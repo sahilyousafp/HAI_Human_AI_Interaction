@@ -12,6 +12,7 @@
   --hand-left: #f2b25c;
   --hand-right: #52bcc6;
   --face-points: rgb(227 234 236 / 0.55);
+  --axis-z: #8f9bff;
   --f-body: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   --f-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --f-mono: "Cascadia Mono", "Cascadia Code", ui-monospace, Consolas, monospace;
@@ -31,6 +32,7 @@
     --hand-left: #b8610f;
     --hand-right: #0b8794;
     --face-points: rgb(255 255 255 / 0.7);
+    --axis-z: #4a52c9;
     color-scheme: light;
   }
 }

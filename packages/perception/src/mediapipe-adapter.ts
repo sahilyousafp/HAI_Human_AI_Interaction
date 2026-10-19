@@ -30,8 +30,9 @@ export interface FrameInput {
   hands: MpHandResult;
   face?: MpFaceResult;
   /**
-   * MediaPipe labels handedness assuming a mirrored (selfie) image. We feed unmirrored camera frames,
-   * so labels are swapped to name the user's own hand. Set true only if the input is already mirrored.
+   * The Tasks API labels handedness correctly for unmirrored camera frames, which is what we feed it
+   * (verified on recorded footage: a raised right hand is reported as "Right"; the legacy Solutions docs'
+   * "assumes a mirrored image" note does not apply). Set true only if frames are mirrored before inference.
    */
   inputMirrored?: boolean;
 }
@@ -49,7 +50,7 @@ function toHands(result: MpHandResult, inputMirrored: boolean): TrackedHand[] {
     if (!category || !image || !world) continue;
     const reported = category.categoryName === "Left" ? "Left" : "Right";
     const swapped = reported === "Left" ? "Right" : "Left";
-    const handedness = inputMirrored ? reported : swapped;
+    const handedness = inputMirrored ? swapped : reported;
     hands.push({ handedness, score: clamp01(category.score), image: image.map(vec), world: world.map(vec) });
   }
   return hands;

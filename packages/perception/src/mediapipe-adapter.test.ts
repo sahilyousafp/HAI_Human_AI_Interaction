@@ -17,14 +17,14 @@ const base = {
 };
 
 describe("toTrackingFrame", () => {
-  it("swaps MediaPipe's selfie-based handedness for unmirrored input", () => {
-    expect(toTrackingFrame({ ...base, hands: hand("Left") }).hands[0]?.handedness).toBe("Right");
-    expect(toTrackingFrame({ ...base, hands: hand("Right") }).hands[0]?.handedness).toBe("Left");
+  it("keeps MediaPipe's handedness for unmirrored input (verified on recorded footage)", () => {
+    expect(toTrackingFrame({ ...base, hands: hand("Left") }).hands[0]?.handedness).toBe("Left");
+    expect(toTrackingFrame({ ...base, hands: hand("Right") }).hands[0]?.handedness).toBe("Right");
   });
 
-  it("keeps labels when the input is already mirrored", () => {
+  it("swaps labels when frames are mirrored before inference", () => {
     expect(toTrackingFrame({ ...base, hands: hand("Left"), inputMirrored: true }).hands[0]?.handedness).toBe(
-      "Left",
+      "Right",
     );
   });
 

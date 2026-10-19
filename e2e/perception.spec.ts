@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { frames, startCamera } from "./tracking.ts";
+import { frames, framesDuring, startCamera } from "./tracking.ts";
 
 // These tests use Chromium's built-in fake camera (a synthetic pattern with no hands and no face).
 // Scenarios that need real hands or a face run against recorded clips in e2e/clips/.
@@ -77,9 +77,7 @@ test.describe("tracking on the fake camera", () => {
   test("no hands visible: no frame reports a hand", async ({ page }) => {
     await page.goto("/");
     await startCamera(page);
-    await page.waitForTimeout(3000);
-    const recent = (await frames(page)).slice(-60);
-    expect(recent.length).toBeGreaterThan(20);
+    const recent = await framesDuring(page, 3000);
     expect(recent.every((f) => f.hands.length === 0)).toBe(true);
   });
 

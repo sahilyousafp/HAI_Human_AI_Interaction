@@ -35,7 +35,7 @@ Readouts refresh once per second; the overlay redraws every animation frame.
 4. Results are converted to a tracking frame, smoothed with a One Euro filter (min cutoff 1 Hz, beta 6, derivative cutoff 2 Hz in normalised image units), and posted back. The bitmap is closed immediately.
 5. When the frame rate stays below 24 fps for 2 seconds, face tracking runs on alternate frames. It returns to every frame above 28 fps. Hands always run on every frame.
 
-MediaPipe labels handedness for mirrored selfie images; AEX feeds unmirrored frames and swaps the labels, so "Right" is your right hand.
+AEX feeds unmirrored camera frames to MediaPipe, which labels them correctly, so "Right" is your right hand. This was checked against recorded footage: a raised right hand is reported as "Right", and turning your head to your right gives negative yaw.
 
 ## Troubleshooting
 

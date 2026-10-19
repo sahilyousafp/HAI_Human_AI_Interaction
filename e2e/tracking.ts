@@ -7,6 +7,7 @@ export type Summary = {
   face: boolean;
   faceRan: boolean;
   yaw: number | null;
+  pitch: number | null;
   captureTs: number;
   inferenceDoneTs: number;
 };
@@ -23,9 +24,16 @@ export async function startCamera(page: Page) {
   await expect.poll(async () => (await frames(page)).length, { timeout: 45_000 }).toBeGreaterThan(10);
 }
 
-/** Frames captured during the next `ms` milliseconds. */
-export async function framesDuring(page: Page, ms: number): Promise<Summary[]> {
+/**
+ * Frames captured from now on, for at least `minMs` and until at least `minFrames` have arrived.
+ * Frame-rate independent: GPU laptops reach 30 fps, CPU-only CI runners about 5 fps.
+ */
+export async function framesDuring(page: Page, minMs: number, minFrames = 20): Promise<Summary[]> {
   const startSeq = (await frames(page)).at(-1)?.seq ?? -1;
-  await page.waitForTimeout(ms);
-  return (await frames(page)).filter((f) => f.seq > startSeq);
+  const since = async () => (await frames(page)).filter((f) => f.seq > startSeq);
+  await page.waitForTimeout(minMs);
+  await expect
+    .poll(async () => (await since()).length, { timeout: 60_000 })
+    .toBeGreaterThanOrEqual(minFrames);
+  return since();
 }

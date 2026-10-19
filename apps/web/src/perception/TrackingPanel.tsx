@@ -28,6 +28,7 @@ interface Summary {
   face: boolean;
   faceRan: boolean;
   yaw: number | null;
+  pitch: number | null;
   captureTs: number;
   inferenceDoneTs: number;
 }
@@ -48,7 +49,7 @@ function readColors(el: Element): DrawColors {
     face: v("--face-points"),
     axisX: v("--risk"),
     axisY: v("--ok"),
-    axisZ: v("--accent"),
+    axisZ: v("--axis-z"),
   };
 }
 
@@ -98,6 +99,7 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
               face: Boolean(frame.face),
               faceRan,
               yaw: frame.face?.headPose.yaw ?? null,
+              pitch: frame.face?.headPose.pitch ?? null,
               captureTs: frame.captureTs,
               inferenceDoneTs: frame.inferenceDoneTs,
             });
