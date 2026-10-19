@@ -23,7 +23,7 @@
 ## 4. End-to-end harness and CI
 
 - [x] 4.1 Configure Playwright (Chromium) to start bridge and web and launch with the fake-camera flags; add a smoke test asserting the shell reaches "connected"; verify `pnpm test:e2e` passes locally
-- [ ] 4.2 Add `.github/workflows/ci.yml` (windows-latest, ubuntu-latest): install, lint, typecheck, test, licenses:check, test:e2e, with pnpm and Playwright caches; verify a green run on a pushed branch
+- [x] 4.2 Add `.github/workflows/ci.yml` (windows-latest, ubuntu-latest): install, lint, typecheck, test, licenses:check, test:e2e, with pnpm and Playwright caches; verify a green run on a pushed branch
 
 ## 5. Open-source documents
 
