@@ -3,6 +3,7 @@ import { Edges, Grid } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { type FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
+import { isSoftwareRenderer } from "../gpu.ts";
 import type { InputBus } from "../input/input-bus.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
 import { elementGeometry, sceneBounds } from "./geometry.ts";
@@ -159,6 +160,7 @@ function CameraRig({
 }
 
 export function Viewer({ client, bus }: { client: SceneClient; bus: InputBus }) {
+  const software = useMemo(isSoftwareRenderer, []);
   const scene = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [colors, setColors] = useState<Colors>(readColors);
   const nav = useRef<Turntable>({ target: [20, 15, 3], azimuth: 305, elevation: 32, distance: 70 });
@@ -334,10 +336,11 @@ export function Viewer({ client, bus }: { client: SceneClient; bus: InputBus }) 
   return (
     <section className="viewer" ref={wrapper} aria-label="3D model" data-testid="viewer">
       <Canvas
-        shadows
+        shadows={!software}
         camera={{ fov: FOV, near: 0.1, far: 5000, position: [60, -40, 40] }}
-        gl={{ antialias: true, preserveDrawingBuffer: true }}
-        dpr={[1, 2]}
+        gl={{ antialias: !software, preserveDrawingBuffer: true }}
+        dpr={software ? 1 : [1, 2]}
+        data-renderer={software ? "software" : "gpu"}
       >
         <color attach="background" args={[colors.background]} />
         <hemisphereLight args={["#ffffff", "#b9b4a8", 1.1]} />

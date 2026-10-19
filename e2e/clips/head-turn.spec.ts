@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { attachPreview, overlayColorCounts } from "../overlay.ts";
-import { framesDuring, startCamera } from "../tracking.ts";
+import { frames, startCamera } from "../tracking.ts";
 
 // Plays test-assets/clips/head-turn.mp4 as the camera: the maintainer turns right, then left, then looks up.
 // The fake camera loops the clip, so one full loop (about 6 s) plus margin covers every pose.
@@ -10,14 +10,22 @@ test("head turn: yaw goes beyond 15 degrees on both sides and pitch rises when l
 }) => {
   await page.goto("/");
   await startCamera(page);
-  // A full loop of the clip at any frame rate: at least 9 s and 40 frames.
-  const list = await framesDuring(page, 9000, 40);
-  const yaws = list.map((f) => f.yaw).filter((y): y is number => y !== null);
-  const pitches = list.map((f) => f.pitch).filter((p): p is number => p !== null);
-  expect(yaws.length).toBeGreaterThan(20);
-  expect(Math.max(...yaws)).toBeGreaterThan(15);
-  expect(Math.min(...yaws)).toBeLessThan(-15);
-  expect(Math.max(...pitches)).toBeGreaterThan(20);
+  // Watch until every pose has been seen, however slowly the machine processes frames. On CPU-only runners face
+  // tracking runs on alternate frames and the full look-up has no detectable face, so few frames carry a pose.
+  const startSeq = (await frames(page)).at(-1)?.seq ?? -1;
+  const extremes = async () => {
+    const poses = (await frames(page)).filter((f) => f.seq > startSeq && f.yaw !== null && f.pitch !== null);
+    const yaws = poses.map((f) => f.yaw as number);
+    const pitches = poses.map((f) => f.pitch as number);
+    return {
+      left: Math.max(-Infinity, ...yaws) > 15,
+      right: Math.min(Infinity, ...yaws) < -15,
+      up: Math.max(-Infinity, ...pitches) > 20,
+    };
+  };
+  await expect
+    .poll(extremes, { timeout: 90_000, intervals: [500] })
+    .toEqual({ left: true, right: true, up: true });
 });
 
 test("debug overlay draws the head axes", async ({ page }, testInfo) => {

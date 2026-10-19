@@ -3,6 +3,7 @@
 // are closed right after inference, and only pixel-free TrackingFrames are posted back.
 import { AdaptiveScheduler, FrameSmoother, GestureRecognizer, toTrackingFrame } from "@aex/perception";
 import { FaceLandmarker, FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
+import { isSoftwareRenderer } from "../gpu.ts";
 import type { FromWorker, ToWorker } from "./messages.ts";
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -21,25 +22,7 @@ const recognizer = new GestureRecognizer();
 const post = (message: FromWorker) => self.postMessage(message);
 const now = () => performance.timeOrigin + performance.now();
 
-/**
- * True when WebGL is backed by a software rasteriser (SwiftShader, llvmpipe). MediaPipe's "GPU" delegate then
- * runs far slower than its CPU delegate (XNNPACK): about 1 fps versus 5+ on a CI runner without a GPU.
- */
-function softwareWebGL(): boolean {
-  try {
-    const gl = new OffscreenCanvas(1, 1).getContext("webgl2");
-    if (!gl) return true;
-    const info = gl.getExtension("WEBGL_debug_renderer_info");
-    const renderer = String(
-      info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
-    );
-    return /swiftshader|llvmpipe|software|basic render/i.test(renderer);
-  } catch {
-    return true;
-  }
-}
-
-const preferGPU = !softwareWebGL();
+const preferGPU = !isSoftwareRenderer();
 
 /** Uses the GPU delegate on real GPUs and falls back to CPU if it fails or WebGL is software-only. */
 async function withDelegate<T>(
