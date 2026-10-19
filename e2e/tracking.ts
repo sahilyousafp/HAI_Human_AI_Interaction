@@ -37,3 +37,14 @@ export async function framesDuring(page: Page, minMs: number, minFrames = 20): P
     .toBeGreaterThanOrEqual(minFrames);
   return since();
 }
+
+/** Gesture events the app logged in dev builds (window.__AEX_GESTURES__). */
+export const gestureEvents = (page: Page) =>
+  page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __AEX_GESTURES__?: { events: Array<{ type: string; ts: number; hand?: string }> };
+        }
+      ).__AEX_GESTURES__?.events ?? [],
+  );

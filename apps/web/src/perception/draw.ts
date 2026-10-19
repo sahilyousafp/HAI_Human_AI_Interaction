@@ -1,5 +1,5 @@
 import { matrixFromHeadPose } from "@aex/perception";
-import type { TrackingFrame, Vec3 } from "@aex/protocol";
+import type { TrackedHand, TrackingFrame, Vec3 } from "@aex/protocol";
 
 /** Bone pairs of MediaPipe's 21-point hand model. */
 export const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
@@ -33,15 +33,33 @@ export interface DrawColors {
   axisX: string;
   axisY: string;
   axisZ: string;
+  raw: string;
 }
 
 /** Image landmarks are unmirrored; the preview is mirrored, so x is flipped to line up with what the user sees. */
 const toCanvas = (p: Vec3, w: number, h: number): [number, number] => [(1 - p[0]) * w, p[1] * h];
 
-export function drawTracking(ctx: CanvasRenderingContext2D, frame: TrackingFrame | null, colors: DrawColors) {
+export function drawTracking(
+  ctx: CanvasRenderingContext2D,
+  frame: TrackingFrame | null,
+  colors: DrawColors,
+  rawHands: TrackedHand[] = [],
+) {
   const { width: w, height: h } = ctx.canvas;
   ctx.clearRect(0, 0, w, h);
   if (!frame) return;
+
+  // Unsmoothed points as faint hollow dots underneath, to show what smoothing removes.
+  ctx.strokeStyle = colors.raw;
+  ctx.lineWidth = 1;
+  for (const hand of rawHands) {
+    for (const p of hand.image) {
+      const [x, y] = toCanvas(p, w, h);
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
 
   if (frame.face) {
     ctx.fillStyle = colors.face;

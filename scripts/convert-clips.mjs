@@ -9,6 +9,15 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 
 const CLIPS = ["no-hands", "one-hand-pinch", "two-hands", "head-turn", "open-palm"];
+/**
+ * Clips derived from the recordings: joined end to end (one pose followed by another) or trimmed to the part
+ * that matches a scenario. A part is a clip name or { clip, start, end } in seconds.
+ */
+const DERIVED = {
+  "open-palm-then-pinch": ["open-palm", "one-hand-pinch"],
+  // The two-hands recording ends with the hands lowering out of view; this keeps only the part with both in view.
+  "two-hands-held": [{ clip: "two-hands", start: 0.2, end: 6.5 }],
+};
 const MAX_SECONDS = 8;
 const root = join(import.meta.dirname, "..");
 const clipDir = join(root, "test-assets", "clips");
@@ -73,6 +82,32 @@ export function buildClips(out = join(root, ".aex", "clips")) {
     const target = join(out, `${clip}.y4m`);
     if (!existsSync(target) || statSync(target).mtimeMs < statSync(src).mtimeMs) {
       ffmpeg(["-i", src, "-vf", VIDEO_FILTER, "-pix_fmt", "yuv420p", "-an", target]);
+      console.log(`built    ${target}`);
+    }
+    built.push(clip);
+  }
+  for (const [clip, spec] of Object.entries(DERIVED)) {
+    const parts = spec.map((p) => (typeof p === "string" ? { clip: p } : p));
+    const sources = parts.map((p) => join(clipDir, `${p.clip}.mp4`));
+    if (!sources.every((src) => existsSync(src))) continue;
+    const target = join(out, `${clip}.y4m`);
+    const newest = Math.max(...sources.map((src) => statSync(src).mtimeMs));
+    if (!existsSync(target) || statSync(target).mtimeMs < newest) {
+      const inputs = sources.flatMap((src) => ["-i", src]);
+      const trim = (p) =>
+        p.start !== undefined ? `trim=start=${p.start}:end=${p.end},setpts=PTS-STARTPTS,` : "";
+      const scaled = parts.map((p, i) => `[${i}:v]${trim(p)}${VIDEO_FILTER}[v${i}]`).join(";");
+      const joined = `${parts.map((_, i) => `[v${i}]`).join("")}concat=n=${parts.length}:v=1:a=0[out]`;
+      ffmpeg([
+        ...inputs,
+        "-filter_complex",
+        `${scaled};${joined}`,
+        "-map",
+        "[out]",
+        "-pix_fmt",
+        "yuv420p",
+        target,
+      ]);
       console.log(`built    ${target}`);
     }
     built.push(clip);

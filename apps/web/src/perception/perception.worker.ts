@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 // Runs hand and face tracking off the main thread. Camera frames arrive as transferred ImageBitmaps,
 // are closed right after inference, and only pixel-free TrackingFrames are posted back.
-import { AdaptiveScheduler, FrameSmoother, toTrackingFrame } from "@aex/perception";
+import { AdaptiveScheduler, FrameSmoother, GestureRecognizer, toTrackingFrame } from "@aex/perception";
 import { FaceLandmarker, FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import type { FromWorker, ToWorker } from "./messages.ts";
 
@@ -13,21 +13,46 @@ let hands: HandLandmarker | null = null;
 let face: FaceLandmarker | null = null;
 let backend: Delegate = "CPU";
 let perfDelayMs = 0;
+let sendRawHands = false;
 const smoother = new FrameSmoother();
 const scheduler = new AdaptiveScheduler();
+const recognizer = new GestureRecognizer();
 
 const post = (message: FromWorker) => self.postMessage(message);
 const now = () => performance.timeOrigin + performance.now();
 
-/** Tries the GPU delegate first and falls back to CPU (e.g. headless CI, blocked WebGL). */
+/**
+ * True when WebGL is backed by a software rasteriser (SwiftShader, llvmpipe). MediaPipe's "GPU" delegate then
+ * runs far slower than its CPU delegate (XNNPACK): about 1 fps versus 5+ on a CI runner without a GPU.
+ */
+function softwareWebGL(): boolean {
+  try {
+    const gl = new OffscreenCanvas(1, 1).getContext("webgl2");
+    if (!gl) return true;
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    const renderer = String(
+      info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+    );
+    return /swiftshader|llvmpipe|software|basic render/i.test(renderer);
+  } catch {
+    return true;
+  }
+}
+
+const preferGPU = !softwareWebGL();
+
+/** Uses the GPU delegate on real GPUs and falls back to CPU if it fails or WebGL is software-only. */
 async function withDelegate<T>(
   create: (delegate: Delegate) => Promise<T>,
 ): Promise<{ task: T; delegate: Delegate }> {
-  try {
-    return { task: await create("GPU"), delegate: "GPU" };
-  } catch {
-    return { task: await create("CPU"), delegate: "CPU" };
+  if (preferGPU) {
+    try {
+      return { task: await create("GPU"), delegate: "GPU" };
+    } catch {
+      // fall through to CPU
+    }
   }
+  return { task: await create("CPU"), delegate: "CPU" };
 }
 
 async function init(msg: Extract<ToWorker, { type: "init" }>) {
@@ -76,21 +101,30 @@ function onFrame(msg: Extract<ToWorker, { type: "frame" }>) {
       }
     }
     const inferenceDoneTs = now();
-    const frame = smoother.smooth(
-      toTrackingFrame({
-        seq,
-        captureTs,
-        inferenceDoneTs,
-        backend,
-        hands: handResult,
-        ...(faceResult ? { face: faceResult } : {}),
-      }),
-    );
+    const raw = toTrackingFrame({
+      seq,
+      captureTs,
+      inferenceDoneTs,
+      backend,
+      aspect: bitmap.width / bitmap.height,
+      hands: handResult,
+      ...(faceResult ? { face: faceResult } : {}),
+    });
+    const frame = smoother.smooth(raw);
     scheduler.frameDone(inferenceDoneTs);
+    const inferenceMs = performance.now() - started;
+    // Gestures are recognised here, right after smoothing, so they never wait on the main thread.
+    const gestureStarted = performance.now();
+    const gestures = recognizer.process(frame);
+    const gestureMs = performance.now() - gestureStarted;
     post({
       type: "frame",
       frame,
-      inferenceMs: performance.now() - started,
+      gestures,
+      gestureState: recognizer.state,
+      gestureMs,
+      ...(sendRawHands ? { rawHands: raw.hands } : {}),
+      inferenceMs,
       faceRan: faceResult !== undefined,
       fps: scheduler.fps,
       faceCadence: scheduler.faceCadence,
@@ -108,5 +142,7 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     );
   } else if (msg.type === "frame") {
     onFrame(msg);
+  } else if (msg.type === "options") {
+    sendRawHands = msg.rawHands;
   }
 };

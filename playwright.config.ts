@@ -17,6 +17,8 @@ const clipProjects: Project[] = buildClips(clipDir)
   .map((clip: string) => ({
     name: `clip:${clip}`,
     testMatch: `clips/${clip}.spec.ts`,
+    // CPU-only CI runners process a few frames per second; clip tests wait for enough of them.
+    timeout: 120_000,
     use: {
       ...devices["Desktop Chrome"],
       channel,

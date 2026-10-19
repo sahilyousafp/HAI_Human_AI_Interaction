@@ -1,4 +1,5 @@
-import type { TrackingFrame } from "@aex/protocol";
+import type { RecognizerState } from "@aex/perception";
+import type { GestureEvent, TrackedHand, TrackingFrame } from "@aex/protocol";
 import type { FromWorker, ToWorker } from "./messages.ts";
 
 export type CameraError = "denied" | "not-found" | "in-use" | "unknown";
@@ -19,7 +20,8 @@ export interface TrackerStats {
 
 export interface TrackerCallbacks {
   onState(state: TrackerState): void;
-  onFrame(frame: TrackingFrame, stats: TrackerStats, faceRan: boolean): void;
+  onFrame(frame: TrackingFrame, stats: TrackerStats, faceRan: boolean, rawHands?: TrackedHand[]): void;
+  onGestures(events: GestureEvent[], state: RecognizerState, gestureMs: number): void;
 }
 
 function classify(error: unknown): CameraError {
@@ -51,6 +53,14 @@ export class Tracker {
 
   get mediaStream(): MediaStream | null {
     return this.stream;
+  }
+
+  private rawHands = false;
+
+  /** Debug: ask the worker to also send unsmoothed hand points. */
+  setRawHands(enabled: boolean): void {
+    this.rawHands = enabled;
+    this.worker?.postMessage({ type: "options", rawHands: enabled } satisfies ToWorker);
   }
 
   async start(): Promise<void> {
@@ -114,6 +124,7 @@ export class Tracker {
     };
     this.busy = true; // nothing is sent until the models are ready
     this.worker.postMessage(init);
+    if (this.rawHands) this.worker.postMessage({ type: "options", rawHands: true } satisfies ToWorker);
   }
 
   private onWorkerMessage(msg: FromWorker) {
@@ -130,7 +141,8 @@ export class Tracker {
         inferenceMs: msg.inferenceMs,
         faceCadence: msg.faceCadence,
       };
-      this.callbacks.onFrame(msg.frame, this.stats, msg.faceRan);
+      this.callbacks.onFrame(msg.frame, this.stats, msg.faceRan, msg.rawHands);
+      this.callbacks.onGestures(msg.gestures, msg.gestureState, msg.gestureMs);
     } else {
       this.fail(msg.message);
     }

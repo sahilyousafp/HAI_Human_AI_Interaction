@@ -27,6 +27,8 @@ export interface FrameInput {
   captureTs: number;
   inferenceDoneTs: number;
   backend: "GPU" | "CPU";
+  /** Frame width / height. */
+  aspect?: number;
   hands: MpHandResult;
   face?: MpFaceResult;
   /**
@@ -75,6 +77,7 @@ export function toTrackingFrame(input: FrameInput): TrackingFrame {
     captureTs: input.captureTs,
     inferenceDoneTs: input.inferenceDoneTs,
     backend: input.backend,
+    ...(input.aspect ? { aspect: input.aspect } : {}),
     hands: toHands(input.hands, input.inputMirrored ?? false),
     ...(face ? { face } : {}),
   };

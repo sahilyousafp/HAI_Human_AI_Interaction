@@ -40,6 +40,8 @@ export const TrackingFrame = z.strictObject({
   captureTs: z.number().positive(),
   inferenceDoneTs: z.number().positive(),
   backend: z.enum(["GPU", "CPU"]),
+  /** Camera frame width / height, needed to measure image-space distances. Absent means 4:3. */
+  aspect: z.number().positive().optional(),
   hands: z.array(TrackedHand).max(2),
   /** Absent on frames where face tracking was skipped to keep hands responsive. */
   face: TrackedFace.optional(),

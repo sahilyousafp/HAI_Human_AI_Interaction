@@ -1,6 +1,9 @@
-import type { TrackingFrame } from "@aex/protocol";
+import type { GestureEvent, TrackedHand, TrackingFrame } from "@aex/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type DrawColors, drawTracking } from "./draw.ts";
+import { GesturePanel } from "./GesturePanel.tsx";
+import { GestureStore } from "./gesture-store.ts";
+import { downloadFrames, LandmarkRecorder } from "./recorder.ts";
 import { type CameraError, Tracker, type TrackerState, type TrackerStats } from "./tracker.ts";
 
 const ERROR_TEXT: Record<CameraError, { title: string; fix: string }> = {
@@ -37,6 +40,8 @@ declare global {
   interface Window {
     /** Dev builds only: recent frame summaries for end-to-end tests. Never contains pixels. */
     __AEX_TRACKING__?: { frames: Summary[]; faceCadence: 1 | 2 };
+    /** Dev builds only: recent gesture events for end-to-end tests. */
+    __AEX_GESTURES__?: { events: GestureEvent[] };
   }
 }
 
@@ -50,6 +55,7 @@ function readColors(el: Element): DrawColors {
     axisX: v("--risk"),
     axisY: v("--ok"),
     axisZ: v("--axis-z"),
+    raw: v("--raw-points"),
   };
 }
 
@@ -64,11 +70,16 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
   const trackerRef = useRef<Tracker | null>(null);
   const latestFrame = useRef<TrackingFrame | null>(null);
   const latestStats = useRef<TrackerStats | null>(null);
+  const latestRaw = useRef<TrackedHand[]>([]);
   const [state, setState] = useState<TrackerState>({ camera: "off" });
   const [stats, setStats] = useState<TrackerStats | null>(null);
   const [headPose, setHeadPose] = useState<TrackingFrame["face"] | null>(null);
   const [handCount, setHandCount] = useState(0);
   const [debugView, setDebugView] = useState(true);
+  const [showRaw, setShowRaw] = useState(false);
+  const recorderRef = useRef(new LandmarkRecorder());
+  const gestureStore = useRef(new GestureStore()).current;
+  const [recording, setRecording] = useState(false);
 
   const updateState = useCallback(
     (next: TrackerState) => {
@@ -86,10 +97,21 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
       video,
       {
         onState: updateState,
-        onFrame: (frame, frameStats, faceRan) => {
+        onGestures: (events, gestureState, gestureMs) => {
+          gestureStore.push(events, gestureState, gestureMs);
+          if (import.meta.env.DEV && events.length > 0) {
+            if (!window.__AEX_GESTURES__) window.__AEX_GESTURES__ = { events: [] };
+            const log = window.__AEX_GESTURES__.events;
+            log.push(...events);
+            if (log.length > 500) log.splice(0, log.length - 500);
+          }
+        },
+        onFrame: (frame, frameStats, faceRan, rawHands) => {
           latestFrame.current = frame;
+          latestRaw.current = rawHands ?? [];
           latestStats.current = frameStats;
           if (import.meta.env.DEV) {
+            recorderRef.current.push(frame);
             if (!window.__AEX_TRACKING__) window.__AEX_TRACKING__ = { frames: [], faceCadence: 1 };
             const store = window.__AEX_TRACKING__;
             store.faceCadence = frameStats.faceCadence;
@@ -110,8 +132,9 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
       { perfDelayMs },
     );
     trackerRef.current = tracker;
+    if (import.meta.env.DEV) window.__AEX_RECORDER__ = recorderRef.current;
     return () => tracker.stop();
-  }, [updateState]);
+  }, [updateState, gestureStore]);
 
   // Redraw the overlay every animation frame from the latest result; no React render per frame.
   useEffect(() => {
@@ -126,7 +149,7 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
     };
     scheme.addEventListener("change", refreshColors);
     const tick = () => {
-      drawTracking(ctx, debugView ? latestFrame.current : null, colors);
+      drawTracking(ctx, debugView ? latestFrame.current : null, colors, showRaw ? latestRaw.current : []);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -134,7 +157,11 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
       cancelAnimationFrame(raf);
       scheme.removeEventListener("change", refreshColors);
     };
-  }, [debugView]);
+  }, [debugView, showRaw]);
+
+  useEffect(() => {
+    trackerRef.current?.setRawHands(showRaw);
+  }, [showRaw]);
 
   // Text readouts refresh once per second.
   useEffect(() => {
@@ -153,6 +180,7 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
       latestFrame.current = null;
       latestStats.current = null;
       setStats(null);
+      gestureStore.reset();
     } else {
       void trackerRef.current?.start();
     }
@@ -160,32 +188,46 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
 
   const backend = state.camera === "on" ? state.backend : null;
 
+  const toggleRecording = () => {
+    const recorder = recorderRef.current;
+    if (recorder.active) {
+      downloadFrames(recorder.stop());
+      setRecording(false);
+    } else {
+      recorder.start();
+      setRecording(true);
+    }
+  };
+
   return (
     <section className="tracking" aria-label="Camera tracking">
-      <div className="preview" data-camera={state.camera}>
-        <video ref={videoRef} className="preview-video" muted playsInline />
-        <canvas
-          ref={canvasRef}
-          className="preview-overlay"
-          width={640}
-          height={480}
-          role="img"
-          aria-label="Tracked hand and face points over the camera preview"
-        />
-        {state.camera !== "on" && (
-          <div className="preview-empty">
-            {state.camera === "starting" ? <p>Starting camera and loading models...</p> : null}
-            {state.camera === "off" ? (
-              <p>The camera is off. Video stays in this browser tab; only hand and face points are used.</p>
-            ) : null}
-            {state.camera === "error" ? (
-              <div className="camera-error" data-testid="camera-error" data-kind={state.error} role="alert">
-                <strong>{ERROR_TEXT[state.error].title}</strong>
-                <span>{ERROR_TEXT[state.error].fix}</span>
-              </div>
-            ) : null}
-          </div>
-        )}
+      <div className="main-column">
+        <div className="preview" data-camera={state.camera}>
+          <video ref={videoRef} className="preview-video" muted playsInline />
+          <canvas
+            ref={canvasRef}
+            className="preview-overlay"
+            width={640}
+            height={480}
+            role="img"
+            aria-label="Tracked hand and face points over the camera preview"
+          />
+          {state.camera !== "on" && (
+            <div className="preview-empty">
+              {state.camera === "starting" ? <p>Starting camera and loading models...</p> : null}
+              {state.camera === "off" ? (
+                <p>The camera is off. Video stays in this browser tab; only hand and face points are used.</p>
+              ) : null}
+              {state.camera === "error" ? (
+                <div className="camera-error" data-testid="camera-error" data-kind={state.error} role="alert">
+                  <strong>{ERROR_TEXT[state.error].title}</strong>
+                  <span>{ERROR_TEXT[state.error].fix}</span>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+        <GesturePanel store={gestureStore} cameraOn={state.camera === "on"} />
       </div>
 
       <div className="tracking-side">
@@ -196,6 +238,27 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
           <input type="checkbox" checked={debugView} onChange={(e) => setDebugView(e.target.checked)} />
           Debug view
         </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            data-testid="show-raw"
+            checked={showRaw}
+            disabled={!debugView}
+            onChange={(e) => setShowRaw(e.target.checked)}
+          />
+          Show raw points (before smoothing)
+        </label>
+        {import.meta.env.DEV && (
+          <button
+            type="button"
+            className="secondary"
+            data-testid="record-landmarks"
+            disabled={state.camera !== "on"}
+            onClick={toggleRecording}
+          >
+            {recording ? "Stop and save landmarks" : "Record landmarks"}
+          </button>
+        )}
 
         <dl className="readouts">
           <div>

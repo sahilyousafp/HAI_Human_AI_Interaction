@@ -13,6 +13,7 @@
   --hand-right: #52bcc6;
   --face-points: rgb(227 234 236 / 0.55);
   --axis-z: #8f9bff;
+  --raw-points: rgb(227 234 236 / 0.75);
   --f-body: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   --f-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --f-mono: "Cascadia Mono", "Cascadia Code", ui-monospace, Consolas, monospace;
@@ -33,6 +34,7 @@
     --hand-right: #0b8794;
     --face-points: rgb(255 255 255 / 0.7);
     --axis-z: #4a52c9;
+    --raw-points: rgb(255 255 255 / 0.85);
     color-scheme: light;
   }
 }
@@ -144,7 +146,7 @@ button {
 
 .stage {
   display: grid;
-  align-content: center;
+  align-content: safe center; /* centre when it fits, never push content above the scroll area */
   justify-items: center;
   gap: 16px;
   padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
@@ -218,6 +220,45 @@ button {
   border-left: 3px solid var(--risk);
 }
 
+.main-column {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.gestures {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.gestures-head {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gesture-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font: 500 12.5px / 1.2 var(--f-mono);
+  color: var(--muted);
+}
+.gesture-pill[data-state="engaged"] {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.gesture-pill.two {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.gesture-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
 .tracking-side {
   display: grid;
   gap: 14px;
@@ -237,6 +278,22 @@ button {
 }
 .primary:hover {
   background: color-mix(in srgb, var(--accent) 85%, var(--ink));
+}
+.secondary {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.secondary:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
 }
 .check {
   display: flex;
@@ -267,6 +324,10 @@ button {
   margin: 0;
   font: 500 14px / 1.3 var(--f-mono);
   font-variant-numeric: tabular-nums;
+}
+.gestures .readouts {
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 10px 16px;
 }
 
 @keyframes pulse {
