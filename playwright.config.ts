@@ -43,13 +43,33 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: "clips/**",
+      testIgnore: ["clips/**", "visual/**"],
       // Starting the camera loads MediaPipe in a fresh browser context each test (about 17 s on a CPU-only Windows
       // runner) and startCamera allows 45 s for frames, so the test needs more than the default 30 s.
       timeout: 60_000,
       use: { ...devices["Desktop Chrome"], channel, launchOptions: { args: fakeCamera } },
     },
     ...clipProjects,
+    // Screenshot baselines. Rendering is forced through software WebGL (SwiftShader) so a laptop GPU and a CI runner
+    // draw the same pixels; baselines are recorded on Windows (fonts differ elsewhere), so the project runs there.
+    ...(process.platform === "win32"
+      ? [
+          {
+            name: "visual",
+            testMatch: "visual/**",
+            timeout: 60_000,
+            use: {
+              ...devices["Desktop Chrome"],
+              channel,
+              viewport: { width: 1280, height: 800 },
+              launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] },
+            },
+            expect: {
+              toHaveScreenshot: { maxDiffPixelRatio: 0.02, threshold: 0.25, animations: "disabled" as const },
+            },
+          },
+        ]
+      : []),
   ],
   webServer: [
     {

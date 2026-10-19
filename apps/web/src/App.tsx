@@ -10,6 +10,10 @@ import { InputBus } from "./input/input-bus.ts";
 import { TrackingPanel } from "./perception/TrackingPanel.tsx";
 import type { TrackerState } from "./perception/tracker.ts";
 import { SceneClient } from "./scene/scene-client.ts";
+import { DEFAULT_LAYOUT, registerBuiltinTools } from "./tools/builtin.ts";
+import { ToolController } from "./tools/controller.ts";
+import { ToolRegistry } from "./tools/registry.ts";
+import { PaletteSettings } from "./tools/ToolOverlays.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
 import { Viewer } from "./viewer/Viewer.tsx";
 
@@ -40,6 +44,15 @@ export function App() {
   );
   const bus = useMemo(() => new InputBus(), []);
   const renderLatency = useMemo(() => new LatencyTracker(), []);
+  const tools = useMemo(() => {
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const controller = new ToolController(registry, DEFAULT_LAYOUT);
+    // The layout is a user setting kept by the bridge, so it follows the workspace across browsers and restarts.
+    controller.onLayoutChange = (palette) =>
+      connection.current?.send({ type: "settings.set", id: crypto.randomUUID(), payload: { palette } });
+    return controller;
+  }, []);
 
   // Dev builds only: lets end-to-end tests edit the scene through the same client the UI uses.
   useEffect(() => {
@@ -47,12 +60,13 @@ export function App() {
   }, [sceneClient]);
 
   useEffect(() => {
-    const conn = connectToBridge(window.__AEX_SESSION__ ?? null, browserDeps, setBridge, (message) =>
-      sceneClient.handle(message),
-    );
+    const conn = connectToBridge(window.__AEX_SESSION__ ?? null, browserDeps, setBridge, (message) => {
+      if (sceneClient.handle(message)) return;
+      if (message.type === "settings.snapshot") tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT);
+    });
     connection.current = conn;
     return () => conn.close();
-  }, [sceneClient]);
+  }, [sceneClient, tools]);
 
   const label = LABELS[bridge.status];
   const cameraOn = camera.camera === "on" || camera.camera === "starting";
@@ -91,11 +105,12 @@ export function App() {
       </header>
       <main className="workspace">
         <div className="stage">
-          <Viewer client={sceneClient} bus={bus} latency={renderLatency} />
+          <Viewer client={sceneClient} bus={bus} latency={renderLatency} tools={tools} />
           {label.hint && <p className="hint">{label.hint}</p>}
         </div>
         <aside className="sidebar" aria-label="Tracking">
           <TrackingPanel onCameraState={setCamera} bus={bus} renderLatency={renderLatency} />
+          <PaletteSettings controller={tools} />
         </aside>
       </main>
     </div>

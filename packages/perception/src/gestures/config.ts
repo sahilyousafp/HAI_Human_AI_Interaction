@@ -26,6 +26,10 @@ export interface GestureConfig {
     othersMin: number;
     /** A pinching hand that tracking loses for less than this (fast sweeps, passing the face) is still pinching. */
     lostGraceMs: number;
+    /** A pinch held this long... */
+    holdMs: number;
+    /** ...while moving less than this fraction of the frame width is a hold (long pinch). */
+    holdMaxMove: number;
   };
   posture: {
     /** Tip-to-wrist / knuckle-to-wrist above this means the finger is extended. */
@@ -68,6 +72,8 @@ export const DEFAULT_GESTURES: GestureConfig = {
     tapMaxMove: 0.02,
     othersMin: 1.3,
     lostGraceMs: 250,
+    holdMs: 600,
+    holdMaxMove: 0.02,
   },
   posture: { extended: 1.35, curled: 1.15, thumbSpread: 0.45, palmFacing: 0.5 },
   clutch: { debounceMs: 100 },

@@ -14,6 +14,7 @@ import {
 import { type WebSocket, WebSocketServer } from "ws";
 import { assertLoopback } from "./config.ts";
 import { SceneHub, type SceneHubOptions } from "./scene-hub.ts";
+import { SettingsHub } from "./settings.ts";
 
 export interface BridgeOptions {
   host: string;
@@ -22,6 +23,8 @@ export interface BridgeOptions {
   version: string;
   token?: string;
   scene?: SceneHubOptions;
+  /** Where user settings are kept (.aex/settings.json); without one they live in memory. */
+  settingsFile?: string;
 }
 
 export interface Bridge {
@@ -74,6 +77,7 @@ export function createBridge(options: BridgeOptions): Bridge {
   };
   const broadcastStatus = () => broadcast(statusMessage());
   const scene = new SceneHub(options.scene ?? {}, broadcast);
+  const settings = new SettingsHub(options.settingsFile ?? null, broadcast);
 
   const server: Server = createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
@@ -112,6 +116,7 @@ export function createBridge(options: BridgeOptions): Bridge {
         clients.add(ws);
         broadcastStatus();
         scene.greet(send);
+        settings.greet(send);
         return;
       }
       // Nothing but hello is accepted before a client has said hello.
@@ -119,7 +124,7 @@ export function createBridge(options: BridgeOptions): Bridge {
         ws.close(1008, "Say hello first");
         return;
       }
-      scene.handle(message, send);
+      if (!scene.handle(message, send)) settings.handle(message);
     });
     ws.on("close", () => {
       if (clients.delete(ws)) broadcastStatus();

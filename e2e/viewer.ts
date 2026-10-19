@@ -20,7 +20,8 @@ let nextPort = 4900;
 export async function startTestBridge(page: Page): Promise<Bridge> {
   const port = nextPort++;
   const token = `viewer-e2e-${port}-0123456789`;
-  const projectDir = join(mkdtempSync(join(tmpdir(), "aex-e2e-")), "project");
+  const root = mkdtempSync(join(tmpdir(), "aex-e2e-"));
+  const projectDir = join(root, "project");
   const bridge = createBridge({
     host: "127.0.0.1",
     port,
@@ -28,6 +29,7 @@ export async function startTestBridge(page: Page): Promise<Bridge> {
     version: "e2e",
     token,
     scene: { projectDir, saveDelayMs: 200 },
+    settingsFile: join(root, ".aex", "settings.json"),
   });
   await bridge.start();
   await page.addInitScript(

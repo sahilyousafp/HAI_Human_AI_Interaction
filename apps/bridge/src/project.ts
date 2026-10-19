@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { parseScene, type SceneDocument } from "@aex/protocol";
+import { readSettingsFile, updateSettingsFile } from "./settings.ts";
 
 export const SCENE_FILE = "scene.aex.json";
 export const SAMPLE_SCENE = join(import.meta.dirname, "..", "samples", "mixed-use-block.aex.json");
@@ -96,27 +97,16 @@ export class Autosaver {
   }
 }
 
+const settingsFile = (workspaceRoot: string) => join(workspaceRoot, ".aex", "settings.json");
+
 /** Remembers the last opened project in .aex/settings.json. */
 export function readLastProject(workspaceRoot: string): string | null {
-  try {
-    const settings = JSON.parse(readFileSync(join(workspaceRoot, ".aex", "settings.json"), "utf8"));
-    return typeof settings.lastProject === "string" ? settings.lastProject : null;
-  } catch {
-    return null;
-  }
+  const last = readSettingsFile(settingsFile(workspaceRoot)).lastProject;
+  return typeof last === "string" ? last : null;
 }
 
 export function writeLastProject(workspaceRoot: string, path: string): void {
-  const dir = join(workspaceRoot, ".aex");
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, "settings.json");
-  let settings: Record<string, unknown> = {};
-  try {
-    settings = JSON.parse(readFileSync(file, "utf8"));
-  } catch {
-    settings = {};
-  }
-  writeFileSync(file, `${JSON.stringify({ ...settings, lastProject: path }, null, 2)}\n`);
+  updateSettingsFile(settingsFile(workspaceRoot), { lastProject: path });
 }
 
 /** The project opened when none was remembered: a copy of the sample scene inside .aex. */

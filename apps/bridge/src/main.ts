@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { loadConfig } from "./config.ts";
 import { defaultProjectDir, readLastProject, writeLastProject } from "./project.ts";
 import { createBridge } from "./server.ts";
@@ -11,6 +12,7 @@ const bridge = createBridge({
   port: config.port,
   allowedOrigins: config.allowedOrigins,
   version: VERSION,
+  settingsFile: join(config.workspaceRoot, ".aex", "settings.json"),
   scene: {
     projectDir: readLastProject(config.workspaceRoot) ?? defaultProjectDir(config.workspaceRoot),
     onProjectOpened: (project) => writeLastProject(config.workspaceRoot, project.path),

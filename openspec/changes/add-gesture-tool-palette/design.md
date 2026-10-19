@@ -18,7 +18,9 @@ Builds on `add-gesture-recognition` (pinch, clutch, nod and shake events), `add-
 
 **Marking-menu interaction** (Kurtenbach and Buxton). Open with a long pinch, steer and release. Novices see the ring and labels. Experts flick without looking because each slot keeps a fixed direction. Rejected: a fixed toolbar (needs precise aiming with a jittery hand pointer); a separate posture to open (more to learn, more false triggers).
 
-**Hold detection in the pinch state machine.** `pinch.hold` fires once at 600 ms if movement stays under 2% of image width, then the same pinch continues as a drag. This keeps one pinch for open-steer-release, without a second gesture.
+**Hold detection in the pinch state machine.** `pinch.hold` fires once at 600 ms if movement stays under 2% of image width, then the same pinch continues as a drag. This keeps one pinch for open-steer-release, without a second gesture. The router ignores a hold while the active tool holds something (a moved element, the section plane): holding still on a grabbed object is aiming, not a palette request. A hold during an orbit ends the orbit before the palette opens.
+
+**Getting out and pressing the HUD by hand.** One cancel action (the active tool's x, Escape, a head shake) backs out of the innermost thing: open palette, pending confirmation, drag in progress, else the tool itself. HUD buttons marked `data-hand-press` are pressed by a pinch tap over them, so every on-screen control works without a mouse; after an undo or redo a strip offers Undo again and Redo for repeated steps. The hand pointer changes shape with what a pinch would do there.
 
 **Palette state machine** in the web app: `closed -> open(centre) -> highlighting(slot) -> closed`. While open, gesture drag events route to the palette instead of the navigation controller (the routing lives in one input router, so navigation never has to know about the palette). Slot index is `round(angle / 45 deg) mod 8`, active once beyond the 4% dead zone.
 

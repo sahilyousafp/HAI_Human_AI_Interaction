@@ -27,15 +27,20 @@ const two = (
 });
 
 describe("one-hand pinch drag orbits (spec)", () => {
-  it("drag right orbits: azimuth increases and the target stays put", () => {
+  it("drag right orbits: azimuth decreases (like dragging the model with the mouse) and the target stays put", () => {
     const next = navigate(start, initialInput(), drag(0.2, 0));
-    expect(next.azimuth).toBeGreaterThan(start.azimuth);
+    const change = ((next.azimuth - start.azimuth + 540) % 360) - 180; // the short way round
+    expect(change).toBeCloseTo(-0.2 * 270, 9);
     expect(next.target).toEqual(start.target);
+  });
+
+  it("drag down raises the view", () => {
+    expect(navigate(start, initialInput(), drag(0, 0.1)).elevation).toBeGreaterThan(start.elevation);
   });
 
   it("elevation is clamped at 89 degrees", () => {
     let t = start;
-    for (let i = 0; i < 20; i++) t = navigate(t, initialInput(), drag(0, -0.2)); // dragging up raises the view
+    for (let i = 0; i < 20; i++) t = navigate(t, initialInput(), drag(0, 0.2)); // dragging down raises the view
     expect(t.elevation).toBe(ELEVATION_MAX);
   });
 });
@@ -54,6 +59,14 @@ describe("two-hand pinch zooms and pans (spec)", () => {
     t = navigate(t, input, two("twohand.update", 0.3, [0.4, 0.5]));
     expect(t.target).not.toEqual(start.target);
     expect(Math.abs(t.distance - start.distance) / start.distance).toBeLessThan(0.02);
+  });
+
+  it("the view pans opposite to the hands: moving them left pans as a screen pan to the right", () => {
+    const input = initialInput();
+    let t = navigate(start, input, two("twohand.start", 0.3, [0.5, 0.5]));
+    t = navigate(t, input, two("twohand.update", 0.3, [0.4, 0.45]));
+    const expected = pan(start, 0.1 * 1.2, -0.05 * 1.2);
+    for (const [i, v] of t.target.entries()) expect(v).toBeCloseTo(expected.target[i] ?? 0, 9);
   });
 });
 

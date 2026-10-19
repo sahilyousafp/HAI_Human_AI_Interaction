@@ -176,6 +176,7 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
           bus.emitPointer({
             position: primary ? pinchPoint(primary) : null,
             secondary: right && left ? pinchPoint(left) : null,
+            ...(frame.aspect ? { aspect: frame.aspect } : {}),
             ts: frame.captureTs,
           });
           latestRaw.current = rawHands ?? [];

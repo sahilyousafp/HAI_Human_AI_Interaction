@@ -8,9 +8,9 @@ Engage first by holding an open palm toward the camera (see [gestures.md](gestur
 
 | Do | Effect |
 |---|---|
-| Pinch and drag with one hand | Orbit. Drag right turns the model; drag up looks from higher. The view stays between 5 and 89 degrees above the ground |
+| Pinch and drag with one hand | Orbit, like dragging the model with the mouse. Drag down looks from higher. The view stays between 5 and 89 degrees above the ground |
 | Pinch with both hands, move them apart or together | Zoom in or out |
-| Pinch with both hands, move them together sideways or up and down | Pan |
+| Pinch with both hands, move them together sideways or up and down | Pan; the view moves the opposite way |
 | Close a hand into a fist mid-drag | Clutch: move your hand back without moving the view, then pinch again |
 | Point (a relaxed hand, not pinching) | A ring follows your pinch point; the element under it is highlighted |
 | Both hands in view | The left hand gets a second, light grey ring; hover and selection stay with the right hand |

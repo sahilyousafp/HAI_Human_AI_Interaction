@@ -33,10 +33,10 @@ With Measure active, two taps on scene surfaces SHALL show the straight-line dis
 - **THEN** a label reading 6000 mm, within 1% tolerance for the picked points, is shown and the scene is unchanged
 
 ### Requirement: Section clips the view by hand height
-With Section active, a vertical pinch drag SHALL move a horizontal section plane through the model, hiding geometry above it. The plane height SHALL be shown in millimetres. Leaving the tool SHALL keep the section until it is cleared from the HUD.
+With Section active, the section plane SHALL be shown as a plane that highlights under the pointer, and a vertical pinch drag that starts on it SHALL move it through the model, hiding geometry above it (a drag that starts off the plane orbits the view). The plane height SHALL be shown in millimetres. Leaving the tool SHALL keep the section until it is cleared from the HUD.
 
 #### Scenario: Lower the section
-- **WHEN** the user pinch-drags downward with Section active
+- **WHEN** the user pinch-drags the section plane downward with Section active
 - **THEN** the section plane height decreases and geometry above it is hidden
 
 ### Requirement: Add massing places a block
@@ -60,12 +60,17 @@ With Delete active, a tap on an element SHALL mark it for deletion and ask for c
 - **THEN** nothing is deleted
 
 ### Requirement: Undo and Redo act immediately
-Choosing Undo or Redo in the palette SHALL undo or redo one transaction immediately and leave the previous tool active.
+Choosing Undo or Redo in the palette SHALL undo or redo one transaction immediately and leave the previous tool active. After an undo or redo, the HUD SHALL offer Undo again and Redo controls for a few seconds, so several transactions can be undone in a row.
 
 #### Scenario: Undo from the palette
 - **GIVEN** Move is active and the last transaction moved a block
 - **WHEN** the user chooses Undo from the palette
 - **THEN** the block returns to its previous position and Move is still active
+
+#### Scenario: Undo several changes
+- **GIVEN** the last two transactions renamed a block twice
+- **WHEN** the user undoes once and then taps Undo again
+- **THEN** both renames are undone
 
 ### Requirement: Ask agent opens the agent input
 Choosing Ask agent SHALL focus the agent request input, so the user can type or, once voice exists, speak. When no agent is available it SHALL say why.

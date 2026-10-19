@@ -13,6 +13,8 @@ export interface SceneState {
   projectError: string | null;
   /** Last rejected request, shown briefly to the user. */
   lastError: string | null;
+  /** The most recent change to the scene: what kind, its label, and when it arrived (ms). */
+  lastChange: { kind: "apply" | "undo" | "redo"; label: string; at: number } | null;
 }
 
 const INITIAL: SceneState = {
@@ -25,6 +27,7 @@ const INITIAL: SceneState = {
   savedAt: null,
   projectError: null,
   lastError: null,
+  lastChange: null,
 };
 
 const newId = () => crypto.randomUUID();
@@ -55,7 +58,7 @@ export class SceneClient {
         return true;
       }
       case "scene.patch": {
-        const { seq, ops, canUndo, canRedo } = message.payload;
+        const { seq, ops, canUndo, canRedo, kind, label } = message.payload;
         if (!this.state.doc || seq !== this.state.seq + 1) {
           this.resync();
           return true;
@@ -65,7 +68,7 @@ export class SceneClient {
           this.resync();
           return true;
         }
-        this.update({ doc: result.doc, seq, canUndo, canRedo });
+        this.update({ doc: result.doc, seq, canUndo, canRedo, lastChange: { kind, label, at: Date.now() } });
         return true;
       }
       case "selection.changed":

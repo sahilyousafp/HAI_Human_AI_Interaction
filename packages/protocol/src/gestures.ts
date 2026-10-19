@@ -27,6 +27,8 @@ export const GestureEvent = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("engaged"), ...base }),
   z.strictObject({ type: z.literal("disengaged"), ...base, reason: z.enum(["no-hands", "idle"]) }),
   z.strictObject({ type: z.literal("pinch.tap"), ...handed, position: Point2 }),
+  /** A pinch held still (long pinch); the same pinch then continues as a drag until release. */
+  z.strictObject({ type: z.literal("pinch.hold"), ...handed, position: Point2 }),
   z.strictObject({ type: z.literal("pinch.drag.start"), ...handed, position: Point2 }),
   z.strictObject({ type: z.literal("pinch.drag.update"), ...handed, position: Point2, delta: Point2 }),
   z.strictObject({ type: z.literal("pinch.drag.end"), ...handed, position: Point2 }),

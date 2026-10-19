@@ -146,10 +146,13 @@ test.describe("hand pointer and selection", () => {
       return { primary: css("hand-pointer"), secondary: css("hand-pointer-secondary") };
     });
     expect(colors.secondary).not.toBe(colors.primary);
-    // Not engaged: no pointers.
+    // Not engaged: the pointer still shows where the hand is, dimmed, and nothing is hovered.
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(false));
-    await expect(page.getByTestId("hand-pointer")).toHaveCount(0);
-    await expect(secondary).toHaveCount(0);
+    await page.evaluate(([p, q]) => window.__AEX_INPUT__?.pointer(p, q), [
+      handAt(at),
+      handAt([0.15, 0.2]),
+    ] as const);
+    await expect(page.getByTestId("hand-pointer")).toHaveAttribute("data-engaged", "false");
   });
 });
 
@@ -177,7 +180,7 @@ test.describe("navigation", () => {
         e("pinch.drag.end") as never,
       ]);
     }, ts);
-    expect((await camera(page)).azimuth).toBeGreaterThan(before.azimuth);
+    expect((await camera(page)).azimuth).toBeLessThan(before.azimuth); // drag right: negative azimuth
   });
 
   test("gesture-to-render latency is measured and shown", async ({ page }) => {

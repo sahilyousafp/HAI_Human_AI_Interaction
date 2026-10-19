@@ -30,6 +30,8 @@ type Phase = "idle" | "candidate" | "pinching";
  * - A pinch starts after the fingertips touch (ratio below `press`, other fingers not curled) for `minHoldMs`, and
  *   ends above `release` (hysteresis).
  * - Drag start is held back until the pinch outlasts a tap or moves; a short, still pinch is a tap.
+ * - A pinch kept still for `holdMs` also emits one hold (long pinch, which opens the tool palette); the same pinch
+ *   carries on as a drag, so it can be steered and released. A pinch that moves first never holds.
  * - A fist (checked before pinch, since a fist also closes thumb and index) suspends all drag output.
  * - Only pinches that began while engaged emit anything ("pinch before engaging is ignored").
  * - Tracking often loses a hand for a few frames while it sweeps fast or passes over the face. A pinch survives a
@@ -46,6 +48,8 @@ export class HandMachine {
   private maxMove = 0;
   private dragStarted = false;
   private valid = false;
+  /** The hold was emitted, or ruled out because the hand moved. */
+  private holdDone = false;
   /** Resumed after a two-hand gesture: a quick release must not count as a tap. */
   private tapAllowed = true;
   private suppressed = false;
@@ -147,6 +151,7 @@ export class HandMachine {
     this.maxMove = 0;
     this.dragStarted = false;
     this.tapAllowed = false;
+    this.holdDone = true; // a pinch resumed from a two-hand gesture is mid-gesture, not a fresh long pinch
   }
 
   /** Ends any pinch (e.g. on disengage), emitting drag end if a drag was running. */
@@ -181,6 +186,7 @@ export class HandMachine {
         this.maxMove = 0;
         this.dragStarted = false;
         this.tapAllowed = true;
+        this.holdDone = false;
         this.valid = ctx.engaged;
         return;
       case "pinching": {
@@ -195,6 +201,11 @@ export class HandMachine {
           this.dragStarted = true;
           events.push(this.event("pinch.drag.start", ts, this.startPos));
           this.lastEmittedPos = this.startPos;
+        }
+        if (!this.holdDone && this.maxMove >= p.holdMaxMove) this.holdDone = true;
+        if (!this.holdDone && ts - this.startTs >= p.holdMs) {
+          this.holdDone = true;
+          events.push(this.event("pinch.hold", ts));
         }
         if (this.dragStarted) events.push(this.dragUpdate(ts));
         return;
@@ -242,7 +253,7 @@ export class HandMachine {
   }
 
   private event(
-    type: "pinch.tap" | "pinch.drag.start" | "pinch.drag.end",
+    type: "pinch.tap" | "pinch.hold" | "pinch.drag.start" | "pinch.drag.end",
     ts: number,
     position: Point2 = this.lastPos,
   ): GestureEvent {

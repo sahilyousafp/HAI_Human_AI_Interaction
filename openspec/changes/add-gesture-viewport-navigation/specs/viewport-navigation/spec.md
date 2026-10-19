@@ -12,7 +12,7 @@ While engaged, a one-hand pinch drag SHALL orbit the camera around the current o
 #### Scenario: Drag right orbits
 - **GIVEN** the system is engaged
 - **WHEN** the user pinch-drags to the right by 20% of the image width
-- **THEN** the camera azimuth changes by a positive amount and the orbit target does not move
+- **THEN** the camera azimuth changes by a negative amount (the model turns as if dragged with the mouse) and the orbit target does not move
 
 #### Scenario: Elevation is clamped
 - **WHEN** the user drags far enough to exceed 89 degrees elevation

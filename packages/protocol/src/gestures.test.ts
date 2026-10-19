@@ -8,6 +8,7 @@ const valid = [
   { type: "engaged", ts, confidence: 1 },
   { type: "disengaged", ts, confidence: 1, reason: "idle" },
   { type: "pinch.tap", ts, confidence: 0.9, hand: "Right", position: [0.4, 0.6] },
+  { type: "pinch.hold", ts, confidence: 0.9, hand: "Left", position: [0.5, 0.5] },
   { type: "pinch.drag.start", ts, confidence: 0.9, hand: "Left", position: [0.4, 0.6] },
   { type: "pinch.drag.update", ts, confidence: 0.9, hand: "Left", position: [0.42, 0.6], delta: [0.02, 0] },
   { type: "pinch.drag.end", ts, confidence: 0.9, hand: "Left", position: [0.42, 0.6] },

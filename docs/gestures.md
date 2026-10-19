@@ -9,6 +9,7 @@ AEX turns smoothed hand and head tracking into a small gesture vocabulary. Every
 | Engage | Hold an open palm toward the camera for a moment | `engaged` |
 | Pinch tap | Touch thumb and index briefly, keep the other fingers relaxed open (like an OK sign) | `pinch.tap` |
 | Pinch drag | Pinch and move, then open the fingers | `pinch.drag.start`, `.update`, `.end` |
+| Long pinch | Pinch and keep the hand still for a moment; then steer and release (opens the tool palette) | `pinch.hold` |
 | Clutch | Close the hand into a fist; move; open again | `clutch.start`, `clutch.end` |
 | Two-hand pinch | Pinch with both hands; spread, bring together, move or rotate them | `twohand.start`, `.update`, `.end` |
 | Nod | Nod your head down and up | `head.nod` |
@@ -34,6 +35,8 @@ All values live in `packages/perception/src/gestures/config.ts`; a unit test che
 | `pinch.tapMaxMove` | 0.02 | ...if they moved less than this fraction of the frame width |
 | `pinch.othersMin` | 1.3 | Mean extension of the middle, ring and little fingers needed for a pinch to start |
 | `pinch.lostGraceMs` | 250 | A pinching hand lost by tracking for less than this is still pinching |
+| `pinch.holdMs` | 600 | A pinch held this long... |
+| `pinch.holdMaxMove` | 0.02 | ...while moving less than this fraction of the frame width is a hold (long pinch) |
 | `posture.extended` | 1.35 | Finger tip-to-wrist / knuckle-to-wrist above this: extended |
 | `posture.curled` | 1.15 | Below this: curled |
 | `posture.thumbSpread` | 0.45 | Thumb tip to index knuckle / hand size above this: thumb spread |

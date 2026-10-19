@@ -7,6 +7,17 @@ function message<T extends string, P extends z.ZodType>(type: T, payload: P) {
 }
 
 const UndoState = { canUndo: z.boolean(), canRedo: z.boolean() };
+
+/** Tool id per palette slot, clockwise from the top; null is an empty slot. */
+export const PaletteLayout = z.array(z.string().min(1).max(64).nullable()).length(8);
+export type PaletteLayout = z.infer<typeof PaletteLayout>;
+
+/** User settings kept by the bridge in .aex/settings.json. */
+export const Settings = z.strictObject({
+  /** null until the user changes the layout: the app's default applies. */
+  palette: PaletteLayout.nullable(),
+});
+export type Settings = z.infer<typeof Settings>;
 const Project = z.strictObject({ name: z.string(), path: z.string() });
 
 // Bridge -> clients
@@ -42,6 +53,8 @@ export const ProjectStatusMessage = message(
     error: z.string().nullable(),
   }),
 );
+/** The current settings: sent on connect and to every client after a change. */
+export const SettingsSnapshotMessage = message("settings.snapshot", Settings);
 /** Reply to a client request that could not be applied (for example an invalid transaction). */
 export const RequestErrorMessage = message(
   "request.error",
@@ -59,6 +72,7 @@ export const SceneRedoMessage = message("scene.redo", z.strictObject({}));
 export const SceneResyncMessage = message("scene.resync", z.strictObject({}));
 export const SelectionSetMessage = message("selection.set", z.strictObject({ ids: z.array(ElementId) }));
 export const ProjectOpenMessage = message("project.open", z.strictObject({ path: z.string().min(1) }));
+export const SettingsSetMessage = message("settings.set", z.strictObject({ palette: PaletteLayout }));
 
 export const Message = z.discriminatedUnion("type", [
   HelloMessage,
@@ -68,12 +82,14 @@ export const Message = z.discriminatedUnion("type", [
   SelectionChangedMessage,
   ProjectStatusMessage,
   RequestErrorMessage,
+  SettingsSnapshotMessage,
   SceneApplyMessage,
   SceneUndoMessage,
   SceneRedoMessage,
   SceneResyncMessage,
   SelectionSetMessage,
   ProjectOpenMessage,
+  SettingsSetMessage,
 ]);
 export type Message = z.infer<typeof Message>;
 export type MessageOf<T extends Message["type"]> = Extract<Message, { type: T }>;

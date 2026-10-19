@@ -6,6 +6,8 @@ export interface PointerSample {
   position: Point2 | null;
   /** The left hand's pinch point while both hands are visible, shown as a second, quieter pointer. */
   secondary?: Point2 | null;
+  /** Width / height of the camera frame the positions are in. */
+  aspect?: number;
   ts: number;
 }
 

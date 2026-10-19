@@ -1,4 +1,4 @@
-import type { Element, GestureEvent, Point2, SceneDocument } from "@aex/protocol";
+import type { Element, GestureEvent, Point2, Point3Mm, SceneDocument } from "@aex/protocol";
 import { Edges, Grid } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { type FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -6,9 +6,15 @@ import * as THREE from "three";
 import { isSoftwareRenderer } from "../gpu.ts";
 import type { InputBus } from "../input/input-bus.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
-import { elementGeometry, sceneBounds } from "./geometry.ts";
+import { overSectionPlane } from "../tools/builtin.ts";
+import type { ToolController } from "../tools/controller.ts";
+import { InputRouter } from "../tools/input-router.ts";
+import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
+import type { Hit } from "../tools/types.ts";
+import { elementGeometry, MM, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
 import { initialInput, movesCamera, navigate } from "./navigation.ts";
+import { MeasureMarks, SectionClipping, SectionPlane } from "./ToolScene.tsx";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 
 const FOV = 45;
@@ -18,6 +24,19 @@ const EASE_MS = 40;
 const SETTLED = { degrees: 0.01, distance: 0.001 };
 /** Hands rarely reach the frame edges comfortably, so the pointer amplifies motion around the centre. */
 const POINTER_GAIN = 1.3;
+/** Holding the right mouse button this long without moving opens the tool palette; moving sooner pans. */
+const RIGHT_HOLD_MS = 400;
+/** The hand pointer stays put this long when tracking drops the hand for a few frames, instead of blinking out. */
+const POINTER_HOLD_MS = 250;
+
+/** The on-screen button (marked `data-hand-press`) at a viewer position, if any: hands can press HUD buttons. */
+function handButtonAt(wrapper: HTMLElement | null, [x, y]: Point2): HTMLButtonElement | null {
+  if (!wrapper) return null;
+  const rect = wrapper.getBoundingClientRect();
+  const el = document.elementFromPoint(rect.left + x * rect.width, rect.top + y * rect.height);
+  const button = el?.closest<HTMLButtonElement>("[data-hand-press]");
+  return button && wrapper.contains(button) && !button.disabled ? button : null;
+}
 
 declare global {
   interface Window {
@@ -29,7 +48,13 @@ declare global {
       latencyP90(): number | null;
       /** Frames rendered so far (the canvas renders on demand, so an idle view adds none). */
       renders(): number;
+      /** Viewer position (0..1) of a scene point in millimetres. */
+      project(point: Point3Mm): Point2;
+      /** Whether a viewer position is on the section plane. */
+      overSection(x: number, y: number): boolean;
     };
+    /** Dev builds only: the tool controller, for end-to-end tests. */
+    __AEX_TOOLS__?: ToolController;
     /** Dev builds only: inject hand input exactly as the tracker would. */
     __AEX_INPUT__?: {
       gestures(events: GestureEvent[]): void;
@@ -47,6 +72,7 @@ interface Colors {
   selected: string;
   hover: string;
   grid: string;
+  risk: string;
 }
 
 function readColors(): Colors {
@@ -60,6 +86,7 @@ function readColors(): Colors {
     selected: v("--accent"),
     hover: v("--model-hover"),
     grid: v("--viewer-grid"),
+    risk: v("--risk"),
   };
 }
 
@@ -82,25 +109,53 @@ function ElementMesh({
   colors,
   selected,
   hovered,
+  marked,
+  offsetMm,
+  sectionMm,
 }: {
   element: Element;
   doc: SceneDocument;
   colors: Colors;
   selected: boolean;
   hovered: boolean;
+  /** Waiting for confirmation of its deletion. */
+  marked: boolean;
+  /** Being moved: drawn this far from where it is, until the move arrives from the bridge. */
+  offsetMm: [number, number] | null;
+  /** Section height, mm, or null. */
+  sectionMm: number | null;
 }) {
   const geometry = useMemo(() => elementGeometry(element, doc.levels), [element, doc.levels]);
   useEffect(() => () => geometry.dispose(), [geometry]);
+  const topMm = useMemo(() => {
+    geometry.computeBoundingBox();
+    return (geometry.boundingBox?.max.z ?? 0) / MM;
+  }, [geometry]);
+  // Edge lines clip per segment by its first point, so a cut element's vertical edges would stick up through the
+  // section; cut elements are drawn without edges instead.
+  const showEdges = sectionMm === null || topMm <= sectionMm;
   let color = element.type === "massing" ? colors.massing : colors.element;
   if (hovered) color = colors.hover;
   if (selected) color = colors.selected;
+  if (marked) color = colors.risk;
+  const offset: [number, number, number] = offsetMm ? [offsetMm[0] * MM, offsetMm[1] * MM, 0] : [0, 0, 0];
   return (
-    <mesh geometry={geometry} castShadow receiveShadow userData={{ elementId: element.id }}>
+    <mesh geometry={geometry} position={offset} castShadow receiveShadow userData={{ elementId: element.id }}>
       <meshStandardMaterial color={color} roughness={0.9} metalness={0} />
-      <Edges threshold={20} color={colors.edge} />
+      {showEdges && <Edges threshold={20} color={colors.edge} />}
     </mesh>
   );
 }
+
+/** Scene-space picking helpers the camera rig fills in (they need the live camera). */
+interface Picking {
+  id(x: number, y: number): string | null;
+  hit(x: number, y: number): Hit | null;
+  ground(x: number, y: number, heightMm: number): Point3Mm | null;
+  project(point: Point3Mm): Point2;
+}
+
+const noPicking: Picking = { id: () => null, hit: () => null, ground: () => null, project: () => [0, 0] };
 
 /** An angle difference brought into -180..180 degrees, the short way round. */
 function wrap180(degrees: number): number {
@@ -118,13 +173,16 @@ function CameraRig({
   pendingTs,
   latency,
   pickRef,
+  sectionRef,
   invalidateRef,
   rendersRef,
 }: {
   nav: React.RefObject<Turntable>;
   pendingTs: React.RefObject<number | null>;
   latency: LatencyTracker;
-  pickRef: React.RefObject<(x: number, y: number) => string | null>;
+  pickRef: React.RefObject<Picking>;
+  /** Section height, mm: surfaces above it are hidden, so they cannot be picked either. */
+  sectionRef: React.RefObject<number | null>;
   invalidateRef: React.RefObject<() => void>;
   rendersRef: React.RefObject<() => number>;
 }) {
@@ -141,18 +199,37 @@ function CameraRig({
       pendingTs.current = null;
       latency.add(performance.timeOrigin + performance.now() - ts);
     };
-    pickRef.current = (x, y) => {
+    const cast = (x: number, y: number) =>
       raycaster.setFromCamera(new THREE.Vector2(x * 2 - 1, -(y * 2 - 1)), camera);
-      for (const hit of raycaster.intersectObjects(scene.children, true)) {
-        const id = hit.object.userData.elementId;
-        if (typeof id === "string") return id;
+    const hit = (x: number, y: number): Hit | null => {
+      cast(x, y);
+      const cut = sectionRef.current;
+      for (const h of raycaster.intersectObjects(scene.children, true)) {
+        const id = h.object.userData.elementId;
+        if (typeof id !== "string") continue;
+        if (cut !== null && h.point.z / MM > cut + 1) continue; // hidden above the section
+        return { elementId: id, point: [h.point.x / MM, h.point.y / MM, h.point.z / MM] };
       }
       return null;
+    };
+    pickRef.current = {
+      hit,
+      id: (x, y) => hit(x, y)?.elementId ?? null,
+      ground: (x, y, heightMm) => {
+        cast(x, y);
+        const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -heightMm * MM);
+        const at = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+        return at ? [at.x / MM, at.y / MM, heightMm] : null;
+      },
+      project: (point) => {
+        const v = new THREE.Vector3(point[0] * MM, point[1] * MM, point[2] * MM).project(camera);
+        return [(v.x + 1) / 2, (1 - v.y) / 2];
+      },
     };
     return () => {
       scene.onAfterRender = () => {};
     };
-  }, [camera, scene, raycaster, pendingTs, latency, pickRef]);
+  }, [camera, scene, raycaster, pendingTs, latency, pickRef, sectionRef]);
 
   useFrame((_, delta) => {
     const target = nav.current;
@@ -189,24 +266,33 @@ export function Viewer({
   client,
   bus,
   latency,
+  tools,
 }: {
   client: SceneClient;
   bus: InputBus;
   /** Gesture-to-render latency, shared with the Detection card. */
   latency: LatencyTracker;
+  tools: ToolController;
 }) {
   const software = useMemo(isSoftwareRenderer, []);
   const scene = useSyncExternalStore(client.subscribe, client.getSnapshot);
+  const toolState = useSyncExternalStore(tools.subscribe, tools.getSnapshot);
   const [colors, setColors] = useState<Colors>(readColors);
   const nav = useRef<Turntable>({ target: [20, 15, 3], azimuth: 305, elevation: 32, distance: 70 });
   const navInput = useRef(initialInput());
   const pendingTs = useRef<number | null>(null);
-  const pickRef = useRef<(x: number, y: number) => string | null>(() => null);
+  const pickRef = useRef<Picking>(noPicking);
+  const sectionRef = useRef<number | null>(null);
+  sectionRef.current = toolState.overlay.sectionMm;
+  const handAspect = useRef(4 / 3);
+  const lastMouse = useRef<Point2 | null>(null);
   const invalidateRef = useRef<() => void>(() => {});
   const rendersRef = useRef<() => number>(() => 0);
   const framed = useRef(false);
   const navigating = useRef(false);
   const [pointer, setPointer] = useState<Point2 | null>(null);
+  const [engaged, setEngaged] = useState(bus.engaged);
+  const [overButton, setOverButton] = useState(false);
   const [secondaryPointer, setSecondaryPointer] = useState<Point2 | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [p90, setP90] = useState<number | null>(null);
@@ -222,6 +308,19 @@ export function Viewer({
     return () => scheme.removeEventListener("change", refresh);
   }, []);
 
+  // Scene bounds in millimetres, for tools (the section range).
+  const boundsMm = useMemo(() => {
+    const geometries = Object.values(scene.doc?.elements ?? {}).map((e) =>
+      elementGeometry(e, scene.doc?.levels ?? []),
+    );
+    const { min, max } = sceneBounds(geometries);
+    for (const g of geometries) g.dispose();
+    const mm = (v: [number, number, number]): Point3Mm => [v[0] / MM, v[1] / MM, v[2] / MM];
+    return { min: mm(min), max: mm(max) };
+  }, [scene.doc]);
+  const boundsRef = useRef(boundsMm);
+  boundsRef.current = boundsMm;
+
   // Frame the model the first time a scene arrives.
   useEffect(() => {
     if (!scene.doc || framed.current) return;
@@ -235,79 +334,161 @@ export function Viewer({
     framed.current = true;
   }, [scene.doc]);
 
-  // Hand input: gestures move the camera locally (never through the bridge); taps select.
+  // Tools act on the scene through the same client as everything else, and see the view through picking.
   useEffect(() => {
-    const offGestures = bus.onGestures((events) => {
-      for (const event of events) {
+    tools.attach({
+      doc: () => client.getSnapshot().doc,
+      apply: (label, ops) => void client.apply(label, ops),
+      undo: () => void client.undo(),
+      redo: () => void client.redo(),
+      select: (ids) => client.select(ids),
+      pick: ([x, y]) => pickRef.current.hit(x, y),
+      ground: ([x, y], heightMm = 0) => pickRef.current.ground(x, y, heightMm),
+      bounds: () => boundsRef.current,
+      handToViewer,
+      handAspect: () => handAspect.current,
+      navigate: (event: GestureEvent) => {
         nav.current = navigate(nav.current, navInput.current, event);
-        if (movesCamera(event)) invalidateRef.current();
-        if (movesCamera(event)) pendingTs.current = Math.max(pendingTs.current ?? 0, event.ts);
+        if (movesCamera(event)) {
+          invalidateRef.current();
+          pendingTs.current = Math.max(pendingTs.current ?? 0, event.ts);
+        }
         if (event.type === "pinch.drag.start" || event.type === "twohand.start") navigating.current = true;
         if (event.type === "pinch.drag.end" || event.type === "twohand.end" || event.type === "disengaged") {
           navigating.current = false;
         }
-        if (event.type === "pinch.tap") {
-          const [x, y] = handToViewer(event.position);
-          const id = pickRef.current(x, y);
-          client.select(id ? [id] : []);
-        }
-      }
+      },
+      press: (at) => {
+        const button = handButtonAt(wrapper.current, at);
+        button?.click();
+        return button !== null;
+      },
+      isButton: (at) => handButtonAt(wrapper.current, at) !== null,
+      // The agent arrives with the agent bridge change.
+      agentAvailable: () => false,
     });
+  }, [tools, client]);
+
+  // Hand input: the router sends each gesture to the palette, the active tool or navigation (never the bridge).
+  useEffect(() => {
+    const router = new InputRouter(tools.routerTargets);
+    const offGestures = bus.onGestures((events) => {
+      for (const event of events) router.handle(event);
+    });
+    let hideTimer: ReturnType<typeof setTimeout> | null = null;
+    let hoveredButton: HTMLButtonElement | null = null;
+    const markButton = (button: HTMLButtonElement | null) => {
+      if (button === hoveredButton) return;
+      hoveredButton?.removeAttribute("data-hand-hover");
+      button?.setAttribute("data-hand-hover", "");
+      hoveredButton = button;
+      setOverButton(button !== null);
+    };
     const offPointer = bus.onPointer((sample) => {
-      if (!sample.position || !bus.engaged || navigating.current) {
-        setPointer(null);
-        setSecondaryPointer(null);
-        setHoverId(null);
+      if (sample.aspect) handAspect.current = sample.aspect;
+      if (!sample.position) {
+        // Tracking often drops a hand for a frame or two: keep the pointer a moment rather than blink.
+        hideTimer ??= setTimeout(() => {
+          hideTimer = null;
+          setPointer(null);
+          setSecondaryPointer(null);
+          setHoverId(null);
+          markButton(null);
+        }, POINTER_HOLD_MS);
         return;
       }
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = null;
       const at = handToViewer(sample.position);
       setPointer(at);
       setSecondaryPointer(sample.secondary ? handToViewer(sample.secondary) : null);
-      setHoverId(pickRef.current(at[0], at[1]));
-    });
-    const offEngaged = bus.onEngaged((engaged) => {
-      if (!engaged) {
-        setPointer(null);
-        setSecondaryPointer(null);
+      // The pointer always shows where the hand is; hover and HUD buttons respond only while engaged.
+      const button = bus.engaged ? handButtonAt(wrapper.current, at) : null;
+      markButton(button);
+      if (!bus.engaged || navigating.current || button) {
         setHoverId(null);
+        return;
+      }
+      setHoverId(pickRef.current.id(at[0], at[1]));
+      tools.hover(at);
+    });
+    const offEngaged = bus.onEngaged((value) => {
+      setEngaged(value);
+      if (!value) {
+        setHoverId(null);
+        markButton(null);
       }
     });
     return () => {
       offGestures();
       offPointer();
       offEngaged();
+      if (hideTimer) clearTimeout(hideTimer);
     };
-  }, [bus, client]);
+  }, [bus, tools]);
 
-  // Mouse: left drag orbits (a click selects), right or middle drag pans, wheel zooms.
+  // Mouse: a click goes to the active tool; a left drag goes to the tool if it takes it, else orbits; right or
+  // middle drag pans; holding the right button still opens the palette; the wheel zooms.
   useEffect(() => {
     const el = wrapper.current?.querySelector("canvas");
     if (!el) return;
-    let drag: { x: number; y: number; button: number; moved: boolean } | null = null;
+    const viewerAt = (x: number, y: number): Point2 => {
+      const rect = el.getBoundingClientRect();
+      return [(x - rect.left) / rect.width, (y - rect.top) / rect.height];
+    };
+    let drag: {
+      x: number;
+      y: number;
+      button: number;
+      moved: boolean;
+      byTool: boolean;
+      holdTimer: ReturnType<typeof setTimeout> | null;
+    } | null = null;
     const down = (e: PointerEvent) => {
-      drag = { x: e.clientX, y: e.clientY, button: e.button, moved: false };
+      const at = viewerAt(e.clientX, e.clientY);
+      const start = { x: e.clientX, y: e.clientY, button: e.button, moved: false, byTool: false };
+      drag = { ...start, holdTimer: null };
+      if (e.button === 2) {
+        drag.holdTimer = setTimeout(() => {
+          if (!drag || drag.moved) return;
+          tools.openPalette({ center: at, aspect: el.clientWidth / el.clientHeight }, "pointer");
+        }, RIGHT_HOLD_MS);
+      }
       el.setPointerCapture(e.pointerId);
     };
     const move = (e: PointerEvent) => {
+      const at = viewerAt(e.clientX, e.clientY);
+      lastMouse.current = at;
+      if (!drag) tools.hover(at);
+      if (tools.paletteOpen) {
+        tools.steerPalette(at);
+        return;
+      }
       if (!drag) return;
       const dx = e.clientX - drag.x;
       const dy = e.clientY - drag.y;
-      if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+      if (!drag.moved) {
+        if (Math.abs(dx) + Math.abs(dy) <= 3) return;
+        drag.moved = true;
+        if (drag.holdTimer) clearTimeout(drag.holdTimer);
+        if (drag.button === 0) drag.byTool = tools.dragStart(viewerAt(drag.x, drag.y));
+      }
       drag.x = e.clientX;
       drag.y = e.clientY;
+      if (drag.byTool) {
+        tools.drag(at);
+        return;
+      }
       if (drag.button === 0) nav.current = orbit(nav.current, -dx * 0.3, dy * 0.25);
       else nav.current = pan(nav.current, dx / el.clientHeight, -dy / el.clientHeight, FOV);
       invalidateRef.current();
     };
     const up = (e: PointerEvent) => {
-      if (drag && !drag.moved && drag.button === 0) {
-        const rect = el.getBoundingClientRect();
-        const id = pickRef.current(
-          (e.clientX - rect.left) / rect.width,
-          (e.clientY - rect.top) / rect.height,
-        );
-        client.select(id ? [id] : []);
-      }
+      const at = viewerAt(e.clientX, e.clientY);
+      if (drag?.holdTimer) clearTimeout(drag.holdTimer);
+      if (tools.paletteOpen && e.button === 2) tools.releasePalette();
+      else if (drag?.byTool) tools.dragEnd(at);
+      else if (drag && !drag.moved && drag.button === 0) tools.tap(at);
       drag = null;
     };
     const wheel = (e: WheelEvent) => {
@@ -328,24 +509,58 @@ export function Viewer({
       el.removeEventListener("wheel", wheel);
       el.removeEventListener("contextmenu", menu);
     };
-  }, [client]);
+  }, [tools]);
 
-  // Keyboard: Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo (not while typing).
+  // Keyboard (not while typing): Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo; hold Space for the palette at the
+  // pointer; one key per tool; Enter and Escape answer a confirmation (Escape also closes the palette).
   useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || (e.target as HTMLElement).closest("input, textarea")) return;
+    const typing = (e: KeyboardEvent) =>
+      (e.target as HTMLElement).closest("input, textarea, select") !== null;
+    const keydown = (e: KeyboardEvent) => {
+      if (typing(e)) return;
       const k = e.key.toLowerCase();
-      if (k === "z" && !e.shiftKey) {
-        e.preventDefault();
-        client.undo();
-      } else if ((k === "z" && e.shiftKey) || k === "y") {
-        e.preventDefault();
-        client.redo();
+      if (e.ctrlKey || e.metaKey) {
+        if (k === "z" && !e.shiftKey) {
+          e.preventDefault();
+          client.undo();
+        } else if ((k === "z" && e.shiftKey) || k === "y") {
+          e.preventDefault();
+          client.redo();
+        }
+        return;
       }
+      if (e.altKey) return;
+      if (e.key === " ") {
+        e.preventDefault();
+        const canvas = wrapper.current?.querySelector("canvas");
+        if (!e.repeat && !tools.paletteOpen && canvas) {
+          const aspect = canvas.clientWidth / canvas.clientHeight;
+          tools.openPalette({ center: lastMouse.current ?? [0.5, 0.5], aspect }, "pointer");
+        }
+        return;
+      }
+      if (e.key === "Enter" && tools.getSnapshot().question) {
+        e.preventDefault();
+        tools.respond(true);
+        return;
+      }
+      if (e.key === "Escape") {
+        tools.cancel();
+        return;
+      }
+      const tool = !e.repeat && !e.shiftKey ? tools.registry.byShortcut(k) : undefined;
+      if (tool) tools.choose(tool.id);
     };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [client]);
+    const keyup = (e: KeyboardEvent) => {
+      if (e.key === " " && tools.paletteOpen) tools.releasePalette();
+    };
+    window.addEventListener("keydown", keydown);
+    window.addEventListener("keyup", keyup);
+    return () => {
+      window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+    };
+  }, [client, tools]);
 
   // Latency readout refreshes twice a second.
   useEffect(() => {
@@ -359,19 +574,48 @@ export function Viewer({
     window.__AEX_VIEWER__ = {
       camera: () => nav.current,
       meshCount: () => Object.keys(client.getSnapshot().doc?.elements ?? {}).length,
-      pick: (x, y) => pickRef.current(x, y),
+      pick: (x, y) => pickRef.current.id(x, y),
       latencyP90: () => latency.p90(),
       renders: () => rendersRef.current(),
+      project: (point) => pickRef.current.project(point),
+      overSection: (x, y) =>
+        overSectionPlane(
+          {
+            overlay: () => tools.getSnapshot().overlay,
+            ground: ([gx, gy], heightMm = 0) => pickRef.current.ground(gx, gy, heightMm),
+            bounds: () => boundsRef.current,
+          },
+          [x, y],
+        ),
     };
+    window.__AEX_TOOLS__ = tools;
     window.__AEX_INPUT__ = {
       gestures: (events) => bus.emitGestures(events),
       pointer: (position, secondary = null) =>
         bus.emitPointer({ position, secondary, ts: performance.timeOrigin + performance.now() }),
       engaged: (engaged) => bus.setEngaged(engaged),
     };
-  }, [bus, client, latency]);
+  }, [bus, client, latency, tools]);
+
+  // The hand pointer shows what a pinch would do here: press a button, steer the palette, grab the section, or the
+  // active tool's own action (its icon).
+  const activeIcon = tools.registry.get(toolState.activeId)?.icon ?? null;
+  let pointerMode: string = toolState.activeId;
+  if (!engaged) pointerMode = "idle";
+  else if (toolState.palette) pointerMode = "palette";
+  else if (overButton) pointerMode = "press";
+  else if (toolState.overlay.sectionHover) pointerMode = "grab";
+  let pointerGlyph =
+    pointerMode === toolState.activeId && toolState.activeId !== "select" ? activeIcon : null;
+  if (pointerMode === "grab") pointerGlyph = "M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4";
 
   const selection = new Set(scene.selection);
+  const { overlay } = toolState;
+  // A move preview applies only while the element is still as it was when the drag began.
+  const previewOffset = (element: Element): [number, number] | null =>
+    overlay.movePreview?.id === element.id && overlay.movePreview.from === JSON.stringify(element)
+      ? overlay.movePreview.offsetMm
+      : null;
   const selected = scene.doc && scene.selection[0] ? scene.doc.elements[scene.selection[0]] : undefined;
   const openProject = (e: FormEvent) => {
     e.preventDefault();
@@ -380,7 +624,14 @@ export function Viewer({
   };
 
   return (
-    <section className="viewer" ref={wrapper} aria-label="3D model" data-testid="viewer">
+    <section
+      className="viewer"
+      ref={wrapper}
+      aria-label="3D model"
+      data-testid="viewer"
+      data-tool={toolState.activeId}
+      data-section-hover={toolState.overlay.sectionHover}
+    >
       <Canvas
         frameloop="demand"
         shadows={!software}
@@ -420,13 +671,27 @@ export function Viewer({
               colors={colors}
               selected={selection.has(element.id)}
               hovered={hoverId === element.id}
+              marked={overlay.marked === element.id}
+              offsetMm={previewOffset(element)}
+              sectionMm={overlay.sectionMm}
             />
           ))}
+        <SectionClipping heightMm={overlay.sectionMm} version={scene.doc} />
+        {overlay.sectionMm !== null && (
+          <SectionPlane
+            heightMm={overlay.sectionMm}
+            bounds={boundsMm}
+            color={colors.selected}
+            hovered={overlay.sectionHover}
+          />
+        )}
+        {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
         <CameraRig
           nav={nav}
           pendingTs={pendingTs}
           latency={latency}
           pickRef={pickRef}
+          sectionRef={sectionRef}
           invalidateRef={invalidateRef}
           rendersRef={rendersRef}
         />
@@ -444,10 +709,17 @@ export function Viewer({
         <div
           className="hand-pointer"
           data-testid="hand-pointer"
+          data-mode={pointerMode}
+          data-engaged={engaged}
           style={{ left: `${pointer[0] * 100}%`, top: `${pointer[1] * 100}%` }}
           aria-hidden="true"
-        />
+        >
+          {pointerGlyph && <ToolIcon path={pointerGlyph} size={14} />}
+        </div>
       )}
+
+      <ToolOverlays controller={tools} />
+      <UndoStrip client={client} />
 
       <div className="viewer-toolbar">
         <div className="project" data-testid="project-status">
@@ -461,6 +733,7 @@ export function Viewer({
             onClick={() => client.undo()}
             disabled={!scene.canUndo}
             title="Undo (Ctrl+Z)"
+            data-hand-press
           >
             Undo
           </button>
@@ -470,6 +743,7 @@ export function Viewer({
             onClick={() => client.redo()}
             disabled={!scene.canRedo}
             title="Redo (Ctrl+Shift+Z)"
+            data-hand-press
           >
             Redo
           </button>
@@ -494,6 +768,7 @@ export function Viewer({
       </div>
 
       <div className="viewer-status">
+        <ActiveTool controller={tools} />
         <span data-testid="selection-status">
           {selected ? `${selected.name} (${selected.type})` : "Nothing selected"}
         </span>

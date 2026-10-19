@@ -153,6 +153,47 @@ describe("clutch (spec: closed fist acts as a clutch)", () => {
   });
 });
 
+describe("long pinch (hold)", () => {
+  it("hold then steer: one hold at 600 ms, then drag updates and a drag end", () => {
+    const events = run([
+      ...repeat(22, () => ({ ratio: 0.12, position: at(0.5) })), // about 730 ms still
+      ...repeat(10, (i) => ({ ratio: 0.12, position: at(0.5 + i * 0.01) })), // steer right
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
+    const t = types(events);
+    expect(t.filter((x) => x === "pinch.hold")).toHaveLength(1);
+    const hold = events.find((e) => e.type === "pinch.hold");
+    // The pinch starts when the fingertips first touch; the hold fires 600 ms after that.
+    expect(hold && hold.ts - 1000).toBeGreaterThanOrEqual(600);
+    expect(hold && hold.ts - 1000).toBeLessThan(600 + 2 * STEP);
+    const afterHold = t.slice(t.indexOf("pinch.hold") + 1);
+    expect(afterHold.filter((x) => x === "pinch.drag.update").length).toBeGreaterThan(5);
+    expect(afterHold.at(-1)).toBe("pinch.drag.end");
+    expect(t).not.toContain("pinch.tap");
+  });
+
+  it("a moving pinch never holds", () => {
+    const events = run([
+      ...repeat(30, (i) => ({ ratio: 0.12, position: at(0.3 + i * 0.006) })), // steady move for 1 s
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
+    expect(types(events)).not.toContain("pinch.hold");
+  });
+
+  it("a pinch that moved and then stops does not hold later", () => {
+    const events = run([
+      ...repeat(5, (i) => ({ ratio: 0.12, position: at(0.3 + i * 0.01) })),
+      ...repeat(30, () => ({ ratio: 0.12, position: at(0.34) })),
+    ]);
+    expect(types(events)).not.toContain("pinch.hold");
+  });
+
+  it("a short tap never holds", () => {
+    const events = run([...repeat(6, () => ({ ratio: 0.12 })), ...repeat(3, () => ({ ratio: 0.8 }))]);
+    expect(types(events)).toEqual(["pinch.tap"]);
+  });
+});
+
 describe("tracking loss (hand sweeping fast or passing over the face)", () => {
   it("a pinch that tracking loses mid-sweep is not a tap", () => {
     // Recorded clip: the fingertips touch, the hand starts a fast sweep across the face and is lost for 300 ms+.

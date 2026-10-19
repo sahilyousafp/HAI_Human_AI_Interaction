@@ -273,12 +273,265 @@ button {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--viewer-bg) 70%, transparent);
   pointer-events: none;
 }
+/* The hand pointer shows what a pinch would do: the active tool's icon, press (over a HUD button), steer (palette
+   open), grab (the section plane); dimmed and dashed while not engaged. */
+.hand-pointer {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  transition:
+    width 90ms ease,
+    height 90ms ease,
+    margin 90ms ease,
+    background 90ms ease;
+}
+.hand-pointer:has(svg) {
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  background: color-mix(in srgb, var(--viewer-bg) 75%, transparent);
+}
+.hand-pointer[data-mode="delete"] {
+  border-color: var(--risk);
+  color: var(--risk);
+}
+.hand-pointer[data-mode="press"] {
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.hand-pointer[data-mode="palette"] {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  background: var(--accent);
+}
+.hand-pointer[data-mode="grab"] {
+  border-radius: 7px;
+}
+.hand-pointer[data-engaged="false"] {
+  border-style: dashed;
+  border-color: var(--muted);
+  opacity: 0.7;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hand-pointer {
+    transition: none;
+  }
+}
+[data-hand-press][data-hand-hover] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* The mouse cursor follows the tool too. */
+.viewer[data-tool="measure"] canvas,
+.viewer[data-tool="delete"] canvas {
+  cursor: crosshair;
+}
+.viewer[data-tool="move"] canvas {
+  cursor: move;
+}
+.viewer[data-tool="massing"] canvas {
+  cursor: copy;
+}
+.viewer[data-tool="section"][data-section-hover="true"] canvas {
+  cursor: ns-resize;
+}
 .hand-pointer.left-hand {
   border-color: var(--pointer-secondary);
   /* Light grey on a light viewer needs a fine dark edge to stay visible. */
   box-shadow:
     0 0 0 1px rgb(0 0 0 / 0.28),
     inset 0 0 0 1px rgb(0 0 0 / 0.18);
+}
+
+/* Tool palette (radial, opened at the hand or pointer) and tool messages */
+.tool-palette {
+  /* Sized to the ring (2 x (radius + half a slot)) and centred on where it was opened. */
+  position: absolute;
+  width: 266px;
+  height: 266px;
+  margin: -133px 0 0 -133px;
+  pointer-events: none;
+  z-index: 3;
+}
+.palette-centre,
+.palette-slot {
+  left: 50%;
+  top: 50%;
+}
+.palette-centre {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border: 2px dashed color-mix(in srgb, var(--ink) 45%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+.palette-slot {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  width: 66px;
+  height: 66px;
+  margin: -33px 0 0 -33px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  color: var(--ink);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+  transition:
+    background 80ms ease,
+    transform 80ms ease;
+}
+.palette-slot[data-tool=""] {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+  box-shadow: none;
+}
+.palette-slot[data-highlighted="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.palette-label {
+  max-width: 60px;
+  font: 600 10.5px / 1.1 var(--f-body);
+  text-align: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .palette-slot {
+    transition: none;
+  }
+}
+.tool-messages {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(64ch, calc(100% - 32px));
+  z-index: 2;
+}
+.tool-notice,
+.tool-question {
+  margin: 0;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+  font-size: 13.5px;
+}
+.tool-question {
+  display: grid;
+  gap: 8px;
+  border-left: 3px solid var(--risk);
+}
+.tool-question-actions {
+  display: flex;
+  gap: 8px;
+}
+.danger {
+  padding: 7px 12px;
+  border: 1px solid var(--risk);
+  border-radius: 6px;
+  background: var(--risk);
+  color: var(--bg);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+kbd {
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 4px;
+  font: 500 11px / 1.3 var(--f-mono);
+}
+.section-status {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(6px);
+  font: 500 12.5px / 1.3 var(--f-mono);
+  font-variant-numeric: tabular-nums;
+}
+.active-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.tool-cancel {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.tool-cancel:hover {
+  border-color: var(--accent);
+}
+.undo-strip {
+  position: absolute;
+  left: 50%;
+  bottom: 60px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+.active-tool kbd {
+  color: var(--muted);
+  font-weight: 500;
+}
+.measure-label {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  font: 600 12.5px / 1.3 var(--f-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.palette-settings {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.palette-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
 }
 
 .tracking {
@@ -411,6 +664,12 @@ button {
 .secondary:disabled {
   color: var(--muted);
   cursor: not-allowed;
+}
+.undo-strip .secondary,
+.section-status .secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .check {
   display: flex;
