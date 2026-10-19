@@ -14,6 +14,11 @@ export type ConnectionState =
   | { status: "offline" }
   | { status: "refused" };
 
+export interface BridgeConnection {
+  send(message: Message): boolean;
+  close(): void;
+}
+
 export interface Session {
   port: number;
   token: string;
@@ -48,10 +53,10 @@ export function connectToBridge(
   deps: ConnectionDeps,
   onState: (state: ConnectionState) => void,
   onMessage: (message: Message) => void = () => {},
-): () => void {
+): BridgeConnection {
   if (!session) {
     onState({ status: "no-session" });
-    return () => {};
+    return { send: () => false, close: () => {} };
   }
   const { port, token } = session;
   let socket: SocketLike | null = null;
@@ -115,7 +120,14 @@ export function connectToBridge(
 
   open();
 
-  return () => {
+  /** Sends a message if the socket is open; returns false (and drops it) otherwise. */
+  const send = (message: Message): boolean => {
+    if (!socket || !socketOpen) return false;
+    socket.send(JSON.stringify(message));
+    return true;
+  };
+
+  const close = () => {
     disposed = true;
     if (timer !== null) deps.clearTimer(timer);
     const current = socket;
@@ -129,6 +141,8 @@ export function connectToBridge(
       current.onmessage = null;
     }
   };
+
+  return { send, close };
 }
 
 export const browserDeps: ConnectionDeps = {

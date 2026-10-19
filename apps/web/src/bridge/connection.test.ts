@@ -89,7 +89,7 @@ describe("connectToBridge", () => {
 
   it("defers closing a still-connecting socket until it opens", () => {
     const h = harness();
-    const dispose = connectToBridge({ port: 4870, token: "abc" }, h.deps, h.onState);
+    const { close: dispose } = connectToBridge({ port: 4870, token: "abc" }, h.deps, h.onState);
     const socket = h.sockets[0];
     let closed = false;
     if (socket)
@@ -105,7 +105,7 @@ describe("connectToBridge", () => {
 
   it("stops reconnecting after dispose", () => {
     const h = harness();
-    const dispose = connectToBridge({ port: 4870, token: "abc" }, h.deps, h.onState);
+    const { close: dispose } = connectToBridge({ port: 4870, token: "abc" }, h.deps, h.onState);
     h.sockets[0]?.onopen?.();
     dispose();
     expect(h.timers).toHaveLength(0);

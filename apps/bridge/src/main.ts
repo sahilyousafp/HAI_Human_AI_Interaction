@@ -1,4 +1,5 @@
 import { loadConfig } from "./config.ts";
+import { defaultProjectDir, readLastProject, writeLastProject } from "./project.ts";
 import { createBridge } from "./server.ts";
 import { removeSessionFile, writeSessionFile } from "./session-file.ts";
 
@@ -10,6 +11,10 @@ const bridge = createBridge({
   port: config.port,
   allowedOrigins: config.allowedOrigins,
   version: VERSION,
+  scene: {
+    projectDir: readLastProject(config.workspaceRoot) ?? defaultProjectDir(config.workspaceRoot),
+    onProjectOpened: (project) => writeLastProject(config.workspaceRoot, project.path),
+  },
 });
 
 const address = await bridge.start();

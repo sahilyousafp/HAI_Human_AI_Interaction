@@ -31,3 +31,23 @@ test("gesture events arrive in order: engaged, then two-hand pinches, timestamps
   for (let i = 1; i < events.length; i++)
     expect(events[i]?.ts ?? 0).toBeGreaterThanOrEqual(events[i - 1]?.ts ?? 0);
 });
+
+test("full pipeline: camera -> gestures -> camera motion (two-hand pinches change the view distance)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect
+    .poll(() => page.evaluate(() => window.__AEX_VIEWER__?.meshCount() ?? 0), { timeout: 30_000 })
+    .toBeGreaterThan(0);
+  await page.waitForTimeout(400);
+  const before = await page.evaluate(() => window.__AEX_VIEWER__?.camera().distance ?? 0);
+  await startCamera(page);
+  await expect
+    .poll(async () => (await gestureEvents(page)).some((e) => e.type === "twohand.update"), {
+      timeout: 90_000,
+    })
+    .toBe(true);
+  await expect
+    .poll(() => page.evaluate(() => window.__AEX_VIEWER__?.camera().distance ?? 0), { timeout: 30_000 })
+    .not.toBeCloseTo(before, 2);
+});

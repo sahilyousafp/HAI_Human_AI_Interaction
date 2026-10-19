@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "units": "mm",
+  "up": "Z",
+  "name": "Mixed-use block",
+  "levels": [
+    {
+      "id": "L0",
+      "name": "Ground",
+      "elevation": 0
+    },
+    {
+      "id": "L1",
+      "name": "Level 1",
+      "elevation": 4500
+    },
+    {
+      "id": "L2",
+      "name": "Roof",
+      "elevation": 8000
+    }
+  ],
+  "elements": {
+    "site": {
+      "id": "site",
+      "type": "slab",
+      "name": "Site",
+      "level": "L0",
+      "outline": [[0, 0], [40000, 0], [40000, 30000], [0, 30000]],
+      "thickness": 300,
+      "properties": {
+        "use": "landscape"
+      }
+    },
+    "col-a1": {
+      "id": "col-a1",
+      "type": "column",
+      "name": "Column A1",
+      "level": "L0",
+      "position": [4000, 4000],
+      "section": [400, 400],
+      "height": 4500,
+      "properties": {}
+    },
+    "col-a2": {
+      "id": "col-a2",
+      "type": "column",
+      "name": "Column A2",
+      "level": "L0",
+      "position": [4000, 10000],
+      "section": [400, 400],
+      "height": 4500,
+      "properties": {}
+    },
+    "col-a3": {
+      "id": "col-a3",
+      "type": "column",
+      "name": "Column A3",
+      "level": "L0",
+      "position": [4000, 16000],
+      "section": [400, 400],
+      "height": 4500,
+      "properties": {}
+    },
+    "col-b1": {
+      "id": "col-b1",
+      "type": "column",
+      "name": "Column B1",
+      "level": "L0",
+      "position": [12000, 4000],
+      "section": [400, 400],
+      "height": 4500,
+      "properties": {}
+    },
+    "col-b2": {
+      "id": "col-b2",
+      "type": "column",
+      "name": "Column B2",
+      "level": "L0",
+      "position": [12000, 10000],
+      "section": [400, 400],
+      "height": 4500,
+      "properties": {}
+    },
+    "col-b3": {
+      "id": "col-b3",
+      "type": "column",
+      "name": "Column B3",
+      "level": "L0",
+      "position": [12000, 16000],
+      "section": [400, 400],
+      "height": 4500,
+      "properties": {}
+    },
+    "col-c1": {
+      "id": "col-c1",
+      "type": "column",
+      "name": "Column C1",
+      "level": "L0",
+      "position": [20000, 4000],
+      "section": [400, 400],
+      "height": 4500,
+      "properties": {}
+    },
+    "col-c2": {
+      "id": "col-c2",
+      "type": "column",
+      "name": "Column C2",
+      "level": "L0",
+      "position": [20000, 10000],
+      "section": [400, 400],
+      "height": 4500,
+      "properties": {}
+    },
+    "col-c3": {
+      "id": "col-c3",
+      "type": "column",
+      "name": "Column C3",
+      "level": "L0",
+      "position": [20000, 16000],
+      "section": [400, 400],
+      "height": 4500,
+      "properties": {}
+    },
+    "slab-l1": {
+      "id": "slab-l1",
+      "type": "slab",
+      "name": "Level 1 floor",
+      "level": "L1",
+      "outline": [[3800, 3800], [20200, 3800], [20200, 16200], [3800, 16200]],
+      "thickness": 250,
+      "properties": {}
+    },
+    "wall-s": {
+      "id": "wall-s",
+      "type": "wall",
+      "name": "South wall",
+      "level": "L1",
+      "start": [4000, 4000],
+      "end": [20000, 4000],
+      "height": 3500,
+      "thickness": 300,
+      "properties": {}
+    },
+    "wall-e": {
+      "id": "wall-e",
+      "type": "wall",
+      "name": "East wall",
+      "level": "L1",
+      "start": [20000, 4000],
+      "end": [20000, 16000],
+      "height": 3500,
+      "thickness": 300,
+      "properties": {}
+    },
+    "wall-n": {
+      "id": "wall-n",
+      "type": "wall",
+      "name": "North wall",
+      "level": "L1",
+      "start": [20000, 16000],
+      "end": [4000, 16000],
+      "height": 3500,
+      "thickness": 300,
+      "properties": {}
+    },
+    "wall-w": {
+      "id": "wall-w",
+      "type": "wall",
+      "name": "West wall",
+      "level": "L1",
+      "start": [4000, 16000],
+      "end": [4000, 4000],
+      "height": 3500,
+      "thickness": 300,
+      "properties": {}
+    },
+    "slab-roof": {
+      "id": "slab-roof",
+      "type": "slab",
+      "name": "Block A roof",
+      "level": "L2",
+      "outline": [[3800, 3800], [20200, 3800], [20200, 16200], [3800, 16200]],
+      "thickness": 300,
+      "properties": {}
+    },
+    "block-b": {
+      "id": "block-b",
+      "type": "massing",
+      "name": "Block B tower",
+      "level": "L0",
+      "origin": [24000, 4000, 0],
+      "size": [12000, 12000, 21000],
+      "properties": {
+        "use": "residential",
+        "storeys": 6
+      }
+    },
+    "block-c": {
+      "id": "block-c",
+      "type": "massing",
+      "name": "Block C pavilion",
+      "level": "L0",
+      "origin": [4000, 20000, 0],
+      "size": [32000, 6000, 3500],
+      "properties": {
+        "use": "retail"
+      }
+    }
+  }
+}

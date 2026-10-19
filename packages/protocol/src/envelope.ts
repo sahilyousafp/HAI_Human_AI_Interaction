@@ -42,27 +42,3 @@ export const BridgeStatusMessage = z.strictObject({
   }),
 });
 export type BridgeStatusMessage = z.infer<typeof BridgeStatusMessage>;
-
-export const Message = z.discriminatedUnion("type", [HelloMessage, BridgeStatusMessage]);
-export type Message = z.infer<typeof Message>;
-
-export type ParseResult = { ok: true; message: Message } | { ok: false; error: string };
-
-/** Parse and validate one raw WebSocket frame. Never throws. */
-export function parseMessage(raw: string): ParseResult {
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return { ok: false, error: "Message is not valid JSON." };
-  }
-  const envelope = Envelope.safeParse(data);
-  if (!envelope.success) {
-    return { ok: false, error: z.prettifyError(envelope.error) };
-  }
-  const message = Message.safeParse(data);
-  if (!message.success) {
-    return { ok: false, error: z.prettifyError(message.error) };
-  }
-  return { ok: true, message: message.data };
-}

@@ -9,5 +9,9 @@
   },
   "scripts": {
     "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@aex/protocol": "workspace:*",
+    "zod": "4.6.7"
   }
 }

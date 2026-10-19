@@ -1,21 +1,56 @@
-import { useEffect, useState } from "react";
-import { browserDeps, type ConnectionState, connectToBridge } from "./bridge/connection.ts";
+import type { Message } from "@aex/protocol";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type BridgeConnection,
+  browserDeps,
+  type ConnectionState,
+  connectToBridge,
+} from "./bridge/connection.ts";
+import { InputBus } from "./input/input-bus.ts";
 import { TrackingPanel } from "./perception/TrackingPanel.tsx";
 import type { TrackerState } from "./perception/tracker.ts";
+import { SceneClient } from "./scene/scene-client.ts";
+import { Viewer } from "./viewer/Viewer.tsx";
+
+declare global {
+  interface Window {
+    __AEX_SCENE__?: SceneClient;
+  }
+}
 
 const LABELS: Record<ConnectionState["status"], { text: string; hint?: string }> = {
   "no-session": { text: "Bridge not started", hint: "Run pnpm dev from the repository root, then reload." },
   connecting: { text: "Connecting" },
   connected: { text: "Connected" },
-  offline: { text: "Bridge offline", hint: "Retrying. Is pnpm dev still running?" },
+  offline: {
+    text: "Bridge offline",
+    hint: "Retrying. Hand navigation keeps working; edits wait for the bridge.",
+  },
   refused: { text: "Bridge refused", hint: "The bridge restarted with a new session. Reload the page." },
 };
 
 export function App() {
   const [bridge, setBridge] = useState<ConnectionState>({ status: "connecting" });
   const [camera, setCamera] = useState<TrackerState>({ camera: "off" });
+  const connection = useRef<BridgeConnection | null>(null);
+  const sceneClient = useMemo(
+    () => new SceneClient((message: Message) => connection.current?.send(message) ?? false),
+    [],
+  );
+  const bus = useMemo(() => new InputBus(), []);
 
-  useEffect(() => connectToBridge(window.__AEX_SESSION__ ?? null, browserDeps, setBridge), []);
+  // Dev builds only: lets end-to-end tests edit the scene through the same client the UI uses.
+  useEffect(() => {
+    if (import.meta.env.DEV) window.__AEX_SCENE__ = sceneClient;
+  }, [sceneClient]);
+
+  useEffect(() => {
+    const conn = connectToBridge(window.__AEX_SESSION__ ?? null, browserDeps, setBridge, (message) =>
+      sceneClient.handle(message),
+    );
+    connection.current = conn;
+    return () => conn.close();
+  }, [sceneClient]);
 
   const label = LABELS[bridge.status];
   const cameraOn = camera.camera === "on" || camera.camera === "starting";
@@ -52,9 +87,14 @@ export function App() {
           </output>
         </div>
       </header>
-      <main className="stage">
-        {label.hint && <p className="hint">{label.hint}</p>}
-        <TrackingPanel onCameraState={setCamera} />
+      <main className="workspace">
+        <div className="stage">
+          <Viewer client={sceneClient} bus={bus} />
+          {label.hint && <p className="hint">{label.hint}</p>}
+        </div>
+        <aside className="sidebar" aria-label="Tracking">
+          <TrackingPanel onCameraState={setCamera} bus={bus} />
+        </aside>
       </main>
     </div>
   );

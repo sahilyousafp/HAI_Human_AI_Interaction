@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION, parseMessage } from "./envelope.ts";
+import { PROTOCOL_VERSION } from "./envelope.ts";
+import { parseMessage } from "./messages.ts";
 
 const hello = { type: "hello", id: "m1", payload: { client: "web", protocolVersion: PROTOCOL_VERSION } };
 const status = {

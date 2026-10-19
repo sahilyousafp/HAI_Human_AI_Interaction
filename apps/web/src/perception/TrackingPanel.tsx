@@ -1,5 +1,7 @@
+import { pinchPoint } from "@aex/perception";
 import type { GestureEvent, TrackedHand, TrackingFrame } from "@aex/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { InputBus } from "../input/input-bus.ts";
 import { type DrawColors, drawTracking } from "./draw.ts";
 import { GesturePanel } from "./GesturePanel.tsx";
 import { GestureStore } from "./gesture-store.ts";
@@ -64,7 +66,13 @@ function faceCadenceLabel(state: TrackerState, stats: TrackerStats | null): stri
   return stats?.faceCadence === 2 ? "every 2nd frame" : "every frame";
 }
 
-export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerState): void }) {
+interface TrackingPanelProps {
+  onCameraState(state: TrackerState): void;
+  /** Where hand input goes: gestures, the pointer and engagement. */
+  bus: InputBus;
+}
+
+export function TrackingPanel({ onCameraState, bus }: TrackingPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackerRef = useRef<Tracker | null>(null);
@@ -99,6 +107,8 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
         onState: updateState,
         onGestures: (events, gestureState, gestureMs) => {
           gestureStore.push(events, gestureState, gestureMs);
+          bus.setEngaged(gestureState.engaged);
+          bus.emitGestures(events);
           if (import.meta.env.DEV && events.length > 0) {
             if (!window.__AEX_GESTURES__) window.__AEX_GESTURES__ = { events: [] };
             const log = window.__AEX_GESTURES__.events;
@@ -108,6 +118,9 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
         },
         onFrame: (frame, frameStats, faceRan, rawHands) => {
           latestFrame.current = frame;
+          // The pointer follows the right hand's pinch point, or the left hand if only it is visible.
+          const hand = frame.hands.find((h) => h.handedness === "Right") ?? frame.hands[0];
+          bus.emitPointer({ position: hand ? pinchPoint(hand) : null, ts: frame.captureTs });
           latestRaw.current = rawHands ?? [];
           latestStats.current = frameStats;
           if (import.meta.env.DEV) {
@@ -134,7 +147,7 @@ export function TrackingPanel({ onCameraState }: { onCameraState(state: TrackerS
     trackerRef.current = tracker;
     if (import.meta.env.DEV) window.__AEX_RECORDER__ = recorderRef.current;
     return () => tracker.stop();
-  }, [updateState, gestureStore]);
+  }, [updateState, gestureStore, bus]);
 
   // Redraw the overlay every animation frame from the latest result; no React render per frame.
   useEffect(() => {

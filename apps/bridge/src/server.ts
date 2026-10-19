@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import {
   type BridgeStatusMessage,
+  type Message,
   PROTOCOL_VERSION,
   parseMessage,
   TOKEN_PROTOCOL_PREFIX,
@@ -12,6 +13,7 @@ import {
 } from "@aex/protocol";
 import { type WebSocket, WebSocketServer } from "ws";
 import { assertLoopback } from "./config.ts";
+import { SceneHub, type SceneHubOptions } from "./scene-hub.ts";
 
 export interface BridgeOptions {
   host: string;
@@ -19,11 +21,13 @@ export interface BridgeOptions {
   allowedOrigins: string[];
   version: string;
   token?: string;
+  scene?: SceneHubOptions;
 }
 
 export interface Bridge {
   readonly token: string;
   readonly startedAt: string;
+  readonly scene: SceneHub;
   start(): Promise<AddressInfo>;
   stop(): Promise<void>;
 }
@@ -64,10 +68,12 @@ export function createBridge(options: BridgeOptions): Bridge {
     },
   });
 
-  const broadcastStatus = () => {
-    const frame = JSON.stringify(statusMessage());
+  const broadcast = (message: Message) => {
+    const frame = JSON.stringify(message);
     for (const client of clients) client.send(frame);
   };
+  const broadcastStatus = () => broadcast(statusMessage());
+  const scene = new SceneHub(options.scene ?? {}, broadcast);
 
   const server: Server = createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
@@ -92,17 +98,28 @@ export function createBridge(options: BridgeOptions): Bridge {
 
   wss.on("connection", (ws: WebSocket) => {
     let greeted = false;
+    const send = (message: Message) => ws.send(JSON.stringify(message));
     ws.on("message", (data) => {
       const result = parseMessage(data.toString());
       if (!result.ok) {
         ws.close(1008, "Invalid message");
         return;
       }
-      if (result.message.type === "hello" && !greeted) {
+      const message = result.message;
+      if (message.type === "hello") {
+        if (greeted) return;
         greeted = true;
         clients.add(ws);
         broadcastStatus();
+        scene.greet(send);
+        return;
       }
+      // Nothing but hello is accepted before a client has said hello.
+      if (!greeted) {
+        ws.close(1008, "Say hello first");
+        return;
+      }
+      scene.handle(message, send);
     });
     ws.on("close", () => {
       if (clients.delete(ws)) broadcastStatus();
@@ -112,16 +129,19 @@ export function createBridge(options: BridgeOptions): Bridge {
   return {
     token,
     startedAt,
+    scene,
     start: () =>
       new Promise((resolve, reject) => {
         server.once("error", reject);
         server.listen(options.port, options.host, () => resolve(server.address() as AddressInfo));
       }),
-    stop: () =>
-      new Promise((resolve) => {
+    stop: async () => {
+      await scene.flush();
+      await new Promise<void>((resolve) => {
         for (const client of wss.clients) client.terminate();
         wss.close();
         server.close(() => resolve());
-      }),
+      });
+    },
   };
 }
