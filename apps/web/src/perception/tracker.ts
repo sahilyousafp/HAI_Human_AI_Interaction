@@ -1,5 +1,6 @@
 import type { RecognizerState } from "@aex/perception";
 import type { GestureEvent, TrackedHand, TrackingFrame } from "@aex/protocol";
+import { type CameraEffectsState, disableEffects, EFFECTS_OFF, readEffects } from "./camera-effects.ts";
 import type { FromWorker, ToWorker } from "./messages.ts";
 
 export type CameraError = "denied" | "not-found" | "in-use" | "unknown";
@@ -22,6 +23,8 @@ export interface TrackerCallbacks {
   onState(state: TrackerState): void;
   onFrame(frame: TrackingFrame, stats: TrackerStats, faceRan: boolean, rawHands?: TrackedHand[]): void;
   onGestures(events: GestureEvent[], state: RecognizerState, gestureMs: number): void;
+  /** Operating-system camera effects (background blur, framing, eye contact) after asking for them off. */
+  onEffects?(state: CameraEffectsState): void;
 }
 
 function classify(error: unknown): CameraError {
@@ -68,12 +71,25 @@ export class Tracker {
     this.callbacks.onState({ camera: "starting" });
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 30 },
+          ...EFFECTS_OFF,
+        } as MediaTrackConstraints,
         audio: false,
       });
     } catch (error) {
       this.callbacks.onState({ camera: "error", error: classify(error), detail: String(error) });
       return;
+    }
+    const track = this.stream.getVideoTracks()[0];
+    if (track) {
+      void disableEffects(track).then((effects) => {
+        if (this.stream) this.callbacks.onEffects?.(effects);
+      });
+      // The user can switch effects on from the operating system while the camera runs.
+      track.addEventListener("configurationchange", () => this.callbacks.onEffects?.(readEffects(track)));
     }
     this.video.srcObject = this.stream;
     this.video.muted = true;

@@ -15,7 +15,9 @@ function run(
   steps.forEach((s, i) => {
     const ts = 1000 + i * STEP;
     const obs: HandObservation | null =
-      s === null ? null : { ts, ratio: 1, posture: "other", position: [0.5, 0.5], confidence: 0.9, ...s };
+      s === null
+        ? null
+        : { ts, ratio: 1, others: 1.5, posture: "other", position: [0.5, 0.5], confidence: 0.9, ...s };
     events.push(...machine.update(obs, ts, ctx));
   });
   return events;
@@ -28,7 +30,7 @@ describe("pinch hysteresis and minimum hold", () => {
   it("borderline distance does not flicker", () => {
     const events = run([
       ...repeat(10, () => ({ ratio: 0.1 })),
-      ...repeat(30, (i) => ({ ratio: i % 2 ? 0.27 : 0.33 })),
+      ...repeat(30, (i) => ({ ratio: i % 2 ? 0.17 : 0.19 })),
       ...repeat(3, () => ({ ratio: 0.8 })),
     ]);
     // One pinch only: it started once and ended once (as a drag, since it lasted over 250 ms).
@@ -43,6 +45,7 @@ describe("pinch hysteresis and minimum hold", () => {
     const obs = (ts: number, ratio: number): HandObservation => ({
       ts,
       ratio,
+      others: 1.5,
       posture: "other",
       position: [0.5, 0.5],
       confidence: 1,
@@ -53,6 +56,15 @@ describe("pinch hysteresis and minimum hold", () => {
       ...m.update(obs(1060, 0.8), 1060, engaged),
       ...m.update(obs(1090, 0.8), 1090, engaged),
     ];
+    expect(events).toEqual([]);
+  });
+
+  it("a near miss is not a pinch: fingertips hovering just apart never start one", () => {
+    // Labelled footage: a visible 1-3 mm gap reads 0.18-0.21, real touches 0.12-0.15.
+    const events = run([
+      ...repeat(30, (i) => ({ ratio: 0.18 + (i % 4) * 0.01 })),
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
     expect(events).toEqual([]);
   });
 });
@@ -116,6 +128,71 @@ describe("clutch (spec: closed fist acts as a clutch)", () => {
       ...repeat(5, () => ({})),
     ]);
     expect(types(events)).toEqual(["clutch.start", "clutch.end"]);
+  });
+
+  it("closing into a fist and opening again is not a pinch, though the thumb passes the index both ways", () => {
+    // On footage the frames between an open hand and a fist read as low as 0.11 with the other fingers half curled.
+    const events = run([
+      ...repeat(4, () => ({ ratio: 0.12, others: 1.1 })),
+      ...repeat(10, () => ({ ratio: 0.12, posture: "fist" as const, others: 0.75 })),
+      ...repeat(6, () => ({ ratio: 0.12, others: 1.1 })),
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
+    expect(types(events)).toEqual(["clutch.start", "clutch.end"]);
+  });
+
+  it("a touch that becomes a fist before the minimum hold is dropped, not resumed after the fist", () => {
+    const events = run([
+      { ratio: 0.12 },
+      ...repeat(10, () => ({ ratio: 0.12, posture: "fist" as const, others: 0.75 })),
+      ...repeat(5, () => ({ ratio: 0.8 })), // fist release debounce
+      { ratio: 0.12 },
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
+    expect(types(events)).toEqual(["clutch.start", "clutch.end"]);
+  });
+});
+
+describe("tracking loss (hand sweeping fast or passing over the face)", () => {
+  it("a pinch that tracking loses mid-sweep is not a tap", () => {
+    // Recorded clip: the fingertips touch, the hand starts a fast sweep across the face and is lost for 300 ms+.
+    const events = run([...repeat(4, () => ({ ratio: 0.12 })), ...repeat(15, () => null)]);
+    expect(types(events)).not.toContain("pinch.tap");
+  });
+
+  it("a drag survives a short loss and carries on from where the hand reappears", () => {
+    const events = run([
+      ...repeat(12, (i) => ({ ratio: 0.12, position: at(0.3 + i * 0.01) })),
+      ...repeat(4, () => null), // 133 ms lost
+      ...repeat(6, (i) => ({ ratio: 0.12, position: at(0.5 + i * 0.01) })),
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
+    const t = types(events);
+    expect(t.filter((x) => x === "pinch.drag.start")).toHaveLength(1);
+    expect(t.filter((x) => x === "pinch.drag.end")).toHaveLength(1);
+    expect(t.at(-1)).toBe("pinch.drag.end");
+    // The movement during the loss arrives as one update when the hand is seen again.
+    const updates = events.filter(
+      (e): e is Extract<GestureEvent, { type: "pinch.drag.update" }> => e.type === "pinch.drag.update",
+    );
+    expect(Math.max(...updates.map((e) => e.delta[0]))).toBeGreaterThan(0.05);
+  });
+
+  it("a drag lost for longer than the grace period ends", () => {
+    const events = run([
+      ...repeat(12, (i) => ({ ratio: 0.12, position: at(0.3 + i * 0.01) })),
+      ...repeat(12, () => null), // 400 ms lost
+    ]);
+    expect(types(events).at(-1)).toBe("pinch.drag.end");
+  });
+
+  it("a short pinch whose release happened during a loss is not a tap either", () => {
+    const events = run([
+      ...repeat(4, () => ({ ratio: 0.12 })),
+      ...repeat(3, () => null),
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
+    expect(events).toEqual([]);
   });
 });
 

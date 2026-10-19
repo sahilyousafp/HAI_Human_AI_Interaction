@@ -7,6 +7,8 @@ export interface HandObservation {
   ts: number;
   /** Thumb-index distance / hand size, image space. */
   ratio: number;
+  /** Mean extension of the middle, ring and little fingers (see `othersExtension`). */
+  others: number;
   posture: Posture;
   /** Pinch point, mirrored, normalised. */
   position: Point2;
@@ -25,10 +27,14 @@ type Phase = "idle" | "candidate" | "pinching";
 
 /**
  * Per-hand reducer for pinch (tap or drag) and the fist clutch.
- * - A pinch starts after the ratio stays below `press` for `minHoldMs`, and ends above `release` (hysteresis).
+ * - A pinch starts after the fingertips touch (ratio below `press`, other fingers not curled) for `minHoldMs`, and
+ *   ends above `release` (hysteresis).
  * - Drag start is held back until the pinch outlasts a tap or moves; a short, still pinch is a tap.
  * - A fist (checked before pinch, since a fist also closes thumb and index) suspends all drag output.
  * - Only pinches that began while engaged emit anything ("pinch before engaging is ignored").
+ * - Tracking often loses a hand for a few frames while it sweeps fast or passes over the face. A pinch survives a
+ *   loss of up to `lostGraceMs` (a drag carries on from wherever the hand reappears), and a pinch interrupted by a
+ *   loss is never a tap: the fingers were not seen opening.
  */
 export class HandMachine {
   private phase: Phase = "idle";
@@ -48,6 +54,7 @@ export class HandMachine {
   private notFistSince: number | null = null;
   private lastPosture: Posture = "other";
   private confidence = 1;
+  private lostSince: number | null = null;
 
   constructor(
     readonly hand: Hand,
@@ -72,6 +79,12 @@ export class HandMachine {
   update(obs: HandObservation | null, ts: number, ctx: HandContext): GestureEvent[] {
     const events: GestureEvent[] = [];
     if (!obs) {
+      if (this.phase === "pinching") {
+        this.lostSince ??= ts;
+        this.tapAllowed = false;
+        if (ts - this.lostSince < this.config.pinch.lostGraceMs) return events;
+      }
+      this.lostSince = null;
       this.endPinch(ts, events);
       if (this.clutched) {
         this.clutched = false;
@@ -83,10 +96,12 @@ export class HandMachine {
       this.lastPosture = "other";
       return events;
     }
+    this.lostSince = null;
     this.confidence = obs.confidence;
     this.lastPosture = obs.posture;
 
     if (obs.posture === "fist") {
+      if (this.phase === "candidate") this.phase = "idle"; // the touch belonged to the fist forming
       this.notFistSince = null;
       this.fistSince ??= ts;
       if (!this.clutched && ts - this.fistSince >= this.config.clutch.debounceMs) {
@@ -144,15 +159,16 @@ export class HandMachine {
   private advancePinch(obs: HandObservation, ts: number, ctx: HandContext, events: GestureEvent[]) {
     const p = this.config.pinch;
     const aspect = obs.aspect ?? DEFAULT_ASPECT;
+    const touching = obs.ratio < p.press && obs.others >= p.othersMin;
     switch (this.phase) {
       case "idle":
-        if (obs.ratio < p.press) {
+        if (touching) {
           this.phase = "candidate";
           this.candidateSince = ts;
         }
         return;
       case "candidate":
-        if (obs.ratio >= p.press) {
+        if (!touching) {
           this.phase = "idle"; // a brief touch is not a pinch
           return;
         }

@@ -29,8 +29,10 @@ function imageDistance(a: Vec3, b: Vec3, aspect: number): number {
 
 /**
  * Thumb-tip to index-tip distance divided by hand size (wrist to middle knuckle), in image space.
- * Measured on footage, image space separates pinched (0.12-0.17) from open (about 1.2) hands far better than
- * MediaPipe's world coordinates, whose fingertip depth is noisy (a real pinch read 0.40 there).
+ * Measured on footage, image space separates touching (0.12-0.15) from open (about 1.2) hands far better than
+ * MediaPipe's world coordinates, whose fingertip depth is noisy (a real pinch read 0.40 there). Other normalisers
+ * (palm width, finger segment lengths) were tried on the labelled frames and separated touch from near miss no
+ * better.
  */
 export function pinchRatio(hand: TrackedHand, aspect = DEFAULT_ASPECT): number {
   const size = imageDistance(point(hand.image, WRIST), point(hand.image, MIDDLE_MCP), aspect);
@@ -44,6 +46,13 @@ export function fingerExtension(hand: TrackedHand, finger: Finger): number {
   const wrist = point(hand.world, WRIST);
   const base = length3(sub(point(hand.world, mcp), wrist));
   return base === 0 ? 0 : length3(sub(point(hand.world, tip), wrist)) / base;
+}
+
+/** Mean extension of the middle, ring and little fingers: about 1.4-1.7 in a pinch, under 1.2 in or near a fist. */
+export function othersExtension(hand: TrackedHand): number {
+  return (
+    (fingerExtension(hand, "middle") + fingerExtension(hand, "ring") + fingerExtension(hand, "pinky")) / 3
+  );
 }
 
 /** Thumb tip to index knuckle, relative to hand size (world space). */

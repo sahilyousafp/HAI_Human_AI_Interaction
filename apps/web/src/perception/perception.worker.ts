@@ -1,7 +1,13 @@
 /// <reference lib="webworker" />
 // Runs hand and face tracking off the main thread. Camera frames arrive as transferred ImageBitmaps,
 // are closed right after inference, and only pixel-free TrackingFrames are posted back.
-import { AdaptiveScheduler, FrameSmoother, GestureRecognizer, toTrackingFrame } from "@aex/perception";
+import {
+  AdaptiveScheduler,
+  FrameSmoother,
+  GestureRecognizer,
+  HandIdentity,
+  toTrackingFrame,
+} from "@aex/perception";
 import { FaceLandmarker, FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { isSoftwareRenderer } from "../gpu.ts";
 import type { FromWorker, ToWorker } from "./messages.ts";
@@ -15,6 +21,7 @@ let face: FaceLandmarker | null = null;
 let backend: Delegate = "CPU";
 let perfDelayMs = 0;
 let sendRawHands = false;
+const identity = new HandIdentity();
 const smoother = new FrameSmoother();
 const scheduler = new AdaptiveScheduler();
 const recognizer = new GestureRecognizer();
@@ -84,15 +91,18 @@ function onFrame(msg: Extract<ToWorker, { type: "frame" }>) {
       }
     }
     const inferenceDoneTs = now();
-    const raw = toTrackingFrame({
-      seq,
-      captureTs,
-      inferenceDoneTs,
-      backend,
-      aspect: bitmap.width / bitmap.height,
-      hands: handResult,
-      ...(faceResult ? { face: faceResult } : {}),
-    });
+    // Stable Left/Right labels first: smoothing and gesture state are keyed by them.
+    const raw = identity.assign(
+      toTrackingFrame({
+        seq,
+        captureTs,
+        inferenceDoneTs,
+        backend,
+        aspect: bitmap.width / bitmap.height,
+        hands: handResult,
+        ...(faceResult ? { face: faceResult } : {}),
+      }),
+    );
     const frame = smoother.smooth(raw);
     scheduler.frameDone(inferenceDoneTs);
     const inferenceMs = performance.now() - started;

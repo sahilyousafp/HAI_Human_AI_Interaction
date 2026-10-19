@@ -7,7 +7,7 @@ import { isSoftwareRenderer } from "../gpu.ts";
 import type { InputBus } from "../input/input-bus.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
 import { elementGeometry, sceneBounds } from "./geometry.ts";
-import { LatencyTracker } from "./latency.ts";
+import type { LatencyTracker } from "./latency.ts";
 import { initialInput, movesCamera, navigate } from "./navigation.ts";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 
@@ -159,14 +159,22 @@ function CameraRig({
   return null;
 }
 
-export function Viewer({ client, bus }: { client: SceneClient; bus: InputBus }) {
+export function Viewer({
+  client,
+  bus,
+  latency,
+}: {
+  client: SceneClient;
+  bus: InputBus;
+  /** Gesture-to-render latency, shared with the Detection card. */
+  latency: LatencyTracker;
+}) {
   const software = useMemo(isSoftwareRenderer, []);
   const scene = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [colors, setColors] = useState<Colors>(readColors);
   const nav = useRef<Turntable>({ target: [20, 15, 3], azimuth: 305, elevation: 32, distance: 70 });
   const navInput = useRef(initialInput());
   const pendingTs = useRef<number | null>(null);
-  const latency = useMemo(() => new LatencyTracker(), []);
   const pickRef = useRef<(x: number, y: number) => string | null>(() => null);
   const framed = useRef(false);
   const navigating = useRef(false);

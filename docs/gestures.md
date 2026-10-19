@@ -27,11 +27,13 @@ All values live in `packages/perception/src/gestures/config.ts`; a unit test che
 | `engage.openPalmMs` | 300 | Open palm held this long engages |
 | `engage.noHandsMs` | 1500 | No hand visible this long disengages |
 | `engage.idleMs` | 10000 | No gesture this long disengages |
-| `pinch.press` | 0.25 | Thumb-index distance / hand size below this starts a pinch |
-| `pinch.release` | 0.35 | Above this, the pinch ends (hysteresis) |
-| `pinch.minHoldMs` | 60 | The distance must stay below `press` this long |
+| `pinch.press` | 0.16 | Thumb-index distance / hand size below this counts as the fingertips touching |
+| `pinch.release` | 0.2 | Above this, the pinch ends (hysteresis) |
+| `pinch.minHoldMs` | 60 | The fingertips must keep touching this long before a pinch starts |
 | `pinch.tapMaxMs` | 250 | Shorter pinches are taps... |
 | `pinch.tapMaxMove` | 0.02 | ...if they moved less than this fraction of the frame width |
+| `pinch.othersMin` | 1.3 | Mean extension of the middle, ring and little fingers needed for a pinch to start |
+| `pinch.lostGraceMs` | 250 | A pinching hand lost by tracking for less than this is still pinching |
 | `posture.extended` | 1.35 | Finger tip-to-wrist / knuckle-to-wrist above this: extended |
 | `posture.curled` | 1.15 | Below this: curled |
 | `posture.thumbSpread` | 0.45 | Thumb tip to index knuckle / hand size above this: thumb spread |
@@ -43,7 +45,19 @@ All values live in `packages/perception/src/gestures/config.ts`; a unit test che
 | `head.reversals` | 2 | Reversals needed in the window |
 | `head.cooldownMs` | 1000 | After a nod or shake, head motion is ignored this long |
 
-Hand size is the distance from the wrist to the middle-finger knuckle. The pinch distance is measured in the camera image (corrected for aspect ratio): on recorded footage that separates pinched hands (0.12-0.17) from open ones (about 1.2) far better than MediaPipe's 3D world coordinates. Finger extension and palm direction use the 3D world coordinates.
+Hand size is the distance from the wrist to the middle-finger knuckle. The pinch distance is measured in the camera image (corrected for aspect ratio), which separates touching fingertips from open hands (about 1.2) far better than MediaPipe's 3D world coordinates. Finger extension and palm direction use the 3D world coordinates.
+
+**A pinch means the fingertips meet.** The pinch values were set on 135 frames from the test clips, each labelled by eye as touching, near miss or fist (`test-assets/landmarks/pinch-labels.json.gz`, checked by a unit test):
+
+| Hand | Distance / hand size | Other fingers' extension |
+|---|---|---|
+| Fingertips touching, held | 0.12-0.15 | 1.38 or more |
+| Near miss, a visible 1-3 mm gap | 0.18-0.21 | any |
+| Fist, or closing into / opening from one | as low as 0.11 | 1.17 or less |
+
+So `press` sits between touching and a near miss, and `othersMin` keeps the thumb from triggering a pinch as it passes the index on the way into or out of a fist. A touch that turns into a fist before `minHoldMs` is dropped.
+
+**Tracking loss.** A hand sweeping fast or passing over the face is often lost for a few frames (motion blur, skin against skin). A pinch survives a loss shorter than `lostGraceMs`, so a drag carries on from wherever the hand reappears, and a pinch interrupted by a loss never counts as a tap, because the fingers were not seen opening. Without this, pinching and sweeping a hand across the face fired a stray tap (found on a recorded clip, `test-assets/clips/hand-cross-face.mp4`).
 
 ## State machines
 
@@ -52,8 +66,8 @@ Per hand:
 ```mermaid
 stateDiagram-v2
   [*] --> Idle
-  Idle --> Candidate: ratio < press
-  Candidate --> Idle: ratio >= press (brief touch)
+  Idle --> Candidate: ratio < press and other fingers open
+  Candidate --> Idle: apart again (brief touch) or fist
   Candidate --> Pinching: held minHoldMs
   Pinching --> Idle: ratio > release / tap or drag end
   Idle --> Clutch: fist held debounceMs
@@ -80,6 +94,13 @@ Head: pitch and yaw over the last `windowMs` go through a zigzag filter. A rever
 ## In the HUD
 
 The Gestures card shows whether you are engaged, what each hand is doing (open palm, pinch, drag, clutch), the last gesture (held on screen for 1.5 s so a quick tap is readable), the last head gesture, and the recogniser's time per frame.
+
+The Detection card shows how reliably tracking works and how fast it responds:
+
+- **Detected**: for each hand and the face, the share of frames in the last 5 seconds it was found in, with a strip of those frames (pinched frames marked) so dropouts are visible.
+- **Pinch**: for each hand, a meter of the thumb-index distance with the touch (`press`) and release marks, and whether the fingertips touch. When they touch but the other fingers are curled, it says so: that hand is making a fist, not a pinch.
+- **Taps / drags / two-hand**: pinch gestures recognised since the camera started.
+- **Response**: the 90th percentile over the last 3 seconds of camera to gesture (from the camera capturing a frame to its gestures reaching the page) and gesture to render (to the viewer drawing the change).
 
 ## Testing
 

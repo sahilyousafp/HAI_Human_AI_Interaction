@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { loadFixture } from "../testing/fixtures.ts";
+import { loadFixture, loadPinchLabels } from "../testing/fixtures.ts";
 import { DEFAULT_GESTURES } from "./config.ts";
-import { palmFacing, pinchPoint, pinchRatio, posture, screenDistance } from "./features.ts";
+import { othersExtension, palmFacing, pinchPoint, pinchRatio, posture, screenDistance } from "./features.ts";
 
 const handsOf = (clip: Parameters<typeof loadFixture>[0]) => loadFixture(clip).flatMap((f) => f.hands);
 
@@ -35,6 +35,44 @@ describe("hand features on recorded footage", () => {
 
   it("no-hands clip has nothing to classify", () => {
     expect(handsOf("no-hands")).toEqual([]);
+  });
+});
+
+describe("pinch means the fingertips meet (frames labelled by eye)", () => {
+  const P = DEFAULT_GESTURES.pinch;
+  const labelled = loadPinchLabels();
+  const of = (label: string) => labelled.filter((l) => l.label === label);
+  /** What the hand machine needs to start a pinch, short of the minimum hold. */
+  const startsPinch = ({ hand, aspect }: (typeof labelled)[number]) =>
+    posture(hand) !== "fist" && pinchRatio(hand, aspect) < P.press && othersExtension(hand) >= P.othersMin;
+
+  it("has enough of each kind", () => {
+    expect(of("touch").length).toBeGreaterThan(40);
+    expect(of("near-miss").length).toBeGreaterThan(20);
+    expect(of("fist").length).toBeGreaterThan(40);
+  });
+
+  it("no near miss starts a pinch: a visible gap between thumb and index is never a touch", () => {
+    expect(
+      of("near-miss")
+        .filter(startsPinch)
+        .map((l) => `${l.clip}#${l.seq}`),
+    ).toEqual([]);
+  });
+
+  it("no fist, or hand closing into or opening from one, starts a pinch", () => {
+    expect(
+      of("fist")
+        .filter(startsPinch)
+        .map((l) => `${l.clip}#${l.seq}`),
+    ).toEqual([]);
+  });
+
+  it("touching fingertips start a pinch (all but the few frames of the fingers still closing)", () => {
+    const touches = of("touch");
+    expect(touches.filter(startsPinch).length / touches.length).toBeGreaterThanOrEqual(0.9);
+    // Once touching, the hand stays pinched: no touching frame reads above release.
+    expect(touches.filter((l) => pinchRatio(l.hand, l.aspect) > P.release)).toEqual([]);
   });
 });
 

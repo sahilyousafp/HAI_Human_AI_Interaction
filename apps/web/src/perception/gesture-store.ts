@@ -12,7 +12,7 @@ export interface GestureSnapshot {
 }
 
 const EMPTY: GestureSnapshot = {
-  state: { engaged: false, hands: {}, twoHand: false, lastHead: null },
+  state: { engaged: false, hands: {}, pinch: {}, twoHand: false, lastHead: null },
   last: null,
   gestureMs: 0,
 };

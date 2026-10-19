@@ -10,6 +10,7 @@ import { InputBus } from "./input/input-bus.ts";
 import { TrackingPanel } from "./perception/TrackingPanel.tsx";
 import type { TrackerState } from "./perception/tracker.ts";
 import { SceneClient } from "./scene/scene-client.ts";
+import { LatencyTracker } from "./viewer/latency.ts";
 import { Viewer } from "./viewer/Viewer.tsx";
 
 declare global {
@@ -38,6 +39,7 @@ export function App() {
     [],
   );
   const bus = useMemo(() => new InputBus(), []);
+  const renderLatency = useMemo(() => new LatencyTracker(), []);
 
   // Dev builds only: lets end-to-end tests edit the scene through the same client the UI uses.
   useEffect(() => {
@@ -89,11 +91,11 @@ export function App() {
       </header>
       <main className="workspace">
         <div className="stage">
-          <Viewer client={sceneClient} bus={bus} />
+          <Viewer client={sceneClient} bus={bus} latency={renderLatency} />
           {label.hint && <p className="hint">{label.hint}</p>}
         </div>
         <aside className="sidebar" aria-label="Tracking">
-          <TrackingPanel onCameraState={setCamera} bus={bus} />
+          <TrackingPanel onCameraState={setCamera} bus={bus} renderLatency={renderLatency} />
         </aside>
       </main>
     </div>

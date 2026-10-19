@@ -2,6 +2,10 @@ import { pinchPoint } from "@aex/perception";
 import type { GestureEvent, TrackedHand, TrackingFrame } from "@aex/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { InputBus } from "../input/input-bus.ts";
+import type { LatencyTracker } from "../viewer/latency.ts";
+import { CAMERA_EFFECTS, type CameraEffectsState, EFFECT_NAMES } from "./camera-effects.ts";
+import { DetectionPanel } from "./DetectionPanel.tsx";
+import { DetectionStore } from "./detection-store.ts";
 import { type DrawColors, drawTracking } from "./draw.ts";
 import { GesturePanel } from "./GesturePanel.tsx";
 import { GestureStore } from "./gesture-store.ts";
@@ -61,6 +65,20 @@ function readColors(el: Element): DrawColors {
   };
 }
 
+const EFFECTS_FIX =
+  "Turn them off in Quick settings (Windows+A) > Studio effects, or Settings > Bluetooth & devices > Cameras > your camera.";
+
+function effectsOn(effects: CameraEffectsState | null): string[] {
+  return effects ? CAMERA_EFFECTS.filter((e) => effects[e] === "on").map((e) => EFFECT_NAMES[e]) : [];
+}
+
+function effectsLabel(effects: CameraEffectsState | null): string {
+  if (!effects) return "-";
+  const on = effectsOn(effects);
+  if (on.length > 0) return on.join(", ");
+  return CAMERA_EFFECTS.every((e) => effects[e] === "off") ? "off" : "not reported";
+}
+
 function faceCadenceLabel(state: TrackerState, stats: TrackerStats | null): string {
   if (state.camera !== "on") return "-";
   return stats?.faceCadence === 2 ? "every 2nd frame" : "every frame";
@@ -70,24 +88,28 @@ interface TrackingPanelProps {
   onCameraState(state: TrackerState): void;
   /** Where hand input goes: gestures, the pointer and engagement. */
   bus: InputBus;
+  /** Gesture-to-render latency, measured by the viewer. */
+  renderLatency: LatencyTracker;
 }
 
-export function TrackingPanel({ onCameraState, bus }: TrackingPanelProps) {
+export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackerRef = useRef<Tracker | null>(null);
   const latestFrame = useRef<TrackingFrame | null>(null);
   const latestStats = useRef<TrackerStats | null>(null);
   const latestRaw = useRef<TrackedHand[]>([]);
+  const latestFaceRan = useRef(false);
   const [state, setState] = useState<TrackerState>({ camera: "off" });
   const [stats, setStats] = useState<TrackerStats | null>(null);
   const [headPose, setHeadPose] = useState<TrackingFrame["face"] | null>(null);
-  const [handCount, setHandCount] = useState(0);
   const [debugView, setDebugView] = useState(true);
   const [showRaw, setShowRaw] = useState(false);
   const recorderRef = useRef(new LandmarkRecorder());
   const gestureStore = useRef(new GestureStore()).current;
+  const detectionStore = useRef(new DetectionStore()).current;
   const [recording, setRecording] = useState(false);
+  const [effects, setEffects] = useState<CameraEffectsState | null>(null);
 
   const updateState = useCallback(
     (next: TrackerState) => {
@@ -105,8 +127,13 @@ export function TrackingPanel({ onCameraState, bus }: TrackingPanelProps) {
       video,
       {
         onState: updateState,
+        onEffects: setEffects,
         onGestures: (events, gestureState, gestureMs) => {
           gestureStore.push(events, gestureState, gestureMs);
+          // The frame these gestures came from was delivered just before, in onFrame.
+          if (latestFrame.current) {
+            detectionStore.push(latestFrame.current, latestFaceRan.current, gestureState, events);
+          }
           bus.setEngaged(gestureState.engaged);
           bus.emitGestures(events);
           if (import.meta.env.DEV && events.length > 0) {
@@ -118,6 +145,7 @@ export function TrackingPanel({ onCameraState, bus }: TrackingPanelProps) {
         },
         onFrame: (frame, frameStats, faceRan, rawHands) => {
           latestFrame.current = frame;
+          latestFaceRan.current = faceRan;
           // The pointer follows the right hand's pinch point, or the left hand if only it is visible.
           const hand = frame.hands.find((h) => h.handedness === "Right") ?? frame.hands[0];
           bus.emitPointer({ position: hand ? pinchPoint(hand) : null, ts: frame.captureTs });
@@ -147,7 +175,7 @@ export function TrackingPanel({ onCameraState, bus }: TrackingPanelProps) {
     trackerRef.current = tracker;
     if (import.meta.env.DEV) window.__AEX_RECORDER__ = recorderRef.current;
     return () => tracker.stop();
-  }, [updateState, gestureStore, bus]);
+  }, [updateState, gestureStore, detectionStore, bus]);
 
   // Redraw the overlay every animation frame from the latest result; no React render per frame.
   useEffect(() => {
@@ -181,7 +209,6 @@ export function TrackingPanel({ onCameraState, bus }: TrackingPanelProps) {
     const id = setInterval(() => {
       setStats(latestStats.current ? { ...latestStats.current } : null);
       setHeadPose(latestFrame.current?.face ?? null);
-      setHandCount(latestFrame.current?.hands.length ?? 0);
     }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -194,12 +221,16 @@ export function TrackingPanel({ onCameraState, bus }: TrackingPanelProps) {
       latestStats.current = null;
       setStats(null);
       gestureStore.reset();
+      detectionStore.reset();
+      setEffects(null);
     } else {
       void trackerRef.current?.start();
     }
   };
 
   const backend = state.camera === "on" ? state.backend : null;
+  const effectsStillOn = effectsOn(effects);
+  const effectsText = effectsLabel(effects);
 
   const toggleRecording = () => {
     const recorder = recorderRef.current;
@@ -240,7 +271,21 @@ export function TrackingPanel({ onCameraState, bus }: TrackingPanelProps) {
             </div>
           )}
         </div>
+        {state.camera === "on" && effectsStillOn.length > 0 && (
+          <div className="effects-warning" data-testid="camera-effects-warning" role="status">
+            <strong>Camera effects are on: {effectsStillOn.join(", ")}.</strong>
+            <span>
+              The operating system applies them before tracking sees the image: blur smears fingertips,
+              framing moves a still hand. {EFFECTS_FIX}
+            </span>
+          </div>
+        )}
         <GesturePanel store={gestureStore} cameraOn={state.camera === "on"} />
+        <DetectionPanel
+          store={detectionStore}
+          renderLatency={renderLatency}
+          cameraOn={state.camera === "on"}
+        />
       </div>
 
       <div className="tracking-side">
@@ -287,8 +332,14 @@ export function TrackingPanel({ onCameraState, bus }: TrackingPanelProps) {
             <dd data-testid="hud-backend">{backend ?? "-"}</dd>
           </div>
           <div>
-            <dt>Hands</dt>
-            <dd data-testid="hud-hands">{state.camera === "on" ? handCount : "-"}</dd>
+            <dt>Camera effects</dt>
+            <dd data-testid="hud-camera-effects">{state.camera === "on" ? effectsText : "-"}</dd>
+            {state.camera === "on" && effectsText === "not reported" && (
+              <p className="readout-note">
+                This browser does not report blur, framing or eye contact. If Windows Studio Effects are on:{" "}
+                {EFFECTS_FIX}
+              </p>
+            )}
           </div>
           <div>
             <dt>Face tracking</dt>

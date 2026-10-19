@@ -1,4 +1,4 @@
-/** Rolling gesture-to-render latency samples with a p90, kept for the last few seconds. */
+/** Rolling latency samples (gesture to render, camera to gesture) with a p90, kept for the last few seconds. */
 export class LatencyTracker {
   private samples: Array<{ at: number; ms: number }> = [];
 
@@ -20,5 +20,9 @@ export class LatencyTracker {
 
   get latest(): number | null {
     return this.samples.at(-1)?.ms ?? null;
+  }
+
+  clear(): void {
+    this.samples = [];
   }
 }

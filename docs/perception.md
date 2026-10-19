@@ -20,22 +20,27 @@ AEX turns your webcam into hand and face measurements, entirely inside your brow
 | Frame rate | Tracking frames per second, smoothed |
 | Inference | Time the worker spent on the last frame, in ms |
 | Backend | GPU (WebGL in the worker) or CPU (fallback) |
-| Hands | Number of hands in the last frame (0-2) |
+| Camera effects | Background blur, automatic framing and eye contact applied by the operating system: "off", the ones still on, or "not reported" when the browser cannot tell |
 | Face tracking | "every frame", or "every 2nd frame" when the machine is under load |
 | Head yaw / pitch / roll | Degrees. Yaw is positive when you turn to your left, pitch when you look up, roll when you tilt to your right |
 | Frames / dropped | Frames processed and camera frames skipped because the worker was busy |
 
-Readouts refresh once per second; the overlay redraws every animation frame.
+Readouts refresh once per second; the overlay redraws every animation frame. How often each hand and the face are found, the live pinch distance and the response times are in the Detection card (see [gestures.md](gestures.md#in-the-hud)).
 
 ## How it works
 
 1. The main thread receives camera frames with `requestVideoFrameCallback`, which provides the capture time.
 2. If the worker is free, the frame becomes an `ImageBitmap` and is transferred (not copied) to the worker. If it is busy, the frame is dropped, so latency never builds up.
 3. The worker runs MediaPipe Hand Landmarker (2 hands) and Face Landmarker (blendshapes and transformation matrix) on the GPU when possible.
-4. Results are converted to a tracking frame, smoothed with a One Euro filter (min cutoff 1 Hz, beta 6, derivative cutoff 2 Hz in normalised image units), and posted back. The bitmap is closed immediately.
-5. When the frame rate stays below 24 fps for 2 seconds, face tracking runs on alternate frames. It returns to every frame above 28 fps. Hands always run on every frame.
+4. Each hand keeps a stable Left/Right label (see below).
+5. Results are converted to a tracking frame, smoothed with a One Euro filter (min cutoff 1 Hz, beta 6, derivative cutoff 2 Hz in normalised image units), and posted back. The bitmap is closed immediately.
+6. When the frame rate stays below 24 fps for 2 seconds, face tracking runs on alternate frames. It returns to every frame above 28 fps. Hands always run on every frame.
 
 AEX feeds unmirrored camera frames to MediaPipe, which labels them correctly, so "Right" is your right hand. This was checked against recorded footage: a raised right hand is reported as "Right", and turning your head to your right gives negative yaw.
+
+**Stable hand labels.** MediaPipe guesses handedness on every frame from the hand's appearance, and the guess fails when a hand crosses your face or comes near the other hand: the label flips, or both hands get the same one. Smoothing and pinch state are kept per label, so a flip would end a drag, fire a stray tap or merge two hands into one. `HandIdentity` (`packages/perception/src/hand-identity.ts`) therefore follows each hand by position: a hand keeps the label it entered with while it stays in view, two hands never share a label, and only a hand entering the view (or returning after 300 ms away) takes MediaPipe's label, or the free one if the other hand already holds it. It also drops a hand reported twice: on motion-blurred frames MediaPipe sometimes fits a lower-scoring "ghost" hand inside the real one, which could otherwise start a two-hand gesture nobody made.
+
+**Camera effects.** Windows Studio Effects (on laptops with an NPU), and similar effects on macOS and ChromeOS, change the image before the browser sees it. Background blur smears fingertips that leave your outline and can fill the gap between thumb and index; automatic framing crops and pans, so a still hand appears to move; eye contact warps the face. AEX asks the browser to turn all three off when the camera starts. Where the browser cannot (Edge and Chrome only expose these controls with experimental web platform features enabled), turn them off yourself: Quick settings (Windows+A) > Studio effects, or Settings > Bluetooth & devices > Cameras > your camera.
 
 ## Troubleshooting
 
@@ -44,6 +49,7 @@ AEX feeds unmirrored camera frames to MediaPipe, which labels them correctly, so
 | Camera permission was denied | Click the camera icon in the address bar (or Site settings), allow the camera, start again |
 | No camera was found | Connect a webcam or enable it in Windows Settings > Privacy & security > Camera |
 | The camera is being used by another app | Close Teams, Zoom or other camera apps, start again |
+| Camera effects shows blur, framing or eye contact | Turn them off in Quick settings (Windows+A) > Studio effects. They make pinches and hand positions unreliable |
 | Backend shows CPU | WebGL is unavailable or blocked. Tracking still works, slower. Check `edge://gpu` or `chrome://gpu` |
 
 ## For developers

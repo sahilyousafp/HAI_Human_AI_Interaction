@@ -1,12 +1,21 @@
 import type { GestureEvent, Hand, Point2, TrackingFrame } from "@aex/protocol";
 import { DEFAULT_GESTURES, type GestureConfig } from "./config.ts";
-import { DEFAULT_ASPECT, pinchPoint, pinchRatio, posture } from "./features.ts";
+import { DEFAULT_ASPECT, othersExtension, pinchPoint, pinchRatio, posture } from "./features.ts";
 import { type HandDisplay, HandMachine, type HandObservation } from "./hand-machine.ts";
 import { HeadMachine } from "./head-machine.ts";
+
+/** What the recogniser measured on a hand this frame, for the HUD's pinch meter. */
+export interface PinchReading {
+  /** Thumb-index distance / hand size, image space. */
+  ratio: number;
+  /** Middle, ring and little fingers open enough for a pinch to start (`pinch.othersMin`). */
+  othersOpen: boolean;
+}
 
 export interface RecognizerState {
   engaged: boolean;
   hands: Partial<Record<Hand, HandDisplay>>;
+  pinch: Partial<Record<Hand, PinchReading>>;
   twoHand: boolean;
   /** Most recent head gesture, for the HUD. */
   lastHead: { type: "head.nod" | "head.shake"; ts: number } | null;
@@ -28,7 +37,7 @@ export class GestureRecognizer {
   private lastTwoHand: { distance: number; midpoint: Point2; angle: number; confidence: number } | null =
     null;
   private lastHead: RecognizerState["lastHead"] = null;
-  private present: Partial<Record<Hand, boolean>> = {};
+  private readings: Partial<Record<Hand, PinchReading>> = {};
 
   constructor(private readonly config: GestureConfig = DEFAULT_GESTURES) {
     this.machines = { Left: new HandMachine("Left", config), Right: new HandMachine("Right", config) };
@@ -38,8 +47,14 @@ export class GestureRecognizer {
   get state(): RecognizerState {
     const hands: RecognizerState["hands"] = {};
     for (const hand of ["Left", "Right"] as const)
-      if (this.present[hand]) hands[hand] = this.machines[hand].display;
-    return { engaged: this.engaged, hands, twoHand: this.twoHandActive, lastHead: this.lastHead };
+      if (this.readings[hand]) hands[hand] = this.machines[hand].display;
+    return {
+      engaged: this.engaged,
+      hands,
+      pinch: { ...this.readings },
+      twoHand: this.twoHandActive,
+      lastHead: this.lastHead,
+    };
   }
 
   process(frame: TrackingFrame): GestureEvent[] {
@@ -47,17 +62,23 @@ export class GestureRecognizer {
     const aspect = frame.aspect ?? DEFAULT_ASPECT;
     const events: GestureEvent[] = [];
     const observations: Partial<Record<Hand, HandObservation>> = {};
+    this.readings = {};
     for (const hand of frame.hands) {
-      observations[hand.handedness] = {
+      const obs: HandObservation = {
         ts,
         ratio: pinchRatio(hand, aspect),
+        others: othersExtension(hand),
         posture: posture(hand, this.config),
         position: pinchPoint(hand),
         confidence: hand.score,
         aspect,
       };
+      observations[hand.handedness] = obs;
+      this.readings[hand.handedness] = {
+        ratio: obs.ratio,
+        othersOpen: obs.others >= this.config.pinch.othersMin,
+      };
     }
-    this.present = { Left: Boolean(observations.Left), Right: Boolean(observations.Right) };
 
     this.updateEngagement(ts, observations, events);
 
