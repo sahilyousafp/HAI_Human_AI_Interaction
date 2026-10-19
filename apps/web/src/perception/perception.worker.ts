@@ -21,6 +21,8 @@ let face: FaceLandmarker | null = null;
 let backend: Delegate = "CPU";
 let perfDelayMs = 0;
 let sendRawHands = false;
+let mirrored = false;
+let flipCanvas: OffscreenCanvas | null = null;
 const identity = new HandIdentity();
 const smoother = new FrameSmoother();
 const scheduler = new AdaptiveScheduler();
@@ -77,8 +79,25 @@ async function init(msg: Extract<ToWorker, { type: "init" }>) {
   post({ type: "ready", backend });
 }
 
+/**
+ * Tracking expects the unmirrored image a camera normally sends: MediaPipe's handedness and every downstream
+ * convention (pointer, head yaw, palm direction) depend on it. A mirrored camera's frame is flipped back first.
+ */
+function unmirrored(bitmap: ImageBitmap): ImageBitmap {
+  if (!mirrored) return bitmap;
+  if (flipCanvas?.width !== bitmap.width || flipCanvas.height !== bitmap.height) {
+    flipCanvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  }
+  const ctx = flipCanvas.getContext("2d") as OffscreenCanvasRenderingContext2D;
+  ctx.setTransform(-1, 0, 0, 1, bitmap.width, 0);
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  return flipCanvas.transferToImageBitmap();
+}
+
 function onFrame(msg: Extract<ToWorker, { type: "frame" }>) {
-  const { bitmap, seq, captureTs } = msg;
+  const { seq, captureTs } = msg;
+  const bitmap = unmirrored(msg.bitmap);
   try {
     if (!hands || !face) return;
     const started = performance.now();
@@ -136,6 +155,7 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   } else if (msg.type === "frame") {
     onFrame(msg);
   } else if (msg.type === "options") {
-    sendRawHands = msg.rawHands;
+    if (msg.rawHands !== undefined) sendRawHands = msg.rawHands;
+    if (msg.mirrored !== undefined) mirrored = msg.mirrored;
   }
 };

@@ -19,12 +19,22 @@ export interface TrackerStats {
   faceCadence: 1 | 2;
 }
 
+/** The camera in use and what it actually delivers (it may not grant the size or rate asked for). */
+export interface CameraInfo {
+  deviceId: string;
+  label: string;
+  width: number | null;
+  height: number | null;
+  frameRate: number | null;
+}
+
 export interface TrackerCallbacks {
   onState(state: TrackerState): void;
   onFrame(frame: TrackingFrame, stats: TrackerStats, faceRan: boolean, rawHands?: TrackedHand[]): void;
   onGestures(events: GestureEvent[], state: RecognizerState, gestureMs: number): void;
   /** Operating-system camera effects (background blur, framing, eye contact) after asking for them off. */
   onEffects?(state: CameraEffectsState): void;
+  onCamera?(info: CameraInfo): void;
 }
 
 function classify(error: unknown): CameraError {
@@ -59,32 +69,88 @@ export class Tracker {
   }
 
   private rawHands = false;
+  private mirrored = false;
+  /** "" is the system's default camera. */
+  private deviceId = "";
 
   /** Debug: ask the worker to also send unsmoothed hand points. */
   setRawHands(enabled: boolean): void {
     this.rawHands = enabled;
-    this.worker?.postMessage({ type: "options", rawHands: enabled } satisfies ToWorker);
+    this.postOptions();
+  }
+
+  /** The camera sends a mirrored image (some phone webcam apps do); the worker flips it back. */
+  setMirrored(mirrored: boolean): void {
+    this.mirrored = mirrored;
+    this.postOptions();
+  }
+
+  /** Chooses the camera; a running camera switches over. */
+  async setDevice(deviceId: string): Promise<void> {
+    if (deviceId === this.deviceId) return;
+    this.deviceId = deviceId;
+    if (!this.stream) return;
+    this.release();
+    await this.start();
+  }
+
+  private postOptions(): void {
+    this.worker?.postMessage({
+      type: "options",
+      rawHands: this.rawHands,
+      mirrored: this.mirrored,
+    } satisfies ToWorker);
+  }
+
+  private open(deviceId: string): Promise<MediaStream> {
+    return navigator.mediaDevices.getUserMedia({
+      video: {
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        // 60 fps where the camera offers it (phones, better webcams): half the motion blur of 30 fps, so fewer
+        // hands lost mid-sweep. The worker drops frames it cannot keep up with, so slower machines lose nothing.
+        frameRate: { ideal: 60 },
+        ...EFFECTS_OFF,
+      } as MediaTrackConstraints,
+      audio: false,
+    });
   }
 
   async start(): Promise<void> {
     if (this.stream) return;
     this.callbacks.onState({ camera: "starting" });
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 30 },
-          ...EFFECTS_OFF,
-        } as MediaTrackConstraints,
-        audio: false,
-      });
+      this.stream = await this.open(this.deviceId);
     } catch (error) {
-      this.callbacks.onState({ camera: "error", error: classify(error), detail: String(error) });
-      return;
+      // A remembered camera that is no longer connected: fall back to the default one.
+      const gone =
+        error instanceof DOMException && error.name === "OverconstrainedError" && this.deviceId !== "";
+      if (!gone) {
+        this.callbacks.onState({ camera: "error", error: classify(error), detail: String(error) });
+        return;
+      }
+      try {
+        this.stream = await this.open("");
+      } catch (fallbackError) {
+        this.callbacks.onState({
+          camera: "error",
+          error: classify(fallbackError),
+          detail: String(fallbackError),
+        });
+        return;
+      }
     }
     const track = this.stream.getVideoTracks()[0];
     if (track) {
+      const settings = track.getSettings();
+      this.callbacks.onCamera?.({
+        deviceId: settings.deviceId ?? "",
+        label: track.label,
+        width: settings.width ?? null,
+        height: settings.height ?? null,
+        frameRate: settings.frameRate ?? null,
+      });
       void disableEffects(track).then((effects) => {
         if (this.stream) this.callbacks.onEffects?.(effects);
       });
@@ -140,7 +206,7 @@ export class Tracker {
     };
     this.busy = true; // nothing is sent until the models are ready
     this.worker.postMessage(init);
-    if (this.rawHands) this.worker.postMessage({ type: "options", rawHands: true } satisfies ToWorker);
+    this.postOptions();
   }
 
   private onWorkerMessage(msg: FromWorker) {

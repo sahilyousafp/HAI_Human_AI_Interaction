@@ -13,6 +13,7 @@ Engage first by holding an open palm toward the camera (see [gestures.md](gestur
 | Pinch with both hands, move them together sideways or up and down | Pan |
 | Close a hand into a fist mid-drag | Clutch: move your hand back without moving the view, then pinch again |
 | Point (a relaxed hand, not pinching) | A ring follows your pinch point; the element under it is highlighted |
+| Both hands in view | The left hand gets a second, light grey ring; hover and selection stay with the right hand |
 | Quick pinch (tap) | Select the highlighted element; a tap on empty space clears the selection |
 
 Hand navigation runs entirely in the browser. It keeps working while the bridge is offline; only edits wait for the bridge.

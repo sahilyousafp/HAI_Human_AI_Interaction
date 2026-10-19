@@ -95,6 +95,37 @@ test.describe("hand pointer and selection", () => {
     );
     await expect(page.getByTestId("selection-status")).toHaveText("Nothing selected");
   });
+  test("with both hands visible the left hand gets a second, grey pointer; hover stays with the right", async ({
+    page,
+  }) => {
+    bridge = await startTestBridge(page);
+    await openViewer(page);
+    const at = await findElementOnScreen(page, "block-b");
+    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    // One hand: one pointer.
+    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), handAt(at));
+    await expect(page.getByTestId("hand-pointer")).toBeVisible();
+    await expect(page.getByTestId("hand-pointer-secondary")).toHaveCount(0);
+    // Both hands: the left one shows in light grey, away from the right one.
+    await page.evaluate(([p, q]) => window.__AEX_INPUT__?.pointer(p, q), [
+      handAt(at),
+      handAt([0.15, 0.2]),
+    ] as const);
+    const secondary = page.getByTestId("hand-pointer-secondary");
+    await expect(secondary).toBeVisible();
+    const colors = await page.evaluate(() => {
+      const css = (id: string) => {
+        const el = document.querySelector(`[data-testid="${id}"]`);
+        return el ? getComputedStyle(el).borderTopColor : null;
+      };
+      return { primary: css("hand-pointer"), secondary: css("hand-pointer-secondary") };
+    });
+    expect(colors.secondary).not.toBe(colors.primary);
+    // Not engaged: no pointers.
+    await page.evaluate(() => window.__AEX_INPUT__?.engaged(false));
+    await expect(page.getByTestId("hand-pointer")).toHaveCount(0);
+    await expect(secondary).toHaveCount(0);
+  });
 });
 
 test.describe("navigation", () => {

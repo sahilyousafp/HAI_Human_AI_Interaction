@@ -2,7 +2,10 @@ import type { GestureEvent, Point2 } from "@aex/protocol";
 
 /** Where the hand pointer is (mirrored, normalised preview coordinates) and when it was captured. */
 export interface PointerSample {
+  /** The right hand's pinch point, or the left hand's when only it is visible. Hover and selection follow it. */
   position: Point2 | null;
+  /** The left hand's pinch point while both hands are visible, shown as a second, quieter pointer. */
+  secondary?: Point2 | null;
   ts: number;
 }
 

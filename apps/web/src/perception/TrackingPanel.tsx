@@ -4,13 +4,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { InputBus } from "../input/input-bus.ts";
 import type { LatencyTracker } from "../viewer/latency.ts";
 import { CAMERA_EFFECTS, type CameraEffectsState, EFFECT_NAMES } from "./camera-effects.ts";
+import { type CameraPrefs, loadCameraPrefs, mirroredFor, saveCameraPrefs } from "./camera-prefs.ts";
 import { DetectionPanel } from "./DetectionPanel.tsx";
 import { DetectionStore } from "./detection-store.ts";
 import { type DrawColors, drawTracking } from "./draw.ts";
 import { GesturePanel } from "./GesturePanel.tsx";
 import { GestureStore } from "./gesture-store.ts";
 import { downloadFrames, LandmarkRecorder } from "./recorder.ts";
-import { type CameraError, Tracker, type TrackerState, type TrackerStats } from "./tracker.ts";
+import {
+  type CameraError,
+  type CameraInfo,
+  Tracker,
+  type TrackerState,
+  type TrackerStats,
+} from "./tracker.ts";
 
 const ERROR_TEXT: Record<CameraError, { title: string; fix: string }> = {
   denied: {
@@ -79,6 +86,17 @@ function effectsLabel(effects: CameraEffectsState | null): string {
   return CAMERA_EFFECTS.every((e) => effects[e] === "off") ? "off" : "not reported";
 }
 
+async function listCameras(): Promise<MediaDeviceInfo[]> {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  return devices.filter((d) => d.kind === "videoinput");
+}
+
+function cameraLabel(info: CameraInfo | null): string {
+  if (!info?.width || !info.height) return "-";
+  const fps = info.frameRate ? `, ${Math.round(info.frameRate)} fps` : "";
+  return `${info.width} x ${info.height}${fps}`;
+}
+
 function faceCadenceLabel(state: TrackerState, stats: TrackerStats | null): string {
   if (state.camera !== "on") return "-";
   return stats?.faceCadence === 2 ? "every 2nd frame" : "every frame";
@@ -110,6 +128,9 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
   const detectionStore = useRef(new DetectionStore()).current;
   const [recording, setRecording] = useState(false);
   const [effects, setEffects] = useState<CameraEffectsState | null>(null);
+  const [prefs, setPrefs] = useState<CameraPrefs>(loadCameraPrefs);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [cameraInfo, setCameraInfo] = useState<CameraInfo | null>(null);
 
   const updateState = useCallback(
     (next: TrackerState) => {
@@ -128,6 +149,7 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
       {
         onState: updateState,
         onEffects: setEffects,
+        onCamera: setCameraInfo,
         onGestures: (events, gestureState, gestureMs) => {
           gestureStore.push(events, gestureState, gestureMs);
           // The frame these gestures came from was delivered just before, in onFrame.
@@ -146,9 +168,16 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
         onFrame: (frame, frameStats, faceRan, rawHands) => {
           latestFrame.current = frame;
           latestFaceRan.current = faceRan;
-          // The pointer follows the right hand's pinch point, or the left hand if only it is visible.
-          const hand = frame.hands.find((h) => h.handedness === "Right") ?? frame.hands[0];
-          bus.emitPointer({ position: hand ? pinchPoint(hand) : null, ts: frame.captureTs });
+          // The pointer follows the right hand's pinch point, or the left hand if only it is visible; with both
+          // hands in view, the left one gets a second pointer.
+          const right = frame.hands.find((h) => h.handedness === "Right");
+          const left = frame.hands.find((h) => h.handedness === "Left");
+          const primary = right ?? left;
+          bus.emitPointer({
+            position: primary ? pinchPoint(primary) : null,
+            secondary: right && left ? pinchPoint(left) : null,
+            ts: frame.captureTs,
+          });
           latestRaw.current = rawHands ?? [];
           latestStats.current = frameStats;
           if (import.meta.env.DEV) {
@@ -204,6 +233,31 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
     trackerRef.current?.setRawHands(showRaw);
   }, [showRaw]);
 
+  useEffect(() => {
+    trackerRef.current?.setMirrored(prefs.mirrored);
+  }, [prefs.mirrored]);
+
+  useEffect(() => {
+    void trackerRef.current?.setDevice(prefs.deviceId);
+  }, [prefs.deviceId]);
+
+  // The camera list; names are only readable once camera permission is granted, so refresh when the camera starts.
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const refresh = () => void listCameras().then(setCameras);
+    refresh();
+    navigator.mediaDevices.addEventListener("devicechange", refresh);
+    return () => navigator.mediaDevices.removeEventListener("devicechange", refresh);
+  }, []);
+  useEffect(() => {
+    if (state.camera === "on") void listCameras().then(setCameras);
+  }, [state.camera]);
+
+  const choosePrefs = (next: CameraPrefs) => {
+    setPrefs(next);
+    saveCameraPrefs(next);
+  };
+
   // Text readouts refresh once per second.
   useEffect(() => {
     const id = setInterval(() => {
@@ -223,6 +277,7 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
       gestureStore.reset();
       detectionStore.reset();
       setEffects(null);
+      setCameraInfo(null);
     } else {
       void trackerRef.current?.start();
     }
@@ -246,7 +301,7 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
   return (
     <section className="tracking" aria-label="Camera tracking">
       <div className="main-column">
-        <div className="preview" data-camera={state.camera}>
+        <div className="preview" data-camera={state.camera} data-mirrored={prefs.mirrored}>
           <video ref={videoRef} className="preview-video" muted playsInline />
           <canvas
             ref={canvasRef}
@@ -292,6 +347,38 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
         <button type="button" className="primary" data-testid="camera-toggle" onClick={toggle}>
           {running ? "Stop camera" : "Start camera"}
         </button>
+        <label className="field">
+          <span>Camera</span>
+          <select
+            data-testid="camera-select"
+            value={prefs.deviceId}
+            onChange={(e) => choosePrefs({ deviceId: e.target.value, mirrored: mirroredFor(e.target.value) })}
+          >
+            <option value="">System default</option>
+            {cameras
+              .filter((c) => c.deviceId !== "" && c.deviceId !== "default")
+              .map((c, i) => (
+                <option key={c.deviceId} value={c.deviceId}>
+                  {c.label || `Camera ${i + 1}`}
+                </option>
+              ))}
+          </select>
+        </label>
+        <div className="check-group">
+          <label className="check">
+            <input
+              type="checkbox"
+              data-testid="camera-mirrored"
+              checked={prefs.mirrored}
+              onChange={(e) => choosePrefs({ ...prefs, mirrored: e.target.checked })}
+            />
+            Camera image is mirrored
+          </label>
+          <p className="readout-note">
+            Raise your right hand: the Gestures card should list it as the right hand. If it says left, your
+            camera (often a phone webcam app) sends a mirrored image; tick this.
+          </p>
+        </div>
         <label className="check">
           <input type="checkbox" checked={debugView} onChange={(e) => setDebugView(e.target.checked)} />
           Debug view
@@ -326,6 +413,10 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
           <div>
             <dt>Inference</dt>
             <dd data-testid="hud-inference">{stats ? `${stats.inferenceMs.toFixed(1)} ms` : "-"}</dd>
+          </div>
+          <div>
+            <dt>Camera delivers</dt>
+            <dd data-testid="hud-camera">{state.camera === "on" ? cameraLabel(cameraInfo) : "-"}</dd>
           </div>
           <div>
             <dt>Backend</dt>

@@ -12,7 +12,7 @@ interface Window {
   __AEX_INPUT__?: {
     // biome-ignore lint/suspicious/noExplicitAny: tests build events loosely; the app validates their shape.
     gestures(events: any[]): void;
-    pointer(position: E2EPoint | null): void;
+    pointer(position: E2EPoint | null, secondary?: E2EPoint | null): void;
     engaged(engaged: boolean): void;
   };
   __AEX_SCENE__?: {

@@ -21,6 +21,7 @@
   --model-edge: #1c2328;
   --model-hover: #8fd3da;
   --strip-seen: #5d7480;
+  --pointer-secondary: #c9d1d4;
   --strip-dropped: color-mix(in srgb, var(--risk) 70%, var(--panel));
   --f-body: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   --f-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
@@ -50,6 +51,7 @@
     --model-edge: #39434a;
     --model-hover: #bfe3e6;
     --strip-seen: #8ea0a7;
+    --pointer-secondary: #c4ccd0;
     --strip-dropped: color-mix(in srgb, var(--risk) 55%, var(--panel));
     color-scheme: light;
   }
@@ -271,6 +273,13 @@ button {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--viewer-bg) 70%, transparent);
   pointer-events: none;
 }
+.hand-pointer.left-hand {
+  border-color: var(--pointer-secondary);
+  /* Light grey on a light viewer needs a fine dark edge to stay visible. */
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.28),
+    inset 0 0 0 1px rgb(0 0 0 / 0.18);
+}
 
 .tracking {
   display: grid;
@@ -296,6 +305,9 @@ button {
 .preview-video {
   object-fit: cover;
   transform: scaleX(-1); /* mirror, like a mirror; landmarks are flipped to match in draw.ts */
+}
+.preview[data-mirrored="true"] .preview-video {
+  transform: none; /* the camera already mirrors its image */
 }
 .preview[data-camera="off"] .preview-video,
 .preview[data-camera="error"] .preview-video {
@@ -410,6 +422,26 @@ button {
 .check input {
   accent-color: var(--accent);
 }
+.check-group {
+  display: grid;
+  gap: 2px;
+}
+.field {
+  display: grid;
+  gap: 4px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.field select {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+}
 .readouts {
   display: grid;
   gap: 10px;
@@ -459,6 +491,9 @@ button {
   font-size: 12px;
   line-height: 1.4;
   color: var(--muted);
+}
+.check-group .readout-note {
+  margin-left: 24px;
 }
 
 /* Detection card: detection rate strips, pinch meters, response times */

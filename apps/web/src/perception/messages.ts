@@ -12,8 +12,13 @@ export type ToWorker =
       perfDelayMs: number;
     }
   | { type: "frame"; seq: number; captureTs: number; bitmap: ImageBitmap }
-  /** Debug: also send the unsmoothed hand points, to compare against the smoothed ones. */
-  | { type: "options"; rawHands: boolean };
+  | {
+      type: "options";
+      /** Debug: also send the unsmoothed hand points, to compare against the smoothed ones. */
+      rawHands?: boolean;
+      /** The camera sends a mirrored image (some phone webcam apps do): flip it back before tracking. */
+      mirrored?: boolean;
+    };
 
 export type FromWorker =
   | { type: "ready"; backend: "GPU" | "CPU" }

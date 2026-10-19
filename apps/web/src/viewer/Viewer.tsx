@@ -29,7 +29,7 @@ declare global {
     /** Dev builds only: inject hand input exactly as the tracker would. */
     __AEX_INPUT__?: {
       gestures(events: GestureEvent[]): void;
-      pointer(position: Point2 | null): void;
+      pointer(position: Point2 | null, secondary?: Point2 | null): void;
       engaged(engaged: boolean): void;
     };
   }
@@ -179,6 +179,7 @@ export function Viewer({
   const framed = useRef(false);
   const navigating = useRef(false);
   const [pointer, setPointer] = useState<Point2 | null>(null);
+  const [secondaryPointer, setSecondaryPointer] = useState<Point2 | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [p90, setP90] = useState<number | null>(null);
   const [projectPath, setProjectPath] = useState("");
@@ -225,16 +226,19 @@ export function Viewer({
     const offPointer = bus.onPointer((sample) => {
       if (!sample.position || !bus.engaged || navigating.current) {
         setPointer(null);
+        setSecondaryPointer(null);
         setHoverId(null);
         return;
       }
       const at = handToViewer(sample.position);
       setPointer(at);
+      setSecondaryPointer(sample.secondary ? handToViewer(sample.secondary) : null);
       setHoverId(pickRef.current(at[0], at[1]));
     });
     const offEngaged = bus.onEngaged((engaged) => {
       if (!engaged) {
         setPointer(null);
+        setSecondaryPointer(null);
         setHoverId(null);
       }
     });
@@ -328,7 +332,8 @@ export function Viewer({
     };
     window.__AEX_INPUT__ = {
       gestures: (events) => bus.emitGestures(events),
-      pointer: (position) => bus.emitPointer({ position, ts: performance.timeOrigin + performance.now() }),
+      pointer: (position, secondary = null) =>
+        bus.emitPointer({ position, secondary, ts: performance.timeOrigin + performance.now() }),
       engaged: (engaged) => bus.setEngaged(engaged),
     };
   }, [bus, client, latency]);
@@ -386,6 +391,14 @@ export function Viewer({
         <CameraRig nav={nav} pendingTs={pendingTs} latency={latency} pickRef={pickRef} />
       </Canvas>
 
+      {secondaryPointer && (
+        <div
+          className="hand-pointer left-hand"
+          data-testid="hand-pointer-secondary"
+          style={{ left: `${secondaryPointer[0] * 100}%`, top: `${secondaryPointer[1] * 100}%` }}
+          aria-hidden="true"
+        />
+      )}
       {pointer && (
         <div
           className="hand-pointer"
