@@ -1,0 +1,26 @@
+import type { TrackingFrame } from "@aex/protocol";
+
+/** Messages between the main thread and the perception worker. Camera images only ever travel inward. */
+export type ToWorker =
+  | {
+      type: "init";
+      wasmBase: string;
+      handModel: string;
+      faceModel: string;
+      /** Test hook: busy-wait this long per frame to simulate a slow machine. 0 in normal use. */
+      perfDelayMs: number;
+    }
+  | { type: "frame"; seq: number; captureTs: number; bitmap: ImageBitmap };
+
+export type FromWorker =
+  | { type: "ready"; backend: "GPU" | "CPU" }
+  | {
+      type: "frame";
+      frame: TrackingFrame;
+      inferenceMs: number;
+      /** Whether face tracking ran on this frame (it may run and find no face). */
+      faceRan: boolean;
+      fps: number | null;
+      faceCadence: 1 | 2;
+    }
+  | { type: "error"; message: string };

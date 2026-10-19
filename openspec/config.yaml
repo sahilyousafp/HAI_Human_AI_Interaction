@@ -1,0 +1,44 @@
+schema: spec-driven
+
+context: |
+  Product: open-source (Apache-2.0) interaction layer that lets one architect drive an AI agent and AEC design
+  software with hand + face tracking from a laptop webcam, plus voice. It reimagines how a single user interacts
+  with their own Claude; it is not a hosted service and earns no money.
+  Primary platform: Windows 11 laptop, built-in RGB webcam, Chrome or Edge. Rhino 8 (+ Grasshopper) is the first
+  external host; Blender/Bonsai comes later. A built-in three.js viewer is the zero-install default host.
+  Agent: the user's own locally installed, self-logged-in `claude` CLI, spawned unmodified as a long-lived
+  `claude -p --input-format stream-json --output-format stream-json` process. Never read, copy, store or proxy
+  Claude credentials or tokens; never spoof headers; never bundle the claude binary. Other providers come later
+  behind the same AgentProvider interface.
+  The user keeps full use of their own Claude Code setup: their MCP servers and skills load in the agent session,
+  and they can install more from the app. Tool calls that are not pre-approved go to an in-app approval prompt
+  (gesture, voice or click) instead of being silently allowed or silently denied.
+  Rhino agent tools come from McNeel's RhinoAI ("Rhino-MCP-Platform" Yak package, stdio router). Our own Rhino
+  plugin only adds what RhinoAI lacks: high-rate camera sync, selection sync, and ghost previews.
+  Everything runs on localhost: servers bind to 127.0.0.1 only and require a random per-session token.
+  Privacy: camera frames never leave the perception Web Worker; only landmarks, gestures and intents cross it.
+  No emotion inference; face blendshapes are only explicit control switches.
+  Latency: gesture navigation and selection must never wait on the LLM.
+  Stack: pnpm workspace, TypeScript, Vite, React, React Three Fiber, @mediapipe/tasks-vision, Node 24 bridge with
+  `ws`, MCP TypeScript SDK v2 (@modelcontextprotocol/server + /node), zod 4, Biome, Vitest, Playwright
+  (E2E uses Chromium's fake camera fed from recorded .y4m clips). C# only inside plugins/rhino.
+  Licences: no AGPL, GPL or non-commercial dependencies in shipped code or shipped model weights.
+  Budget: the maintainer has 5-8 hours per week and publishes two LinkedIn videos per week, so every change must
+  end in a short filmable demo.
+  Writing: never use the em dash character in any artifact; use a plain hyphen.
+
+rules:
+  proposal:
+    - State what is out of scope.
+    - Name the 30-60 second demo clip this change enables.
+  design:
+    - Record rejected alternatives in one line each.
+    - Call out any latency budget and where it is measured.
+  tasks:
+    - Each task fits in at most 2 hours of focused work.
+    - Group tasks so each group ends in something runnable.
+    - Include automated tests for every requirement scenario, preferring end-to-end tests with the fake camera.
+    - End with a demo task that names the clip and a repeatable script under demos/.
+  specs:
+    - Use SHALL / MUST language and GIVEN / WHEN / THEN scenarios.
+    - Scenarios must be testable without a human in front of the camera.

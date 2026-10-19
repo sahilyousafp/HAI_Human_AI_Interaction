@@ -1,0 +1,950 @@
+<title>Gesture Agent Blueprint</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an architectural drawing set. Title block on top, then working panels read like sheets; teal ink on cool trace paper. */
+:root {
+  --paper: #eef2f1;
+  --panel: #fbfcfc;
+  --ink: #15202a;
+  --muted: #56646f;
+  --line: #d2dbd9;
+  --accent: #0b6e78;
+  --accent-soft: #dcefef;
+  --ok: #2c7a4b;
+  --ok-soft: #e1f1e6;
+  --warn: #9a6512;
+  --warn-soft: #f7ecd6;
+  --risk: #b42318;
+  --risk-soft: #fbe4e1;
+  --grid: rgba(11, 110, 120, 0.07);
+  --f-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1519; --panel: #141d22; --ink: #e3eaec; --muted: #93a3ab; --line: #26343b;
+    --accent: #52bcc6; --accent-soft: #143238; --ok: #62c48f; --ok-soft: #15301f;
+    --warn: #e2ab4f; --warn-soft: #33270f; --risk: #f0786d; --risk-soft: #3a1714;
+    --grid: rgba(82, 188, 198, 0.06); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1519; --panel: #141d22; --ink: #e3eaec; --muted: #93a3ab; --line: #26343b;
+  --accent: #52bcc6; --accent-soft: #143238; --ok: #62c48f; --ok-soft: #15301f;
+  --warn: #e2ab4f; --warn-soft: #33270f; --risk: #f0786d; --risk-soft: #3a1714;
+  --grid: rgba(82, 188, 198, 0.06); color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.55;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--panel); }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.wrap {
+  max-width: 1160px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.12; }
+h1 { font-size: clamp(30px, 5vw, 52px); font-weight: 800; font-stretch: 118%; letter-spacing: -0.01em; }
+h2 { font-size: clamp(22px, 3vw, 30px); font-weight: 750; font-stretch: 112%; }
+h3 { font-size: 17px; font-weight: 700; font-stretch: 105%; }
+p { margin: 0; max-width: 68ch; }
+.label { font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--f-mono); }
+.muted { color: var(--muted); }
+code { font-family: var(--f-mono); font-size: 0.88em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; }
+
+/* Sticky sheet index */
+.nav { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+.nav .wrap { display: flex; gap: 4px; overflow-x: auto; padding-block: 8px; scrollbar-width: none; }
+.nav a { font-family: var(--f-mono); font-size: 12px; text-decoration: none; color: var(--muted); padding: 6px 10px; border-radius: 4px; white-space: nowrap; }
+.nav a:hover { color: var(--ink); background: var(--accent-soft); }
+.nav a b { color: var(--accent); font-weight: 500; margin-right: 6px; }
+
+/* Title block */
+header { padding-block: 28px 8px; }
+.titleblock { display: grid; grid-template-columns: minmax(0, 1fr) 300px; border: 1.5px solid var(--ink); background: var(--panel); }
+.tb-main { padding: 28px; display: grid; gap: 16px; border-right: 1.5px solid var(--ink); min-width: 0; }
+.tb-main .lede { font-size: 17px; max-width: 60ch; }
+.tb-side { display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+.tb-cells { display: grid; grid-template-columns: 1fr 1fr; }
+.tb-cell { padding: 8px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); min-width: 0; }
+.tb-cell:nth-child(2n) { border-right: 0; }
+.tb-cell .v { font-family: var(--f-mono); font-size: 13px; }
+.hand { padding: 10px 12px 12px; display: grid; gap: 4px; }
+.hand svg { width: 100%; height: auto; max-height: 230px; }
+.hand .cap { font-family: var(--f-mono); font-size: 11px; color: var(--muted); line-height: 1.45; }
+.hb-bone { stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
+.hb-pt { fill: var(--panel); stroke: var(--ink); stroke-width: 1.5; }
+.hb-tip { fill: var(--accent); stroke: var(--accent); }
+.hb-num { font-family: var(--f-mono); font-size: 9px; fill: var(--muted); }
+.hb-pinch { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.hb-ref { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 2 3; }
+
+.answer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border: 1.5px solid var(--ink); border-top: 0; background: var(--panel); }
+.answer > div { padding: 16px 20px; border-right: 1px solid var(--line); display: grid; gap: 6px; align-content: start; min-width: 0; }
+.answer > div:last-child { border-right: 0; }
+.answer .k { font-family: var(--f-display); font-weight: 700; font-size: 15px; font-stretch: 108%; }
+.verdict-tag { display: inline-block; font-family: var(--f-mono); font-size: 11px; padding: 2px 8px; border-radius: 3px; background: var(--accent); color: var(--panel); letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* Sections */
+section { padding-block: 40px 8px; scroll-margin-top: 60px; }
+.sec-head { display: grid; gap: 8px; margin-bottom: 20px; }
+.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; min-width: 0; }
+
+/* Wizard */
+.wizard { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.btn { font: 500 13px var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.sliders { display: grid; gap: 12px; }
+.slider { display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 2px 10px; align-items: center; }
+.slider label { font-weight: 600; font-size: 14px; }
+.slider .d { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+.slider input { grid-column: 1; width: 100%; accent-color: var(--accent); }
+.slider output { grid-column: 2; grid-row: 1 / span 2; font-family: var(--f-mono); font-size: 18px; text-align: right; color: var(--accent); }
+.slider .row { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 10px; align-items: center; }
+
+.ranking { display: grid; gap: 6px; }
+.rank { display: grid; grid-template-columns: 150px minmax(0, 1fr) 46px; gap: 10px; align-items: center; width: 100%; text-align: left; font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 7px 8px; cursor: pointer; }
+.rank:hover { border-color: var(--line); }
+.rank[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.rank .n { font-weight: 600; font-size: 14px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.rank .bar { height: 12px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.rank .bar i { display: block; height: 100%; background: var(--muted); border-radius: 2px; transition: width 0.35s ease; }
+.rank.win .bar i { background: var(--accent); }
+.rank .s { font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; font-size: 14px; }
+.best { font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; background: var(--accent); color: var(--panel); padding: 1px 6px; border-radius: 3px; }
+.detail { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--line); display: grid; gap: 12px; }
+.pc { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.pc ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
+.pc .plus h3 { color: var(--ok); }
+.pc .minus h3 { color: var(--risk); }
+.dots { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 16px; }
+.dot-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.pips { display: inline-flex; gap: 3px; align-items: center; }
+.pips i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--accent); }
+.pips i.on { background: var(--accent); }
+.swing { font-size: 13.5px; background: var(--warn-soft); border-radius: 4px; padding: 10px 12px; }
+
+/* Architecture */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.diagram { overflow-x: auto; }
+.diagram svg { display: block; width: 100%; min-width: 640px; height: auto; }
+.n-core rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.n-ext rect { fill: var(--panel); stroke: var(--muted); stroke-width: 1.2; }
+.n-io rect { fill: var(--paper); stroke: var(--ink); stroke-width: 1.2; stroke-dasharray: 5 3; }
+.n-pain rect { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 1.5; }
+.nt { font-family: var(--f-body); font-size: 13px; font-weight: 700; fill: var(--ink); }
+.ns { font-family: var(--f-body); font-size: 11px; fill: var(--muted); }
+.edge { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+.edge.d { stroke: var(--accent); stroke-dasharray: 5 4; }
+.el { font-family: var(--f-mono); font-size: 10px; fill: var(--muted); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+.ah { fill: var(--muted); }
+.ahd { fill: var(--accent); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 16px; height: 11px; border-radius: 2px; display: inline-block; }
+.lg-core { background: var(--accent-soft); border: 1.5px solid var(--accent); }
+.lg-ext { background: var(--panel); border: 1.2px solid var(--muted); }
+.lg-pain { background: var(--warn-soft); border: 1.5px solid var(--warn); }
+.lg-d { border-top: 2px dashed var(--accent); height: 0 !important; }
+.arch-notes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+pre { margin: 0; font-family: var(--f-mono); font-size: 12px; line-height: 1.55; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 12px; overflow-x: auto; }
+.arch-notes ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+
+/* Catalog */
+.cat-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.search { font: 14px var(--f-body); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 7px 10px; min-width: 0; flex: 1 1 220px; max-width: 320px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 12px var(--f-mono); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; }
+.chip[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); background: var(--paper); }
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13.5px; }
+th { text-align: left; font-family: var(--f-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--paper); position: sticky; top: 0; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.name { font-weight: 600; white-space: nowrap; }
+.badge { display: inline-block; font-family: var(--f-mono); font-size: 11px; padding: 2px 7px; border-radius: 3px; white-space: nowrap; border: 1px solid transparent; }
+.b-perm, .b-low { background: var(--ok-soft); color: var(--ok); }
+.b-copy, .b-grey { background: var(--warn-soft); color: var(--warn); }
+.b-nc, .b-high { background: var(--risk-soft); color: var(--risk); }
+.b-paid, .b-na { background: var(--paper); color: var(--muted); border-color: var(--line); }
+.b-unv { background: transparent; color: var(--muted); border: 1px dashed var(--muted); }
+.count { font-family: var(--f-mono); font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+/* Timeline */
+.tl-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 18px; align-items: end; }
+.tl-result { font-family: var(--f-display); font-size: 22px; font-weight: 750; font-stretch: 110%; }
+.tl-result small { display: block; font-family: var(--f-body); font-size: 13px; font-weight: 400; color: var(--muted); font-stretch: 100%; }
+.warnbox { font-size: 13.5px; background: var(--warn-soft); color: var(--ink); border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; }
+.gantt-box { overflow-x: auto; }
+.gantt { min-width: 680px; display: grid; gap: 4px; }
+.g-row { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 10px; align-items: center; }
+.g-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-name span { font-family: var(--f-mono); font-weight: 400; color: var(--muted); margin-right: 6px; }
+.g-track { position: relative; height: 22px; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(var(--wk) - 1px), var(--line) calc(var(--wk) - 1px), var(--line) var(--wk)); border-radius: 2px; }
+.g-bar { position: absolute; top: 3px; bottom: 3px; background: var(--accent); border-radius: 2px; min-width: 3px; }
+.g-bar.rh { background: var(--warn); }
+.g-ticks { position: relative; height: 16px; }
+.g-ticks span { position: absolute; transform: translateX(-50%); font-family: var(--f-mono); font-size: 10px; color: var(--muted); }
+.posts td:nth-child(2) { font-family: var(--f-mono); white-space: nowrap; }
+
+/* Risks */
+.cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.tier { border-radius: 6px; padding: 16px; display: grid; gap: 8px; align-content: start; border: 1px solid var(--line); background: var(--panel); }
+.tier ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 14px; }
+.tier.t-ok { border-top: 4px solid var(--ok); }
+.tier.t-grey { border-top: 4px solid var(--warn); }
+.tier.t-no { border-top: 4px solid var(--risk); }
+.risk-list { display: grid; gap: 0; }
+.risk { display: grid; grid-template-columns: 90px minmax(0, 1fr) minmax(0, 1fr); gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.risk:last-child { border-bottom: 0; }
+.oq { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; }
+.src { columns: 2 320px; column-gap: 28px; font-size: 13px; margin: 0; padding-left: 18px; }
+.src li { break-inside: avoid; margin-bottom: 5px; }
+footer { padding-block: 32px 48px; font-size: 12.5px; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .titleblock { grid-template-columns: minmax(0, 1fr); }
+  .tb-main { border-right: 0; border-bottom: 1.5px solid var(--ink); }
+  .tb-side { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto; }
+  .answer { grid-template-columns: minmax(0, 1fr); }
+  .answer > div { border-right: 0; border-bottom: 1px solid var(--line); }
+  .answer > div:last-child { border-bottom: 0; }
+  .wizard, .arch-notes, .cols3 { grid-template-columns: minmax(0, 1fr); }
+  .tl-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .tl-controls .tl-result { grid-column: 1 / -1; }
+  .risk { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+@media (max-width: 560px) {
+  .tb-main { padding: 18px; }
+  .tb-side { grid-template-columns: minmax(0, 1fr); }
+  .pc { grid-template-columns: minmax(0, 1fr); }
+  .rank { grid-template-columns: 118px minmax(0, 1fr) 40px; }
+  .tl-controls { grid-template-columns: minmax(0, 1fr); }
+  .sheet { padding: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+
+<nav class="nav" aria-label="Sections">
+  <div class="wrap">
+    <a href="#answer"><b>A0</b>Answer</a>
+    <a href="#decide"><b>A1</b>Decide</a>
+    <a href="#architecture"><b>A2</b>Architecture</a>
+    <a href="#catalog"><b>A3</b>Catalog</a>
+    <a href="#timeline"><b>A4</b>Timeline</a>
+    <a href="#risks"><b>A5</b>Risks</a>
+    <a href="#sources"><b>A6</b>Sources</a>
+  </div>
+</nav>
+
+<header class="wrap" id="answer">
+  <div class="titleblock">
+    <div class="tb-main">
+      <span class="label">Decision record / gesture + agent interaction for AEC</span>
+      <h1>Build the hands, not the modeler.</h1>
+      <p class="lede">Own the interaction layer: webcam hand and face tracking, a HUD, and an agent loop that runs in the browser. Let Rhino do the precise geometry through MCP. Blender comes second. Everything below shows how that answer was reached, and lets you change the weights and see if it still holds.</p>
+      <div><span class="verdict-tag">Recommended: Hybrid</span></div>
+    </div>
+    <div class="tb-side">
+      <div class="tb-cells">
+        <div class="tb-cell"><div class="label">Project</div><div class="v">AEC Agentic Exp.</div></div>
+        <div class="tb-cell"><div class="label">Sheet</div><div class="v">A0 of A6</div></div>
+        <div class="tb-cell"><div class="label">Input</div><div class="v">RGB webcam, 30 fps</div></div>
+        <div class="tb-cell"><div class="label">Date</div><div class="v">2026-10-19</div></div>
+        <div class="tb-cell"><div class="label">Budget</div><div class="v">5-8 hrs / week</div></div>
+        <div class="tb-cell"><div class="label">Rev</div><div class="v">A, for review</div></div>
+      </div>
+      <div class="hand">
+        <span class="label">Detail 1 / pinch test on 21 landmarks</span>
+        <svg id="hand" viewBox="0 0 260 230" role="img" aria-label="MediaPipe hand landmarks 0 to 20 with pinch distance between points 4 and 8 and reference distance between points 0 and 9"></svg>
+        <div class="cap">pinch = d(4,8) / d(0,9)<br>press &lt; 0.25 / release &gt; 0.35</div>
+      </div>
+    </div>
+  </div>
+  <div class="answer">
+    <div>
+      <span class="label">Your question</span>
+      <span class="k">Rhino or Blender, or my own UI?</span>
+      <p class="muted">Both. Build your own UI, but not your own modeler, then plug it into Rhino first. A Rhino-only plugin limits you to people who own a $995 license, and McNeel already ships its own AI panel.</p>
+    </div>
+    <div>
+      <span class="label">Why own the UI</span>
+      <span class="k">The gap is the interaction layer</span>
+      <p class="muted">No maintained project combines webcam gestures with an LLM agent for CAD or BIM. MediaPipe also runs fastest in the browser: GPU on Windows, no hops between processes, and video stays on the laptop.</p>
+    </div>
+    <div>
+      <span class="label">Why not a new modeler</span>
+      <span class="k">Rhino already solved geometry</span>
+      <p class="muted">Rebuilding NURBS, booleans and IFC would eat months of a 6-hour week. McNeel's MIT-licensed RhinoAI MCP and rhinomcp already let an agent drive Rhino.</p>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="decide">
+  <div class="sec-head">
+    <span class="label">A1 / decision matrix</span>
+    <h2>Weigh it yourself</h2>
+    <p class="muted">Each option is scored 1 to 5 on seven criteria, based on the research. Set how much each criterion matters to you, from 0 to 5. The ranking updates as you go. Click an option to see its pros and cons and its architecture.</p>
+  </div>
+  <div class="wizard">
+    <div class="sheet">
+      <div class="presets" id="presets" role="group" aria-label="Weight presets"></div>
+      <div class="sliders" id="sliders"></div>
+    </div>
+    <div class="sheet">
+      <div class="ranking" id="ranking" role="group" aria-label="Ranked options"></div>
+      <div class="detail" id="detail"></div>
+    </div>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="sec-head">
+    <span class="label">A2 / system diagram</span>
+    <h2>What each option looks like inside</h2>
+    <p class="muted">Teal boxes are code you write. Grey boxes are existing tools you reuse. Amber boxes are where the option hurts. Dashed teal lines are direct gesture paths that never wait for the LLM.</p>
+  </div>
+  <div class="sheet">
+    <div class="tabs" id="archTabs" role="group" aria-label="Choose an option"></div>
+    <div class="diagram" id="diagram"></div>
+    <div class="legend">
+      <span><i class="lg-core"></i>You build</span>
+      <span><i class="lg-ext"></i>Reused, existing</span>
+      <span><i class="lg-pain"></i>Pain point</span>
+      <span><i class="lg-d"></i>Direct gesture path (no LLM)</span>
+    </div>
+    <p id="archNote" class="muted" style="margin-top:10px"></p>
+  </div>
+  <div class="arch-notes">
+    <div class="sheet">
+      <h3>Two speeds of control</h3>
+      <ul>
+        <li><b>Fast path, under 50 ms:</b> gestures and head pose drive orbit, zoom, pan, select and confirm. Fixed rules, no LLM in the loop.</li>
+        <li><b>Slow path, a few seconds:</b> voice plus pointing becomes an intent ("make this wall 300 thick"). The agent calls MCP tools.</li>
+        <li><b>Proposals as ghosts:</b> the agent's change shows as a preview. Pinch, thumbs up or a nod accepts it. One undo reverts the whole agent turn.</li>
+        <li><b>Privacy:</b> only landmarks and intents leave the tracking worker. Video never leaves the device.</li>
+      </ul>
+    </div>
+    <div class="sheet">
+      <h3>One interface, any model provider</h3>
+<pre>interface AgentProvider {
+  kind: "cli" | "acp" | "api" | "local";
+  detect(): { installed, authed, billing };
+  startSession({ cwd, mcpServers,
+                 systemPrompt }): Session;
+}
+// backends: ClaudeCli (claude -p stream-json)
+//           CodexAppServer (ChatGPT plan)
+//           Acp (Gemini, Copilot, Cursor...)
+//           OpenAICompat (Ollama, OpenRouter)
+//           AnthropicApi (key or Max credits)</pre>
+    </div>
+  </div>
+</section>
+
+<section id="catalog">
+  <div class="sec-head">
+    <span class="label">A3 / research catalog</span>
+    <h2>What is out there</h2>
+    <p class="muted">Host platforms, vision libraries, datasets and LLM routes, as of October 2026. Badges show the license class. Copyleft and non-commercial items limit what you can ship.</p>
+  </div>
+  <div class="sheet">
+    <div class="tabs" id="catTabs" role="group" aria-label="Catalog category"></div>
+    <div class="cat-controls">
+      <input class="search" id="catSearch" type="search" placeholder="Filter by name or note" aria-label="Filter catalog">
+      <div class="chips" id="catChips" role="group" aria-label="License filter"></div>
+    </div>
+    <div class="tablebox"><table id="catTable"></table></div>
+    <div class="count" id="catCount"></div>
+  </div>
+</section>
+
+<section id="timeline">
+  <div class="sec-head">
+    <span class="label">A4 / programme</span>
+    <h2>Thirteen milestones, two clips a week</h2>
+    <p class="muted">Every milestone ends in something you can film. Set your real weekly hours and how much of that goes to recording and editing. The schedule stretches or compresses to fit. Start date: Monday 26 October 2026.</p>
+  </div>
+  <div class="sheet">
+    <div class="tl-controls">
+      <div class="slider">
+        <div class="row"><label for="hrsTotal">Hours per week</label><output id="hrsTotalOut" for="hrsTotal">7.5</output></div>
+        <input id="hrsTotal" type="range" min="3" max="20" step="0.5" value="7.5">
+      </div>
+      <div class="slider">
+        <div class="row"><label for="hrsVideo">Of which: filming two posts</label><output id="hrsVideoOut" for="hrsVideo">1.5</output></div>
+        <input id="hrsVideo" type="range" min="0.5" max="4" step="0.5" value="1.5">
+      </div>
+      <div class="tl-result" id="tlResult"></div>
+    </div>
+    <div id="tlWarn"></div>
+    <div class="gantt-box"><div class="gantt" id="gantt"></div></div>
+  </div>
+  <div class="sheet" style="margin-top:16px">
+    <h3 style="margin-bottom:10px">LinkedIn content plan</h3>
+    <p class="muted" style="margin-bottom:12px">Tuesday: a 30-60 second demo clip, 4:5, captions burned in, the hook in the first 2 seconds. Friday: a 60-90 second build log showing how it works and what broke. Upload video natively; linked videos reportedly get much less reach.</p>
+    <div class="tablebox"><table class="posts" id="posts"></table></div>
+  </div>
+</section>
+
+<section id="risks">
+  <div class="sec-head">
+    <span class="label">A5 / risks and rules</span>
+    <h2>Using your subscription plan safely</h2>
+    <p class="muted">From Anthropic's legal and compliance page and the consumer terms, read on 2026-10-19. This is not legal advice. The rules have changed several times in 2026, so keep the provider layer swappable.</p>
+  </div>
+  <div class="cols3">
+    <div class="tier t-ok">
+      <span class="badge b-low">Lowest risk</span>
+      <ul>
+        <li>You run your own Claude Code, signed in yourself, on your own machine. This is how this project works.</li>
+        <li>App spawns the unmodified <code>claude</code> binary for one user; nothing is resold or hosted</li>
+        <li>User's own API key, or Max monthly API credits ($100 or $200)</li>
+        <li>Codex with a ChatGPT plan, or "Sign in with ChatGPT" (preview)</li>
+        <li>Local models through Ollama</li>
+      </ul>
+    </div>
+    <div class="tier t-grey">
+      <span class="badge b-grey">Grey zone</span>
+      <ul>
+        <li>Turning the app into a hosted service where others' requests run through one person's plan</li>
+        <li>Unusually heavy automated use may not count as "ordinary individual usage"; watch your plan limits</li>
+        <li>Each user should install and sign in to their own Claude Code; the README says so</li>
+      </ul>
+    </div>
+    <div class="tier t-no">
+      <span class="badge b-high">Not allowed</span>
+      <ul>
+        <li>A "Sign in with Claude" button in your app</li>
+        <li>Reading, storing or proxying Claude.ai tokens or credentials</li>
+        <li>Spoofing Claude Code headers</li>
+        <li>"Claude Code" in the product name ("Powered by Claude" is fine)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="sheet" style="margin-top:16px">
+    <h3 style="margin-bottom:6px">Project risks</h3>
+    <div class="risk-list" id="riskList"></div>
+  </div>
+  <div class="sheet" style="margin-top:16px">
+    <h3 style="margin-bottom:10px">Open questions to settle early</h3>
+    <ol class="oq">
+      <li>Does an open-source app that spawns the user's own logged-in <code>claude -p</code> count as routing requests on behalf of users? Get a written answer from Anthropic.</li>
+      <li>Does <code>claude -p</code> with an API key draw from the Max monthly credits? The docs say the credits do not cover "Claude Code".</li>
+      <li>What frame rate do hands and face together actually reach on your laptop? Benchmark in week 2.</li>
+      <li>What are HaGRIDv2's extra license terms? Read them before publishing trained weights.</li>
+      <li>Does a click-through Electron overlay composite cleanly over Rhino 9's Direct3D viewport?</li>
+    </ol>
+  </div>
+</section>
+
+<section id="sources">
+  <div class="sec-head">
+    <span class="label">A6 / references</span>
+    <h2>Sources</h2>
+    <p class="muted">Full notes are in <code>docs/research/</code>, next to this page.</p>
+  </div>
+  <div class="sheet">
+    <ul class="src" id="srcList"></ul>
+  </div>
+</section>
+
+</main>
+<footer class="wrap">Prepared 2026-10-19 from three research passes covering AEC hosts, computer vision and LLM routes. Star counts and some licenses are approximate; the catalog marks them as unverified where needed.</footer>
+
+<script>
+(function () {
+  "use strict";
+  var store = {
+    get: function (k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  function el(tag, attrs, html) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+    if (html != null) n.innerHTML = html;
+    return n;
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  /* ---------- Detail 1: hand landmarks ---------- */
+  (function drawHand() {
+    var P = [[118,205],[88,186],[66,160],[52,134],[48,108],[100,118],[96,82],[94,58],[92,36],[124,114],[126,74],[127,48],[128,24],[148,118],[153,82],[156,58],[158,38],[170,128],[180,100],[186,82],[190,64]];
+    var B = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+    var svg = document.getElementById("hand"), s = "";
+    B.forEach(function (b) { s += '<line class="hb-bone" x1="' + P[b[0]][0] + '" y1="' + P[b[0]][1] + '" x2="' + P[b[1]][0] + '" y2="' + P[b[1]][1] + '"/>'; });
+    s += '<line class="hb-pinch" x1="48" y1="108" x2="92" y2="36"/>';
+    s += '<line class="hb-ref" x1="118" y1="205" x2="124" y2="114"/>';
+    P.forEach(function (p, i) {
+      var tip = i === 4 || i === 8;
+      s += '<circle class="hb-pt' + (tip ? " hb-tip" : "") + '" cx="' + p[0] + '" cy="' + p[1] + '" r="' + (tip ? 4.5 : 3.5) + '"/>';
+      var knuckle = i === 5 || i === 9 || i === 13;
+      var dx = i <= 4 ? -14 : (i >= 17 ? 8 : (i === 9 ? -15 : (knuckle ? -3 : 7))), dy = i === 0 || knuckle ? 15 : 3;
+      s += '<text class="hb-num" x="' + (p[0] + dx) + '" y="' + (p[1] + dy) + '">' + i + '</text>';
+    });
+    s += '<text class="hb-num" x="20" y="72" style="fill:var(--accent)">d(4,8)</text>';
+    s += '<text class="hb-num" x="134" y="216" style="fill:var(--warn)">d(0,9)</text>';
+    svg.innerHTML = s;
+  })();
+
+  /* ---------- A1: decision matrix ---------- */
+  var CRIT = [
+    { id: "reach", name: "Open-source reach", d: "Anyone can try it without buying software" },
+    { id: "precision", name: "Precision modeling", d: "NURBS, booleans and IFC that architects trust" },
+    { id: "effort", name: "Low build effort", d: "Fits a 5-8 hour week without stalling" },
+    { id: "latency", name: "Gesture latency", d: "Camera to viewport without extra hops" },
+    { id: "cost", name: "Free for users", d: "No license needed to run the default path" },
+    { id: "rhino", name: "Uses your Rhino skills", d: "Grasshopper and RhinoCommon know-how pays off" },
+    { id: "story", name: "Stands out on LinkedIn", d: "Something new, not a copy of a vendor feature" }
+  ];
+  var OPTS = [
+    { id: "hybrid", name: "Hybrid", s: [5,4,3,5,4,4,5],
+      sum: "Your own browser app owns camera, gestures, HUD and agent. Rhino connects through MCP for precise geometry; Blender later.",
+      pros: ["Free web viewer means zero-install demos", "Reuses McNeel's RhinoAI MCP and rhinomcp instead of rebuilding", "MediaPipe on the browser GPU, no IPC hop", "Works with Rhino, then Blender, then others"],
+      cons: ["Two codebases: TypeScript app plus a thin C# plugin", "Sync between web view and Rhino camera needs care", "Overlay mode on top of Rhino needs Electron later"] },
+    { id: "rhino", name: "Rhino plugin only", s: [2,5,3,2,1,5,2],
+      sum: "Everything lives in Rhino: an Eto WebView2 panel, DisplayConduit overlays, and a separate camera helper process.",
+      pros: ["Best AEC viewport overlays (DisplayConduit)", "Your Rhino and Grasshopper skills apply directly", "Fastest path if the tool is only for you"],
+      cons: ["Every user needs a $995 Rhino license", "MediaPipe cannot run well inside Rhino: CPU-only Python on Windows, UI thread blocking", "Competes with McNeel's own AI panel in RhinoAI"] },
+    { id: "blender", name: "Blender add-on", s: [4,2,3,3,5,1,3],
+      sum: "A Blender add-on runs tracking and draws a HUD with the gpu module; blender-mcp gives the agent tools; Bonsai adds IFC.",
+      pros: ["Free and open source end to end", "Huge MCP community (blender-mcp around 31k stars)", "Bonsai gives real IFC authoring"],
+      cons: ["Mesh-first, weak for precise NURBS design", "Interaction model feels foreign to most architects", "No embedded browser for a rich HUD"] },
+    { id: "scratch", name: "Own modeler from scratch", s: [5,1,1,5,5,2,4],
+      sum: "A browser app with your own geometry engine built on Manifold, replicad and web-ifc. No external CAD at all.",
+      pros: ["Total control and zero install", "Lowest latency, everything in one page", "Fully open source"],
+      cons: ["Months rebuilding NURBS, booleans and IFC", "Hard to win architects' trust on precision", "Stalls a 6-hour week; few demoable clips early"] },
+    { id: "revit", name: "Revit add-in", s: [2,4,1,2,1,1,3],
+      sum: "A Revit add-in with a camera helper, using the Revit Public MCP (tech preview) for agent access.",
+      pros: ["Where BIM production happens", "Official MCP exists (tech preview)"],
+      cons: ["No real 2D HUD API, only DirectContext3D", "Around $3k a year per user, poor fit for open source", "MCP is read-heavy; write scope unclear"] },
+    { id: "engine", name: "Unreal or Godot app", s: [3,1,2,4,5,1,3],
+      sum: "A game-engine app with a full custom UI; Unreal 5.8 ships an experimental MCP and godot-mcp exists.",
+      pros: ["Full control of UI and rendering", "Great looking demos", "Godot is MIT and free"],
+      cons: ["No CAD kernel, so modeling must be rebuilt", "Far from architects' daily tools", "Heavy engine for a webcam UI"] }
+  ];
+  var PRESETS = [
+    { id: "you", name: "Your profile", w: [4,3,5,4,4,3,4] },
+    { id: "reach", name: "Max open-source reach", w: [5,1,3,3,5,0,4] },
+    { id: "power", name: "Rhino power user", w: [1,5,4,2,0,5,2] },
+    { id: "solo", name: "Just a personal tool", w: [0,5,5,2,0,5,0] }
+  ];
+  var saved = store.get("gab-weights");
+  var weights = Array.isArray(saved) && saved.length === CRIT.length ? saved : PRESETS[0].w.slice();
+  var selected = store.get("gab-selected") || null;
+
+  var presetsEl = document.getElementById("presets");
+  PRESETS.forEach(function (p) {
+    var b = el("button", { type: "button", "class": "btn", id: "preset-" + p.id, "aria-pressed": "false" }, esc(p.name));
+    b.addEventListener("click", function () { weights = p.w.slice(); syncSliders(); update(); });
+    presetsEl.appendChild(b);
+  });
+  var slidersEl = document.getElementById("sliders");
+  CRIT.forEach(function (c, i) {
+    var wrap = el("div", { "class": "slider" });
+    wrap.innerHTML = '<div class="row"><label for="w-' + c.id + '">' + esc(c.name) + '</label><output id="o-' + c.id + '" for="w-' + c.id + '"></output></div>' +
+      '<input id="w-' + c.id + '" type="range" min="0" max="5" step="1" aria-describedby="d-' + c.id + '">' +
+      '<span class="d" id="d-' + c.id + '">' + esc(c.d) + '</span>';
+    slidersEl.appendChild(wrap);
+    wrap.querySelector("input").addEventListener("input", function (e) { weights[i] = +e.target.value; update(); });
+  });
+  function syncSliders() {
+    CRIT.forEach(function (c, i) { document.getElementById("w-" + c.id).value = weights[i]; });
+  }
+  function score(o) {
+    var tot = 0, max = 0;
+    o.s.forEach(function (v, i) { tot += v * weights[i]; max += 5 * weights[i]; });
+    return max ? Math.round(tot / max * 100) : 0;
+  }
+  var rankEl = document.getElementById("ranking"), detailEl = document.getElementById("detail");
+  function pips(n) { var s = '<span class="pips" aria-label="' + n + ' of 5">'; for (var i = 1; i <= 5; i++) s += '<i class="' + (i <= n ? "on" : "") + '"></i>'; return s + "</span>"; }
+  function update() {
+    CRIT.forEach(function (c, i) { document.getElementById("o-" + c.id).textContent = weights[i]; });
+    PRESETS.forEach(function (p) { document.getElementById("preset-" + p.id).setAttribute("aria-pressed", String(p.w.join() === weights.join())); });
+    var ranked = OPTS.map(function (o) { return { o: o, v: score(o) }; }).sort(function (a, b) { return b.v - a.v; });
+    var winner = ranked[0].o.id;
+    if (!selected || !OPTS.some(function (o) { return o.id === selected; })) selected = winner;
+    rankEl.innerHTML = "";
+    ranked.forEach(function (r, idx) {
+      var b = el("button", { type: "button", "class": "rank" + (idx === 0 ? " win" : ""), "aria-pressed": String(r.o.id === selected) });
+      b.innerHTML = '<span class="n">' + esc(r.o.name) + (idx === 0 ? ' <span class="best">Best fit</span>' : "") + '</span><span class="bar"><i style="width:' + r.v + '%"></i></span><span class="s">' + r.v + '</span>';
+      b.addEventListener("click", function () { selected = r.o.id; store.set("gab-selected", selected); update(); renderArch(); });
+      rankEl.appendChild(b);
+    });
+    var sel = OPTS.filter(function (o) { return o.id === selected; })[0];
+    var top = ranked[0], second = ranked[1];
+    var swingHtml = "";
+    var cmp = sel.id === top.o.id ? second.o : top.o;
+    var best = -1, bestI = -1;
+    sel.s.forEach(function (v, i) { var gap = cmp.s[i] - v; if (gap > best) { best = gap; bestI = i; } });
+    if (best > 0) {
+      swingHtml = '<div class="swing"><b>What would change the answer:</b> ' + esc(cmp.name) + ' beats ' + esc(sel.name) + ' most on <b>' + esc(CRIT[bestI].name.toLowerCase()) + '</b> (' + cmp.s[bestI] + ' vs ' + sel.s[bestI] + '). ' +
+        (sel.id === top.o.id ? 'Raise that weight to see how far the lead holds. Current margin: ' + (top.v - second.v) + ' points.' : 'That is where this option loses ground.') + '</div>';
+    } else {
+      swingHtml = '<div class="swing">' + esc(sel.name) + ' scores at least as well as ' + esc(cmp.name) + ' on every criterion.</div>';
+    }
+    detailEl.innerHTML = '<h3>' + esc(sel.name) + '</h3><p class="muted">' + esc(sel.sum) + '</p>' +
+      '<div class="pc"><div class="plus"><h3>For</h3><ul>' + sel.pros.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + '</ul></div>' +
+      '<div class="minus"><h3>Against</h3><ul>' + sel.cons.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + '</ul></div></div>' +
+      '<div class="dots">' + CRIT.map(function (c, i) { return '<div class="dot-row"><span>' + esc(c.name) + '</span>' + pips(sel.s[i]) + '</div>'; }).join("") + '</div>' + swingHtml;
+    store.set("gab-weights", weights);
+    syncTabs();
+  }
+
+  /* ---------- A2: architecture diagrams ---------- */
+  var ARCH = {
+    hybrid: { note: "Recommended. Gestures reach the viewer and Rhino through a direct navigation channel; only intents go to the agent.",
+      n: [
+        ["cam", 0, "Webcam + mic", "Processed on device only", "io"],
+        ["perc", 1, "Perception worker", "MediaPipe hands + face, One Euro", "core"],
+        ["voice", 1, "Voice", "Silero VAD + Moonshine", "core"],
+        ["intent", 2, "Intent engine", "Gesture state machine, head focus", "core"],
+        ["hud", 2, "HUD + agent chat", "React, ghosts, confirm / reject", "core"],
+        ["nav", 3, "Navigation channel", "WebSocket: camera + selection", "core"],
+        ["bridge", 3, "Agent bridge", "AgentProvider: claude -p, Codex...", "core"],
+        ["web", 4, "Built-in web viewer", "three.js + web-scene MCP", "core"],
+        ["rh", 4, "Rhino 8 connector", "RhinoAI MCP + C# conduit", "ext"],
+        ["bl", 4, "Blender / Bonsai", "Later, via blender-mcp", "ext"]
+      ],
+      e: [["cam","perc"],["cam","voice"],["perc","intent"],["voice","hud","speech"],["intent","hud"],["intent","nav","","d"],["hud","bridge","intent + context"],["nav","web","","d"],["nav","rh","","d"],["bridge","web","MCP"],["bridge","rh","MCP"],["bridge","bl"]] },
+    rhino: { note: "Simple for one Rhino user, but tracking has to live in a separate helper process and every user needs a Rhino license.",
+      n: [
+        ["cam", 0, "Webcam", "", "io"],
+        ["cv", 1, "Camera helper process", "Python MediaPipe, CPU on Windows", "pain"],
+        ["plug", 2, "Rhino plugin (C#)", "Eto WebView2 panel + conduit", "core"],
+        ["agent", 2, "AI panel", "RhinoAI ACP: Claude / Codex", "ext"],
+        ["doc", 3, "Rhino document", "Requires $995 license per user", "pain"]
+      ],
+      e: [["cam","cv"],["cv","plug","TCP landmarks"],["plug","doc","","d"],["agent","doc","MCP"]] },
+    blender: { note: "Free and open, but precise NURBS design is not Blender's strength.",
+      n: [
+        ["cam", 0, "Webcam", "", "io"],
+        ["add", 1, "Blender add-on", "OpenCV + MediaPipe, modal timer", "core"],
+        ["hud", 2, "gpu POST_PIXEL HUD", "No embedded browser", "pain"],
+        ["mcp", 2, "blender-mcp", "Agent tools, socket :9876", "ext"],
+        ["scene", 3, "Blender scene", "Bonsai for IFC, mesh-first", "ext"]
+      ],
+      e: [["cam","add"],["add","hud"],["add","scene","","d"],["mcp","scene","MCP"]] },
+    scratch: { note: "The interaction layer is identical to Hybrid, but the geometry kernel becomes your problem.",
+      n: [
+        ["cam", 0, "Webcam + mic", "", "io"],
+        ["perc", 1, "Perception worker", "MediaPipe in browser", "core"],
+        ["agent", 1, "Agent bridge", "claude -p, Codex...", "core"],
+        ["model", 2, "Your own modeler", "NURBS, booleans, IFC from scratch", "pain"],
+        ["libs", 3, "Kernels", "Manifold, replicad, web-ifc", "ext"]
+      ],
+      e: [["cam","perc"],["perc","model","","d"],["agent","model","tools"],["model","libs"]] },
+    revit: { note: "Where BIM production happens, but the overlay story is weak and the license cost rules out most open-source users.",
+      n: [
+        ["cam", 0, "Webcam", "", "io"],
+        ["cv", 1, "Camera helper process", "Separate Python process", "pain"],
+        ["add", 2, "Revit add-in (C#)", "DirectContext3D, no HUD API", "pain"],
+        ["mcp", 2, "Revit Public MCP", "Tech preview, read-heavy", "ext"],
+        ["doc", 3, "Revit model", "About $3k per year per user", "pain"]
+      ],
+      e: [["cam","cv"],["cv","add","landmarks"],["add","doc","","d"],["mcp","doc","MCP"]] },
+    engine: { note: "Beautiful demos, but there is no CAD kernel and it sits far from architects' daily tools.",
+      n: [
+        ["cam", 0, "Webcam", "", "io"],
+        ["perc", 1, "Perception plugin", "MediaPipe native or sidecar", "core"],
+        ["app", 2, "Engine app UI", "UMG or Godot Control nodes", "core"],
+        ["mcp", 2, "Engine MCP", "Unreal 5.8 MCP / godot-mcp", "ext"],
+        ["scene", 3, "Game scene", "No CAD kernel", "pain"]
+      ],
+      e: [["cam","perc"],["perc","app","","d"],["app","scene"],["mcp","scene","MCP"]] }
+  };
+  var archTabs = document.getElementById("archTabs");
+  OPTS.forEach(function (o) {
+    var b = el("button", { type: "button", "class": "btn", id: "arch-" + o.id, "aria-pressed": "false" }, esc(o.name));
+    b.addEventListener("click", function () { selected = o.id; store.set("gab-selected", selected); update(); renderArch(); });
+    archTabs.appendChild(b);
+  });
+  function syncTabs() { OPTS.forEach(function (o) { document.getElementById("arch-" + o.id).setAttribute("aria-pressed", String(o.id === selected)); }); }
+  function renderArch() {
+    var d = ARCH[selected] || ARCH.hybrid, W = 760, rowH = 100, h = 58, gap = 22;
+    var rows = {}, byId = {}, R = 0;
+    d.n.forEach(function (n) { (rows[n[1]] = rows[n[1]] || []).push(n); R = Math.max(R, n[1] + 1); });
+    Object.keys(rows).forEach(function (r) {
+      var list = rows[r], k = list.length, bw = Math.min(236, (W - 32 - (k - 1) * gap) / k), total = k * bw + (k - 1) * gap, x0 = (W - total) / 2;
+      list.forEach(function (n, i) { byId[n[0]] = { x: x0 + i * (bw + gap), y: 14 + n[1] * rowH, w: bw, n: n }; });
+    });
+    var H = 14 + (R - 1) * rowH + h + 16;
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Architecture for ' + esc(selected) + '"><defs>' +
+      '<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>' +
+      '<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ahd" d="M0,0 L10,5 L0,10 z"/></marker></defs>';
+    var labels = "";
+    d.e.forEach(function (e) {
+      var a = byId[e[0]], b = byId[e[1]];
+      var x1 = a.x + a.w / 2, y1 = a.y + h, x2 = b.x + b.w / 2, y2 = b.y - 2;
+      if (a.n[1] === b.n[1]) { // same row: side to side
+        y1 = a.y + h / 2; y2 = b.y + h / 2;
+        if (a.x < b.x) { x1 = a.x + a.w; x2 = b.x - 2; } else { x1 = a.x; x2 = b.x + b.w + 2; }
+      }
+      var dashed = e[3] === "d";
+      s += '<path class="edge' + (dashed ? " d" : "") + '" d="M' + x1 + "," + y1 + " L" + x2 + "," + y2 + '" marker-end="url(#' + (dashed ? "ahd" : "ah") + ')"/>';
+      if (e[2]) labels += '<text class="el" x="' + ((x1 + x2) / 2 + 6) + '" y="' + ((y1 + y2) / 2 + 3) + '">' + esc(e[2]) + '</text>';
+    });
+    Object.keys(byId).forEach(function (id) {
+      var b = byId[id], n = b.n;
+      s += '<g class="n-' + n[4] + '"><rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + h + '" rx="5"/>' +
+        '<text class="nt" x="' + (b.x + 12) + '" y="' + (b.y + (n[3] ? 24 : 34)) + '">' + esc(n[2]) + '</text>' +
+        (n[3] ? '<text class="ns" x="' + (b.x + 12) + '" y="' + (b.y + 43) + '">' + esc(n[3]) + '</text>' : "") + '</g>';
+    });
+    s += labels + "</svg>";
+    document.getElementById("diagram").innerHTML = s;
+    document.getElementById("archNote").textContent = d.note;
+  }
+
+  /* ---------- A3: catalog ---------- */
+  var LIC_CHIPS = [["all","All"],["perm","Permissive"],["copy","Copyleft"],["nc","Non-commercial"],["paid","Paid / proprietary"],["unv","Unverified"]];
+  var LIC_TEXT = { perm: "Permissive", copy: "Copyleft", nc: "Non-commercial", paid: "Paid", unv: "Unverified" };
+  var CAT = {
+    hosts: { name: "AEC hosts", head: ["Name","What it gives you","License","Status","Notes"], chips: LIC_CHIPS, rows: [
+      ["Rhino 8 / 9 beta","https://www.rhino3d.com/9/new/","Primary connector; DisplayConduit overlays, Eto WebView2 panels","Commercial, $995","paid","Stable 8.x; 9 in beta","Rhino 9 adds an in-viewport UI SDK and CPython 3.13"],
+      ["mcneel/RhinoAI","https://github.com/mcneel/RhinoAI","Official Rhino MCP server + in-Rhino AI panel","MIT","perm","Active, since May 2026","run_python, run_csharp, Grasshopper tools; ACP panel for Claude, Codex, Gemini"],
+      ["rhinomcp","https://github.com/jingcheng-chen/rhinomcp","Community Rhino MCP over TCP :1999","MIT","perm","~1.2k stars","Geometry ops, layers, viewport capture, Grasshopper graphs"],
+      ["rhino3dm","https://github.com/mcneel/rhino3dm","Read and write .3dm in JS/WASM, Python, .NET","MIT","perm","Active","Lets the web app open Rhino files without Rhino"],
+      ["Rhino.Compute","https://developer.rhino3d.com/guides/compute/core-hour-billing/","REST access to Rhino and Grasshopper","MIT code, billed remote","paid","Active","Free on your own desktop; $0.10 per core-hour remote"],
+      ["Blender","https://www.blender.org","Free 3D host, Python API, gpu overlays","GPL","copy","Active","Add-ons that import bpy are GPL"],
+      ["blender-mcp","https://github.com/ahujasid/blender-mcp","Agent tools for Blender","MIT","perm","~31.6k stars","Socket :9876, execute_blender_code, viewport capture"],
+      ["Bonsai (BlenderBIM)","https://bonsaibim.org","IFC authoring in Blender","GPL-3","copy","Active","Bonsai MCPs exist from Show2Instruct and others"],
+      ["three.js","https://threejs.org","Web 3D rendering","MIT","perm","Active","Use with React Three Fiber"],
+      ["That Open components","https://github.com/ThatOpen/engine_components","BIM viewer toolkit for the web","MIT","perm","~714 stars","Successor to IFC.js"],
+      ["web-ifc","https://github.com/ThatOpen/engine_web-ifc","Fast IFC parsing in WASM","MPL-2.0","copy","Active","Weak, file-level copyleft; fine to depend on"],
+      ["Manifold","https://github.com/elalish/manifold","Robust mesh booleans","Apache-2.0","perm","Active","Good for massing operations"],
+      ["replicad / OpenCascade.js","https://replicad.xyz","BREP modeling in the browser","MIT / LGPL-2.1","unv","Active","Licenses from memory; OpenCascade.js WASM is 10-30 MB"],
+      ["Speckle","https://github.com/specklesystems/speckle-server","Interchange bus with Rhino, Revit, Archicad connectors","Apache-2.0","perm","Active","Only community MCPs so far"],
+      ["xeokit","https://github.com/xeokit/xeokit-sdk","BIM viewer","AGPL-3 or commercial","copy","Active","Avoid: AGPL spreads to your app"],
+      ["Revit 2027 + Public MCP","https://www.autodesk.com/blogs/aec/2026/06/17/revit-public-mcp-server/","Official MCP tech preview","Commercial","paid","Preview","Read and bulk parameter edits; weak overlay APIs"],
+      ["FreeCAD + freecad-mcp","https://github.com/neka-nat/freecad-mcp","Fully open CAD host","LGPL / MIT","perm","~0.9k stars","BIM workbench UX is rough"],
+      ["Archicad MCP","https://community.graphisoft.com/t5/Graphisoft-Insights/What-s-new-in-our-2026-Product-Portfolio/ba-p/716314","Official MCP beta + Tapir JSON API","Commercial","paid","Beta","Community server with 173 commands"],
+      ["Godot + godot-mcp","https://github.com/Coding-Solo/godot-mcp","Engine host with full UI control","MIT","perm","~4k stars","No CAD kernel"],
+      ["Unreal 5.8 MCP","https://www.strayspark.studio/blog/epic-official-mcp-plugin-ue5-8-vs-third-party","Experimental built-in MCP","Royalty above threshold","paid","Experimental","HTTP at 127.0.0.1:8000/mcp"]
+    ]},
+    vision: { name: "Vision + voice", head: ["Name","What it gives you","License","Status","Notes"], chips: LIC_CHIPS, rows: [
+      ["MediaPipe Tasks","https://developers.google.com/edge/mediapipe/solutions/guide","Hand (21 pts) + Face (478 pts, 52 blendshapes, head pose)","Apache-2.0","perm","Active (v1.1, Oct)","Use @mediapipe/tasks-vision in a Web Worker with the GPU delegate"],
+      ["LiteRT.js","https://developers.googleblog.com/litertjs-googles-high-performance-web-ai-inference/","Run your own .tflite models in the browser","Apache-2.0","perm","New, Jul 2026","For the custom gesture classifier"],
+      ["onnxruntime-web","https://onnxruntime.ai","Run ONNX models in the browser","MIT","perm","Active","Alternative runtime for the classifier"],
+      ["One Euro filter","https://gery.casiez.net/1euro/","Low-latency jitter smoothing","BSD","perm","Stable","Tune min_cutoff first, then beta"],
+      ["OpenCV","https://opencv.org","Capture, solvePnP, Kalman","Apache-2.0","perm","Mature","Plumbing, not tracking"],
+      ["rtmlib (RTMPose/RTMW)","https://github.com/Tau-J/rtmlib","Whole-body pose with hands","Apache-2.0 code","unv","Active","100-370 MB models; weight licenses unclear"],
+      ["Ultralytics YOLO pose","https://www.ultralytics.com/license","Pose and hand keypoints","AGPL-3.0","copy","Active","Avoid: copyleft reaches your whole app"],
+      ["OpenPose","https://github.com/CMU-Perceptual-Computing-Lab/openpose","Body and hand pose","Non-commercial","nc","Inactive","Avoid"],
+      ["WebGazer.js","https://webgazer.cs.brown.edu","Webcam eye tracking","GPLv3","copy","Unmaintained since Feb 2026","Noisy; click calibration"],
+      ["WebEyeTrack","https://github.com/RedForestAI/WebEyeTrack","Few-shot webcam gaze in the browser","Check repo","unv","Research, 2025","Coarse region only, later milestone"],
+      ["L2CS-Net","https://github.com/Ahmednull/L2CS-Net","Gaze estimation","MIT code, NC-data weights","nc","Stable","About 3.9 degrees on MPIIGaze"],
+      ["Project Gameface","https://github.com/google/project-gameface","Head-pose cursor + face-gesture clicks","Apache-2.0","perm","Archived Sep 2025","Best reference design for head control"],
+      ["Handsfree.js","https://github.com/CreativeInquiry/handsfree","Browser gesture toolkit","Apache-2.0","perm","Archived 2022","Read for ideas"],
+      ["Silero VAD (vad-web)","https://github.com/ricky0123/vad","Voice activity detection in the browser","MIT","perm","Active","Gate speech before transcription"],
+      ["Moonshine","https://moonshine-voice.readthedocs.io/en/latest/using/benchmarks/","Fast local speech-to-text","MIT (verify)","unv","Active","Vendor claims 34-107 ms latency"],
+      ["whisper.cpp","https://github.com/ggml-org/whisper.cpp","Local speech-to-text sidecar","MIT","perm","Active","Heavier, very accurate"],
+      ["Ultraleap Leap Motion 2","https://www.ultraleap.com","Optional precise hand tracking","Proprietary SDK","paid","Supply uncertain","Optional adapter later"]
+    ]},
+    datasets: { name: "Datasets", head: ["Name","Content","License","Use","Notes"], chips: LIC_CHIPS, rows: [
+      ["HaGRIDv2","https://github.com/hukenovs/hagrid","1.08M images, 33 gestures + no_gesture, ships MediaPipe landmarks","CC BY-SA 4.0 variant","copy","Primary for classifier","Landmarks match the runtime; read the extra terms"],
+      ["IPN Hand","https://gibranbenitez.github.io/IPN_Hand/","4,000+ continuous interface gestures","CC BY 4.0","perm","High","Permissive and close to UI use"],
+      ["Jester","https://www.qualcomm.com/developer/software/jester-dataset","148k clips, 27 dynamic gestures","Academic","nc","Dynamic gestures","Extract landmarks yourself"],
+      ["EgoGesture","https://nlpr.ia.ac.cn/iva/yfzhang/datasets/egogesture.html","83 classes, RGB-D, first person","Research agreement","nc","Low","Egocentric view"],
+      ["NVGesture","https://research.nvidia.com/publication/2016-06_online-detection-and-classification-dynamic-hand-gestures-recurrent-3d","25 classes, RGB-D, in-car","Unclear","unv","Low","Car setting"],
+      ["ChaLearn IsoGD","https://chalearnlap.cvc.uab.cat/","249 classes, RGB-D","Research","nc","Low","Sign-like gestures"],
+      ["FreiHAND","https://lmb.informatik.uni-freiburg.de/projects/freihand/","130k images, MANO meshes","Academic","nc","Later, 3D pose","Not needed for v0.1"],
+      ["InterHand2.6M","https://github.com/facebookresearch/InterHand2.6M","2.6M frames, interacting hands","CC BY-NC 4.0","nc","Later","Repo archived 2025-09"],
+      ["HOT3D","https://www.projectaria.com/datasets/hot3D/license/","Aria + Quest 3 hand-object recordings","CC BY-SA / BY-NC-SA","nc","Later","Hand annotations are non-commercial"],
+      ["ARCTIC","https://github.com/zc-alexfan/arctic","2.1M frames, bimanual manipulation","No commercial use","nc","Later",""],
+      ["Ego-Exo4D","https://ai.meta.com/blog/ego-exo4d-video-learning-perception/","Thousands of hours of egocentric video","Custom agreement","nc","Research","Read the official text"],
+      ["MPIIFaceGaze","https://www.mpi-inf.mpg.de/departments/computer-vision-and-machine-learning/research/gaze-based-human-computer-interaction/its-written-all-over-your-face-full-face-appearance-based-gaze-estimation","Laptop-webcam gaze, 15 people","CC BY-NC-SA 4.0","nc","Gaze, later","Close to your capture setup"],
+      ["ETH-XGaze","https://ait.ethz.ch/xgaze","1M+ images, extreme head poses","CC BY-NC-SA 4.0","nc","Gaze, later","On request"],
+      ["WFLW / 300W","https://wywu.github.io/projects/LAB/WFLW.html","98 / 68-point face landmarks","Research","nc","Not needed","MediaPipe already covers faces"],
+      ["BIWI Kinect Head Pose","https://data.vision.ee.ethz.ch/cvl/gfanelli/head_pose/head_forest.html","15k frames with pose labels","Research","nc","Evaluate head pose",""],
+      ["AffectNet","http://mohammadmahoor.com/affectnet/","Emotion labels","Academic","nc","Do not use","Emotion inference is contested and banned at work under the EU AI Act"]
+    ]},
+    llm: { name: "LLM routes", head: ["Route","How it connects","Billing","Risk","Notes"],
+      chips: [["all","All"],["low","Low risk"],["grey","Grey zone"],["na","No subscription"]], rows: [
+      ["Claude Code CLI (own login)","https://code.claude.com/docs/en/headless","claude -p, long-lived stream-json, --mcp-config","Pro / Max limits","grey","Spawn the unmodified binary only; never touch credentials. Label experimental"],
+      ["Claude API key","https://code.claude.com/docs/en/legal-and-compliance","Agent SDK or Messages API","Pay per token","low","The route Anthropic expects for products"],
+      ["Max monthly API credits","https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers","Normal API key from a linked Console org","$100 (5x) / $200 (20x) a month","low","Pro not eligible; unclear whether claude -p counts"],
+      ["OpenAI Codex CLI / app-server","https://learn.chatgpt.com/docs/app-server","codex exec --json, JSON-RPC app-server","ChatGPT plan","low","Official subscription sign-in"],
+      ["Sign in with ChatGPT","https://developers.openai.com/siwc/token-sharing-open-source/sign-in","OAuth PKCE to the Responses API","ChatGPT plan quota","low","Preview since Sep 2026; OpenCode, Pi, OpenClaw use it"],
+      ["Gemini CLI","https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/","-p, stream-json, --acp","API key only","na","Personal Google accounts dropped 2026-06-18"],
+      ["GitHub Copilot CLI","https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/run-cli-programmatically","copilot -p, ACP preview","Copilot plan","grey","Premium-request billing unverified"],
+      ["Cursor CLI","https://cursor.com/docs/cli/headless","agent -p stream-json, ACP","Cursor plan or key","grey","Headless billing unclear"],
+      ["OpenCode","https://opencode.ai","opencode run --format json, ACP","ChatGPT plan via SIWC","low","Removed Claude OAuth in Feb 2026"],
+      ["Ollama / LM Studio","https://ollama.com","OpenAI-compatible local endpoint","Free, local","low","Good offline fallback; weaker tool use"],
+      ["OpenRouter / LiteLLM","https://openrouter.ai","One OpenAI-compatible API, many models","Pay per token","na","Easy multi-model testing"]
+    ]}
+  };
+  var catState = store.get("gab-cat") || { tab: "hosts", chip: "all", q: "" };
+  if (!CAT[catState.tab]) catState = { tab: "hosts", chip: "all", q: "" };
+  var catTabs = document.getElementById("catTabs"), catChips = document.getElementById("catChips"), catSearch = document.getElementById("catSearch");
+  Object.keys(CAT).forEach(function (k) {
+    var b = el("button", { type: "button", "class": "btn", id: "cat-" + k, "aria-pressed": "false" }, esc(CAT[k].name));
+    b.addEventListener("click", function () { catState.tab = k; catState.chip = "all"; renderCat(); });
+    catTabs.appendChild(b);
+  });
+  catSearch.value = catState.q || "";
+  catSearch.addEventListener("input", function () { catState.q = catSearch.value; renderCat(); });
+  function renderCat() {
+    var c = CAT[catState.tab];
+    Object.keys(CAT).forEach(function (k) { document.getElementById("cat-" + k).setAttribute("aria-pressed", String(k === catState.tab)); });
+    catChips.innerHTML = "";
+    c.chips.forEach(function (ch) {
+      var b = el("button", { type: "button", "class": "chip", "aria-pressed": String(ch[0] === catState.chip) }, esc(ch[1]));
+      b.addEventListener("click", function () { catState.chip = ch[0]; renderCat(); });
+      catChips.appendChild(b);
+    });
+    var q = (catState.q || "").toLowerCase().trim();
+    var isLLM = catState.tab === "llm";
+    var rows = c.rows.filter(function (r) {
+      var cls = isLLM ? r[4] : r[4];
+      if (catState.chip !== "all" && cls !== catState.chip) return false;
+      return !q || r.join(" ").toLowerCase().indexOf(q) !== -1;
+    });
+    var html = "<thead><tr>" + c.head.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>";
+    rows.forEach(function (r) {
+      if (isLLM) {
+        var rl = { low: "Low", grey: "Grey zone", na: "No subscription" }[r[4]];
+        html += '<tr><td class="name"><a href="' + esc(r[1]) + '" target="_blank" rel="noopener">' + esc(r[0]) + '</a></td><td>' + esc(r[2]) + '</td><td>' + esc(r[3]) + '</td><td><span class="badge b-' + r[4] + '">' + rl + '</span></td><td class="muted">' + esc(r[5]) + '</td></tr>';
+      } else {
+        html += '<tr><td class="name"><a href="' + esc(r[1]) + '" target="_blank" rel="noopener">' + esc(r[0]) + '</a></td><td>' + esc(r[2]) + '</td><td><span class="badge b-' + r[4] + '" title="' + LIC_TEXT[r[4]] + '">' + esc(r[3]) + '</span></td><td>' + esc(r[5]) + '</td><td class="muted">' + esc(r[6]) + '</td></tr>';
+      }
+    });
+    if (!rows.length) html += '<tr><td colspan="5" class="muted">Nothing matches. Clear the filter or pick another license class.</td></tr>';
+    document.getElementById("catTable").innerHTML = html + "</tbody>";
+    document.getElementById("catCount").textContent = rows.length + " of " + c.rows.length + " shown";
+    store.set("gab-cat", catState);
+  }
+
+  /* ---------- A4: timeline ---------- */
+  var MS = [
+    ["Setup + research", 5, "Why I'm not building a Rhino plugin (this page)", "The research: libraries, datasets and the gap", 0],
+    ["Hand + face tracking", 6, "21 hand + 478 face points live, nothing leaves the laptop", "MediaPipe in a Web Worker: fps on a laptop iGPU", 0],
+    ["Smoothing + pinch", 6, "Jitter before and after a One Euro filter", "Pinch with hysteresis: why 0.25 in, 0.35 out", 0],
+    ["Gesture navigation", 6, "Orbiting a building massing with one hand", "Two-hand zoom and pan, and beating gorilla arm", 0],
+    ["Gesture tool palette", 6, "Tools in the palm of your hand: measure, section, move", "Marking menus: why direction beats aiming", 0],
+    ["Agent bridge", 7, "First agent edit: \"add three floors\"", "Driving claude -p over stream-json, and the plan rules", 0],
+    ["Voice + pointing", 6, "Point at a wall, say \"make it 300 thick\"", "Local speech with Silero VAD + Moonshine", 0],
+    ["Rhino connector", 7, "The same gestures now drive Rhino 8", "RhinoAI MCP vs rhinomcp: what I reused", 1],
+    ["Ghost previews", 6, "The agent proposes, I nod to accept", "DisplayConduit ghosts and one undo per agent turn", 1],
+    ["More providers", 5, "Same task with Claude, Codex and a local model", "The AgentProvider interface", 0],
+    ["Overlay over Rhino", 6, "A transparent HUD floating over Rhino", "Click-through Electron windows on Windows", 1],
+    ["Custom gestures", 7, "Training my own gestures on HaGRIDv2", "From landmarks to an MLP to LiteRT.js", 0],
+    ["Release v0.1", 5, "v0.1 launch reel", "What 13 weeks taught me + how to contribute", 0]
+  ];
+  var TOTAL = MS.reduce(function (a, m) { return a + m[1]; }, 0);
+  var START = new Date(2026, 9, 26);
+  var hrsTotal = document.getElementById("hrsTotal"), hrsVideo = document.getElementById("hrsVideo");
+  var tl = store.get("gab-tl");
+  if (tl && tl.t) { hrsTotal.value = tl.t; hrsVideo.value = tl.v; }
+  function fmt(d) { return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+  function renderTL() {
+    var t = +hrsTotal.value, v = Math.min(+hrsVideo.value, t - 1);
+    if (+hrsVideo.value !== v) hrsVideo.value = v;
+    var build = t - v;
+    document.getElementById("hrsTotalOut").textContent = t;
+    document.getElementById("hrsVideoOut").textContent = v;
+    var weeks = Math.ceil(TOTAL / build - 1e-9);
+    var end = new Date(START.getTime()); end.setDate(end.getDate() + (weeks - 1) * 7 + 4);
+    document.getElementById("tlResult").innerHTML = "v0.1 in " + weeks + " weeks<small>" + build + " build hours a week, " + TOTAL + " hours total. Release around " + fmt(end) + ".</small>";
+    var warn = "";
+    if (v / 2 < 0.75) warn = "Under 45 minutes per post is tight for filming, captions and editing. Consider batch-recording two clips per session.";
+    if (build < 3) warn = "With under 3 build hours a week, a milestone takes 2-3 weeks. Fill the gaps with research explainers, dataset deep dives and failure stories, or post once a week.";
+    document.getElementById("tlWarn").innerHTML = warn ? '<div class="warnbox">' + esc(warn) + "</div>" : "";
+    var g = document.getElementById("gantt"), wkPct = 100 / weeks, step = weeks <= 16 ? 1 : Math.ceil(weeks / 12);
+    var ticks = '<div class="g-row"><div class="label">Milestone</div><div class="g-ticks">';
+    for (var w = 1; w <= weeks; w += step) ticks += '<span style="left:' + ((w - 0.5) * wkPct) + '%">W' + w + "</span>";
+    ticks += "</div></div>";
+    var cum = 0, rows = "", posts = "<thead><tr><th>Milestone</th><th>Weeks</th><th>Tue demo clip</th><th>Fri build log</th></tr></thead><tbody>";
+    MS.forEach(function (m, i) {
+      var s = cum / build, e = (cum + m[1]) / build; cum += m[1];
+      rows += '<div class="g-row"><div class="g-name" title="' + esc(m[0]) + '"><span>' + String(i + 1).padStart(2, "0") + "</span>" + esc(m[0]) + '</div><div class="g-track" style="--wk:' + wkPct + '%"><div class="g-bar' + (m[4] ? " rh" : "") + '" style="left:' + (s / weeks * 100) + "%;width:" + ((e - s) / weeks * 100) + '%" title="' + m[1] + ' hours"></div></div></div>';
+      var w0 = Math.floor(s) + 1, w1 = Math.max(w0, Math.ceil(e - 1e-9));
+      posts += "<tr><td><b>" + esc(m[0]) + "</b></td><td>" + (w0 === w1 ? "W" + w0 : "W" + w0 + "-" + w1) + "</td><td>" + esc(m[2]) + "</td><td>" + esc(m[3]) + "</td></tr>";
+    });
+    g.innerHTML = ticks + rows + '<div class="legend"><span><i class="lg-core"></i>Web app milestones</span><span><i class="lg-pain"></i>Rhino milestones</span></div>';
+    document.getElementById("posts").innerHTML = posts + "</tbody>";
+    store.set("gab-tl", { t: t, v: v });
+  }
+  hrsTotal.addEventListener("input", renderTL);
+  hrsVideo.addEventListener("input", renderTL);
+
+  /* ---------- A5: risks ---------- */
+  var RISKS = [
+    ["High", "Subscription rules change again. Anthropic changed them several times in 2026.", "Provider interface from day one; API key or Max credits as the documented default; Codex and Ollama ready by week 9."],
+    ["High", "Scope creep against a 6-hour week.", "Each milestone must end in a filmable clip. Cut features, never cut the clip."],
+    ["Medium", "Webcam frame rate on a laptop iGPU with hands and face both running.", "Benchmark in week 2; run face tracking every other frame; keep tracking in a Web Worker."],
+    ["Medium", "Gesture fatigue and accidental triggers (gorilla arm, the Midas touch problem).", "Engage posture plus a clutch; elbows-on-desk mapping; voice handles discrete commands."],
+    ["Medium", "RhinoAI and Rhino 9 APIs change quickly.", "Keep the Rhino adapter thin and behind MCP; pin versions; support Rhino 8 first."],
+    ["Medium", "Burnout from two videos a week.", "Batch-record on one day; reuse footage; alternate demo clips with talking-head explainers."],
+    ["Low", "Dataset licenses (non-commercial and share-alike).", "Publish training scripts, not weights, or train on IPN Hand (CC BY 4.0)."],
+    ["Low", "Privacy concerns about a camera pointed at the user.", "On-device only, a visible camera indicator, no video stored, no emotion inference."]
+  ];
+  document.getElementById("riskList").innerHTML = RISKS.map(function (r) {
+    var cls = r[0] === "High" ? "b-high" : r[0] === "Medium" ? "b-grey" : "b-low";
+    return '<div class="risk"><div><span class="badge ' + cls + '">' + r[0] + '</span></div><div>' + esc(r[1]) + '</div><div class="muted">' + esc(r[2]) + "</div></div>";
+  }).join("");
+
+  /* ---------- A6: sources ---------- */
+  var SRC = [
+    ["mcneel/RhinoAI (official Rhino MCP)", "https://github.com/mcneel/RhinoAI"],
+    ["RhinoAI plan (undo per agent turn, GH2)", "https://github.com/mcneel/RhinoAI/blob/main/PLAN.md"],
+    ["jingcheng-chen/rhinomcp", "https://github.com/jingcheng-chen/rhinomcp"],
+    ["Rhino display conduits guide", "https://developer.rhino3d.com/guides/rhinocommon/display-conduits/"],
+    ["What's new in Rhino 9", "https://www.rhino3d.com/9/new/"],
+    ["Rhino 9 in-viewport UI (forum)", "https://discourse.mcneel.com/t/rhino-beta-feature-in-viewport-user-interface/221416"],
+    ["WebView2 in Rhino 8 (forum)", "https://discourse.mcneel.com/t/webview2-rhino-8-python-or-c/193763"],
+    ["ahujasid/blender-mcp", "https://github.com/ahujasid/blender-mcp"],
+    ["ThatOpen engine_components", "https://github.com/ThatOpen/engine_components"],
+    ["Revit Public MCP Server (Autodesk blog)", "https://www.autodesk.com/blogs/aec/2026/06/17/revit-public-mcp-server/"],
+    ["JustShape, ACM 2026 (gesture + LLM parametric modeling)", "https://dl.acm.org/doi/10.1145/3772318.3790641"],
+    ["MediaPipe solutions guide", "https://developers.google.com/edge/mediapipe/solutions/guide"],
+    ["MediaPipe Hand Landmarker", "https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker"],
+    ["MediaPipe Face Landmarker", "https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker"],
+    ["LiteRT.js announcement (Jul 2026)", "https://developers.googleblog.com/litertjs-googles-high-performance-web-ai-inference/"],
+    ["One Euro filter", "https://gery.casiez.net/1euro/"],
+    ["Consumed Endurance, CHI 2014", "https://doi.org/10.1145/2556288.2557130"],
+    ["Gaze + pinch interaction (arXiv 2401.10948)", "https://arxiv.org/abs/2401.10948"],
+    ["HaGRID / HaGRIDv2", "https://github.com/hukenovs/hagrid"],
+    ["IPN Hand", "https://gibranbenitez.github.io/IPN_Hand/"],
+    ["Claude Code headless mode", "https://code.claude.com/docs/en/headless"],
+    ["Claude Code legal and compliance", "https://code.claude.com/docs/en/legal-and-compliance"],
+    ["Anthropic consumer terms", "https://www.anthropic.com/legal/consumer-terms"],
+    ["API credits for Max and Team subscribers", "https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers"],
+    ["Codex app-server", "https://learn.chatgpt.com/docs/app-server"],
+    ["Sign in with ChatGPT for open source", "https://developers.openai.com/siwc/token-sharing-open-source/sign-in"],
+    ["Gemini CLI transition notice", "https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/"],
+    ["Agent Client Protocol: agents", "https://agentclientprotocol.com/get-started/agents"],
+    ["Electron custom window interactions", "https://electronjs.org/docs/latest/tutorial/custom-window-interactions"],
+    ["Cap (open-source screen recorder)", "https://github.com/CapSoftware/Cap"],
+    ["LinkedIn video in 2026", "https://www.visla.us/blog/guides/linkedin-video-in-2026-whats-working-and-how-to-make-it/"]
+  ];
+  document.getElementById("srcList").innerHTML = SRC.map(function (s) { return '<li><a href="' + esc(s[1]) + '" target="_blank" rel="noopener">' + esc(s[0]) + "</a></li>"; }).join("");
+
+  syncSliders();
+  update();
+  renderArch();
+  renderCat();
+  renderTL();
+})();
+</script>

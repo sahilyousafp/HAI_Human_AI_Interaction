@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.aex/
+test-results/
+playwright-report/
+blob-report/
+*.tsbuildinfo
+.vite/
+coverage/
+.DS_Store
+Thumbs.db
+apps/web/public/models/
+apps/web/public/mediapipe/
