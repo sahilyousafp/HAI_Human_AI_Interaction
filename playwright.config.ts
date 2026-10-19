@@ -44,6 +44,9 @@ export default defineConfig({
     {
       name: "chromium",
       testIgnore: "clips/**",
+      // Starting the camera loads MediaPipe in a fresh browser context each test (about 17 s on a CPU-only Windows
+      // runner) and startCamera allows 45 s for frames, so the test needs more than the default 30 s.
+      timeout: 60_000,
       use: { ...devices["Desktop Chrome"], channel, launchOptions: { args: fakeCamera } },
     },
     ...clipProjects,

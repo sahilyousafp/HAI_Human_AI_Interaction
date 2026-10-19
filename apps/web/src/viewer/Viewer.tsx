@@ -14,6 +14,8 @@ import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./tu
 const FOV = 45;
 /** Camera easing time constant: smooths hand jitter without adding visible lag. */
 const EASE_MS = 40;
+/** The eased camera counts as arrived (and rendering stops) within this of its target. */
+const SETTLED = { degrees: 0.01, distance: 0.001 };
 /** Hands rarely reach the frame edges comfortably, so the pointer amplifies motion around the centre. */
 const POINTER_GAIN = 1.3;
 
@@ -25,6 +27,8 @@ declare global {
       meshCount(): number;
       pick(x: number, y: number): string | null;
       latencyP90(): number | null;
+      /** Frames rendered so far (the canvas renders on demand, so an idle view adds none). */
+      renders(): number;
     };
     /** Dev builds only: inject hand input exactly as the tracker would. */
     __AEX_INPUT__?: {
@@ -98,19 +102,35 @@ function ElementMesh({
   );
 }
 
-/** Drives the camera from the turntable state, eased, and stamps latency after each rendered change. */
+/** An angle difference brought into -180..180 degrees, the short way round. */
+function wrap180(degrees: number): number {
+  return ((((degrees + 180) % 360) + 360) % 360) - 180;
+}
+
+/**
+ * Drives the camera from the turntable state, eased, and stamps latency after each rendered change.
+ * The canvas renders on demand: code that moves `nav` calls `invalidateRef`, and the rig keeps requesting frames
+ * only until the eased camera reaches its target, so an idle view costs nothing (with software WebGL, a constant
+ * 60 fps redraw used to take the CPU that hand tracking needs).
+ */
 function CameraRig({
   nav,
   pendingTs,
   latency,
   pickRef,
+  invalidateRef,
+  rendersRef,
 }: {
   nav: React.RefObject<Turntable>;
   pendingTs: React.RefObject<number | null>;
   latency: LatencyTracker;
   pickRef: React.RefObject<(x: number, y: number) => string | null>;
+  invalidateRef: React.RefObject<() => void>;
+  rendersRef: React.RefObject<() => number>;
 }) {
-  const { camera, scene, raycaster } = useThree();
+  const { camera, scene, raycaster, invalidate, gl } = useThree();
+  invalidateRef.current = invalidate;
+  rendersRef.current = () => gl.info.render.frame;
   const eased = useRef<Turntable | null>(null);
 
   useEffect(() => {
@@ -137,11 +157,10 @@ function CameraRig({
   useFrame((_, delta) => {
     const target = nav.current;
     if (!target) return;
-    const k = 1 - Math.exp((-delta * 1000) / EASE_MS);
+    // After an idle spell the first delta is long; cap it so the camera still eases instead of jumping.
+    const k = 1 - Math.exp((-Math.min(delta, 0.05) * 1000) / EASE_MS);
     const prev = eased.current ?? target;
-    let dAz = target.azimuth - prev.azimuth;
-    if (dAz > 180) dAz -= 360;
-    if (dAz < -180) dAz += 360;
+    const dAz = wrap180(target.azimuth - prev.azimuth);
     const next: Turntable = {
       azimuth: prev.azimuth + dAz * k,
       elevation: prev.elevation + (target.elevation - prev.elevation) * k,
@@ -153,6 +172,13 @@ function CameraRig({
       ],
     };
     eased.current = next;
+    const near = SETTLED.distance * target.distance;
+    const arrived =
+      Math.abs(wrap180(target.azimuth - next.azimuth)) < SETTLED.degrees &&
+      Math.abs(target.elevation - next.elevation) < SETTLED.degrees &&
+      Math.abs(target.distance - next.distance) < near &&
+      next.target.every((v, i) => Math.abs(v - (target.target[i] ?? 0)) < near);
+    if (!arrived) invalidate(); // keep easing
     camera.position.set(...cameraPosition(next));
     camera.lookAt(...next.target);
   });
@@ -176,6 +202,8 @@ export function Viewer({
   const navInput = useRef(initialInput());
   const pendingTs = useRef<number | null>(null);
   const pickRef = useRef<(x: number, y: number) => string | null>(() => null);
+  const invalidateRef = useRef<() => void>(() => {});
+  const rendersRef = useRef<() => number>(() => 0);
   const framed = useRef(false);
   const navigating = useRef(false);
   const [pointer, setPointer] = useState<Point2 | null>(null);
@@ -203,6 +231,7 @@ export function Viewer({
     const { min, max } = sceneBounds(geometries);
     for (const g of geometries) g.dispose();
     nav.current = frameBox(min, max);
+    invalidateRef.current();
     framed.current = true;
   }, [scene.doc]);
 
@@ -211,6 +240,7 @@ export function Viewer({
     const offGestures = bus.onGestures((events) => {
       for (const event of events) {
         nav.current = navigate(nav.current, navInput.current, event);
+        if (movesCamera(event)) invalidateRef.current();
         if (movesCamera(event)) pendingTs.current = Math.max(pendingTs.current ?? 0, event.ts);
         if (event.type === "pinch.drag.start" || event.type === "twohand.start") navigating.current = true;
         if (event.type === "pinch.drag.end" || event.type === "twohand.end" || event.type === "disengaged") {
@@ -267,6 +297,7 @@ export function Viewer({
       drag.y = e.clientY;
       if (drag.button === 0) nav.current = orbit(nav.current, -dx * 0.3, dy * 0.25);
       else nav.current = pan(nav.current, dx / el.clientHeight, -dy / el.clientHeight, FOV);
+      invalidateRef.current();
     };
     const up = (e: PointerEvent) => {
       if (drag && !drag.moved && drag.button === 0) {
@@ -282,6 +313,7 @@ export function Viewer({
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
       nav.current = zoom(nav.current, Math.exp(e.deltaY * 0.001));
+      invalidateRef.current();
     };
     const menu = (e: Event) => e.preventDefault();
     el.addEventListener("pointerdown", down);
@@ -329,6 +361,7 @@ export function Viewer({
       meshCount: () => Object.keys(client.getSnapshot().doc?.elements ?? {}).length,
       pick: (x, y) => pickRef.current(x, y),
       latencyP90: () => latency.p90(),
+      renders: () => rendersRef.current(),
     };
     window.__AEX_INPUT__ = {
       gestures: (events) => bus.emitGestures(events),
@@ -349,6 +382,7 @@ export function Viewer({
   return (
     <section className="viewer" ref={wrapper} aria-label="3D model" data-testid="viewer">
       <Canvas
+        frameloop="demand"
         shadows={!software}
         camera={{ fov: FOV, near: 0.1, far: 5000, position: [60, -40, 40] }}
         gl={{ antialias: !software, preserveDrawingBuffer: true }}
@@ -388,7 +422,14 @@ export function Viewer({
               hovered={hoverId === element.id}
             />
           ))}
-        <CameraRig nav={nav} pendingTs={pendingTs} latency={latency} pickRef={pickRef} />
+        <CameraRig
+          nav={nav}
+          pendingTs={pendingTs}
+          latency={latency}
+          pickRef={pickRef}
+          invalidateRef={invalidateRef}
+          rendersRef={rendersRef}
+        />
       </Canvas>
 
       {secondaryPointer && (

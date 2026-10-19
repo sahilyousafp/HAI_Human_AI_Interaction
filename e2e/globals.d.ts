@@ -8,6 +8,7 @@ interface Window {
     meshCount(): number;
     pick(x: number, y: number): string | null;
     latencyP90(): number | null;
+    renders(): number;
   };
   __AEX_INPUT__?: {
     // biome-ignore lint/suspicious/noExplicitAny: tests build events loosely; the app validates their shape.

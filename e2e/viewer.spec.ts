@@ -55,6 +55,31 @@ test.describe("viewer", () => {
     await page.keyboard.press("Control+Shift+z");
     await expect.poll(count).toBe((initial ?? 0) - 1);
   });
+  test("an idle view stops rendering, and moving the camera renders until it has eased into place", async ({
+    page,
+  }) => {
+    bridge = await startTestBridge(page);
+    await openViewer(page);
+    const renders = () => page.evaluate(() => window.__AEX_VIEWER__?.renders() ?? 0);
+    // Let the first framing settle, then nothing should draw for a second.
+    await page.waitForTimeout(1500);
+    const idleStart = await renders();
+    await page.waitForTimeout(1000);
+    expect((await renders()) - idleStart).toBeLessThanOrEqual(1);
+    // A drag renders frames while the camera eases, then stops again.
+    const box = await page.getByTestId("viewer").boundingBox();
+    if (!box) throw new Error("viewer not laid out");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 6 });
+    await page.mouse.up();
+    const afterDrag = await renders();
+    expect(afterDrag - idleStart).toBeGreaterThan(3);
+    await page.waitForTimeout(1500);
+    const settled = await renders();
+    await page.waitForTimeout(1000);
+    expect((await renders()) - settled).toBeLessThanOrEqual(1);
+  });
 });
 
 test.describe("hand pointer and selection", () => {
