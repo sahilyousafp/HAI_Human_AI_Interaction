@@ -160,11 +160,12 @@ export function sectionTool(): Tool {
       ctx.setOverlay({ notice: null, sectionHover: false }); // the section itself stays until cleared
     },
     onHover(ctx, at) {
-      const over = overSectionPlane(ctx, at);
+      const over = overSectionPlane(ctx, at) || ctx.onSectionLine(at);
       if (over !== ctx.overlay().sectionHover) ctx.setOverlay({ sectionHover: over });
     },
     onDragStart(ctx, at) {
-      if (!overSectionPlane(ctx, at)) return false; // off the plane the view orbits, and a long pinch opens the palette
+      // Off the plane and its outline the view orbits, and a long pinch opens the palette.
+      if (!overSectionPlane(ctx, at) && !ctx.onSectionLine(at)) return false;
       drag = { startY: at[1], startMm: ctx.overlay().sectionMm ?? range(ctx).max };
       ctx.setOverlay({ sectionHover: true });
       return true;
@@ -237,7 +238,7 @@ export const deleteTool: Tool = {
     const element = hit ? ctx.doc()?.elements[hit.elementId] : undefined;
     if (!element) {
       // The section plane is not part of the model; tapping it with Delete simply removes it.
-      if (overSectionPlane(ctx, at)) {
+      if (overSectionPlane(ctx, at) || ctx.onSectionLine(at)) {
         ctx.setOverlay({ sectionMm: null, sectionHover: false });
         ctx.flash("Section removed.");
       }

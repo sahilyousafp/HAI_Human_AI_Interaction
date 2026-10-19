@@ -48,6 +48,8 @@ export interface ToolContext {
   ground(at: Point2, heightMm?: number): Point3Mm | null;
   /** Bounding box of the scene, millimetres. */
   bounds(): { min: Point3Mm; max: Point3Mm };
+  /** Whether a viewer position is on the section's outline on screen (within a finger's width). */
+  onSectionLine(at: Point2): boolean;
   overlay(): ToolOverlay;
   setOverlay(partial: Partial<ToolOverlay>): void;
   /** Shows a passing message for a few seconds. */

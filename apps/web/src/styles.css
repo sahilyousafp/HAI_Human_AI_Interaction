@@ -335,7 +335,7 @@ button {
 .viewer[data-tool="massing"] canvas {
   cursor: copy;
 }
-.viewer[data-tool="section"][data-section-hover="true"] canvas {
+.viewer[data-section-hover="true"] canvas {
   cursor: ns-resize;
 }
 .hand-pointer.left-hand {

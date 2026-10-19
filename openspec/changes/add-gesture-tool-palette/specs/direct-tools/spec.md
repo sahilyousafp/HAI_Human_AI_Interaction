@@ -39,6 +39,14 @@ With Section active, the section plane SHALL be shown as a plane that highlights
 - **WHEN** the user pinch-drags the section plane downward with Section active
 - **THEN** the section plane height decreases and geometry above it is hidden
 
+### Requirement: The section line can be grabbed from any tool
+While a section exists, its outline SHALL highlight under the pointer whatever tool is active; a drag that starts on it SHALL move the section, and a tap on it SHALL select the Section tool.
+
+#### Scenario: Grab the section line from another tool
+- **GIVEN** a section exists and Select is active
+- **WHEN** the user pinch-drags the section's outline downward
+- **THEN** the section plane height decreases
+
 ### Requirement: Add massing places a block
 With Add massing active, a tap on the ground SHALL create a 6000 x 6000 x 3500 mm massing block centred on the tapped point, snapped to 100 mm, in one transaction labelled "Add massing".
 

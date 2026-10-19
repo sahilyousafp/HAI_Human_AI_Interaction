@@ -11,6 +11,7 @@ interface Window {
     renders(): number;
     project(point: [number, number, number]): [number, number];
     overSection(x: number, y: number): boolean;
+    sectionOutline(): Array<[number, number]>;
   };
   __AEX_INPUT__?: {
     // biome-ignore lint/suspicious/noExplicitAny: tests build events loosely; the app validates their shape.

@@ -35,7 +35,7 @@ The hand pointer shows what a pinch would do where it is:
 |---|---|
 | Plain ring | Select: tap selects, a drag orbits |
 | Ring with the tool's icon (red for Delete) | The active tool acts here |
-| Rounded square with up and down arrows | Over the section plane: pinch to grab it and drag |
+| Rounded square with up and down arrows | Over the section plane (with Section) or its outline (with any tool): pinch to grab it and drag |
 | Small dot | Over a button (tap to press), or the palette is open (steer and release) |
 | Dashed grey ring | Tracking sees your hand but you are not engaged: show an open palm |
 
@@ -48,7 +48,7 @@ The mouse cursor changes with the tool as well. The pointer stays put through br
 | Select | V | Top | Tap selects the element under the pointer; tap on empty space clears. Drags orbit the view |
 | Ask agent | A | Top right | Opens the agent request. Until the agent bridge arrives it says the agent is not connected |
 | Measure | D | Right | Tap two points on the model: the distance between them is shown in millimetres (rounded to 1 mm). Changes nothing |
-| Section | S | Bottom right | The cut is a plane you can grab: pinch on it (it lights up under the pointer) and drag down to cut lower, up to cut higher; the height is shown in millimetres. A drag off the plane orbits. The section stays when you change tool, until you press Remove (or tap the plane with Delete) |
+| Section | S | Bottom right | The cut is a plane you can grab: pinch on it (it lights up under the pointer) and drag down to cut lower, up to cut higher; the height is shown in millimetres. A drag off the plane orbits. The section stays when you change tool, until you press Remove (or tap the plane with Delete). From any other tool, its outline can still be grabbed and dragged, and tapping the outline selects the section |
 | Move | M | Bottom | Pinch an element and drag it along the ground; it snaps to 100 mm and is moved in one "Move" transaction when you let go. A drag that starts on empty space orbits instead |
 | Add massing | B | Bottom left | Tap the ground: a 6000 x 6000 x 3500 mm block is placed there, centred on the tap and snapped to 100 mm |
 | Delete | X | Left | Tap an element: it turns red and asks you to confirm. Nod or press Enter to delete it; shake your head or press Escape to keep it. Tapping the section plane removes the section |

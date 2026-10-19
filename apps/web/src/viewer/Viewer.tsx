@@ -1,12 +1,20 @@
 import type { Element, GestureEvent, Point2, Point3Mm, SceneDocument } from "@aex/protocol";
 import { Edges, Grid } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { type FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import * as THREE from "three";
 import { isSoftwareRenderer } from "../gpu.ts";
 import type { InputBus } from "../input/input-bus.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
-import { overSectionPlane } from "../tools/builtin.ts";
+import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
 import type { ToolController } from "../tools/controller.ts";
 import { InputRouter } from "../tools/input-router.ts";
 import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
@@ -28,6 +36,16 @@ const POINTER_GAIN = 1.3;
 const RIGHT_HOLD_MS = 400;
 /** The hand pointer stays put this long when tracking drops the hand for a few frames, instead of blinking out. */
 const POINTER_HOLD_MS = 250;
+
+/** How close to the section outline (screen pixels) still counts as on it: about a fingertip's reach. */
+const SECTION_LINE_PX = 14;
+
+function distanceToSegment([px, py]: Point2, [ax, ay]: Point2, [bx, by]: Point2): number {
+  const [dx, dy] = [bx - ax, by - ay];
+  const lengthSq = dx * dx + dy * dy;
+  const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
 
 /** The on-screen button (marked `data-hand-press`) at a viewer position, if any: hands can press HUD buttons. */
 function handButtonAt(wrapper: HTMLElement | null, [x, y]: Point2): HTMLButtonElement | null {
@@ -52,6 +70,8 @@ declare global {
       project(point: Point3Mm): Point2;
       /** Whether a viewer position is on the section plane. */
       overSection(x: number, y: number): boolean;
+      /** The section outline's corners in viewer positions (empty without a section). */
+      sectionOutline(): Point2[];
     };
     /** Dev builds only: the tool controller, for end-to-end tests. */
     __AEX_TOOLS__?: ToolController;
@@ -321,6 +341,21 @@ export function Viewer({
   const boundsRef = useRef(boundsMm);
   boundsRef.current = boundsMm;
 
+  /** The section outline's corners as viewer positions, or none without a section. */
+  const sectionOutlineOnScreen = useCallback((): Point2[] => {
+    const height = tools.getSnapshot().overlay.sectionMm;
+    if (height === null) return [];
+    const { min, max } = boundsRef.current;
+    const pad = SECTION_PAD_MM;
+    const corners: Point3Mm[] = [
+      [min[0] - pad, min[1] - pad, height],
+      [max[0] + pad, min[1] - pad, height],
+      [max[0] + pad, max[1] + pad, height],
+      [min[0] - pad, max[1] + pad, height],
+    ];
+    return corners.map((c) => pickRef.current.project(c));
+  }, [tools]);
+
   // Frame the model the first time a scene arrives.
   useEffect(() => {
     if (!scene.doc || framed.current) return;
@@ -364,10 +399,21 @@ export function Viewer({
         return button !== null;
       },
       isButton: (at) => handButtonAt(wrapper.current, at) !== null,
+      onSectionLine: (at) => {
+        const corners = sectionOutlineOnScreen();
+        const el = wrapper.current;
+        if (corners.length === 0 || !el) return false;
+        const px = (p: Point2): Point2 => [p[0] * el.clientWidth, p[1] * el.clientHeight];
+        const q = px(at);
+        return corners.some((c, i) => {
+          const [a, b] = [px(c), px(corners[(i + 1) % corners.length] as Point2)];
+          return distanceToSegment(q, a, b) <= SECTION_LINE_PX;
+        });
+      },
       // The agent arrives with the agent bridge change.
       agentAvailable: () => false,
     });
-  }, [tools, client]);
+  }, [tools, client, sectionOutlineOnScreen]);
 
   // Hand input: the router sends each gesture to the palette, the active tool or navigation (never the bridge).
   useEffect(() => {
@@ -578,6 +624,7 @@ export function Viewer({
       latencyP90: () => latency.p90(),
       renders: () => rendersRef.current(),
       project: (point) => pickRef.current.project(point),
+      sectionOutline: () => sectionOutlineOnScreen(),
       overSection: (x, y) =>
         overSectionPlane(
           {
@@ -595,7 +642,7 @@ export function Viewer({
         bus.emitPointer({ position, secondary, ts: performance.timeOrigin + performance.now() }),
       engaged: (engaged) => bus.setEngaged(engaged),
     };
-  }, [bus, client, latency, tools]);
+  }, [bus, client, latency, tools, sectionOutlineOnScreen]);
 
   // The hand pointer shows what a pinch would do here: press a button, steer the palette, grab the section, or the
   // active tool's own action (its icon).

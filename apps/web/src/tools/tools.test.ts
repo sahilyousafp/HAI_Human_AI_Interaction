@@ -53,6 +53,7 @@ function setup() {
     navigate: (e) => void navigated.push(e),
     press: () => false,
     isButton: () => false,
+    onSectionLine: () => false,
     agentAvailable: () => false,
   };
   controller.attach(env);

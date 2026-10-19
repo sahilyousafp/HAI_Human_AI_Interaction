@@ -558,8 +558,44 @@ test.describe("hand UX regressions", () => {
     await page.mouse.click(box_(await viewerBox(page), spot).x, box_(await viewerBox(page), spot).y);
     await expect(page.getByTestId("section-status")).toHaveCount(0);
   });
-});
 
+  test("the section line can be grabbed from any tool: hover lights it, a drag on it moves the cut", async ({
+    page,
+  }) => {
+    await start(page);
+    await page.keyboard.press("s");
+    await page.keyboard.press("v"); // back to Select; the section stays
+    const outline = await page.evaluate(() => window.__AEX_VIEWER__?.sectionOutline() ?? []);
+    expect(outline.length).toBeGreaterThanOrEqual(4);
+    // The middle of the outline's lowest edge on screen (the front edge), in page pixels.
+    const box = await viewerBox(page);
+    const edges = outline.map((p, i) => [p, outline[(i + 1) % outline.length]] as const);
+    const [a, b] = edges.reduce((best, e) =>
+      (e[0][1] + (e[1]?.[1] ?? 0)) / 2 > (best[0][1] + (best[1]?.[1] ?? 0)) / 2 ? e : best,
+    );
+    const mid = {
+      x: box.x + ((a[0] + (b?.[0] ?? 0)) / 2) * box.width,
+      y: box.y + ((a[1] + (b?.[1] ?? 0)) / 2) * box.height,
+    };
+    await page.mouse.move(mid.x, mid.y);
+    await expect(page.getByTestId("viewer")).toHaveAttribute("data-section-hover", "true");
+    const before = (await tools(page)).overlay.sectionMm ?? 0;
+    await mouseDrag(page, mid, { x: mid.x, y: mid.y + 150 });
+    expect((await tools(page)).overlay.sectionMm ?? 0).toBeLessThan(before);
+  });
+
+  test("tapping the section line selects the section (the Section tool)", async ({ page }) => {
+    await start(page);
+    await page.keyboard.press("s");
+    await page.keyboard.press("m");
+    const outline = await page.evaluate(() => window.__AEX_VIEWER__?.sectionOutline() ?? []);
+    const box = await viewerBox(page);
+    const [p, q] = [outline[0], outline[1]];
+    if (!p || !q) throw new Error("no outline");
+    await page.mouse.click(box.x + ((p[0] + q[0]) / 2) * box.width, box.y + ((p[1] + q[1]) / 2) * box.height);
+    await expect(activeTool(page)).toHaveAttribute("data-tool", "section");
+  });
+});
 const box_ = (box: { x: number; y: number; width: number; height: number }, [x, y]: number[]) => ({
   x: box.x + (x ?? 0) * box.width,
   y: box.y + (y ?? 0) * box.height,

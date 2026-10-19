@@ -21,6 +21,7 @@ export interface ToolEnvironment {
   pick(at: Point2): Hit | null;
   ground(at: Point2, heightMm?: number): Point3Mm | null;
   bounds(): { min: Point3Mm; max: Point3Mm };
+  onSectionLine(at: Point2): boolean;
   /** Camera-frame position (mirrored like the preview) to viewer position. */
   handToViewer(position: Point2): Point2;
   /** Width / height of the camera frame. */
@@ -160,12 +161,31 @@ export class ToolController {
   tap(at: Point2): void {
     const ctx = this.ctx();
     if (!ctx || this.env?.press(at)) return;
+    // Tapping the section's outline selects the section, except with Delete, which removes it (its own tap).
+    if (this.onSectionLine(at) && this.snapshot.activeId !== "delete") {
+      this.choose("section");
+      return;
+    }
     this.active?.onTap?.(ctx, at, ctx.pick(at));
   }
 
+  /**
+   * Hover feedback. The section outline responds in every tool (it lights up and the pointer shows grab), so the
+   * section can be picked up whatever tool is active.
+   */
   hover(at: Point2): void {
     const ctx = this.ctx();
-    if (ctx && !this.dragging) this.active?.onHover?.(ctx, at);
+    if (!ctx || this.dragging) return;
+    const line = this.onSectionLine(at);
+    const ownHover = this.active?.onHover;
+    ownHover?.call(this.active, ctx, at);
+    // A tool with its own hover (Section) may light the section up for other reasons too; the line always does.
+    const hover = ownHover ? this.snapshot.overlay.sectionHover || line : line;
+    if (hover !== this.snapshot.overlay.sectionHover) this.setOverlay({ sectionHover: hover });
+  }
+
+  private onSectionLine(at: Point2): boolean {
+    return this.snapshot.overlay.sectionMm !== null && (this.env?.onSectionLine(at) ?? false);
   }
 
   /**
@@ -188,6 +208,8 @@ export class ToolController {
       this.pressing = true;
       return true;
     }
+    // A drag that starts on the section's outline grabs the section from any tool.
+    if (this.onSectionLine(at) && this.snapshot.activeId !== "section") this.choose("section");
     this.dragging = this.active?.onDragStart?.(ctx, at, ctx.pick(at)) ?? false;
     this.lastDragAt = at;
     return this.dragging;
@@ -284,6 +306,7 @@ export class ToolController {
       pick: (at) => env.pick(at),
       ground: (at, heightMm) => env.ground(at, heightMm),
       bounds: () => env.bounds(),
+      onSectionLine: (at) => env.onSectionLine(at),
       overlay: () => this.snapshot.overlay,
       setOverlay: (partial) => this.setOverlay(partial),
       flash: (message) => this.flash(message),
