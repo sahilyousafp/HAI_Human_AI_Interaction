@@ -12,6 +12,7 @@ import {
   type ProjectMcpServer,
 } from "@aex/protocol";
 import type { Logger } from "../log.ts";
+import { parseFrontmatter } from "./frontmatter.ts";
 
 type Send = (message: Message) => void;
 type Init = Extract<AgentEvent, { type: "init" }>;
@@ -41,29 +42,14 @@ export function readProjectServers(projectDir: string): ProjectMcpServer[] {
   });
 }
 
-/**
- * The `name` and `description` from a SKILL.md's front matter (the block between `---` lines at the top), or why it
- * is not a valid skill. Plain and folded (`>` or `|`) values are read; nothing else of YAML is needed here.
- */
+/** The `name` and `description` from a SKILL.md's front matter, or why it is not a valid skill. */
 export function parseSkill(text: string): { name: string; description: string } | { error: string } {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  if (!match)
+  const parsed = parseFrontmatter(text);
+  if (!parsed)
     return {
       error: "SKILL.md has no front matter (a block between --- lines with a name and a description).",
     };
-  const fields: Record<string, string> = {};
-  const lines = (match[1] ?? "").split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const field = /^([A-Za-z_-]+):\s*(.*)$/.exec(lines[i] ?? "");
-    if (!field) continue;
-    let value = field[2]?.trim() ?? "";
-    if (value === ">" || value === "|" || value === ">-" || value === "|-") {
-      const block: string[] = [];
-      while (i + 1 < lines.length && /^\s+\S/.test(lines[i + 1] ?? "")) block.push((lines[++i] ?? "").trim());
-      value = block.join(" ");
-    }
-    fields[field[1] ?? ""] = value.replace(/^(["'])(.*)\1$/, "$2");
-  }
+  const { fields } = parsed;
   if (!fields.name) return { error: "SKILL.md has no name in its front matter." };
   if (!ExtensionName.safeParse(fields.name).success)
     return { error: `The skill name "${fields.name}" must use letters, digits, - and _ only.` };

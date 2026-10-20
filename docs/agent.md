@@ -8,27 +8,28 @@ Install Claude Code and sign in once in a terminal by running `claude`. The brid
 
 ## How the session runs
 
-When you send the first request in a project, the bridge starts one long-lived process in the project folder:
+AEX runs a small team of agents, each its own Claude Code session (see [agents.md](agents.md)). When an agent first has work in a project, the bridge starts one long-lived process for it in the project folder:
 
 ```text
-claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --mcp-config <project>/.aex/agent/mcp.json --permission-prompt-tool mcp__aex__approve_tool --append-system-prompt-file <project>/.aex/agent/system.md --resume <session id>
+claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --mcp-config <project>/.aex/agent/<name>/mcp.json --permission-prompt-tool mcp__aex__approve_tool --append-system-prompt-file <project>/.aex/agent/<name>/system.md --agent <name> --resume <session id>
 ```
 
-`--resume` is only added when the project already has a conversation. A unit test checks that this command matches the code (`buildClaudeArgs` in `packages/agent-core/src/claude/provider.ts`).
+`--agent` names the team member the process runs as (see [agents.md](agents.md)); `--resume` is only added when that agent already has a conversation. A unit test checks that this command matches the code (`buildClaudeArgs` in `packages/agent-core/src/claude/provider.ts`).
 
-- **One process per project.** Every request is a new turn for the same process, so the agent remembers the conversation. Opening another project starts that project's own conversation.
+- **One process per agent.** Every request to Mochi, and every task for a specialist, is a new turn for that agent's process, so each agent remembers its conversation. Opening another project starts that project's own conversations.
 - **Files it writes**, all in the project's `.aex` folder, which is kept out of git:
-  - `agent/mcp.json` adds only the app's own MCP server, `aex`, at `http://127.0.0.1:<port>/mcp`. It carries this bridge session's random token as a bearer header. That token protects the app's local endpoint; it is not a Claude credential.
-  - `agent/system.md` is added to the system prompt. It says that lengths are millimetres, Z is up, scene work goes through the `aex` tools, and "this" or "that" means what you point at or select.
-  - `agent/session.json` holds the conversation id, so the conversation survives restarts.
-- **Reloading the page** shows the whole conversation again. The bridge keeps the last 50 turns.
+  - `agent/<name>/mcp.json` adds only the app's own MCP server, `aex`, at `http://127.0.0.1:<port>/mcp`. It carries a random token issued to this process as a bearer header, and a new one each time the process starts. From the token the bridge knows which agent is calling and offers it only the `aex` tools its definition lists, so Reviewer has no write tools at all. The browsers' session token is not accepted there. These tokens protect the app's local endpoint; they are not Claude credentials.
+  - `agent/<name>/system.md` is added to the system prompt. It says that lengths are millimetres, Z is up, scene work goes through the `aex` tools, and "this" or "that" means what you point at or select. Mochi's also lists the specialists it can hand work to, from their definitions.
+  - `agent/<name>/session.json` holds the agent's conversation id, so its conversation survives restarts.
+  - The team's definitions are Claude Code agent files in `.claude/agents/`, with AEX's extra details in `.aex/agents.json` ([agents.md](agents.md)).
+- **Reloading the page** shows every agent's conversation again. The bridge keeps the last 50 turns of each.
 - **If the process ends unexpectedly**, the next request starts a new one with `--resume`, and the turn shows "Session recovered".
-- **After 20 idle minutes** the process is closed. The next request resumes the conversation.
-- **Stop** (the stop button, or both open palms toward the camera for half a second) sends Claude Code's interrupt request. If the turn has not ended within 1.5 s, the process is ended and the next request resumes. Either way the turn ends within 3 seconds, and what it already changed stays as one undo step.
+- **After 20 idle minutes** an agent's process is closed. Its next turn resumes the conversation.
+- **Stop** (the stop button, **Stop all**, or both open palms toward the camera for half a second) sends Claude Code's interrupt request to every agent that is working; one task can be stopped on its own. If a turn has not ended within 1.5 s, the process is ended and the next turn resumes. Either way it ends within 3 seconds, and what it already changed stays as one undo step.
 
 ## What the agent can do in the scene
 
-The `aex` MCP server gives the agent these tools:
+The `aex` MCP server gives each agent the tools its definition lists, from these:
 
 | Tool | What it does |
 |---|---|
@@ -38,8 +39,10 @@ The `aex` MCP server gives the agent these tools:
 | `create_elements`, `update_elements`, `delete_elements` | Change the scene. Each batch is checked as a whole: if one element is invalid, nothing changes and the error names it |
 | `set_selection` | Select elements for everyone |
 | `capture_view` | A PNG of what you see in the viewer, at most 1280 px on its longest side |
+| `sun_study` | Sets the viewer's sun for a date, time and place and returns its altitude and azimuth with a picture (Climate) |
+| `delegate`, `team_status`, `cancel_task` | Hand a task to a specialist, see what everyone is doing, stop a task (Mochi) |
 
-**One request is one undo step.** Everything the agent changes while answering one request is a single transaction labelled with your request. You watch the model change as it works, and one Undo reverts the whole turn.
+**One task is one undo step.** Everything a specialist changes in one task is a single transaction labelled with the agent and the task, for example "Architect: Stair core". You watch the model change as it works, and one Undo reverts the whole task. Only one agent changes the model at a time.
 
 ## Approvals
 
@@ -47,7 +50,7 @@ Some tool calls need your say-so.
 
 - **The scene tools run without asking**, because every change shows in the model and can be undone.
 - **Your own Claude Code rules apply first.** Anything your Claude Code settings already allow, and read-only commands Claude Code considers safe, run without a card. A card only appears for a call you would have been asked about in a terminal.
-- **Everything else shows an approval card** in the turn, under the tool's chip. The card shows the tool, where it comes from (Claude Code itself or the MCP server's name), and the command, path, URL or input.
+- **Everything else shows an approval card** in the turn, under the tool's chip, naming the agent that asks. A specialist's card also waits under its hand-off chip in Mochi's chat. The card shows the tool, where it comes from (Claude Code itself or the MCP server's name), and the command, path, URL or input.
   - **Allow** with a click, or by nodding while engaged.
   - **Deny** with a click, or by shaking your head. Claude is told you declined.
   - Head gestures only decide a card while it is the only one waiting.
@@ -67,23 +70,24 @@ The **Extensions** tab in the agent panel shows:
   - The folder must contain a `SKILL.md` with a `name` and a `description` in its front matter, or installation stops with the reason and nothing is copied.
   - Skills are copied to `.claude/skills/<name>/` in the project.
 
-After any change the agent process restarts and resumes the same conversation, so the change applies from your next request.
+After any change every agent's process restarts and resumes its conversation, so the change applies from the next request or task.
 
 User-level servers and skills stay yours to manage in Claude Code itself.
 
 ## Using the panel
 
+- **The panel talks to Mochi.** The team strip shows the specialists, hand-off chips open their work on a task, and the **Agents** tab edits the team ([agents.md](agents.md)). Mochi's replies are spoken.
 - **Speak** is the main way to ask: press the microphone button (or hold the **`** key) and say what to change while you point at the model. The transcript is sent after 1.5 s, or at once with a nod or **Enter**; a shake or **Escape** discards it. See [voice.md](voice.md).
 - Or type a request and press **Enter** to send it (**Shift+Enter** adds a line). You can send while the agent is ready; while it works, the send button becomes **Stop**.
 - **Ask agent** in the tool palette (or the **A** key) opens the panel and starts listening.
 - Replies stream in as they are written. Each tool call is a chip showing running, needs approval, done, failed or denied. Click a chip to see its input and its result or error.
-- The status shows Not available, Starting, Ready, Working or Recovering.
+- The status shows Mochi's state: Unavailable, Starting, Ready, Working or Recovering.
 - Collapse the panel with its arrow button. While collapsed, it shows how many approvals are waiting.
 
 ## Privacy and logs
 
 - The bridge only ever starts `claude` and exchanges messages with it. It never reads Claude's credential files, tokens or keys. A CI check (`pnpm credentials:check`) fails if any shipped source refers to them.
-- The bridge logs one line per event: session started, turn ended, approval decided, extension changed. Every logged detail is redacted first: environment variables, headers, tokens and bearer values are replaced, and so is the session token. A test runs a full turn with an approval and a secret header and checks that the log contains neither.
+- The bridge logs one line per event: session started, turn ended, approval decided, extension changed. Every logged detail is redacted first: environment variables, headers, tokens and bearer values are replaced, and so are the session token and the agents' MCP tokens. A test runs a full turn with an approval and a secret header and checks that the log contains neither.
 - Claude Code's own error output is never echoed.
 
 ## Troubleshooting

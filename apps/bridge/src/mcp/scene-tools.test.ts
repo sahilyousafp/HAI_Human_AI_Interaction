@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { WebSocket } from "ws";
 import { connectClient } from "../../test/ws-client.ts";
 import { type Bridge, createBridge } from "../server.ts";
+import type { Caller } from "./agent-tokens.ts";
 
 const ORIGIN = "http://localhost:5173";
 const TOKEN = "mcp-test-token-0123456789";
@@ -34,8 +35,14 @@ async function start(): Promise<AddressInfo> {
   return bridge.start();
 }
 
-/** An MCP client as the agent would be one: bearer token, no Origin. */
-async function mcp(address: AddressInfo, token = TOKEN) {
+/** An agent's own MCP token, as the bridge writes it into the agent's mcp.json. */
+const agentToken = (caller: Caller = { agent: null, tools: null }) => {
+  if (!bridge) throw new Error("no bridge");
+  return bridge.agentTokens.issue(caller);
+};
+
+/** An MCP client as the agent would be one: its bearer token, no Origin. */
+async function mcp(address: AddressInfo, token = agentToken()) {
   const client = new Client({ name: "test-agent", version: "1.0.0" });
   const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${address.port}/mcp`), {
     requestInit: { headers: { Authorization: `Bearer ${token}` } },
@@ -85,8 +92,53 @@ describe("MCP endpoint access", () => {
   it("refuses a request from a foreign web page, even with the token", async () => {
     const address = await start();
     expect(
-      (await post(address, { authorization: `Bearer ${TOKEN}`, origin: "https://evil.example" })).status,
+      (await post(address, { authorization: `Bearer ${agentToken()}`, origin: "https://evil.example" }))
+        .status,
     ).toBe(403);
+  });
+
+  it("the browsers' session token is not an agent token", async () => {
+    const address = await start();
+    expect((await post(address, { authorization: `Bearer ${TOKEN}` })).status).toBe(401);
+    expect((await post(address, { authorization: `Bearer ${agentToken()}` })).status).toBe(200);
+  });
+
+  it("a new token for an agent revokes its previous one; other agents' tokens keep working", async () => {
+    const address = await start();
+    const first = agentToken({ agent: "architect", tools: null });
+    const climate = agentToken({ agent: "climate", tools: null });
+    const second = agentToken({ agent: "architect", tools: null });
+    expect((await post(address, { authorization: `Bearer ${first}` })).status).toBe(401);
+    expect((await post(address, { authorization: `Bearer ${second}` })).status).toBe(200);
+    expect((await post(address, { authorization: `Bearer ${climate}` })).status).toBe(200);
+  });
+
+  it("reviewer cannot edit: only its read tools are offered, and a write call is refused", async () => {
+    const address = await start();
+    const reviewer = await mcp(
+      address,
+      agentToken({
+        agent: "reviewer",
+        tools: new Set(["get_scene_summary", "get_elements", "get_user_context", "capture_view"]),
+      }),
+    );
+    const { tools } = await reviewer.listTools();
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      "approve_tool",
+      "capture_view",
+      "get_elements",
+      "get_scene_summary",
+      "get_user_context",
+    ]);
+    const before = structuredClone(bridge?.scene.scene.doc);
+    const refused = await reviewer
+      .callTool({ name: "delete_elements", arguments: { ids: ["block-b"] } })
+      .then(
+        (result) => textOf(result),
+        (error: Error) => error.message,
+      );
+    expect(refused).toMatch(/not found|unknown/i);
+    expect(bridge?.scene.scene.doc).toEqual(before);
   });
 
   it("serves the scene tools to a client with the token", async () => {
@@ -102,6 +154,7 @@ describe("MCP endpoint access", () => {
         "get_scene_summary",
         "get_user_context",
         "set_selection",
+        "sun_study",
         "update_elements",
       ].sort(),
     );
@@ -151,6 +204,52 @@ describe("read tools", () => {
     expect(context.pointed).toEqual({ id: "col-a1", name: "Column A1", type: "column", level: "L0" });
     expect(context.selection.map((e: { id: string }) => e.id)).toEqual(["block-b"]);
     expect(context.camera.azimuth).toBe(305);
+  });
+});
+
+describe("sun study", () => {
+  const climate = () => agentToken({ agent: "climate", tools: new Set(["sun_study", "get_scene_summary"]) });
+  const winter = { date: "2026-12-21", time: "12:00", latitude: 51.5, longitude: 0 };
+
+  it("winter shadows: the viewer's sun is set to about 15 degrees from the south, and Climate gets a picture", async () => {
+    const address = await start();
+    const viewer = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    const result = (await mcp(address, climate())).callTool({ name: "sun_study", arguments: winter });
+    const request = await viewer.waitFor("view.capture");
+    expect(request.payload.sun).toMatchObject({ label: "2026-12-21 12:00, 51.5 N 0 E" });
+    expect(request.payload.sun?.altitude).toBeCloseTo(15.2, 0);
+    expect(request.payload.sun?.azimuth).toBeCloseTo(180, 0);
+    viewer.send("view.captured", { requestId: request.payload.requestId, png: "iVBORw0KGgoAAAA" });
+    const { content } = (await result) as { content: Array<{ type: string; text?: string; data?: string }> };
+    expect(JSON.parse(content[0]?.text ?? "{}")).toMatchObject({
+      from: "S",
+      aboveHorizon: true,
+      utc: "2026-12-21T12:00:00.000Z",
+    });
+    expect(content[1]).toMatchObject({ type: "image", data: "iVBORw0KGgoAAAA" });
+  });
+
+  it("local time follows the longitude unless an offset is given; at night the sun is below the horizon", async () => {
+    const address = await start();
+    const agent = await mcp(address, climate());
+    const tokyo = json(
+      await agent.callTool({
+        name: "sun_study",
+        arguments: { date: "2026-06-21", time: "23:30", latitude: 35.7, longitude: 139.7 },
+      }),
+    );
+    expect(tokyo).toMatchObject({ aboveHorizon: false, utc: "2026-06-21T14:30:00.000Z" });
+    expect(tokyo.view).toMatch(/No viewer is open/);
+    const offset = json(
+      await agent.callTool({ name: "sun_study", arguments: { ...winter, utcOffsetHours: 1 } }),
+    );
+    expect(offset.utc).toBe("2026-12-21T11:00:00.000Z");
+  });
+
+  it("only agents given the tool have it", async () => {
+    const address = await start();
+    const reviewer = await mcp(address, agentToken({ agent: "reviewer", tools: new Set(["get_elements"]) }));
+    expect((await reviewer.listTools()).tools.map((t) => t.name)).not.toContain("sun_study");
   });
 });
 

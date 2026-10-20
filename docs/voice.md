@@ -6,6 +6,7 @@ Speaking is the main way to ask the agent. Say what you want while you point at 
 
 - **Press the microphone button** in the agent panel, or **hold the `` ` `` key** (the key left of 1; releasing it ends what you are saying). **Ask agent** in the tool palette starts listening too.
 - Speak. The microphone indicator in the header shows **Mic on** while the microphone is live, and the bar above the input shows a level meter while you speak.
+- Start with a name to choose who does it: "Architect, add a stair core here". The name is taken out and Mochi hands the request to Architect ([agents.md](agents.md)).
 - Stop talking: after a short silence the request ends, the microphone stops, and the transcript appears.
 - The transcript waits 1.5 seconds with a countdown, then goes to the agent.
   - To send it at once: nod, press **Enter**, or press **Send**.
@@ -13,6 +14,10 @@ Speaking is the main way to ask the agent. Say what you want while you point at 
   - Click the transcript to correct a word. That stops the countdown; press **Enter** when it reads right.
 
 Nod and shake here are the gestures bound to "Yes" and "No" in the Gestures settings. A transcript waiting to be sent takes them before an approval card does.
+
+## Listen for names
+
+**Listen for names** in the Voice settings keeps the microphone open so a request can start with just a name: "Mochi, what is everyone doing?" It is off until you turn it on, and the header then shows **Listening for names**. Only transcripts that start with a team name go to review; everything else is dropped at once, in memory. See [agents.md](agents.md#listen-for-names).
 
 ## Point and speak
 
@@ -29,7 +34,7 @@ The agent receives the transcript with a short context block: the captured eleme
 
 - **On this laptop is the default.** Speech is turned into text on your machine by Moonshine (base, ONNX, MIT licence) running in a Web Worker on WebAssembly. Voice activity detection is Silero VAD (via vad-web) in an AudioWorklet.
 - **Audio never leaves the machine and is never stored.** The utterance is kept in memory only until its transcript exists, then dropped. Nothing goes to disk, the bridge or the network. An automated test plays a recorded phrase as the microphone and fails if any request or bridge message carries audio, and a negative control proves the check catches an injected audio upload.
-- **The microphone is off until you ask.** The page requests no microphone on load. It opens when you press the button, hold the key or choose Ask agent, and closes as soon as the utterance ends.
+- **The microphone is off until you ask.** The page requests no microphone on load. It opens when you press the button, hold the key or choose Ask agent, and closes as soon as the utterance ends. Only **Listen for names** keeps it open, and only while you have it on.
 - **The model files are local.** `pnpm assets` downloads them once from a pinned revision, checks each against its SHA-256, and the app serves them itself. Nothing is fetched from a model hub or CDN while you use the app.
 - **Cloud speech is opt-in.** The Voice settings offer the browser's own speech service instead. Your browser then sends what you say to its vendor (Google for Chrome, Microsoft for Edge) to turn it into text. The setting says so, and it is off unless you choose it.
 
@@ -46,6 +51,10 @@ All values live in `apps/web/src/voice/voice-config.ts`; a unit test checks that
 | `dwellMs` | 300 | The hand pointer must rest on an element this long while you speak for it to be captured |
 
 The Voice settings show where transcription runs and the 90th percentile of the time from the end of speech to the transcript. The target is under one second; on the reference laptop a two-second phrase transcribes in about 0.2 s. The speech model (63 MB) loads while you speak the first request, in about 1.5 s.
+
+## Mochi's voice
+
+Mochi answers out loud, in a voice generated on this laptop (Kokoro on WebGPU, or a voice installed on the computer). Talking to Mochi interrupts it; the speaker button beside the microphone mutes it. See [agents.md](agents.md#spoken-replies).
 
 ## When the microphone does not work
 

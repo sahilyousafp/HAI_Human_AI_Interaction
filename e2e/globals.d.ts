@@ -12,6 +12,7 @@ interface Window {
     project(point: [number, number, number]): [number, number];
     overSection(x: number, y: number): boolean;
     sectionOutline(): Array<[number, number]>;
+    sun(): { altitude: number; azimuth: number; label: string } | null;
   };
   __AEX_INPUT__?: {
     // biome-ignore lint/suspicious/noExplicitAny: tests build events loosely; the app validates their shape.
@@ -45,4 +46,8 @@ interface Window {
     };
   };
   __AEX_GESTURES__?: { events: E2EGesture[] };
+  __AEX_SPEECH__?: {
+    speaker: { getSnapshot(): { engine: string | null; firstAudio: number[] } };
+    roundTrip(text: string): Promise<string | null>;
+  };
 }

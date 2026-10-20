@@ -151,3 +151,136 @@ describe("AgentClient", () => {
     });
   });
 });
+
+describe("the team in the client", () => {
+  const member = (name: string, lead = false) => ({
+    name,
+    description: name,
+    tools: [],
+    aliases: [],
+    color: "#888888",
+    writes: !lead,
+    lead,
+  });
+  const task = (status: string) => ({
+    id: "task-1",
+    agent: "architect",
+    title: "Stair core",
+    instruction: "Add a stair core",
+    status,
+    createdAt: 1,
+    fromTurn: "m1",
+  });
+  const team = (status = "running") => ({
+    members: [member("mochi", true), member("architect")],
+    tasks: [task(status)],
+    maxRunning: 3,
+  });
+
+  it("each agent's turns go to its own thread; Mochi's are the chat", () => {
+    const { client, receive } = setup();
+    receive("team.snapshot", team());
+    receive("agent.turn", {
+      id: "m1",
+      request: "stair core here",
+      recovered: false,
+      kind: "request",
+      agent: "mochi",
+    });
+    receive("agent.turn", {
+      id: "a1",
+      request: "Add a stair core",
+      recovered: false,
+      kind: "task",
+      taskId: "task-1",
+      agent: "architect",
+    });
+    receive("agent.event", {
+      turnId: "a1",
+      event: { type: "text.delta", text: "Done." },
+      agent: "architect",
+    });
+    receive("agent.status", { status: { state: "working" }, agent: "architect" });
+    const state = client.getSnapshot();
+    expect(state.turns.map((t) => t.id)).toEqual(["m1"]);
+    expect(client.thread("architect")).toMatchObject({
+      status: { state: "working" },
+      turns: [{ id: "a1", kind: "task", taskId: "task-1", items: [{ kind: "text", text: "Done." }] }],
+    });
+    expect(state.status).toBeNull(); // Mochi's status is untouched by Architect's
+  });
+
+  it("a page that connects gets every agent's transcript, and cards from each", () => {
+    const { client, receive } = setup();
+    receive("agent.transcript", { turns: [], status: { state: "idle" }, pending: [], agent: "mochi" });
+    const running = { id: "a1", request: "x", events: [], recovered: false, kind: "task", taskId: "task-1" };
+    receive("agent.transcript", {
+      turns: [running],
+      status: { state: "working" },
+      pending: [{ ...card("c1"), agent: "architect" }],
+      agent: "architect",
+    });
+    expect(client.getSnapshot().status).toEqual({ state: "idle" });
+    expect(client.pending.map((a) => [a.request.id, a.turnId])).toEqual([["c1", "a1"]]);
+  });
+
+  it("an approval card belongs to the running turn of the agent asking", () => {
+    const { client, receive } = setup();
+    receive("agent.turn", { id: "m1", request: "x", recovered: false, kind: "request", agent: "mochi" });
+    receive("agent.turn", { id: "a1", request: "y", recovered: false, kind: "task", agent: "architect" });
+    receive("approval.pending", { ...card("c1"), agent: "architect" });
+    receive("approval.pending", { ...card("c2"), agent: "mochi" });
+    expect(client.pending.map((a) => a.turnId)).toEqual(["a1", "m1"]);
+  });
+
+  it("two open palms stop everything while a specialist works, even when Mochi is idle", () => {
+    const { client, sent, receive } = setup();
+    receive("agent.status", { status: { state: "idle" }, agent: "mochi" });
+    client.stopRunning();
+    expect(sent).toEqual([]);
+    receive("team.snapshot", team("running"));
+    client.stopRunning();
+    expect(sent.map((m) => m.type)).toEqual(["agent.stop"]);
+    receive("team.snapshot", team("done"));
+    client.stopRunning();
+    expect(sent).toHaveLength(1);
+  });
+
+  it("stops one task, and sends the specialist the user named", () => {
+    const { client, sent } = setup();
+    client.stopTask("task-1");
+    client.request("add a stair core", undefined, "architect");
+    expect(sent.map((m) => [m.type, m.payload])).toEqual([
+      ["task.stop", { id: "task-1" }],
+      ["agent.send", { text: "add a stair core", agent: "architect" }],
+    ]);
+  });
+
+  it("asks by name: a named specialist travels with the request, without its name", () => {
+    const { client, sent, receive } = setup();
+    receive("team.snapshot", {
+      members: [
+        { ...member("mochi", true), aliases: ["machi"] },
+        { ...member("reviewer"), aliases: ["review or"] },
+      ],
+      tasks: [],
+      maxRunning: 3,
+    });
+    client.ask("Review or check the floor heights");
+    client.ask("Machi, status?");
+    client.ask("add three floors");
+    client.ask("Mochi");
+    expect(sent.map((m) => m.payload)).toEqual([
+      { text: "check the floor heights", agent: "reviewer" },
+      { text: "status?" },
+      { text: "add three floors" },
+      { text: "Mochi" },
+    ]);
+  });
+
+  it("a bridge without a team: messages without a name are the chat's", () => {
+    const { client, receive } = setup();
+    receive("agent.turn", { id: "t1", request: "x", recovered: false, kind: "request" });
+    expect(client.getSnapshot().turns.map((t) => t.id)).toEqual(["t1"]);
+  });
+});

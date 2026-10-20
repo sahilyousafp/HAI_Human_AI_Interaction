@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Message, ViewCamera } from "@aex/protocol";
+import type { Message, SunSetting, ViewCamera } from "@aex/protocol";
 
 type Send = (message: Message) => void;
 
@@ -48,8 +48,8 @@ export class ViewContext {
     return false;
   }
 
-  /** A PNG of the current view from an open viewer. */
-  capture(): Promise<CaptureResult> {
+  /** A PNG of the current view from an open viewer; with `sun`, the viewer's light is set to it first. */
+  capture(sun?: SunSetting): Promise<CaptureResult> {
     if (this.viewers() === 0) {
       return Promise.resolve({ ok: false, error: "No viewer is open, so the view cannot be captured." });
     }
@@ -63,7 +63,11 @@ export class ViewContext {
         clearTimeout(timer);
         resolve(result);
       });
-      this.broadcast({ type: "view.capture", id: randomUUID(), payload: { requestId } });
+      this.broadcast({
+        type: "view.capture",
+        id: randomUUID(),
+        payload: { requestId, ...(sun ? { sun } : {}) },
+      });
     });
   }
 }

@@ -37,6 +37,7 @@ export function buildClaudeArgs(options: StartOptions): string[] {
     options.permissionPromptTool,
     "--append-system-prompt-file",
     options.systemPromptPath,
+    ...(options.agent ? ["--agent", options.agent] : []),
     ...(options.resumeSessionId ? ["--resume", options.resumeSessionId] : []),
   ];
 }

@@ -13,12 +13,13 @@ import {
   WS_PROTOCOL,
 } from "@aex/protocol";
 import { type WebSocket, WebSocketServer } from "ws";
-import { AgentHub } from "./agent/agent-hub.ts";
 import { ApprovalBroker } from "./agent/approvals.ts";
 import { ExtensionHub } from "./agent/extensions.ts";
+import { Team } from "./agent/team.ts";
 import { ViewContext } from "./agent/view-context.ts";
 import { assertLoopback } from "./config.ts";
 import { createLogger, type Logger, silentLogger } from "./log.ts";
+import { AgentTokens } from "./mcp/agent-tokens.ts";
 import { createMcpHandler, MCP_PATH } from "./mcp/mcp-endpoint.ts";
 import { createSceneMcpServer } from "./mcp/scene-tools.ts";
 import { SceneHub, type SceneHubOptions } from "./scene-hub.ts";
@@ -33,8 +34,8 @@ export interface BridgeOptions {
   scene?: SceneHubOptions;
   /** Where user settings are kept (.aex/settings.json); without one they live in memory. */
   settingsFile?: string;
-  /** The user's agent (their own Claude Code); without one, the agent panel says it is not set up. */
-  agent?: { provider: AgentProvider; idleMs?: number };
+  /** The user's agents (their own Claude Code); without one, the agent panel says it is not set up. */
+  agent?: { provider: AgentProvider; idleMs?: number; maxRunning?: number };
   /** Writes one log line (redacted: never secrets or the session token); without it, nothing is logged. */
   log?: (line: string) => void;
 }
@@ -43,9 +44,12 @@ export interface Bridge {
   readonly token: string;
   readonly startedAt: string;
   readonly scene: SceneHub;
-  readonly agent: AgentHub | null;
+  /** The agent team: Mochi and the specialists. */
+  readonly agent: Team | null;
   readonly approvals: ApprovalBroker;
   readonly extensions: ExtensionHub;
+  /** The running agents' MCP tokens (the session token is for browsers only). */
+  readonly agentTokens: AgentTokens;
   readonly log: Logger;
   start(): Promise<AddressInfo>;
   stop(): Promise<void>;
@@ -122,30 +126,29 @@ export function createBridge(options: BridgeOptions): Bridge {
   const settings = new SettingsHub(options.settingsFile ?? null, broadcast);
   const view = new ViewContext(() => clients.size, broadcast);
   let port = options.port;
-  const log = options.log ? createLogger(options.log, () => [token]) : silentLogger;
-  const approvals = new ApprovalBroker({ projectDir: () => scene.projectDir, log }, broadcast);
+  const agentTokens = new AgentTokens();
+  const log = options.log ? createLogger(options.log, () => [token, ...agentTokens.current]) : silentLogger;
+  const approvals = new ApprovalBroker({ projectDir: () => scene.projectDir, log }, (message) => {
+    broadcast(message);
+    agent?.approvalsChanged();
+  });
   projectOpened = () => {
     approvals.announce();
     extensions.projectChanged();
   };
-  const agent = options.agent
-    ? new AgentHub(
+  const agent: Team | null = options.agent
+    ? new Team(
         {
           provider: options.agent.provider,
           projectDir: () => scene.projectDir,
-          mcp: () => ({ url: `http://${options.host}:${port}${MCP_PATH}`, token }),
+          mcpUrl: () => `http://${options.host}:${port}${MCP_PATH}`,
+          tokens: agentTokens,
+          scene,
+          approvals,
+          initialized: (event) => extensions.initialized(event),
           ...(options.agent.idleMs ? { idleMs: options.agent.idleMs } : {}),
-          pending: () => approvals.waiting,
+          ...(options.agent.maxRunning ? { maxRunning: options.agent.maxRunning } : {}),
           log,
-          hooks: {
-            started: (turn) => scene.beginTurn(turn.request),
-            stopping: () => approvals.denyAll("The user stopped the request."),
-            ended: () => {
-              approvals.denyAll("The request ended before the user answered.");
-              scene.endTurn();
-            },
-            initialized: (event) => extensions.initialized(event),
-          },
         },
         broadcast,
       )
@@ -161,18 +164,22 @@ export function createBridge(options: BridgeOptions): Bridge {
   );
 
   const handleMcp = createMcpHandler({
-    tokenMatches: (presented) => tokensMatch(token, presented),
+    identify: (presented) => agentTokens.identify(presented),
     allowedOrigins: options.allowedOrigins,
-    createServer: () =>
-      createSceneMcpServer({
-        doc: () => scene.scene.doc,
-        selection: () => scene.scene.selection,
-        apply: (ops) => scene.applyFromAgent(ops),
-        approve: (tool, input, toolUseId) => approvals.decide(tool, input, toolUseId),
-        setSelection: (ids) => scene.select(ids),
-        userContext: () => view.current,
-        captureView: () => view.capture(),
-      }),
+    createServer: (caller) =>
+      createSceneMcpServer(
+        {
+          doc: () => scene.scene.doc,
+          selection: () => scene.scene.selection,
+          apply: (ops) => scene.applyFromAgent(ops),
+          approve: (tool, input, toolUseId, agent) => approvals.decide(tool, input, toolUseId, agent),
+          setSelection: (ids) => scene.select(ids),
+          userContext: () => view.current,
+          captureView: (sun) => view.capture(sun),
+          ...(agent ? { team: agent.tools } : {}),
+        },
+        caller,
+      ),
   });
 
   const server: Server = createServer((req, res) => {
@@ -247,6 +254,7 @@ export function createBridge(options: BridgeOptions): Bridge {
     agent,
     approvals,
     extensions,
+    agentTokens,
     log,
     start: () =>
       new Promise((resolve, reject) => {

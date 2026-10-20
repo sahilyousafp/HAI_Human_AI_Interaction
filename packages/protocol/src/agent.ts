@@ -91,8 +91,82 @@ export const AgentTurn = z.strictObject({
   events: z.array(AgentEvent),
   /** Set when this turn ran in a session resumed after a crash. */
   recovered: z.boolean().default(false),
+  /** A specialist's turn for a task Mochi handed out (`taskId`), or Mochi's turn reporting finished tasks. */
+  kind: z.enum(["request", "task", "digest"]).default("request"),
+  taskId: z.string().optional(),
 });
 export type AgentTurn = z.infer<typeof AgentTurn>;
+
+/** Where a task Mochi handed to a specialist stands. */
+export const TaskStatus = z.enum(["queued", "running", "waiting", "done", "failed", "stopped"]);
+export type TaskStatus = z.infer<typeof TaskStatus>;
+
+/** A task on the team's board. Times are epoch ms. */
+export const TeamTask = z.strictObject({
+  id: z.string(),
+  agent: z.string(),
+  title: z.string(),
+  instruction: z.string(),
+  status: TaskStatus,
+  createdAt: z.number(),
+  startedAt: z.number().optional(),
+  finishedAt: z.number().optional(),
+  /** The latest tool call or reply line, while it runs. */
+  lastActivity: z.string().optional(),
+  /** The specialist's final reply, shortened. */
+  summary: z.string().optional(),
+  /** The specialist's turn that does the task (in that agent's transcript). */
+  turnId: z.string().optional(),
+  /** Mochi's turn that handed it out. */
+  fromTurn: z.string().optional(),
+});
+export type TeamTask = z.infer<typeof TeamTask>;
+
+/** An agent of the team, as the panel shows it. */
+export const TeamMemberInfo = z.strictObject({
+  name: z.string(),
+  description: z.string(),
+  model: z.string().optional(),
+  tools: z.array(z.string()),
+  aliases: z.array(z.string()),
+  color: z.string(),
+  writes: z.boolean(),
+  lead: z.boolean(),
+});
+export type TeamMemberInfo = z.infer<typeof TeamMemberInfo>;
+
+/** The app's own MCP server's tools (`mcp__aex__<name>`), grouped by what they let an agent do. */
+export const AEX_TOOLS = {
+  read: ["get_scene_summary", "get_elements", "get_user_context", "capture_view"],
+  write: ["create_elements", "update_elements", "delete_elements", "set_selection"],
+  team: ["delegate", "team_status", "cancel_task"],
+  climate: ["sun_study"],
+} as const;
+
+/** An agent's whole definition, for the Agents tab: what the panel shows plus its instructions. */
+export const AgentDefinition = TeamMemberInfo.extend({ prompt: z.string() });
+export type AgentDefinition = z.infer<typeof AgentDefinition>;
+
+/**
+ * An agent the user adds or edits in the Agents tab. It becomes `.claude/agents/<name>.md` (name, description,
+ * tools, model and the instructions) and its entry in `.aex/agents.json` (aliases, colour).
+ */
+export const AgentDefinitionInput = z.strictObject({
+  name: z
+    .string()
+    .regex(
+      /^[a-z][a-z0-9-]{0,31}$/,
+      "Use lower-case letters, digits and - (up to 32), starting with a letter",
+    ),
+  description: z.string().trim().min(1, "Say what the agent does").max(300),
+  model: z.string().trim().max(64).optional(),
+  /** Tools as Claude Code names them (`mcp__aex__create_elements`, `Read`, `Bash(git:*)`). */
+  tools: z.array(z.string().regex(/^[^,\n]{1,200}$/)).max(64),
+  aliases: z.array(z.string().trim().min(1).max(40)).max(10),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  prompt: z.string().trim().min(1, "Give the agent its instructions").max(20_000),
+});
+export type AgentDefinitionInput = z.infer<typeof AgentDefinitionInput>;
 
 export const ApprovalOutcome = z.enum(["allowed", "denied", "timed-out"]);
 export type ApprovalOutcome = z.infer<typeof ApprovalOutcome>;
@@ -109,6 +183,8 @@ export const ApprovalRequest = z.strictObject({
   input: z.unknown(),
   /** The tool call this decides (the `id` of its tool.start event), when the provider reports it. */
   toolUseId: z.string().optional(),
+  /** The team agent asking, when the bridge runs a team. */
+  agent: z.string().optional(),
   /** When it is denied automatically (epoch ms). */
   expiresAt: z.number(),
 });

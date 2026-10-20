@@ -15,6 +15,7 @@ describe("docs/agent.md", () => {
       mcpConfigPath: "mcp.json",
       systemPromptPath: "system.md",
       permissionPromptTool: "mcp__aex__approve_tool",
+      agent: "mochi",
       resumeSessionId: "session",
     }).filter((arg) => arg.startsWith("-"));
     expect(documented).toEqual(actual);

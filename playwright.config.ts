@@ -31,7 +31,13 @@ const clipProjects: Project[] = buildClips(clipDir)
 // One project per speech fixture in test-assets/speech (WAV, played once as Chromium's fake microphone), for the
 // voice tests in e2e/voice/<fixture>.spec.ts.
 const speechDir = join(import.meta.dirname, "test-assets", "speech");
-const voiceProjects: Project[] = ["make-this-wall-300-thick"]
+const voiceProjects: Project[] = [
+  "make-this-wall-300-thick",
+  "architect-stair-core",
+  "mochi-ask-climate",
+  "mochi-status",
+  "add-three-floors",
+]
   .filter((fixture) => existsSync(join(import.meta.dirname, "e2e", "voice", `${fixture}.spec.ts`)))
   .map((fixture) => ({
     name: `voice:${fixture}`,

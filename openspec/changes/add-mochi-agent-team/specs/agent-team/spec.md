@@ -48,7 +48,7 @@ The system SHALL know which agent makes each call to the app's scene tools and S
 
 #### Scenario: Reviewer cannot edit
 - **WHEN** Reviewer tries to create, update or delete an element
-- **THEN** the call is refused with a message that Reviewer does not change the model, and the model is unchanged
+- **THEN** the call is refused, because the app's tool server offers Reviewer no tools that change the model, and the model is unchanged
 
 ### Requirement: Status on demand
 The user SHALL be able to ask Mochi for the team's status at any time, including while specialists are working, and Mochi SHALL answer from each agent's current state, current task, latest activity and place in the queue, without stopping their work.

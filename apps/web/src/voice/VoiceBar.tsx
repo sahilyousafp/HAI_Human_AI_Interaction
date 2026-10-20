@@ -71,7 +71,8 @@ export function VoiceBar({ voice, nameOf }: { voice: VoiceInput; nameOf: (id: st
     return () => clearTimeout(id);
   }, [state.phase, voice]);
 
-  if (state.phase === "off" || state.phase === "sent") return null;
+  // Listening for names shows only in the header: speech without a name is never shown anywhere.
+  if (state.phase === "off" || state.phase === "sent" || state.phase === "names") return null;
   const refs = references.length > 0 && (
     <ol className="voice-refs" data-testid="voice-refs" aria-label="What this refers to">
       {references.map((id, i) => (

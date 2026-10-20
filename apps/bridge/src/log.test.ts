@@ -93,6 +93,9 @@ describe("bridge logs", () => {
     expect(log).toMatch(/tool approval .*"outcome":"allowed"/);
     expect(log).toMatch(/extension change applied/);
     expect(log).not.toContain("sk-live-never-log-me");
-    expect(log).not.toContain(TOKEN); // the session token is in mcp.json and every MCP request, never in the log
+    expect(log).not.toContain(TOKEN); // the browsers' session token is never in the log
+    const agentToken = bridge.agentTokens.current[0] ?? "";
+    expect(agentToken).not.toBe(""); // the agent's token is in mcp.json and every MCP request, never in the log
+    expect(log).not.toContain(agentToken);
   });
 });

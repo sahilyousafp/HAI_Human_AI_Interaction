@@ -40,9 +40,24 @@ export interface AgentHubOptions {
   /** Approval cards waiting for the user, for a page that connects later. */
   pending?(): ApprovalRequest[];
   log?: Logger;
+  /**
+   * The team agent this hub runs (`claude --agent <name>`): its own session id, files and transcript, and its name
+   * on everything it broadcasts. Unset for the single unnamed session.
+   */
+  agent?: string;
+  /** Added to the agent's system prompt when its process starts (the lead's roster of specialists). */
+  extraPrompt?(): string | undefined;
 }
 
 const id = () => randomUUID();
+
+/** What kind of turn a request starts, for the team: the user's request, a specialist's task, or Mochi's report. */
+export interface TurnMeta {
+  kind?: AgentTurn["kind"];
+  taskId?: string;
+  /** A line the agent receives before the request but the transcript does not show (`[for: architect]`). */
+  preface?: string;
+}
 
 /**
  * The text the agent receives for a request that came with context (a spoken request): a compact block naming what
@@ -120,7 +135,12 @@ export class AgentHub {
     send({
       type: "agent.transcript",
       id: id(),
-      payload: { turns: this.turns, status: this.status, pending: this.options.pending?.() ?? [] },
+      payload: {
+        turns: this.turns,
+        status: this.status,
+        pending: this.options.pending?.() ?? [],
+        ...this.named,
+      },
     });
     if (this.status.state === "unavailable") void this.detect();
   }
@@ -141,8 +161,11 @@ export class AgentHub {
     return false;
   }
 
-  /** Sends a request (and what it refers to, for a spoken one) as a new turn; resolves when the turn has ended. */
-  async request(text: string, context?: RequestContext): Promise<void> {
+  /**
+   * Sends a request (and what it refers to, for a spoken one) as a new turn; resolves with the turn when it has
+   * ended.
+   */
+  async request(text: string, context?: RequestContext, meta: TurnMeta = {}): Promise<AgentTurn> {
     if (this.status.state === "unavailable") await this.detect();
     if (this.status.state === "unavailable")
       throw new Error(`${this.status.reason} ${this.status.fix ?? ""}`.trim());
@@ -157,6 +180,8 @@ export class AgentHub {
       ...(context ? { context } : {}),
       events: [],
       recovered: false,
+      kind: meta.kind ?? "request",
+      ...(meta.taskId ? { taskId: meta.taskId } : {}),
     };
     this.running = turn;
     try {
@@ -168,17 +193,26 @@ export class AgentHub {
       this.broadcast({
         type: "agent.turn",
         id: id(),
-        payload: { id: turn.id, request: text, ...(context ? { context } : {}), recovered: turn.recovered },
+        payload: {
+          id: turn.id,
+          request: text,
+          ...(context ? { context } : {}),
+          recovered: turn.recovered,
+          kind: turn.kind,
+          ...(turn.taskId ? { taskId: turn.taskId } : {}),
+          ...this.named,
+        },
       });
       this.setStatus({ state: "working" });
       this.options.hooks?.started?.(turn);
-      for await (const event of session.send(withContext(text, context))) {
+      const sent = withContext(text, context);
+      for await (const event of session.send(meta.preface ? `${meta.preface}\n${sent}` : sent)) {
         turn.events.push(event);
         if (event.type === "turn.end")
           this.log.info("agent turn ended", { reason: event.reason, durationMs: event.durationMs });
-        this.broadcast({ type: "agent.event", id: id(), payload: { turnId: turn.id, event } });
+        this.broadcast({ type: "agent.event", id: id(), payload: { turnId: turn.id, event, ...this.named } });
         if (event.type === "init") {
-          if (event.sessionId) writeSessionId(projectDir, event.sessionId);
+          if (event.sessionId) writeSessionId(projectDir, event.sessionId, this.options.agent);
           this.options.hooks?.initialized?.(event);
         }
       }
@@ -198,6 +232,7 @@ export class AgentHub {
         await this.close();
       }
     }
+    return turn;
   }
 
   /**
@@ -228,20 +263,32 @@ export class AgentHub {
     return this.options.log ?? silentLogger;
   }
 
+  /** The agent's name, for the payloads it broadcasts. */
+  private get named(): { agent?: string } {
+    return this.options.agent ? { agent: this.options.agent } : {};
+  }
+
   private async ensureSession(projectDir: string): Promise<AgentSession> {
     if (this.session && this.sessionProject === projectDir) return this.session;
     if (this.session) await this.close(); // another project is open now: its own conversation
     this.setStatus({ state: this.crashed ? "recovering" : "starting" });
-    const paths = writeAgentConfig(projectDir, this.options.mcp());
-    const resumeSessionId = readSessionId(projectDir);
+    const { agent } = this.options;
+    const extraPrompt = this.options.extraPrompt?.();
+    const paths = writeAgentConfig(projectDir, this.options.mcp(), {
+      ...(agent ? { agent } : {}),
+      ...(extraPrompt ? { extraPrompt } : {}),
+    });
+    const resumeSessionId = readSessionId(projectDir, agent);
     const session = await this.options.provider.start({
       cwd: projectDir,
       ...paths,
       permissionPromptTool: PERMISSION_TOOL,
       resumeSessionId,
+      ...(agent ? { agent } : {}),
     });
     this.log.info("agent session started", {
       provider: this.options.provider.id,
+      ...this.named,
       project: projectDir,
       resumed: Boolean(resumeSessionId),
       afterCrash: this.crashed,
@@ -272,7 +319,7 @@ export class AgentHub {
 
   private setStatus(status: AgentStatus): void {
     this.status = status;
-    this.broadcast({ type: "agent.status", id: id(), payload: { status } });
+    this.broadcast({ type: "agent.status", id: id(), payload: { status, ...this.named } });
   }
 
   private reject(requestId: string, message: string, send: Send): void {

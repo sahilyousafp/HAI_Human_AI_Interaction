@@ -1,6 +1,7 @@
-import type { Message, SpeechMode } from "@aex/protocol";
+import type { Message, MessageOf, ReplyVoice, SpeechMode } from "@aex/protocol";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
+import { addressOf } from "./agent/addressing.ts";
 import { AgentClient } from "./agent/agent-client.ts";
 import { ViewLink } from "./agent/view-link.ts";
 import {
@@ -22,6 +23,7 @@ import { PaletteSettings } from "./tools/ToolOverlays.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
 import { Viewer } from "./viewer/Viewer.tsx";
 import { listenInCloud, listenOnDevice } from "./voice/listeners.ts";
+import { bestEngine, resample, Speaker } from "./voice/speaker.ts";
 import { Transcriber } from "./voice/transcriber.ts";
 import { VoiceSettingsCard } from "./voice/VoiceSettingsCard.tsx";
 import { VoiceInput } from "./voice/voice-input.ts";
@@ -30,9 +32,12 @@ declare global {
   interface Window {
     __AEX_SCENE__?: SceneClient;
     __AEX_VOICE__?: VoiceInput;
+    __AEX_SPEECH__?: { speaker: Speaker; roundTrip(text: string): Promise<string | null> };
   }
 }
 
+/** The microphone indicator: listening for names looks different from a request being spoken. */
+const MIC_LABEL = { on: "Mic on", names: "Listening for names", off: "Mic off" } as const;
 const LABELS: Record<ConnectionState["status"], { text: string; hint?: string }> = {
   "no-session": { text: "Bridge not started", hint: "Run pnpm dev from the repository root, then reload." },
   connecting: { text: "Connecting" },
@@ -89,6 +94,29 @@ export function App() {
   const speechRef = useRef(speech);
   speechRef.current = speech;
   const transcriber = useMemo(() => new Transcriber(), []);
+  // Mochi's replies are spoken on this laptop: Kokoro on WebGPU, else a voice installed on the computer.
+  const [speakReplies, setSpeakReplies] = useState(true);
+  const [replyVoice, setReplyVoice] = useState<ReplyVoice>("af_heart");
+  const replyVoiceRef = useRef(replyVoice);
+  replyVoiceRef.current = replyVoice;
+  const speaker = useMemo(() => new Speaker(bestEngine(() => replyVoiceRef.current)), []);
+  useEffect(
+    () =>
+      agent.onLeadReply((reply) => {
+        if ("stopped" in reply) speaker.stop();
+        else if (reply.event.type === "text.delta") speaker.feed(reply.turnId, reply.event.text);
+        else if (reply.event.type === "turn.end") speaker.end(reply.turnId);
+      }),
+    [agent, speaker],
+  );
+  // A request is under way, so a reply is coming: the voice loads now rather than at the first sentence.
+  useEffect(
+    () =>
+      agent.subscribe(() => {
+        if (agent.getSnapshot().status?.state === "working") speaker.warm();
+      }),
+    [agent, speaker],
+  );
   const voice = useMemo(
     () =>
       new VoiceInput({
@@ -98,22 +126,28 @@ export function App() {
           return listenOnDevice(events);
         },
         transcribe: (audio) => transcriber.transcribe(audio),
-        send: (text, context) => agent.request(text, context),
+        send: (text, context) => agent.ask(text, context),
         context: (recorder) => {
           const { doc, selection } = sceneClient.getSnapshot();
           return recorder.resolve(doc, selection, viewLink.groundPoint());
         },
+        // While Mochi speaks, what the microphone hears is Mochi: its words never count as a request.
+        isNamed: (text) =>
+          !speaker.speaking && addressOf(text, agent.getSnapshot().team?.members ?? []).agent !== null,
       }),
-    [transcriber, agent, sceneClient, viewLink],
+    [transcriber, agent, sceneClient, viewLink, speaker],
   );
   const startVoice = () => {
+    speaker.stop(); // talking to the agent interrupts its voice before listening starts
     agent.requestOpen();
     void voice.start(() => viewLink.pointedId);
   };
   const startVoiceRef = useRef(startVoice);
   startVoiceRef.current = startVoice;
   const markers = useSyncExternalStore(voice.context.subscribe, () => voice.context.ids);
-  const micOn = useSyncExternalStore(voice.subscribe, () => voice.micOn);
+  const micState = useSyncExternalStore(voice.subscribe, () => voice.micState);
+  const [listenForNames, setListenForNames] = useState(false);
+  useEffect(() => voice.setHovered(() => viewLink.pointedId), [voice, viewLink]);
 
   // What the hand points at, and what gets tapped into the selection, while the user speaks.
   useEffect(() => viewLink.onPointed((id) => voice.context.hover(id, Date.now())), [viewLink, voice]);
@@ -159,11 +193,15 @@ export function App() {
           }
           return agent.answer(yes, bus.engaged);
         },
-        stop: () => agent.stopRunning(),
+        // Both open palms stop everything: the team's work and Mochi's voice, even after its reply has ended.
+        stop: () => {
+          speaker.stop();
+          agent.stopRunning();
+        },
         ask: () => tools.choose("ask-agent"),
       },
     }),
-    [gestureSettings, agent, bus, tools, voice],
+    [gestureSettings, agent, bus, tools, voice, speaker],
   );
 
   // Dev builds only: lets end-to-end tests edit the scene through the same client the UI uses.
@@ -174,6 +212,17 @@ export function App() {
   useEffect(() => {
     if (import.meta.env.DEV) window.__AEX_VOICE__ = voice;
   }, [voice]);
+  // Dev builds only: what the voice says, heard back by the recogniser (end-to-end round trip).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__AEX_SPEECH__ = {
+      speaker,
+      roundTrip: async (text) => {
+        const spoken = await speaker.synthesize(text);
+        return spoken ? transcriber.transcribe(resample(spoken.audio, spoken.rate, 16_000)) : null;
+      },
+    };
+  }, [speaker, transcriber]);
 
   useEffect(() => {
     const conn = connectToBridge(window.__AEX_SESSION__ ?? null, browserDeps, setBridge, (message) => {
@@ -182,6 +231,11 @@ export function App() {
         tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT);
         gestureSettings.load(message.payload.gestures);
         setSpeech(message.payload.speech);
+        setListenForNames(message.payload.listenForNames);
+        voice.setListenForNames(message.payload.listenForNames);
+        setSpeakReplies(message.payload.speakReplies);
+        speaker.setMuted(!message.payload.speakReplies);
+        setReplyVoice(message.payload.replyVoice);
       }
     });
     connection.current = conn;
@@ -189,7 +243,7 @@ export function App() {
       conn.close();
       viewLink.dispose();
     };
-  }, [sceneClient, tools, viewLink, agent, gestureSettings]);
+  }, [sceneClient, tools, viewLink, agent, gestureSettings, voice, speaker]);
 
   const askAgent = () => {
     if (bridge.status !== "connected") return "The agent is not connected: the bridge is offline.";
@@ -198,9 +252,26 @@ export function App() {
     startVoiceRef.current(); // Ask agent listens: speak the request
     return null;
   };
+  /** Keeps a changed setting with the bridge, so it follows the workspace. */
+  const saveSetting = (payload: MessageOf<"settings.set">["payload"]) =>
+    connection.current?.send({ type: "settings.set", id: crypto.randomUUID(), payload });
   const changeSpeech = (mode: SpeechMode) => {
     setSpeech(mode);
-    connection.current?.send({ type: "settings.set", id: crypto.randomUUID(), payload: { speech: mode } });
+    saveSetting({ speech: mode });
+  };
+  const changeListenForNames = (on: boolean) => {
+    setListenForNames(on);
+    voice.setListenForNames(on);
+    saveSetting({ listenForNames: on });
+  };
+  const changeSpeakReplies = (on: boolean) => {
+    setSpeakReplies(on);
+    speaker.setMuted(!on);
+    saveSetting({ speakReplies: on });
+  };
+  const changeReplyVoice = (value: ReplyVoice) => {
+    setReplyVoice(value);
+    saveSetting({ replyVoice: value });
   };
   const nameOf = (id: string) => sceneClient.getSnapshot().doc?.elements[id]?.name ?? id;
 
@@ -226,11 +297,11 @@ export function App() {
           <output
             className="status camera"
             data-testid="mic-indicator"
-            data-state={micOn ? "on" : "off"}
+            data-state={micState}
             aria-live="polite"
           >
             <span className="dot" aria-hidden="true" />
-            <span>{micOn ? "Mic on" : "Mic off"}</span>
+            <span>{MIC_LABEL[micState]}</span>
           </output>
           <output
             className="status"
@@ -260,13 +331,32 @@ export function App() {
             gestures={gestures}
             markers={markers}
           >
-            <AgentPanel client={agent} voice={voice} startVoice={startVoice} nameOf={nameOf} />
+            <AgentPanel
+              client={agent}
+              voice={voice}
+              startVoice={startVoice}
+              nameOf={nameOf}
+              speaker={speaker}
+              speakReplies={speakReplies}
+              onSpeakReplies={changeSpeakReplies}
+            />
           </Viewer>
           {label.hint && <p className="hint">{label.hint}</p>}
         </div>
         <aside className="sidebar" aria-label="Tracking">
           <TrackingPanel onCameraState={setCamera} bus={bus} renderLatency={renderLatency} />
-          <VoiceSettingsCard mode={speech} onMode={changeSpeech} transcriber={transcriber} />
+          <VoiceSettingsCard
+            mode={speech}
+            onMode={changeSpeech}
+            listenForNames={listenForNames}
+            onListenForNames={changeListenForNames}
+            speakReplies={speakReplies}
+            onSpeakReplies={changeSpeakReplies}
+            replyVoice={replyVoice}
+            onReplyVoice={changeReplyVoice}
+            speaker={speaker}
+            transcriber={transcriber}
+          />
           <GestureSettingsCard settings={gestureSettings} bus={bus} />
           <PaletteSettings controller={tools} />
           <AgentPermissions client={agent} />

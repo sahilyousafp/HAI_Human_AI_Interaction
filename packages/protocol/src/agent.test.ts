@@ -107,3 +107,80 @@ describe("agent messages", () => {
     ).toBe(true);
   });
 });
+
+describe("team messages", () => {
+  const parse = (message: object) => parseMessage(JSON.stringify({ id: "m1", ...message }));
+  const task = {
+    id: "t1",
+    agent: "architect",
+    title: "Stair core",
+    instruction: "Add a stair core at the selected slab",
+    status: "running",
+    createdAt: 1,
+    startedAt: 2,
+    lastActivity: "Using create_elements",
+    fromTurn: "turn-1",
+  };
+  const member = {
+    name: "architect",
+    description: "Architecture",
+    model: "sonnet",
+    tools: ["mcp__aex__create_elements"],
+    aliases: ["archie"],
+    color: "#52bcc6",
+    writes: true,
+    lead: false,
+  };
+
+  it("names the agent on turns, events and status", () => {
+    const turn = {
+      id: "turn-2",
+      request: "work",
+      recovered: false,
+      kind: "task",
+      taskId: "t1",
+      agent: "architect",
+    };
+    expect(parse({ type: "agent.turn", payload: turn }).ok).toBe(true);
+    const event = { turnId: "turn-2", event: { type: "text.delta", text: "Hi" }, agent: "architect" };
+    expect(parse({ type: "agent.event", payload: event }).ok).toBe(true);
+    expect(parse({ type: "agent.status", payload: { status: { state: "idle" }, agent: "mochi" } }).ok).toBe(
+      true,
+    );
+    expect(parse({ type: "agent.status", payload: { status: { state: "idle" }, agent: "" } }).ok).toBe(false);
+  });
+
+  it("a turn is a request unless it says otherwise", () => {
+    expect(AgentTurn.parse({ id: "t", request: "x", events: [] }).kind).toBe("request");
+    expect(AgentTurn.safeParse({ id: "t", request: "x", events: [], kind: "chat" }).success).toBe(false);
+  });
+
+  it("carries the team and its board to clients", () => {
+    const snapshot = { members: [member], tasks: [task], maxRunning: 3 };
+    expect(parse({ type: "team.snapshot", payload: snapshot }).ok).toBe(true);
+    expect(parse({ type: "team.snapshot", payload: { ...snapshot, maxRunning: 0 } }).ok).toBe(false);
+    const unknown = { ...snapshot, tasks: [{ ...task, status: "paused" }] };
+    expect(parse({ type: "team.snapshot", payload: unknown }).ok).toBe(false);
+  });
+
+  it("a request can name the specialist, and one task can be stopped", () => {
+    expect(parse({ type: "agent.send", payload: { text: "add a stair core", agent: "architect" } }).ok).toBe(
+      true,
+    );
+    expect(parse({ type: "task.stop", payload: { id: "t1" } }).ok).toBe(true);
+    expect(parse({ type: "task.stop", payload: {} }).ok).toBe(false);
+  });
+
+  it("an approval card names the agent asking", () => {
+    const card = {
+      id: "a1",
+      tool: "Bash",
+      source: "Claude Code",
+      summary: "ls",
+      input: {},
+      agent: "reviewer",
+      expiresAt: 1,
+    };
+    expect(ApprovalRequest.parse(card).agent).toBe("reviewer");
+  });
+});

@@ -1,4 +1,4 @@
-import type { Message, Point3Mm, ViewCamera } from "@aex/protocol";
+import type { Message, Point3Mm, SunSetting, ViewCamera } from "@aex/protocol";
 
 /** Captured views are scaled down so their longest side is at most this many pixels. */
 export const CAPTURE_MAX_SIDE = 1280;
@@ -38,6 +38,9 @@ export class ViewLink {
   private camera: ViewCamera | null = null;
   private sent = "";
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** The sun of a sun study, or null for the viewer's own light. */
+  private sunSetting: SunSetting | null = null;
+  private readonly sunListeners = new Set<() => void>();
 
   constructor(
     private readonly send: (message: Message) => boolean,
@@ -51,6 +54,23 @@ export class ViewLink {
       if (this.capturer === capture) this.capturer = null;
     };
   }
+
+  /** The sun a study set (null: the viewer's own light). */
+  get sun(): SunSetting | null {
+    return this.sunSetting;
+  }
+
+  /** Sets or clears the study's sun; listeners apply it at once (before a capture renders). */
+  setSun(sun: SunSetting | null): void {
+    if (sun === this.sunSetting) return;
+    this.sunSetting = sun;
+    for (const listener of this.sunListeners) listener();
+  }
+
+  onSun = (listener: () => void): (() => void) => {
+    this.sunListeners.add(listener);
+    return () => this.sunListeners.delete(listener);
+  };
 
   /** The element under the hand pointer, or null. */
   setPointed(id: string | null): void {
@@ -102,6 +122,7 @@ export class ViewLink {
       return false; // the scene client handles the snapshot itself
     }
     if (message.type !== "view.capture") return false;
+    if (message.payload.sun) this.setSun(message.payload.sun); // the light moves before the picture is taken
     void this.answer(message.payload.requestId);
     return true;
   }

@@ -139,3 +139,99 @@ describe("VoiceInput", () => {
     expect(micError(new Error("boom"))).toBe("failed");
   });
 });
+
+describe("listening for names", () => {
+  /** A fake microphone that can be opened more than once (listening for names, then a spoken request). */
+  function names(transcripts: string[]) {
+    const opened: Array<{ events: ListenerEvents; open: boolean }> = [];
+    const sent: string[] = [];
+    const voice = new VoiceInput({
+      listen: async (events) => {
+        const mic = { events, open: true };
+        opened.push(mic);
+        return {
+          finish: () => events.speechEnd({ audio: new Float32Array(16_000) }),
+          cancel: () => {
+            mic.open = false;
+          },
+        };
+      },
+      transcribe: async () => transcripts.shift() ?? "",
+      send: (text) => {
+        sent.push(text);
+        return true;
+      },
+      context: () => ({ references: [], selection: [], groundPoint: null }),
+      isNamed: (text) => /^(mochi|architect)\b/i.test(text),
+    });
+    const flush = async () => {
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    };
+    const current = () => opened.at(-1);
+    const say = async () => {
+      current()?.events.speechStart();
+      current()?.events.speechEnd({ audio: new Float32Array(16_000) });
+      await flush();
+    };
+    const openNow = () => opened.filter((m) => m.open).length;
+    return { voice, sent, flush, say, opened, openNow };
+  }
+
+  it("off by default: nothing listens", () => {
+    const { voice, opened } = names([]);
+    expect(voice.listeningForNames).toBe(false);
+    expect(voice.micState).toBe("off");
+    expect(opened).toEqual([]);
+  });
+
+  it("named utterance becomes a request: it goes to review and the microphone stays open", async () => {
+    const { voice, sent, flush, say, openNow } = names(["Mochi, what is everyone doing?"]);
+    voice.setListenForNames(true);
+    await flush();
+    expect(voice.micState).toBe("names");
+    expect(voice.getSnapshot()).toEqual({ phase: "names", speaking: false });
+    await say();
+    expect(voice.getSnapshot()).toMatchObject({ phase: "review", text: "Mochi, what is everyone doing?" });
+    vi.advanceTimersByTime(VOICE.sendDelayMs);
+    expect(sent).toEqual(["Mochi, what is everyone doing?"]);
+    expect(openNow()).toBe(1);
+    expect(voice.micState).toBe("names");
+  });
+
+  it("other speech is ignored: nothing is shown or sent, and listening goes on", async () => {
+    const { voice, sent, flush, say } = names(["add three floors"]);
+    voice.setListenForNames(true);
+    await flush();
+    await say();
+    expect(voice.getSnapshot()).toEqual({ phase: "names", speaking: false });
+    vi.advanceTimersByTime(VOICE.sendDelayMs * 2);
+    expect(sent).toEqual([]);
+  });
+
+  it("the button takes the microphone for a request, and listening for names resumes after it", async () => {
+    const { voice, flush, say, opened, openNow } = names(["add three floors", "Mochi, hello"]);
+    voice.setListenForNames(true);
+    await flush();
+    await voice.start();
+    expect(opened[0]?.open).toBe(false); // the names microphone was released
+    expect(voice.micState).toBe("on");
+    await say(); // a request without a name is fine when asked for with the button
+    expect(voice.getSnapshot()).toMatchObject({ phase: "review", text: "add three floors" });
+    vi.advanceTimersByTime(VOICE.sendDelayMs);
+    await flush();
+    expect(voice.getSnapshot()).toMatchObject({ phase: "sent" }); // still shown
+    expect(opened).toHaveLength(3);
+    expect(openNow()).toBe(1);
+    expect(voice.micState).toBe("names");
+  });
+
+  it("turning it off releases the microphone", async () => {
+    const { voice, flush, openNow } = names([]);
+    voice.setListenForNames(true);
+    await flush();
+    voice.setListenForNames(false);
+    expect(openNow()).toBe(0);
+    expect(voice.getSnapshot()).toEqual({ phase: "off" });
+    expect(voice.micState).toBe("off");
+  });
+});

@@ -96,8 +96,13 @@ export class ApprovalBroker {
     send({ type: "approvals.allowed", id: randomUUID(), payload: { tools: this.alwaysAllowed } });
   }
 
-  /** The permission prompt tool: resolves when the call is allowed or denied. */
-  decide(tool: string, input: Record<string, unknown>, toolUseId?: string): Promise<PermissionDecision> {
+  /** The permission prompt tool, called by an agent: resolves when the call is allowed or denied. */
+  decide(
+    tool: string,
+    input: Record<string, unknown>,
+    toolUseId?: string,
+    agent?: string | null,
+  ): Promise<PermissionDecision> {
     if (this.isPreApproved(tool)) return Promise.resolve({ behavior: "allow", updatedInput: input });
     const timeoutMs = this.options.timeoutMs ?? APPROVAL_TIMEOUT_MS;
     const request: ApprovalRequest = {
@@ -107,6 +112,7 @@ export class ApprovalBroker {
       summary: summarizeInput(tool, input),
       input,
       ...(toolUseId ? { toolUseId } : {}),
+      ...(agent ? { agent } : {}),
       expiresAt: Date.now() + timeoutMs,
     };
     return new Promise((resolve) => {
@@ -117,7 +123,7 @@ export class ApprovalBroker {
       const settle = (outcome: ApprovalOutcome, message = "The user declined this tool call.") => {
         if (!this.pending.delete(request.id)) return;
         clearTimeout(timer);
-        this.options.log?.info("tool approval", { tool, outcome });
+        this.options.log?.info("tool approval", { tool, outcome, ...(agent ? { agent } : {}) });
         this.broadcast({ type: "approval.resolved", id: randomUUID(), payload: { id: request.id, outcome } });
         resolve(
           outcome === "allowed" ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message },
@@ -149,9 +155,11 @@ export class ApprovalBroker {
     return true;
   }
 
-  /** Denies every waiting card, for a turn that was stopped or ended. */
-  denyAll(message: string): void {
-    for (const entry of [...this.pending.values()]) entry.settle("denied", message);
+  /** Denies the waiting cards of a turn that was stopped or ended: every card, or only one agent's. */
+  denyAll(message: string, agent?: string): void {
+    for (const entry of [...this.pending.values()]) {
+      if (agent === undefined || entry.request.agent === agent) entry.settle("denied", message);
+    }
   }
 
   private remember(tool: string): void {

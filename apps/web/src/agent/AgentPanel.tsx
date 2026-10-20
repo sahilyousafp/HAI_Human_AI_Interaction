@@ -1,14 +1,32 @@
-import type { AgentStatus } from "@aex/protocol";
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { AgentStatus, TeamMemberInfo, TeamTask } from "@aex/protocol";
+import {
+  type CSSProperties,
+  type FormEvent,
+  type KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ToolIcon } from "../tools/ToolOverlays.tsx";
+import type { Speaker } from "../voice/speaker.ts";
 import { MicButton, VoiceBar } from "../voice/VoiceBar.tsx";
 import type { VoiceInput } from "../voice/voice-input.ts";
-import type { AgentClient, ApprovalView, ToolOutcome, TurnItem, TurnView } from "./agent-client.ts";
+import { AgentsView } from "./AgentsView.tsx";
+import {
+  type AgentClient,
+  type ApprovalView,
+  displayName,
+  type TeamView,
+  type ToolOutcome,
+  type TurnItem,
+  type TurnView,
+} from "./agent-client.ts";
 import { ExtensionsView } from "./ExtensionsView.tsx";
 
 const STATUS_LABEL: Record<AgentStatus["state"] | "connecting", string> = {
   connecting: "Connecting",
-  unavailable: "Not available",
+  unavailable: "Unavailable",
   starting: "Starting",
   idle: "Ready",
   working: "Working",
@@ -22,11 +40,31 @@ const OUTCOME_LABEL: Record<ToolOutcome | "waiting", string> = {
   denied: "denied",
 };
 const APPROVAL_LABEL = { allowed: "Allowed", denied: "Denied", "timed-out": "Timed out" } as const;
+/** A specialist's state in the team strip. */
+type MemberState = "idle" | "working" | "queued" | "waiting";
+const MEMBER_STATE_LABEL: Record<MemberState, string> = {
+  idle: "idle",
+  working: "working",
+  queued: "queued",
+  waiting: "needs approval",
+};
+const TASK_STATUS_LABEL: Record<TeamTask["status"], string> = {
+  queued: "queued",
+  running: "working",
+  waiting: "needs approval",
+  done: "done",
+  failed: "failed",
+  stopped: "stopped",
+};
+const VIEW_LABEL = { chat: "Chat", agents: "Agents", extensions: "Extensions" } as const;
 const COLLAPSED_KEY = "aex.agentCollapsed";
 const CHEVRON_UP = "M6 15l6-6 6 6";
 const CHEVRON_DOWN = "M6 9l6 6 6-6";
+const CHEVRON_LEFT = "M15 6l-6 6 6 6";
 const STOP_ICON = "M7 7h10v10H7z";
 const SEND_ICON = "M5 12h13M13 6l6 6-6 6";
+const SPEAKER_ICON = "M11 5 6 9H3v6h3l5 4V5zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13";
+const SPEAKER_OFF_ICON = "M11 5 6 9H3v6h3l5 4V5zM16 9.5l5 5M21 9.5l-5 5";
 /** Longest input or result text shown in an expanded chip. */
 const DETAIL_MAX = 1200;
 
@@ -37,6 +75,22 @@ export function toolLabel(name: string): { tool: string; server?: string } {
 }
 
 const clip = (text: string) => (text.length > DETAIL_MAX ? `${text.slice(0, DETAIL_MAX - 1)}…` : text);
+
+const isActive = (task: TeamTask) => task.status === "running" || task.status === "waiting";
+
+/** What a specialist is doing: its task in progress, else its next queued one, else its latest. */
+function memberTask(team: TeamView, name: string): { state: MemberState; task: TeamTask | undefined } {
+  const tasks = team.tasks.filter((t) => t.agent === name);
+  const current = tasks.find(isActive);
+  if (current) return { state: current.status === "waiting" ? "waiting" : "working", task: current };
+  const queued = tasks.find((t) => t.status === "queued");
+  if (queued) return { state: "queued", task: queued };
+  return { state: "idle", task: tasks.at(-1) };
+}
+
+/** An agent's colour, for its dot. */
+const colorOf = (member: TeamMemberInfo | undefined): CSSProperties =>
+  ({ "--agent-color": member?.color ?? "var(--accent)" }) as CSSProperties;
 
 function readCollapsed(): boolean {
   try {
@@ -86,6 +140,11 @@ function ApprovalCard({
       aria-label={`Allow ${label.tool}?`}
     >
       <div className="approval-head">
+        {request.agent && (
+          <span className="approval-agent" data-testid="approval-agent">
+            {displayName(request.agent)}
+          </span>
+        )}
         <strong>{outcome ? label.tool : `Allow ${label.tool}?`}</strong>
         <span className="muted">{request.source}</span>
       </div>
@@ -137,9 +196,12 @@ function ApprovalCard({
 function ToolChip({
   item,
   approval,
+  agent,
 }: {
   item: Extract<TurnItem, { kind: "tool" }>;
   approval?: ApprovalView;
+  /** The team agent that made the call. */
+  agent?: string;
 }) {
   const label = toolLabel(item.name);
   const declined = approval?.outcome === "denied" || approval?.outcome === "timed-out";
@@ -151,6 +213,11 @@ function ToolChip({
     <details className="tool-chip" data-testid="tool-chip" data-outcome={outcome}>
       <summary>
         <span className="tool-chip-dot" aria-hidden="true" />
+        {agent && (
+          <span className="tool-chip-agent" data-testid="tool-chip-agent">
+            {displayName(agent)}
+          </span>
+        )}
         <span className="tool-chip-name">{label.tool}</span>
         {label.server && <span className="tool-chip-server">{label.server}</span>}
         <span className="tool-chip-outcome">{OUTCOME_LABEL[outcome]}</span>
@@ -169,17 +236,57 @@ function ToolChip({
   );
 }
 
+/** A task Mochi handed out, in Mochi's turn: its live status; pressing it opens the specialist's thread. */
+function HandOffChip({
+  task,
+  member,
+  onOpen,
+}: {
+  task: TeamTask;
+  member: TeamMemberInfo | undefined;
+  onOpen: (taskId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="handoff-chip"
+      data-testid="handoff-chip"
+      data-status={task.status}
+      data-hand-press
+      style={colorOf(member)}
+      title={`Open ${displayName(task.agent)}'s work on this task`}
+      onClick={() => onOpen(task.id)}
+    >
+      <span className="team-dot" aria-hidden="true" />
+      <span className="handoff-agent">{displayName(task.agent)}</span>
+      <span className="handoff-title">{task.title}</span>
+      <span className="handoff-status">{TASK_STATUS_LABEL[task.status]}</span>
+    </button>
+  );
+}
+
 function Turn({
   turn,
   approvals,
   client,
   onlyPendingId,
+  agent,
+  team,
+  onOpenTask,
+  taskApprovals,
 }: {
   turn: TurnView;
   approvals: ApprovalView[];
   client: AgentClient;
   onlyPendingId: string | null;
+  /** The team agent whose turn this is (its name goes on the tool chips). */
+  agent?: string;
+  team?: TeamView | null;
+  onOpenTask?: (taskId: string) => void;
+  /** Every approval card, for the waiting cards of the tasks this turn handed out. */
+  taskApprovals?: ApprovalView[];
 }) {
+  const handOffs = team?.tasks.filter((t) => t.fromTurn === turn.id) ?? [];
   const toolIds = new Set(turn.items.flatMap((i) => (i.kind === "tool" ? [i.id] : [])));
   const cardFor = (toolId: string) => approvals.find((a) => a.request.toolUseId === toolId);
   // A card sits under its tool chip; one whose tool call the provider did not name goes at the end of the turn.
@@ -193,8 +300,14 @@ function Turn({
     />
   );
   return (
-    <li className="agent-turn" data-testid="agent-turn" data-ended={turn.ended ?? "running"}>
-      <p className="agent-request">{turn.request}</p>
+    <li
+      className="agent-turn"
+      data-testid="agent-turn"
+      data-kind={turn.kind}
+      data-ended={turn.ended ?? "running"}
+    >
+      {turn.kind === "request" && <p className="agent-request">{turn.request}</p>}
+      {turn.kind === "digest" && <p className="agent-digest">Team update</p>}
       {turn.recovered && (
         <p className="agent-notice" data-testid="agent-recovered">
           Session recovered: the agent restarted and continued the conversation.
@@ -218,12 +331,24 @@ function Turn({
         const approval = cardFor(item.id);
         return (
           <div key={item.id} className="agent-tool">
-            <ToolChip item={item} approval={approval} />
+            <ToolChip item={item} approval={approval} {...(agent ? { agent } : {})} />
             {approval && card(approval)}
           </div>
         );
       })}
       {unlinked.map(card)}
+      {onOpenTask &&
+        handOffs.map((task) => (
+          <div key={task.id} className="agent-tool">
+            <HandOffChip
+              task={task}
+              member={team?.members.find((m) => m.name === task.agent)}
+              onOpen={onOpenTask}
+            />
+            {/* A specialist's card waits here too, so the user sees it without opening the task. */}
+            {taskApprovals?.filter((a) => !a.outcome && a.turnId === task.turnId).map(card)}
+          </div>
+        ))}
       {!turn.ended && <span className="agent-working" role="img" aria-label="Working" />}
       {turn.ended === "stopped" && (
         <p className="agent-ended">Stopped. Changes made so far are kept as one undo step.</p>
@@ -232,16 +357,177 @@ function Turn({
   );
 }
 
+/** Mutes or unmutes Mochi's spoken replies (remembered); it shows when Mochi is speaking. */
+function SpeakToggle({
+  speaker,
+  on,
+  onChange,
+}: {
+  speaker: Speaker;
+  on: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  const speaking = useSyncExternalStore(speaker.subscribe, () => speaker.speaking);
+  const label = on ? "Mute spoken replies" : "Speak replies aloud";
+  return (
+    <button
+      type="button"
+      className="icon-button speak-toggle"
+      data-testid="speak-toggle"
+      data-speaking={speaking}
+      data-hand-press
+      aria-pressed={!on}
+      aria-label={label}
+      title={label}
+      onClick={() => onChange(!on)}
+    >
+      <ToolIcon path={on ? SPEAKER_ICON : SPEAKER_OFF_ICON} size={18} />
+    </button>
+  );
+}
+
 /**
- * The agent panel over the model: the conversation with the user's own Claude, its tool calls as chips, approval
- * cards, status, a typed input and stop. Its buttons can be pressed by hand; gestures reach it through the input
- * router (a nod or shake answers the only waiting card, two open palms stop).
+ * Every specialist and its state. While everyone is idle it is one compact row, so it covers little of the model;
+ * with work under way each specialist gets a chip with its task. Pressing one opens its task's thread.
+ */
+function TeamStrip({
+  team,
+  client,
+  onOpenTask,
+}: {
+  team: TeamView;
+  client: AgentClient;
+  onOpenTask: (taskId: string) => void;
+}) {
+  const specialists = team.members.filter((m) => !m.lead);
+  const working = team.tasks.filter(isActive).length;
+  const queued = team.tasks.filter((t) => t.status === "queued").length;
+  const summary = [working ? `${working} working` : "", queued ? `${queued} queued` : ""].filter(Boolean);
+  const idle = summary.length === 0;
+  const chips = specialists.map((member) => {
+    const { state, task } = memberTask(team, member.name);
+    const shown = state === "idle" ? undefined : task;
+    return (
+      <button
+        key={member.name}
+        type="button"
+        className="team-chip"
+        data-testid={`team-chip-${member.name}`}
+        data-state={state}
+        data-hand-press
+        style={colorOf(member)}
+        disabled={!task}
+        title={
+          task
+            ? `${displayName(member.name)}: ${task.title} (${TASK_STATUS_LABEL[task.status]})`
+            : `${displayName(member.name)}: ${member.description}`
+        }
+        onClick={() => task && onOpenTask(task.id)}
+      >
+        <span className="team-dot" aria-hidden="true" />
+        <span className="team-chip-name">{displayName(member.name)}</span>
+        {!idle && <span className="team-chip-state">{shown ? shown.title : MEMBER_STATE_LABEL[state]}</span>}
+      </button>
+    );
+  });
+  return (
+    <div className="team-strip" data-testid="team-strip" data-idle={idle}>
+      <div className="team-strip-head">
+        <span className="team-strip-label">Team</span>
+        {idle ? (
+          <span className="team-names" title="All idle">
+            {chips}
+          </span>
+        ) : (
+          <>
+            <span className="team-strip-summary" data-testid="team-summary">
+              {summary.join(", ")}
+            </span>
+            <button
+              type="button"
+              className="team-stop"
+              data-testid="team-stop"
+              data-hand-press
+              title="Stop every agent (or hold up both open palms)"
+              onClick={() => client.stop()}
+            >
+              Stop all
+            </button>
+          </>
+        )}
+      </div>
+      {!idle && <div className="team-grid">{chips}</div>}
+    </div>
+  );
+}
+
+/** The head of a task's thread: the specialist and task, its status, a stop, and the way back to Mochi's chat. */
+function TaskHead({
+  task,
+  team,
+  client,
+  onBack,
+}: {
+  task: TeamTask;
+  team: TeamView;
+  client: AgentClient;
+  onBack: () => void;
+}) {
+  const member = team.members.find((m) => m.name === task.agent);
+  const lead = displayName(client.lead);
+  return (
+    <div className="task-thread" data-testid="task-thread" style={colorOf(member)}>
+      <div className="task-head">
+        <button
+          type="button"
+          className="icon-button"
+          data-testid="task-back"
+          data-hand-press
+          aria-label={`Back to ${lead}`}
+          title={`Back to ${lead}`}
+          onClick={onBack}
+        >
+          <ToolIcon path={CHEVRON_LEFT} size={16} />
+        </button>
+        <span className="team-dot" aria-hidden="true" />
+        <span className="task-title">
+          <strong>{displayName(task.agent)}</strong> {task.title}
+        </span>
+        <span className="task-status" data-testid="task-status" data-status={task.status}>
+          {TASK_STATUS_LABEL[task.status]}
+        </span>
+        {(isActive(task) || task.status === "queued") && (
+          <button
+            type="button"
+            className="team-stop"
+            data-testid="task-stop"
+            data-hand-press
+            title={`Stop ${displayName(task.agent)}'s task`}
+            onClick={() => client.stopTask(task.id)}
+          >
+            Stop
+          </button>
+        )}
+      </div>
+      <p className="task-instruction">{task.instruction}</p>
+    </div>
+  );
+}
+
+/**
+ * The agent panel over the model: the conversation with Mochi, the team lead, the team strip and each specialist's
+ * work on its tasks, tool calls as chips, approval cards, status, a typed input and stop. Its buttons can be pressed
+ * by hand; gestures reach it through the input router (a nod or shake answers the only waiting card, two open palms
+ * stop everything).
  */
 export function AgentPanel({
   client,
   voice,
   startVoice,
   nameOf,
+  speaker,
+  speakReplies,
+  onSpeakReplies,
 }: {
   client: AgentClient;
   /** Voice is the main way to ask: the microphone button comes first and typing is the fallback. */
@@ -249,12 +535,22 @@ export function AgentPanel({
   startVoice: () => void;
   /** An element's name, for the references a spoken request carries. */
   nameOf: (id: string) => string;
+  /** Mochi's voice: speaking shows on the toggle, which mutes or unmutes it. */
+  speaker: Speaker;
+  speakReplies: boolean;
+  onSpeakReplies: (on: boolean) => void;
 }) {
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [draft, setDraft] = useState("");
-  const [view, setView] = useState<"chat" | "extensions">("chat");
+  const [view, setView] = useState<"chat" | "agents" | "extensions">("chat");
+  /** The task whose thread is open, instead of Mochi's chat. */
+  const [openTask, setOpenTask] = useState<string | null>(null);
   const transcript = useRef<HTMLOListElement>(null);
+  const team = state.team && state.team.members.length > 0 ? state.team : null;
+  const task = (openTask && team?.tasks.find((t) => t.id === openTask)) || null;
+  const taskTurns = task ? client.thread(task.agent).turns.filter((t) => t.taskId === task.id) : [];
+  const shownTurns = task ? taskTurns : state.turns;
   const input = useRef<HTMLTextAreaElement>(null);
   const status = state.status?.state ?? "connecting";
   const working = status === "working";
@@ -273,24 +569,25 @@ export function AgentPanel({
     setCollapsed(false);
     writeCollapsed(false);
     setView("chat");
+    setOpenTask(null);
   }, [state.openTick]);
 
   // Follow the conversation as it grows, unless the user scrolled up to read. A new request or a new approval card
   // always comes into view: the card is waiting for the user.
-  const lastTurn = state.turns.at(-1);
+  const lastTurn = shownTurns.at(-1);
   const following = useRef(true);
   const seen = useRef({ turns: 0, pending: 0 });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run whenever the transcript or cards change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run whenever the transcript, cards or board change
   useEffect(() => {
     const el = transcript.current;
     if (!el) return;
-    const arrived = state.turns.length > seen.current.turns || pending.length > seen.current.pending;
-    seen.current = { turns: state.turns.length, pending: pending.length };
+    const arrived = shownTurns.length > seen.current.turns || pending.length > seen.current.pending;
+    seen.current = { turns: shownTurns.length, pending: pending.length };
     if (arrived || following.current) {
       el.scrollTop = el.scrollHeight;
       following.current = true;
     }
-  }, [state.turns.length, lastTurn, state.approvals, collapsed]);
+  }, [shownTurns.length, lastTurn, state.approvals, state.team, collapsed, openTask]);
   const onTranscriptScroll = () => {
     const el = transcript.current;
     if (el) following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -299,7 +596,7 @@ export function AgentPanel({
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     if (!canSend) return;
-    if (client.request(draft.trim())) setDraft("");
+    if (client.ask(draft.trim())) setDraft("");
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -317,7 +614,9 @@ export function AgentPanel({
       aria-label="Agent"
     >
       <header className="agent-head">
-        <span className="agent-title">Agent</span>
+        <span className="agent-title" data-testid="agent-title">
+          {team ? displayName(client.lead) : "Agent"}
+        </span>
         <output className="agent-status" data-testid="agent-status" data-state={status}>
           <span className="agent-dot" aria-hidden="true" />
           {STATUS_LABEL[status]}
@@ -329,7 +628,7 @@ export function AgentPanel({
         )}
         {!collapsed && (
           <div className="agent-tabs" role="tablist" aria-label="Agent views">
-            {(["chat", "extensions"] as const).map((v) => (
+            {(["chat", "agents", "extensions"] as const).map((v) => (
               <button
                 key={v}
                 type="button"
@@ -339,7 +638,7 @@ export function AgentPanel({
                 data-hand-press
                 onClick={() => setView(v)}
               >
-                {v === "chat" ? "Chat" : "Extensions"}
+                {VIEW_LABEL[v]}
               </button>
             ))}
           </div>
@@ -356,6 +655,7 @@ export function AgentPanel({
           <ToolIcon path={collapsed ? CHEVRON_DOWN : CHEVRON_UP} size={16} />
         </button>
       </header>
+      {!collapsed && view === "agents" && <AgentsView client={client} />}
       {!collapsed && view === "extensions" && <ExtensionsView client={client} />}
       {!collapsed && view === "chat" && (
         <>
@@ -365,33 +665,62 @@ export function AgentPanel({
               {state.status.fix && <span>{state.status.fix}</span>}
             </div>
           )}
+          {team?.members.some((m) => !m.lead) && (
+            <TeamStrip team={team} client={client} onOpenTask={setOpenTask} />
+          )}
+          {task && team && (
+            <TaskHead task={task} team={team} client={client} onBack={() => setOpenTask(null)} />
+          )}
           <ol
             className="agent-transcript"
             ref={transcript}
-            data-testid="agent-transcript"
+            data-testid={task ? "task-transcript" : "agent-transcript"}
             aria-live="polite"
             onScroll={onTranscriptScroll}
           >
-            {state.turns.length === 0 && state.status?.state !== "unavailable" && (
+            {task && taskTurns.length === 0 && (
+              <li className="agent-empty muted">
+                {task.status === "queued"
+                  ? "Queued: it starts when the agents before it have finished."
+                  : `${TASK_STATUS_LABEL[task.status]}.`}
+              </li>
+            )}
+            {task &&
+              taskTurns.map((turn) => (
+                <Turn
+                  key={turn.id}
+                  turn={turn}
+                  approvals={state.approvals.filter((a) => a.turnId === turn.id)}
+                  client={client}
+                  onlyPendingId={onlyPendingId}
+                  agent={task.agent}
+                />
+              ))}
+            {!task && state.turns.length === 0 && state.status?.state !== "unavailable" && (
               <li className="agent-empty muted">
                 Press the microphone (or hold the ` key) and say what to change, for example "add three floors
                 of 3.5 m to this block". Point at elements while you speak to say which ones, or select them
                 first.
               </li>
             )}
-            {state.turns.map((turn) => (
-              <Turn
-                key={turn.id}
-                turn={turn}
-                approvals={state.approvals.filter((a) => a.turnId === turn.id)}
-                client={client}
-                onlyPendingId={onlyPendingId}
-              />
-            ))}
+            {!task &&
+              state.turns.map((turn) => (
+                <Turn
+                  key={turn.id}
+                  turn={turn}
+                  approvals={state.approvals.filter((a) => a.turnId === turn.id)}
+                  client={client}
+                  onlyPendingId={onlyPendingId}
+                  {...(team
+                    ? { agent: client.lead, team, onOpenTask: setOpenTask, taskApprovals: state.approvals }
+                    : {})}
+                />
+              ))}
           </ol>
           <VoiceBar voice={voice} nameOf={nameOf} />
           <form className="agent-input" onSubmit={submit}>
             <MicButton voice={voice} onStart={startVoice} disabled={status === "unavailable"} />
+            <SpeakToggle speaker={speaker} on={speakReplies} onChange={onSpeakReplies} />
             <textarea
               ref={input}
               value={draft}

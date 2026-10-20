@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  AgentDefinition,
+  AgentDefinitionInput,
   AgentEvent,
   AgentStatus,
   AgentTurn,
@@ -9,6 +11,8 @@ import {
   ExtensionsState,
   McpServerSpec,
   RequestContext,
+  TeamMemberInfo,
+  TeamTask,
 } from "./agent.ts";
 import { GestureBindingsSchema } from "./bindings.ts";
 import { BridgeStatusMessage, Envelope, HelloMessage, MessageId } from "./envelope.ts";
@@ -26,6 +30,9 @@ export type PaletteLayout = z.infer<typeof PaletteLayout>;
 
 export const SpeechMode = z.enum(["device", "cloud"]);
 export type SpeechMode = z.infer<typeof SpeechMode>;
+/** Mochi's voice for spoken replies (Kokoro voices fetched by pnpm assets). */
+export const ReplyVoice = z.enum(["af_heart", "am_michael"]);
+export type ReplyVoice = z.infer<typeof ReplyVoice>;
 
 /** User settings kept by the bridge in .aex/settings.json. */
 export const Settings = z.strictObject({
@@ -35,6 +42,11 @@ export const Settings = z.strictObject({
   gestures: GestureBindingsSchema.nullable().default(null),
   /** Where speech is turned into text: on this laptop (default), or the browser's cloud service (opt-in). */
   speech: SpeechMode.default("device"),
+  /** Keep the microphone open and turn only utterances that start with a team name into requests (opt-in). */
+  listenForNames: z.boolean().default(false),
+  /** Whether Mochi's replies are spoken (on by default; muting is remembered). */
+  speakReplies: z.boolean().default(true),
+  replyVoice: ReplyVoice.default("af_heart"),
 });
 export type Settings = z.infer<typeof Settings>;
 const Project = z.strictObject({ name: z.string(), path: z.string() });
@@ -90,11 +102,21 @@ export const ViewCamera = z.strictObject({
 export type ViewCamera = z.infer<typeof ViewCamera>;
 
 // Agent session, bridge -> clients
-export const AgentStatusMessage = message("agent.status", z.strictObject({ status: AgentStatus }));
+/** Which agent of the team a message is about; without it, the single session of a bridge without a team. */
+const AgentName = z.string().min(1).max(64).optional();
+export const AgentStatusMessage = message(
+  "agent.status",
+  z.strictObject({ status: AgentStatus, agent: AgentName }),
+);
 /** Everything so far in this session: sent on connect, so a reloaded page shows the whole conversation. */
 export const AgentTranscriptMessage = message(
   "agent.transcript",
-  z.strictObject({ turns: z.array(AgentTurn), status: AgentStatus, pending: z.array(ApprovalRequest) }),
+  z.strictObject({
+    turns: z.array(AgentTurn),
+    status: AgentStatus,
+    pending: z.array(ApprovalRequest),
+    agent: AgentName,
+  }),
 );
 export const AgentTurnStartMessage = message(
   "agent.turn",
@@ -103,15 +125,44 @@ export const AgentTurnStartMessage = message(
     request: z.string(),
     context: RequestContext.optional(),
     recovered: z.boolean(),
+    kind: AgentTurn.shape.kind,
+    taskId: z.string().optional(),
+    agent: AgentName,
   }),
 );
 export const AgentEventMessage = message(
   "agent.event",
-  z.strictObject({ turnId: z.string(), event: AgentEvent }),
+  z.strictObject({ turnId: z.string(), event: AgentEvent, agent: AgentName }),
+);
+/** The team and its task board: sent on connect and whenever a task or the roster changes. */
+export const TeamSnapshotMessage = message(
+  "team.snapshot",
+  z.strictObject({
+    members: z.array(TeamMemberInfo),
+    tasks: z.array(TeamTask),
+    /** How many specialists may run at once. */
+    maxRunning: z.number().int().min(1),
+  }),
+);
+/** The project's agent definitions (Agents tab); `saved` names the agent just saved. */
+export const AgentsSnapshotMessage = message(
+  "agents.snapshot",
+  z.strictObject({ definitions: z.array(AgentDefinition), saved: z.string().optional() }),
 );
 export const ApprovalPendingMessage = message("approval.pending", ApprovalRequest);
-/** The agent asked to see the view: a viewer answers with a PNG. */
-export const ViewCaptureMessage = message("view.capture", z.strictObject({ requestId: z.string() }));
+/** A sun position for the viewer's light (a sun study), in degrees; azimuth clockwise from north (+Y). */
+export const SunSetting = z.strictObject({
+  altitude: z.number().min(-90).max(90),
+  azimuth: z.number().min(0).max(360),
+  /** What the study shows, e.g. "21 Dec 12:00, 51.5 N 0 E". */
+  label: z.string().max(120),
+});
+export type SunSetting = z.infer<typeof SunSetting>;
+/** The agent asked to see the view: a viewer answers with a PNG, after setting the sun when one is given. */
+export const ViewCaptureMessage = message(
+  "view.capture",
+  z.strictObject({ requestId: z.string(), sun: SunSetting.optional() }),
+);
 export const ApprovalResolvedMessage = message(
   "approval.resolved",
   z.strictObject({ id: z.string(), outcome: ApprovalOutcome }),
@@ -145,11 +196,19 @@ export const SettingsSetMessage = message(
     palette: PaletteLayout.optional(),
     gestures: GestureBindingsSchema.optional(),
     speech: SpeechMode.optional(),
+    listenForNames: z.boolean().optional(),
+    speakReplies: z.boolean().optional(),
+    replyVoice: ReplyVoice.optional(),
   }),
 );
 export const AgentSendMessage = message(
   "agent.send",
-  z.strictObject({ text: z.string().min(1).max(8000), context: RequestContext.optional() }),
+  z.strictObject({
+    text: z.string().min(1).max(8000),
+    context: RequestContext.optional(),
+    /** The specialist the user named ("Architect, ..."): Mochi hands the request to it. */
+    agent: AgentName,
+  }),
 );
 export const ContextUpdateMessage = message(
   "context.update",
@@ -164,7 +223,12 @@ export const ViewCapturedMessage = message(
     error: z.string().optional(),
   }),
 );
+/** Stops everything the team is doing (Mochi's turn and every task). */
 export const AgentStopMessage = message("agent.stop", z.strictObject({}));
+/** Adds or changes an agent of the open project's team. */
+export const AgentsSaveMessage = message("agents.save", z.strictObject({ agent: AgentDefinitionInput }));
+/** Stops one task, or takes it off the queue. */
+export const TaskStopMessage = message("task.stop", z.strictObject({ id: z.string() }));
 export const ApprovalDecideMessage = message(
   "approval.decide",
   z.strictObject({ id: z.string(), decision: z.enum(["allow", "deny", "always"]) }),
@@ -202,6 +266,8 @@ export const Message = z.discriminatedUnion("type", [
   AgentTranscriptMessage,
   AgentTurnStartMessage,
   AgentEventMessage,
+  TeamSnapshotMessage,
+  AgentsSnapshotMessage,
   ApprovalPendingMessage,
   ApprovalResolvedMessage,
   ApprovalsAllowedMessage,
@@ -216,6 +282,8 @@ export const Message = z.discriminatedUnion("type", [
   SettingsSetMessage,
   AgentSendMessage,
   AgentStopMessage,
+  TaskStopMessage,
+  AgentsSaveMessage,
   ApprovalDecideMessage,
   ApprovalsRevokeMessage,
   ExtensionsAddServerMessage,

@@ -6,6 +6,7 @@ import {
   type Message,
   type MessageOf,
   PaletteLayout,
+  ReplyVoice,
   type Settings,
   SpeechMode,
 } from "@aex/protocol";
@@ -29,9 +30,9 @@ export function updateSettingsFile(file: string, patch: Record<string, unknown>)
 }
 
 /**
- * User settings shared by every client: the tool palette layout, what each gesture does and the speech mode. Kept in
- * .aex/settings.json, so they survive reloads, browser changes and restarts. Without a file (tests), settings live in
- * memory.
+ * User settings shared by every client: the tool palette layout, what each gesture does, the speech mode, whether
+ * the microphone listens for team names and how Mochi's replies are spoken. Kept in .aex/settings.json, so they
+ * survive reloads, browser changes and restarts. Without a file (tests), settings live in memory.
  */
 export class SettingsHub {
   private settings: Settings;
@@ -44,10 +45,14 @@ export class SettingsHub {
     const palette = PaletteLayout.safeParse(stored.palette);
     const gestures = GestureBindingsSchema.safeParse(stored.gestures);
     const speech = SpeechMode.safeParse(stored.speech);
+    const replyVoice = ReplyVoice.safeParse(stored.replyVoice);
     this.settings = {
       palette: palette.success ? palette.data : null,
       gestures: gestures.success ? gestures.data : null,
       speech: speech.success ? speech.data : "device",
+      listenForNames: stored.listenForNames === true,
+      speakReplies: stored.speakReplies !== false,
+      replyVoice: replyVoice.success ? replyVoice.data : "af_heart",
     };
   }
 
@@ -58,11 +63,14 @@ export class SettingsHub {
   /** Handles a settings message from a client. Returns false for other messages. */
   handle(message: Message): boolean {
     if (message.type !== "settings.set") return false;
-    const { palette, gestures, speech } = message.payload;
+    const { palette, gestures, speech, listenForNames, speakReplies, replyVoice } = message.payload;
     const patch: Partial<Settings> = {
       ...(palette ? { palette } : {}),
       ...(gestures ? { gestures } : {}),
       ...(speech ? { speech } : {}),
+      ...(listenForNames !== undefined ? { listenForNames } : {}),
+      ...(speakReplies !== undefined ? { speakReplies } : {}),
+      ...(replyVoice ? { replyVoice } : {}),
     };
     this.settings = { ...this.settings, ...patch };
     if (this.file) updateSettingsFile(this.file, patch);

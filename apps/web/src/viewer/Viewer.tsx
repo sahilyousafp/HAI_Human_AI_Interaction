@@ -1,4 +1,5 @@
-import type { Element, GestureEvent, Point2, Point3Mm, SceneDocument } from "@aex/protocol";
+import type { Element, GestureEvent, Point2, Point3Mm, SceneDocument, SunSetting } from "@aex/protocol";
+import { sunLightDirection } from "@aex/scene";
 import { Edges, Grid } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
@@ -87,6 +88,8 @@ declare global {
       overSection(x: number, y: number): boolean;
       /** The section outline's corners in viewer positions (empty without a section). */
       sectionOutline(): Point2[];
+      /** The sun a study set, or null for the viewer's own light. */
+      sun(): SunSetting | null;
     };
     /** Dev builds only: the tool controller, for end-to-end tests. */
     __AEX_TOOLS__?: ToolController;
@@ -323,6 +326,54 @@ function CameraRig({
   return null;
 }
 
+/** The viewer's own light: from the south-west, high, as a default that reads the model's forms well. */
+const DEFAULT_LIGHT: [number, number, number] = [-40, -60, 90];
+const DEFAULT_INTENSITY = 1.6;
+/** How far away (metres) the sun's light is placed: beyond the model, inside the shadow camera's reach. */
+const SUN_DISTANCE = 120;
+
+/**
+ * The directional light. During a sun study it comes from where the sun is (north is +Y); it is moved at once when a
+ * study sets it, so a capture taken right after already has its shadows.
+ */
+function SunLight({ view }: { view: ViewLink }) {
+  const light = useRef<THREE.DirectionalLight>(null);
+  const { invalidate } = useThree();
+  useEffect(() => {
+    const apply = () => {
+      const current = light.current;
+      if (!current) return;
+      const sun = view.sun;
+      if (sun) {
+        const [x, y, z] = sunLightDirection(sun);
+        current.position.set(-x * SUN_DISTANCE, -y * SUN_DISTANCE, -z * SUN_DISTANCE);
+        current.intensity = sun.altitude > 0 ? 1.8 : 0;
+      } else {
+        current.position.set(...DEFAULT_LIGHT);
+        current.intensity = DEFAULT_INTENSITY;
+      }
+      current.updateMatrixWorld();
+      invalidate();
+    };
+    apply();
+    return view.onSun(apply);
+  }, [view, invalidate]);
+  return (
+    <directionalLight
+      ref={light}
+      position={DEFAULT_LIGHT}
+      intensity={DEFAULT_INTENSITY}
+      castShadow
+      shadow-mapSize={[2048, 2048]}
+      shadow-camera-left={-60}
+      shadow-camera-right={60}
+      shadow-camera-top={60}
+      shadow-camera-bottom={-60}
+      shadow-camera-far={300}
+    />
+  );
+}
+
 export function Viewer({
   client,
   bus,
@@ -353,6 +404,13 @@ export function Viewer({
   const software = useMemo(isSoftwareRenderer, []);
   const scene = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const toolState = useSyncExternalStore(tools.subscribe, tools.getSnapshot);
+  const sun = useSyncExternalStore(view.onSun, () => view.sun);
+  // Picking another tool ends a sun study: the viewer's own light returns.
+  const studiedTool = useRef(toolState.activeId);
+  useEffect(() => {
+    if (studiedTool.current !== toolState.activeId) view.setSun(null);
+    studiedTool.current = toolState.activeId;
+  }, [toolState.activeId, view]);
   const [colors, setColors] = useState<Colors>(readColors);
   const nav = useRef<Turntable>({ target: [20, 15, 3], azimuth: 305, elevation: 32, distance: 70 });
   const navInput = useRef(initialInput());
@@ -667,6 +725,7 @@ export function Viewer({
       }
       if (e.key === "Escape") {
         tools.cancel();
+        view.setSun(null); // back to the viewer's own light after a sun study
         return;
       }
       const tool = !e.repeat && !e.shiftKey ? tools.registry.byShortcut(k) : undefined;
@@ -681,7 +740,7 @@ export function Viewer({
       window.removeEventListener("keydown", keydown);
       window.removeEventListener("keyup", keyup);
     };
-  }, [client, tools]);
+  }, [client, tools, view]);
 
   // Latency readout refreshes twice a second.
   useEffect(() => {
@@ -701,6 +760,7 @@ export function Viewer({
       renders: () => rendersRef.current(),
       project: (point) => pickRef.current.project(point),
       sectionOutline: () => sectionOutlineOnScreen(),
+      sun: () => view.sun,
       overSection: (x, y) =>
         overSectionPlane(
           {
@@ -718,7 +778,7 @@ export function Viewer({
         bus.emitPointer({ position, secondary, ts: performance.timeOrigin + performance.now() }),
       engaged: (engaged) => bus.setEngaged(engaged),
     };
-  }, [bus, client, latency, tools, sectionOutlineOnScreen]);
+  }, [bus, client, latency, tools, sectionOutlineOnScreen, view]);
 
   // The hand pointer shows what a pinch would do here: press a button, steer the palette, grab the section, or the
   // active tool's own action (its icon).
@@ -755,6 +815,30 @@ export function Viewer({
       data-tool={toolState.activeId}
       data-section-hover={toolState.overlay.sectionHover}
     >
+      {sun && (
+        <div className="sun-badge" data-testid="sun-study" data-hud>
+          <span className="sun-dot" aria-hidden="true" />
+          <span>
+            <strong>Sun study</strong> {sun.label}
+            <span className="muted">
+              {" "}
+              {sun.altitude > 0
+                ? `${Math.round(sun.altitude)}° up, ${Math.round(sun.azimuth)}° from north`
+                : "below the horizon"}
+            </span>
+          </span>
+          <button
+            type="button"
+            className="sun-close"
+            data-hand-press
+            aria-label="End the sun study"
+            title="End the sun study (Escape)"
+            onClick={() => view.setSun(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
       <Canvas
         frameloop="demand"
         shadows={!software}
@@ -765,16 +849,7 @@ export function Viewer({
       >
         <color attach="background" args={[colors.background]} />
         <hemisphereLight args={["#ffffff", "#b9b4a8", 1.1]} />
-        <directionalLight
-          position={[-40, -60, 90]}
-          intensity={1.6}
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-left={-60}
-          shadow-camera-right={60}
-          shadow-camera-top={60}
-          shadow-camera-bottom={-60}
-        />
+        <SunLight view={view} />
         <Grid
           rotation={[Math.PI / 2, 0, 0]}
           position={[0, 0, -0.31]}
@@ -785,6 +860,13 @@ export function Viewer({
           fadeDistance={300}
           infiniteGrid
         />
+        {/* The ground catches the model's shadows (a sun study's long winter shadows land here). */}
+        {!software && (
+          <mesh position={[0, 0, -0.3]} receiveShadow>
+            <planeGeometry args={[2000, 2000]} />
+            <shadowMaterial opacity={0.22} />
+          </mesh>
+        )}
         {scene.doc &&
           Object.values(scene.doc.elements).map((element) => (
             <ElementMesh

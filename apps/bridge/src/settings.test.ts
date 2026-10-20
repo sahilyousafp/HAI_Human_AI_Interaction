@@ -24,7 +24,14 @@ describe("SettingsHub", () => {
     expect(sent).toEqual([
       expect.objectContaining({
         type: "settings.snapshot",
-        payload: { palette: null, gestures: null, speech: "device" },
+        payload: {
+          palette: null,
+          gestures: null,
+          speech: "device",
+          listenForNames: false,
+          speakReplies: true,
+          replyVoice: "af_heart",
+        },
       }),
     ]);
   });
@@ -52,13 +59,33 @@ describe("SettingsHub", () => {
     expect(broadcast).toEqual([
       expect.objectContaining({
         type: "settings.snapshot",
-        payload: { palette: LAYOUT, gestures: null, speech: "device" },
+        payload: {
+          palette: LAYOUT,
+          gestures: null,
+          speech: "device",
+          listenForNames: false,
+          speakReplies: true,
+          replyVoice: "af_heart",
+        },
       }),
     ]);
 
     const sent: Message[] = [];
     new SettingsHub(file, () => {}).greet((m) => sent.push(m));
     expect(sent[0]).toMatchObject({ payload: { palette: LAYOUT } });
+  });
+
+  it("listening for names is off by default, and turning it on is remembered", () => {
+    const file = settingsFile(tempRoot());
+    const greeting = (hub: SettingsHub) => {
+      const sent: Message[] = [];
+      hub.greet((m) => sent.push(m));
+      return sent[0]?.type === "settings.snapshot" ? sent[0].payload.listenForNames : undefined;
+    };
+    const hub = new SettingsHub(file, () => {});
+    expect(greeting(hub)).toBe(false);
+    hub.handle({ type: "settings.set", id: "s", payload: { listenForNames: true } });
+    expect(greeting(new SettingsHub(file, () => {}))).toBe(true);
   });
 
   it("keeps the other settings in the file (the last opened project)", () => {

@@ -153,7 +153,8 @@ describe("approvals with the fake Claude Code CLI", () => {
 
   it("scene edit runs without a prompt", async () => {
     const { viewer, agent, scene } = await start();
-    await agent?.request("column");
+    await agent?.request("delegate architect: column");
+    await agent?.settled();
     expect(viewer.received.some((m) => m.type === "approval.pending")).toBe(false);
     expect(Object.values(scene.scene.doc.elements).some((e) => e.name === "Fake column")).toBe(true);
   });
@@ -162,8 +163,13 @@ describe("approvals with the fake Claude Code CLI", () => {
     const { address, viewer, agent } = await start();
     const turn = agent?.request("shell: echo hi");
     const card = await viewer.waitFor("approval.pending");
-    expect(card.payload).toMatchObject({ tool: "Bash", source: "Claude Code", summary: "echo hi" });
-    expect(agent?.runningTurn).not.toBeNull(); // waiting
+    expect(card.payload).toMatchObject({
+      tool: "Bash",
+      source: "Claude Code",
+      summary: "echo hi",
+      agent: "mochi",
+    });
+    expect(agent?.hub("mochi").runningTurn).not.toBeNull(); // waiting
     // A page that connects now sees the card too.
     const late = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
     const transcript = await late.waitFor("agent.transcript");

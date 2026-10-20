@@ -8,14 +8,15 @@ import { openViewer, startTestBridge } from "./viewer.ts";
 type Bridge = Awaited<ReturnType<typeof startTestBridge>>;
 type ToolResult = { content: Array<{ type: string; text?: string; data?: string; mimeType?: string }> };
 
-/** Calls one of the bridge's MCP tools the way the agent does: a JSON-RPC request with the session token. */
+/** Calls one of the bridge's MCP tools the way an agent does: a JSON-RPC request with a token issued to it. */
 async function callTool(bridge: Bridge, name: string): Promise<ToolResult & { isError?: boolean }> {
+  const token = bridge.agentTokens.issue({ agent: "reviewer", tools: new Set([name]) });
   const res = await fetch(`http://127.0.0.1:${bridge.port}/mcp`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
-      authorization: `Bearer ${bridge.token}`,
+      authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
   });
@@ -167,8 +168,10 @@ test.describe("agent panel", () => {
   test("failed tool call: the chip shows failed and expanding it shows the error", async ({ page }) => {
     const bridge = await startWithFakeAgent(page);
     try {
-      await ask(page, "bad column");
-      const chip = lastTurn(page).getByTestId("tool-chip");
+      await ask(page, "delegate architect: bad column");
+      await lastTurn(page).getByTestId("handoff-chip").click();
+      const chip = page.getByTestId("task-transcript").getByTestId("tool-chip");
+      await expect(chip.getByTestId("tool-chip-agent")).toHaveText("Architect");
       await expect(chip).toHaveAttribute("data-outcome", "failed");
       await expect(chip).toContainText("create_elements");
       await expect(chip.getByTestId("tool-chip-result")).toBeHidden();
@@ -253,6 +256,203 @@ test.describe("agent panel", () => {
       await expect(panel(page)).toHaveAttribute("data-collapsed", "true");
       await panel(page).getByRole("button", { name: "Show the agent panel" }).click();
       await expect(page.getByTestId("agent-transcript")).toBeVisible();
+    } finally {
+      await bridge.stop();
+    }
+  });
+});
+
+test.describe("the team", () => {
+  const chip = (page: Page, agent: string) => page.getByTestId(`team-chip-${agent}`);
+
+  test("team strip follows the work: Architect working on its task, Product queued behind it", async ({
+    page,
+  }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await ask(page, "delegate architect: work 2500 | product: work 200");
+      await expect(page.getByTestId("agent-title")).toHaveText("Mochi");
+      await expect(chip(page, "architect")).toHaveAttribute("data-state", "working");
+      await expect(chip(page, "architect")).toContainText("work 2500");
+      await expect(chip(page, "product")).toHaveAttribute("data-state", "queued");
+      await expect(chip(page, "reviewer")).toHaveAttribute("data-state", "idle");
+      // Mochi is free while they work.
+      await expect(status(page)).toHaveAttribute("data-state", "idle");
+      await expect(page.getByTestId("team-stop")).toBeVisible();
+      // Both finish, Product after Architect, and Mochi reports.
+      await expect(chip(page, "product")).toHaveAttribute("data-state", "idle", { timeout: 8000 });
+      await expect(lastTurn(page)).toHaveAttribute("data-kind", "digest");
+      await expect(lastTurn(page)).toContainText('Architect "work 2500": done');
+      await expect(page.getByTestId("team-stop")).toBeHidden();
+    } finally {
+      await bridge.stop();
+    }
+  });
+
+  test("hand-off opens the specialist's conversation: Architect's task with its tool calls", async ({
+    page,
+  }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await ask(page, "delegate architect: columns 2");
+      const handOff = page.getByTestId("handoff-chip");
+      await expect(handOff).toContainText("Architect");
+      await expect(handOff).toHaveAttribute("data-status", "done", { timeout: 8000 });
+      await handOff.click();
+      await expect(page.getByTestId("task-thread")).toContainText("Architect");
+      await expect(page.getByTestId("task-status")).toHaveText("done");
+      const chips = page.getByTestId("task-transcript").getByTestId("tool-chip");
+      await expect(chips).toHaveCount(2);
+      await expect(chips.first().getByTestId("tool-chip-agent")).toHaveText("Architect");
+      await expect(page.getByTestId("task-transcript")).toContainText("Added 2 columns.");
+      await page.getByTestId("task-back").click();
+      await expect(page.getByTestId("agent-transcript")).toBeVisible();
+    } finally {
+      await bridge.stop();
+    }
+  });
+
+  test("stop one task by click: Architect stops within 3 s while Climate keeps working", async ({ page }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await ask(page, "delegate architect: work 8000 | climate: work 4000");
+      await expect(chip(page, "climate")).toHaveAttribute("data-state", "working");
+      await chip(page, "architect").click();
+      const started = Date.now();
+      await page.getByTestId("task-stop").click();
+      await expect(page.getByTestId("task-status")).toHaveText("stopped", { timeout: 3000 });
+      expect(Date.now() - started).toBeLessThan(3000);
+      await expect(chip(page, "climate")).toHaveAttribute("data-state", "working");
+    } finally {
+      await bridge.stop();
+    }
+  });
+
+  test("a specialist's approval card names it and waits in Mochi's chat; a nod allows it", async ({
+    page,
+  }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await ask(page, "delegate architect: shell: echo team");
+      const card = page.getByTestId("approval-card");
+      await expect(card).toBeVisible();
+      await expect(card.getByTestId("approval-agent")).toHaveText("Architect");
+      await expect(chip(page, "architect")).toHaveAttribute("data-state", "waiting");
+      await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+      await inject(page, "head.nod");
+      await expect(page.getByTestId("handoff-chip")).toHaveAttribute("data-status", "done");
+      await expect(lastTurn(page)).toContainText("Done: ran: echo team");
+    } finally {
+      await bridge.stop();
+    }
+  });
+});
+
+test.describe("climate's sun study", () => {
+  test("winter shadows: Climate sets the viewer's sun low in the south, and Escape restores the light", async ({
+    page,
+  }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await ask(page, "Climate, winter shadows");
+      const badge = page.getByTestId("sun-study");
+      await expect(badge).toContainText("Sun study 2026-12-21 12:00, 51.5 N 0 E");
+      await expect(badge).toContainText(/15° up, 180° from north/);
+      const sun = await page.evaluate(() => window.__AEX_VIEWER__?.sun());
+      expect(sun?.altitude).toBeCloseTo(15.2, 0);
+      expect(sun?.azimuth).toBeCloseTo(180, 0);
+      await expect(page.getByTestId("handoff-chip")).toHaveAttribute("data-status", "done");
+      await page.getByTestId("handoff-chip").click();
+      await expect(page.getByTestId("task-transcript")).toContainText(/Sun at 15\.\d degrees from the S\./);
+      await page.keyboard.press("Escape");
+      await expect(badge).toHaveCount(0);
+      expect(await page.evaluate(() => window.__AEX_VIEWER__?.sun())).toBeNull();
+    } finally {
+      await bridge.stop();
+    }
+  });
+});
+
+test.describe("addressing by name", () => {
+  test("a typed specialist name: Mochi hands the request to Architect, without the name", async ({
+    page,
+  }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await ask(page, "Architect, work 100");
+      await expect(lastTurn(page).locator(".agent-request")).toHaveText("work 100");
+      const handOff = page.getByTestId("handoff-chip");
+      await expect(handOff).toContainText("Architect");
+      await expect(handOff).toHaveAttribute("data-status", "done");
+    } finally {
+      await bridge.stop();
+    }
+  });
+
+  test("Mochi asked to delegate: 'Mochi, ask Climate to ...' reaches Climate", async ({ page }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await ask(page, "Machi, ask Climate to work 100");
+      await expect(lastTurn(page).locator(".agent-request")).toHaveText("ask Climate to work 100");
+      await expect(lastTurn(page).getByTestId("handoff-chip")).toContainText("Climate");
+    } finally {
+      await bridge.stop();
+    }
+  });
+});
+
+test.describe("agents tab", () => {
+  test("lists the team, adds an agent that Mochi can then hand work to, and edits one", async ({ page }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await ask(page, "hello"); // the first request creates the team
+      await expect(lastTurn(page)).toHaveAttribute("data-ended", "done");
+      await page.getByTestId("agent-tab-agents").click();
+      const definitions = page.getByTestId("agent-definition");
+      await expect(definitions).toHaveCount(5);
+      await expect(definitions.first()).toContainText("Mochi");
+      await expect(definitions.first()).toContainText("lead");
+
+      await page.getByTestId("agent-add").click();
+      await page.getByTestId("agent-name").fill("structure");
+      await page.getByTestId("agent-description").fill("Sizes beams and columns.");
+      await page.getByTestId("agent-can-write").check();
+      await page.getByTestId("agent-prompt").fill("You are Structure.");
+      await page.getByTestId("agent-save").click();
+      await expect(page.getByTestId("agents-result")).toHaveText(
+        "Saved Structure. It applies from its next task.",
+      );
+      await expect(definitions).toHaveCount(6);
+      await expect(definitions.filter({ hasText: "Structure" })).toContainText("changes the model");
+
+      // Edit Architect's description.
+      await page.getByRole("button", { name: "Edit Architect" }).click();
+      await expect(page.getByTestId("agent-name")).toBeDisabled();
+      await page.getByTestId("agent-description").fill("Only cores and stairs.");
+      await page.getByTestId("agent-save").click();
+      await expect(definitions.filter({ hasText: "Architect" })).toContainText("Only cores and stairs.");
+
+      // Mochi can hand work to the new agent.
+      await page.getByTestId("agent-tab-chat").click();
+      await ask(page, "delegate structure: work 100");
+      await expect(page.getByTestId("handoff-chip")).toHaveAttribute("data-status", "done");
+      await expect(page.getByTestId("team-chip-structure")).toBeVisible();
+    } finally {
+      await bridge.stop();
+    }
+  });
+
+  test("a name already in the team is refused before saving", async ({ page }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await ask(page, "hello");
+      await page.getByTestId("agent-tab-agents").click();
+      await page.getByTestId("agent-add").click();
+      await page.getByTestId("agent-name").fill("climate");
+      await expect(page.getByTestId("agent-form").getByRole("alert")).toHaveText(
+        "There is already an agent with this name.",
+      );
+      await expect(page.getByTestId("agent-save")).toBeDisabled();
     } finally {
       await bridge.stop();
     }

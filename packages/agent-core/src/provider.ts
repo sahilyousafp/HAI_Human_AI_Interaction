@@ -23,6 +23,11 @@ export interface StartOptions {
   permissionPromptTool: string;
   /** Continue this earlier conversation instead of starting a new one. */
   resumeSessionId?: string;
+  /**
+   * Run the session as this agent of the project (its prompt, tools and model come from its definition, for Claude
+   * Code `.claude/agents/<name>.md`).
+   */
+  agent?: string;
 }
 
 /**

@@ -9,6 +9,7 @@ AEX does not ship, host or resell any AI model. It changes how **you** interact 
 - AEX **never** reads, copies, stores, logs or forwards your Claude credentials, OAuth tokens or API keys. It never modifies the `claude` program or its requests.
 - Usage counts against your own Claude plan or API account, under Anthropic's terms. One person, one install, one login.
 - Your own Claude Code setup keeps working: your MCP servers, skills and settings load as usual, and AEX adds its scene tools on top.
+- The agent team (Mochi and its specialists) is several sessions of the same `claude` program, one per agent, started with Claude Code's own `--agent` option and the agent files in the project's `.claude/agents`. Up to four can work at once (Mochi and three specialists), all on your plan; see [docs/agents.md](docs/agents.md).
 - Tool calls your Claude Code settings would ask you about appear as approval cards in AEX (allow by click or nod, deny by click or shake, denied after 60 seconds). Nothing is silently allowed or silently denied.
 - MCP servers you add in AEX go into the project's `.mcp.json` through `claude mcp add --scope project`, so they work in Claude Code too. Skills go into the project's `.claude/skills`.
 

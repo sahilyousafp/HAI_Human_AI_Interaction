@@ -38,6 +38,7 @@ test("no microphone on load: nothing is requested and the indicator shows the mi
   expect(await page.evaluate(() => (window as unknown as { __mic: number }).__mic)).toBe(0);
   await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "off");
   await expect(page.getByTestId("mic-button")).toBeVisible(); // the main way to ask
+  await expect(page.getByTestId("listen-for-names")).not.toBeChecked(); // listening for names is opt-in
 });
 
 test("listening from the palette: Ask agent starts the microphone and the indicator shows it", async ({

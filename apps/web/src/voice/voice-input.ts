@@ -26,6 +26,8 @@ export interface VoiceDeps {
   send(text: string, context: RequestContext): boolean;
   /** Resolves what the utterance referred to at send time. */
   context(recorder: UtteranceContext): RequestContext;
+  /** Whether a transcript starts with a team name (listening for names keeps only those). */
+  isNamed?(text: string): boolean;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -35,6 +37,8 @@ export type MicError = "denied" | "not-found" | "failed";
 
 export type VoiceState =
   | { phase: "off" }
+  /** Listening for a team name (opt-in): the microphone is open and only named utterances become requests. */
+  | { phase: "names"; speaking: boolean }
   | { phase: "starting" }
   | { phase: "listening"; speaking: boolean; level: number }
   | { phase: "transcribing" }
@@ -77,6 +81,15 @@ export class VoiceInput {
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (handle: unknown) => void;
+  private namesWanted = false;
+  /** The open microphone while listening for names, and the session it belongs to. */
+  private namesListener: Listener | null = null;
+  private namesSession = 0;
+  /** A spoken request is taking the microphone: do not reopen it for names meanwhile. */
+  private holdNames = false;
+  /** The microphone is opening to listen for names. */
+  private namesOpening = false;
+  private hovered: () => string | null = () => null;
 
   constructor(private readonly deps: VoiceDeps) {
     this.now = deps.now ?? (() => Date.now());
@@ -93,7 +106,31 @@ export class VoiceInput {
 
   /** The microphone is (or is about to be) live. */
   get micOn(): boolean {
-    return this.state.phase === "starting" || this.state.phase === "listening";
+    return this.micState !== "off";
+  }
+
+  /** What the microphone is doing: listening for a request, listening for names, or nothing. */
+  get micState(): "on" | "names" | "off" {
+    if (this.state.phase === "starting" || this.state.phase === "listening") return "on";
+    if (this.state.phase === "names" || this.namesListener || this.namesOpening) return "names";
+    return "off";
+  }
+
+  /** Whether the microphone stays open listening for team names. */
+  get listeningForNames(): boolean {
+    return this.namesWanted;
+  }
+
+  /**
+   * Turns listening for names on or off. While on, the microphone stays open between requests; each utterance is
+   * transcribed here, and one that starts with a team name goes to review like any spoken request. Anything else is
+   * dropped at once: never shown, sent or kept.
+   */
+  setListenForNames(on: boolean): void {
+    if (on === this.namesWanted) return;
+    this.namesWanted = on;
+    if (on) this.resumeNames();
+    else this.stopNames();
   }
 
   get reviewing(): boolean {
@@ -104,10 +141,14 @@ export class VoiceInput {
   async start(hoveredId: () => string | null = () => null): Promise<void> {
     const { phase } = this.state;
     if (phase === "starting" || phase === "listening" || phase === "transcribing") return;
+    // The button or the talk key takes the microphone; listening for names resumes once this request is done.
+    this.holdNames = true;
     if (phase === "review") this.discard();
+    this.stopNames();
     const session = ++this.session;
     this.context.clear();
     this.update({ phase: "starting" });
+    this.holdNames = false;
     try {
       const listener = await this.deps.listen({
         speechStart: () => {
@@ -155,7 +196,12 @@ export class VoiceInput {
     this.listener?.cancel();
     this.listener = null;
     this.context.clear();
-    if (this.state.phase !== "review") this.update({ phase: "off" });
+    if (this.state.phase !== "review" && this.state.phase !== "names") this.update({ phase: "off" });
+  }
+
+  /** What the hand points at, for what a request named while listening for names refers to. */
+  setHovered(hoveredId: () => string | null): void {
+    this.hovered = hoveredId;
   }
 
   /** Sends the transcript now (nod or Enter). */
@@ -210,6 +256,11 @@ export class VoiceInput {
       this.update({ phase: "off" });
       return;
     }
+    this.review(text);
+  }
+
+  /** Shows a transcript for the send delay; a nod or Enter sends it now, a shake or Escape discards it. */
+  private review(text: string): void {
     this.update({ phase: "review", text, sendAt: this.now() + VOICE.sendDelayMs, paused: false });
     this.sendTimer = this.setTimer(() => {
       this.sendTimer = null;
@@ -229,7 +280,9 @@ export class VoiceInput {
   /** While speaking, settle the pointer's dwell regularly so markers appear on time. */
   private ticking(session: number): void {
     const tick = () => {
-      if (session !== this.session || this.state.phase !== "listening") return;
+      const { phase } = this.state;
+      if (session !== this.session || (phase !== "listening" && !(phase === "names" && this.state.speaking)))
+        return;
       this.context.tick(this.now());
       this.timers.push(this.setTimer(tick, 100));
     };
@@ -250,8 +303,96 @@ export class VoiceInput {
     this.sendTimer = null;
   }
 
+  /** Whether the microphone is free for listening for names: no spoken request is under way. */
+  private get idle(): boolean {
+    const { phase } = this.state;
+    return phase === "off" || phase === "names" || phase === "sent" || phase === "discarded";
+  }
+
+  /**
+   * Opens the microphone to listen for names, if wanted and nothing else is using it. A request just sent or
+   * discarded stays on show meanwhile.
+   */
+  private resumeNames(): void {
+    if (!this.namesWanted || this.holdNames || this.namesListener || this.namesOpening || !this.idle) return;
+    const session = ++this.namesSession;
+    this.namesOpening = true;
+    if (this.state.phase === "off") this.update({ phase: "names", speaking: false });
+    else this.notify();
+    this.deps
+      .listen({
+        speechStart: () => {
+          if (session !== this.namesSession || !this.idle) return;
+          this.context.clear();
+          this.context.begin(this.now(), this.hovered());
+          this.update({ phase: "names", speaking: true });
+          this.ticking(this.session);
+        },
+        speechEnd: (result) => void this.heard(session, result),
+        level: () => {},
+      })
+      .then(
+        (listener) => {
+          if (session !== this.namesSession) {
+            listener.cancel(); // turned off while the microphone opened
+            return;
+          }
+          this.namesOpening = false;
+          this.namesListener = listener;
+          this.notify();
+        },
+        (error) => {
+          if (session !== this.namesSession) return;
+          this.namesOpening = false;
+          this.namesWanted = false;
+          const kind = micError(error);
+          this.update({ phase: "error", error: kind, message: MESSAGES[kind] });
+        },
+      );
+  }
+
+  private stopNames(): void {
+    this.namesSession++;
+    this.namesOpening = false;
+    this.namesListener?.cancel();
+    this.namesListener = null;
+    if (this.state.phase === "names") {
+      this.context.clear();
+      this.update({ phase: "off" });
+    } else {
+      this.notify();
+    }
+  }
+
+  /** An utterance while listening for names: kept only if it starts with a team name. */
+  private async heard(session: number, result: { audio: Float32Array } | { text: string }): Promise<void> {
+    if (session !== this.namesSession || !this.idle) return;
+    this.context.end(this.now());
+    let text: string;
+    try {
+      text = "text" in result ? result.text : await this.deps.transcribe(result.audio);
+    } catch {
+      text = "";
+    }
+    if (session !== this.namesSession || !this.idle) return;
+    text = text.trim();
+    if (text && this.deps.isNamed?.(text)) {
+      this.review(text);
+      return;
+    }
+    // Not for the team: dropped here, in memory, and listening goes on.
+    this.context.clear();
+    this.update({ phase: "names", speaking: false });
+  }
+
   private update(state: VoiceState): void {
     this.state = state;
+    this.notify();
+    // A spoken request has finished (sent, discarded or cancelled): listening for names resumes.
+    this.resumeNames();
+  }
+
+  private notify(): void {
     for (const listener of this.listeners) listener();
   }
 }
