@@ -1,5 +1,8 @@
 /* HUD palette: cool graphite with teal ink, matching the decision record. Dark first; light for bright rooms. */
 :root {
+  /* Layout measures the expanded camera preview is placed against. */
+  --topbar-h: 50px;
+  --sidebar-w: 340px;
   --bg: #0e1519;
   --panel: #141d22;
   --ink: #e3eaec;
@@ -87,6 +90,8 @@ button {
 }
 
 .topbar {
+  box-sizing: border-box;
+  min-height: var(--topbar-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -164,7 +169,7 @@ button {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) var(--sidebar-w);
   min-height: 0;
 }
 .stage {
@@ -600,22 +605,27 @@ kbd {
 .preview-slot > .preview {
   height: 100%;
 }
+/* Expanded, the preview covers the model area (between the header and the sidebar): the largest 4:3 box that fits,
+   centred on a dark backdrop. The hand pointer stays drawn above it, so the hand can still steer. */
+.preview-slot[data-expanded="true"]::after {
+  content: "";
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0;
+  right: var(--sidebar-w);
+  bottom: 0;
+  z-index: 19;
+  background: rgb(0 0 0 / 0.78);
+}
 .preview[data-expanded="true"] {
   position: fixed;
-  right: 372px; /* the sidebar (340 px) and gutters */
-  bottom: 16px;
+  top: calc(var(--topbar-h) + (100dvh - var(--topbar-h)) / 2);
+  left: calc((100vw - var(--sidebar-w)) / 2);
   z-index: 20;
-  /* Clear of the sidebar and of the agent panel on the model's left (380 px and its gutter). */
-  width: min(960px, calc(100vw - 340px - 64px - 392px));
+  width: min(calc(100vw - var(--sidebar-w) - 32px), calc((100dvh - var(--topbar-h) - 32px) * 4 / 3));
   height: auto;
+  transform: translate(-50%, -50%);
   box-shadow: 0 12px 40px rgb(0 0 0 / 0.35);
-}
-@media (max-width: 860px) {
-  .preview[data-expanded="true"] {
-    right: 16px;
-    left: 16px;
-    width: auto;
-  }
 }
 .preview-expand {
   position: absolute;
@@ -1011,6 +1021,9 @@ kbd {
   }
 }
 @media (max-width: 860px) {
+  :root {
+    --sidebar-w: 0px; /* the sidebar stacks below the model */
+  }
   .workspace {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(360px, 60vh) auto;

@@ -136,7 +136,9 @@ test.describe("camera preview size", () => {
     await expect(expand).toHaveAttribute("aria-pressed", "true");
     const large = await preview.boundingBox();
     expect(large?.width).toBeGreaterThan((small?.width ?? 0) * 1.5);
-    // It floats over the model, clear of the sidebar, so the controls stay usable.
+    // It covers the model area (nearly its full height), clear of the sidebar, so the controls stay usable.
+    const stage = await page.locator(".stage").boundingBox();
+    expect(large?.height ?? 0).toBeGreaterThan((stage?.height ?? 0) * 0.85);
     const sidebar = await page.locator("aside").first().boundingBox();
     expect((large?.x ?? 0) + (large?.width ?? 0)).toBeLessThanOrEqual(sidebar?.x ?? 0);
     await expect(page.getByTestId("camera-toggle")).toBeVisible();
