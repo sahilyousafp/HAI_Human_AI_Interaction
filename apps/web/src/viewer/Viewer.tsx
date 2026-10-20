@@ -841,7 +841,8 @@ export function Viewer({
       )}
       <Canvas
         frameloop="demand"
-        shadows={!software}
+        // PCF shadows: three 0.186 dropped the soft variant that `shadows` alone asks for.
+        shadows={software ? false : "percentage"}
         camera={{ fov: FOV, near: 0.1, far: 5000, position: [60, -40, 40] }}
         gl={{ antialias: !software, preserveDrawingBuffer: true }}
         dpr={software ? 1 : [1, 2]}
