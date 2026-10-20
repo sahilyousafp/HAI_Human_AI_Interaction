@@ -2,6 +2,55 @@
 
 Small technical decisions confirmed by experiment, with what was measured. Newest first.
 
+## Mochi's team: agents as `claude -p --agent <name>` processes (2026-10-20)
+
+**Question.** Can each agent of the team (Mochi and the specialists) be a separate Claude Code process that takes its prompt, tools and model from the project's `.claude/agents/<name>.md`?
+
+**Experiment.** Claude Code 2.1.303 in an empty folder with `.claude/agents/mochi.md` (`model: sonnet`, `tools: Read, mcp__aex__get_scene_summary`) and `architect.md`. One stream-json turn ran with `claude -p --agent mochi`.
+
+**Result.**
+
+- The init event reported `model: claude-sonnet-5-5`, so `sonnet` resolves to Sonnet 5.5, and `tools: ["Read"]`. The MCP tool was not listed because no MCP server was configured in that test.
+- The init event also lists every available agent by name, including the project's own, under `agents`.
+- The reply came from the Mochi prompt.
+
+**Decision.** Each agent runs as `claude -p --agent <name>` with the app's MCP config. AEX starts, tracks and identifies these processes itself, so Mochi can answer status questions while specialists work, as RhinoCopilot does. It does not use Claude Code's in-process subagents, which would keep Mochi busy during delegations. Whether a listed `mcp__aex__*` tool appears once the bridge's MCP server is configured is checked against the real bridge when building.
+
+## Mochi's voice: Kokoro on WebGPU in full precision, with phonemize (2026-10-20)
+
+**Question.** Can Mochi's replies be spoken in a natural voice on the laptop, within the project's licence rules?
+
+**Licences.** The Kokoro-82M ONNX weights are Apache-2.0. The `kokoro-js` package is Apache-2.0, but it depends on `phonemizer`, which bundles eSpeak NG compiled to WebAssembly (`src/espeakng.worker.js`). eSpeak NG is GPL-3.0, so `kokoro-js` cannot ship here. `phonemize` 2.0.1 (MIT, pure JavaScript, rule-based English with a 125,000-word lexicon, MIT dependencies) replaces it. The model is driven directly through transformers.js (`StyleTextToSpeech2Model`).
+
+**Experiment.** Three Mochi-style sentences in Edge on the reference laptop (Intel Arc 140T, 16 cores). Intelligibility was checked by transcribing each generated clip with the app's Moonshine recogniser.
+
+| Model and backend | Download | Time for 2.4 s / 4.5-5 s of speech (warm) | Heard back |
+|---|---|---|---|
+| int8, WebAssembly (single thread) | 92 MB | 2.8-3.0 s / 5.4-6.0 s | correct |
+| fp16, WebGPU | 163 MB | 0.5 s / 0.8 s | silence (half-precision overflow) |
+| fp32, WebGPU | 325 MB | 1.1 s / 2.1-2.3 s | correct |
+
+- `phonemize` puts stress marks before a syllable. Kokoro expects them before the vowel, as espeak and misaki do. Moving them before the vowel turned garbled names ("Emoichi here, a product...") into near-perfect round trips ("Mochi here, product is working on the bench and reviewer is idle"). Kokoro's vocabulary also lacks `ɫ` and `ɝ`, which map to `l` and `ɜɹ`.
+- A multi-threaded WebAssembly run with cross-origin isolation (COOP/COEP headers) did not finish within five minutes and was not pursued.
+
+**Decision.** Where WebGPU is available, the fp32 model runs on WebGPU, faster than real time and sentence by sentence. It is a one-time 325 MB download by `pnpm assets`. Without WebGPU, replies use a local system voice, because the int8 WebAssembly path is slower than real time.
+
+## Speaking to the team: how Moonshine hears the agent names (2026-10-20)
+
+**Experiment.** Synthesised phrases (`test-assets/speech/*.wav`), transcribed by the app's worker.
+
+| Said | Heard |
+|---|---|
+| "Architect, add a stair core here." | "Architect, add a stair core here." |
+| "Mochi, ask Climate to run a winter shadow study." | "Machi: ask climate to run a Winter shadow study" |
+| "Product, design a bench for the courtyard." | "Product: Design a bench for the courtyard" |
+| "Reviewer, check the floor heights." | "Review or check the floor heights" |
+| "Mochi, what is everyone doing?" (trimmed) | "Maci, what is everyone doing?" |
+
+The same "Mochi" clip with a second of silence before it and three after came back empty every time. Live requests reach Moonshine trimmed by voice activity detection (300 ms of pre-speech padding), so this affects only untrimmed test input.
+
+**Decision.** Names are matched on the first one or two words, against each agent's name and aliases, allowing one edit. The default aliases include these mishearings ("machi", "maci" for Mochi, "review or" for Reviewer). Users can add their own in `.aex/agents.json`. Voice-routing tests feed trimmed audio.
+
 ## On-device speech: Moonshine base int8 on WebAssembly, not WebGPU (2026-10-20)
 
 **Question.** Where should the Moonshine speech model run in the browser to stay under one second from the end of speech to the transcript?
