@@ -11,10 +11,12 @@ Engage first by holding an open palm toward the camera (see [gestures.md](gestur
 | Pinch and drag with one hand | Orbit, like dragging the model with the mouse. Drag down looks from higher. The view stays between 5 and 89 degrees above the ground |
 | Pinch with both hands, move them apart or together | Zoom in or out |
 | Pinch with both hands, move them together sideways or up and down | Pan; the view moves the opposite way |
+| Pinch with both hands and turn them like a dial | Turn the view the same way (turns under 0.6 degrees per frame are ignored as tracking jitter) |
+| Let go while still moving (a flick) | The view coasts on and slows to a stop, for orbit, zoom, pan and turn alike. Pinching again, clicking or scrolling catches it |
 | Close a hand into a fist mid-drag | Clutch: move your hand back without moving the view, then pinch again |
 | Point (a relaxed hand, not pinching) | A ring follows your pinch point; the element under it is highlighted |
 | Both hands in view | The left hand gets a second, light grey ring; hover and selection stay with the right hand |
-| Quick pinch (tap) | Select the highlighted element; a tap on empty space clears the selection |
+| Pinch and let go without moving (tap) | Select the highlighted element; a tap on empty space clears the selection |
 
 Hand navigation runs entirely in the browser. It keeps working while the bridge is offline; only edits wait for the bridge.
 
@@ -37,8 +39,10 @@ Hand navigation runs entirely in the browser. It keeps working while the bridge 
 | Orbit, vertical | 120 degrees per full frame height | same |
 | Two-hand pan | 1.2 view heights per full frame of midpoint movement | same |
 | Two-hand zoom | Proportional to the change in distance between the hands | same |
+| Two-hand turn | 1 degree of view per degree the hands turn | same |
+| Flick | Measured over the last 100 ms before letting go; coasting slows with a 320 ms time constant, so the view travels about a third of a second's worth of the release speed | same |
 | Pointer gain | 1.3 around the centre, so the hand does not have to reach the frame edges | `apps/web/src/viewer/Viewer.tsx` |
-| Camera easing | 40 ms time constant | same |
+| Camera easing | 100 ms time constant: hand input arrives about every 40 ms, so the camera glides between samples instead of stepping | same |
 | Mouse orbit | 0.3 degrees per pixel | same |
 
 ## Latency

@@ -22,13 +22,18 @@ import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOver
 import type { Hit } from "../tools/types.ts";
 import { elementGeometry, MM, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
-import { initialInput, movesCamera, navigate } from "./navigation.ts";
+import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
 import { MeasureMarks, SectionClipping, SectionPlane } from "./ToolScene.tsx";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 
 const FOV = 45;
 /** Camera easing time constant: smooths hand jitter without adding visible lag. */
-const EASE_MS = 40;
+/**
+ * The camera eases toward where gestures put it. Hand input arrives about every 40 ms (one tracking frame); easing
+ * over a little more than two of those makes it glide between samples instead of stepping, at the cost of a few
+ * tens of milliseconds of lag on large moves (the first rendered change still follows the gesture at once).
+ */
+const EASE_MS = 100;
 /** The eased camera counts as arrived (and rendering stops) within this of its target. */
 const SETTLED = { degrees: 0.01, distance: 0.001 };
 /** Hands rarely reach the frame edges comfortably, so the pointer amplifies motion around the centre. */
@@ -199,6 +204,7 @@ function wrap180(degrees: number): number {
  */
 function CameraRig({
   nav,
+  navInput,
   pendingTs,
   latency,
   pickRef,
@@ -208,6 +214,8 @@ function CameraRig({
   view,
 }: {
   nav: React.RefObject<Turntable>;
+  /** Hand navigation state; after a flick it holds the momentum the view coasts with. */
+  navInput: React.RefObject<NavigationInput>;
   pendingTs: React.RefObject<number | null>;
   latency: LatencyTracker;
   pickRef: React.RefObject<Picking>;
@@ -274,6 +282,10 @@ function CameraRig({
   );
 
   useFrame((_, delta) => {
+    if (navInput.current.momentum) {
+      nav.current = coast(nav.current, navInput.current, Math.min(delta, 0.05) * 1000);
+      invalidate(); // keep coasting
+    }
     const target = nav.current;
     if (!target) return;
     // After an idle spell the first delta is long; cap it so the camera still eases instead of jumping.
@@ -430,6 +442,7 @@ export function Viewer({
       navigate: (event: GestureEvent, dragMode = "orbit") => {
         navInput.current.dragMode = dragMode;
         nav.current = navigate(nav.current, navInput.current, event);
+        if (navInput.current.momentum) invalidateRef.current(); // a flick: start coasting
         if (movesCamera(event)) {
           invalidateRef.current();
           pendingTs.current = Math.max(pendingTs.current ?? 0, event.ts);
@@ -536,6 +549,7 @@ export function Viewer({
       holdTimer: ReturnType<typeof setTimeout> | null;
     } | null = null;
     const down = (e: PointerEvent) => {
+      navInput.current.momentum = null; // a click catches a coasting view
       const at = viewerAt(e.clientX, e.clientY);
       const start = { x: e.clientX, y: e.clientY, button: e.button, moved: false, byTool: false };
       drag = { ...start, holdTimer: null };
@@ -584,6 +598,7 @@ export function Viewer({
     };
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
+      navInput.current.momentum = null;
       nav.current = zoom(nav.current, Math.exp(e.deltaY * 0.001));
       invalidateRef.current();
     };
@@ -780,6 +795,7 @@ export function Viewer({
         {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
         <CameraRig
           nav={nav}
+          navInput={navInput}
           pendingTs={pendingTs}
           latency={latency}
           pickRef={pickRef}

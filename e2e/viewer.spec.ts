@@ -183,6 +183,62 @@ test.describe("navigation", () => {
     expect((await camera(page)).azimuth).toBeLessThan(before.azimuth); // drag right: negative azimuth
   });
 
+  test("a flicked orbit coasts on after the release and then stops by itself", async ({ page }) => {
+    bridge = await startTestBridge(page);
+    await openViewer(page);
+    const ts = await now(page);
+    await page.evaluate((ts) => {
+      const e = (type: string, t: number, extra = {}) => ({
+        type,
+        ts: t,
+        confidence: 1,
+        hand: "Right",
+        position: [0.5, 0.5],
+        ...extra,
+      });
+      // Six quick moves 33 ms apart (a tracking frame each), released while still moving.
+      const events = [e("pinch.drag.start", ts)];
+      for (let i = 1; i <= 6; i++) events.push(e("pinch.drag.update", ts + i * 33, { delta: [0.03, 0] }));
+      events.push(e("pinch.drag.end", ts + 7 * 33));
+      window.__AEX_INPUT__?.gestures(events as never[]);
+    }, ts);
+    const released = (await camera(page)).azimuth;
+    await page.waitForTimeout(300);
+    const coasting = (await camera(page)).azimuth;
+    expect(((coasting - released + 540) % 360) - 180).toBeLessThan(-5); // still turning the same way
+    await page.waitForTimeout(2500);
+    const settled = (await camera(page)).azimuth;
+    await page.waitForTimeout(300);
+    expect((await camera(page)).azimuth).toBe(settled); // stopped
+  });
+
+  test("turning both pinching hands like a dial turns the view", async ({ page }) => {
+    bridge = await startTestBridge(page);
+    await openViewer(page);
+    const before = await camera(page);
+    const ts = await now(page);
+    await page.evaluate((ts) => {
+      const e = (type: string, t: number, angle: number) => ({
+        type,
+        ts: t,
+        confidence: 1,
+        hand: "both",
+        distance: 0.3,
+        midpoint: [0.5, 0.5],
+        angle,
+      });
+      window.__AEX_INPUT__?.gestures([
+        e("twohand.start", ts, 0),
+        e("twohand.update", ts + 33, 10),
+        e("twohand.update", ts + 66, 20),
+        e("twohand.end", ts + 400, 20), // held still before letting go: no coast
+      ] as never[]);
+    }, ts);
+    const after = await camera(page);
+    expect(((after.azimuth - before.azimuth + 540) % 360) - 180).toBeCloseTo(20, 5);
+    expect(after.distance).toBeCloseTo(before.distance, 5);
+  });
+
   test("gesture-to-render latency is measured and shown", async ({ page }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
