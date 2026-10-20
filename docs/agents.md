@@ -30,7 +30,7 @@ The first time you used AEX in a project before the team existed, that one conve
 - **Ask Mochi to delegate**: "Mochi, ask Climate to run a winter shadow study."
 - **Ask for status** whenever you like: "Mochi, what is everyone doing?" Mochi answers from the live task board (each agent's task, its latest activity and anything queued) while the specialists keep working.
 
-Names are matched forgivingly, because speech recognition mishears them. The first one or two words are compared with each agent's name and its other names, ignoring case and punctuation and allowing one letter of difference. The defaults include the mishearings measured on the reference laptop ("Machi" and "Maci" for Mochi, "Review or" for Reviewer). Add your own under the agent in the **Agents** tab.
+Names are matched forgivingly, because speech recognition mishears them. The first one or two words are compared with each agent's name and its other names, ignoring case and punctuation and allowing one letter of difference. A greeting before the name is fine: "Hey Mochi", "Hi Architect", "OK Climate" (hey, hi, hello, ok or okay); it is taken out with the name. The defaults include the mishearings measured on the reference laptop ("Machi" and "Maci" for Mochi, "Review or" for Reviewer). Add your own under the agent in the **Agents** tab.
 
 ### Listen for names
 

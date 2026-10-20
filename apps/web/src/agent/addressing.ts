@@ -53,21 +53,11 @@ function isNamed(candidate: string, agent: Addressee): boolean {
   );
 }
 
-/**
- * Who a request is for: an `@name` mention anywhere, or a name in its first one or two words ("Architect, add a
- * stair core", "Review or check the heights", as speech recognition splits it), ignoring case and punctuation and
- * allowing one character of difference ("Machi"). The name is taken out of the text.
- */
-export function addressOf(text: string, agents: Addressee[]): Addressed {
-  const mention = /(^|\s)@([\p{L}\p{N}-]+)/u.exec(text);
-  if (mention) {
-    const named = agents.find((a) => isNamed(normalize(mention[2] ?? ""), a));
-    if (named) {
-      const rest = `${text.slice(0, mention.index)}${mention[1]}${text.slice(mention.index + mention[0].length)}`;
-      return { agent: named.name, text: rest.replace(/\s+/g, " ").trim() };
-    }
-  }
-  const words = text.trim().split(/\s+/);
+/** Words people say before a name ("Hey Mochi"), skipped when looking for it. */
+const GREETINGS = new Set(["hey", "hay", "hi", "hello", "ok", "okay"]);
+
+/** The agent named by the words at the start of `words`, and the request after the name. */
+function leadingName(words: string[], agents: Addressee[]): Addressed | null {
   const first = words[0] ?? "";
   // A name followed by punctuation ("Mochi, ...") is one word; otherwise the first two words may be one name.
   const ends = /[,:;.!?]$/.test(first);
@@ -83,6 +73,31 @@ export function addressOf(text: string, agents: Addressee[]): Addressed {
         .replace(/^[\s,:;.!?-]+/, "");
       return { agent: named.name, text: rest };
     }
+  }
+  return null;
+}
+
+/**
+ * Who a request is for: an `@name` mention anywhere, or a name in its first one or two words ("Architect, add a
+ * stair core", "Review or check the heights", as speech recognition splits it), after a greeting if there is one
+ * ("Hey Mochi, status?"), ignoring case and punctuation and allowing one character of difference ("Machi"). The
+ * name, and the greeting before it, are taken out of the text.
+ */
+export function addressOf(text: string, agents: Addressee[]): Addressed {
+  const mention = /(^|\s)@([\p{L}\p{N}-]+)/u.exec(text);
+  if (mention) {
+    const named = agents.find((a) => isNamed(normalize(mention[2] ?? ""), a));
+    if (named) {
+      const rest = `${text.slice(0, mention.index)}${mention[1]}${text.slice(mention.index + mention[0].length)}`;
+      return { agent: named.name, text: rest.replace(/\s+/g, " ").trim() };
+    }
+  }
+  const words = text.trim().split(/\s+/);
+  const named = leadingName(words, agents);
+  if (named) return named;
+  if (GREETINGS.has(normalize(words[0] ?? ""))) {
+    const afterGreeting = leadingName(words.slice(1), agents);
+    if (afterGreeting) return afterGreeting;
   }
   return { agent: null, text: text.trim() };
 }

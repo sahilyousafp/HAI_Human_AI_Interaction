@@ -17,7 +17,7 @@ Nod and shake here are the gestures bound to "Yes" and "No" in the Gestures sett
 
 ## Listen for names
 
-**Listen for names** in the Voice settings keeps the microphone open so a request can start with just a name: "Mochi, what is everyone doing?" It is off until you turn it on, and the header then shows **Listening for names**. Only transcripts that start with a team name go to review; everything else is dropped at once, in memory. See [agents.md](agents.md#listen-for-names).
+**Listen for names** in the Voice settings keeps the microphone open so a request can start with just a name: "Mochi, what is everyone doing?" or "Hey Mochi, status?" It is off until you turn it on, and the header then shows **Listening for names**. Only transcripts that start with a team name go to review; everything else is dropped at once, in memory. See [agents.md](agents.md#listen-for-names).
 
 ## Point and speak
 

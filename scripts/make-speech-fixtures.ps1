@@ -10,6 +10,7 @@ $phrases = @{
   "add-three-floors" = "Add three floors."
   "silence" = ""
   "mochi-status" = "Mochi, what is everyone doing?"
+  "hey-mochi-status" = "Hey Mochi, what is everyone doing?"
   "architect-stair-core" = "Architect, add a stair core here."
   "mochi-ask-climate" = "Mochi, ask Climate to run a winter shadow study."
   "product-bench" = "Product, design a bench for the courtyard."

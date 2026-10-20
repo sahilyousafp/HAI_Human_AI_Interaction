@@ -36,6 +36,7 @@ const voiceProjects: Project[] = [
   "architect-stair-core",
   "mochi-ask-climate",
   "mochi-status",
+  "hey-mochi-status",
   "add-three-floors",
 ]
   .filter((fixture) => existsSync(join(import.meta.dirname, "e2e", "voice", `${fixture}.spec.ts`)))

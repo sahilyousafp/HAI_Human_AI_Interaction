@@ -9,6 +9,12 @@ voice activity detection sees a clear start and end.
 | `make-this-wall-300-thick.wav` | "Make this wall three hundred thick." |
 | `add-three-floors.wav` | "Add three floors." |
 | `silence.wav` | Nothing (four seconds of silence) |
+| `mochi-status.wav` | "Mochi, what is everyone doing?" |
+| `hey-mochi-status.wav` | "Hey Mochi, what is everyone doing?" |
+| `architect-stair-core.wav` | "Architect, add a stair core here." |
+| `mochi-ask-climate.wav` | "Mochi, ask Climate to run a winter shadow study." |
+| `product-bench.wav` | "Product, design a bench for the courtyard." |
+| `reviewer-heights.wav` | "Reviewer, check the floor heights." |
 
 They were synthesised offline with the Windows speech voice by `scripts/make-speech-fixtures.ps1`. They are test
 data only and are not shipped. Recordings of a real voice can replace them as long as they keep the same shape.
