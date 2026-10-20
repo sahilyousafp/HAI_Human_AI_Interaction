@@ -1,7 +1,7 @@
 /* HUD palette: cool graphite with teal ink, matching the decision record. Dark first; light for bright rooms. */
 :root {
   /* Layout measures the expanded camera preview is placed against. */
-  --topbar-h: 50px;
+  --topbar-h: 49.5px; /* the header's natural height (12 px padding around one row of pills, and its border) */
   --sidebar-w: 340px;
   --bg: #0e1519;
   --panel: #141d22;
@@ -90,8 +90,6 @@ button {
 }
 
 .topbar {
-  box-sizing: border-box;
-  min-height: var(--topbar-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
