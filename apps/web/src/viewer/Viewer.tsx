@@ -76,6 +76,7 @@ declare global {
     __AEX_VIEWER__?: {
       camera(): Turntable;
       meshCount(): number;
+      /** The element a click or tap at this viewer position would hit (null under a HUD panel). */
       pick(x: number, y: number): string | null;
       latencyP90(): number | null;
       /** Frames rendered so far (the canvas renders on demand, so an idle view adds none). */
@@ -680,7 +681,8 @@ export function Viewer({
     window.__AEX_VIEWER__ = {
       camera: () => nav.current,
       meshCount: () => Object.keys(client.getSnapshot().doc?.elements ?? {}).length,
-      pick: (x, y) => pickRef.current.id(x, y),
+      // What a user can actually hit there: nothing under a HUD panel, as for the mouse and the hand.
+      pick: (x, y) => (overHud(wrapper.current, [x, y]) ? null : pickRef.current.id(x, y)),
       latencyP90: () => latency.p90(),
       renders: () => rendersRef.current(),
       project: (point) => pickRef.current.project(point),
