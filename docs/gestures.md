@@ -47,13 +47,15 @@ All values live in `packages/perception/src/gestures/config.ts`; a unit test che
 | `engage.openPalmMs` | 300 | Open palm held this long engages |
 | `engage.noHandsMs` | 1500 | No hand visible this long disengages |
 | `engage.idleMs` | 10000 | No gesture this long disengages |
-| `pinch.press` | 0.16 | Thumb-index distance / hand size below this counts as the fingertips touching |
+| `pinch.press` | 0.168 | Thumb-index distance / hand size below this counts as the fingertips touching |
 | `pinch.release` | 0.2 | Above this, the pinch ends (hysteresis) |
 | `pinch.minHoldMs` | 60 | The fingertips must keep touching this long before a pinch starts |
 | `pinch.tapMaxMove` | 0.04 | A pinch released before `holdMs` that moved less than this fraction of the frame width is a tap; moving this far starts a drag |
 | `pinch.othersMin` | 1.3 | Mean extension of the middle, ring and little fingers needed for a pinch to start |
 | `pinch.lostGraceMs` | 250 | A pinching hand lost by tracking for less than this is still pinching |
 | `pinch.holdMs` | 800 | A pinch held this long... |
+| `pinch.tapOpen` | 0.3 | A tap counts only once the fingers open past this ratio... |
+| `pinch.tapOpenMs` | 200 | ...within this long of letting go, so a hand that stays half closed after nearly pinching never clicks |
 | `pinch.holdMaxMove` | 0.04 | ...while moving less than this fraction of the frame width is a hold (long pinch) |
 | `posture.extended` | 1.35 | Finger tip-to-wrist / knuckle-to-wrist above this: extended |
 | `posture.curled` | 1.15 | Below this: curled |
@@ -77,7 +79,7 @@ Hand size is the distance from the wrist to the middle-finger knuckle. The pinch
 | Near miss, a visible 1-3 mm gap | 0.18-0.21 | any |
 | Fist, or closing into / opening from one | as low as 0.11 | 1.17 or less |
 
-So `press` sits between touching and a near miss, and `othersMin` keeps the thumb from triggering a pinch as it passes the index on the way into or out of a fist. A touch that turns into a fist before `minHoldMs` is dropped.
+So `press` sits between touching and a near miss, with a 5% buffer above 0.16 so fingertips that only just meet still count (53 of the 55 labelled touches pinch; the one near miss closest to touching, at 0.166, falls inside the buffer), and `othersMin` keeps the thumb from triggering a pinch as it passes the index on the way into or out of a fist. A touch that turns into a fist before `minHoldMs` is dropped.
 
 **Tracking loss.** A hand sweeping fast or passing over the face is often lost for a few frames (motion blur, skin against skin). A pinch survives a loss shorter than `lostGraceMs`, so a drag carries on from wherever the hand reappears, and a pinch interrupted by a loss never counts as a tap, because the fingers were not seen opening. Without this, pinching and sweeping a hand across the face fired a stray tap (found on a recorded clip, `test-assets/clips/hand-cross-face.mp4`).
 

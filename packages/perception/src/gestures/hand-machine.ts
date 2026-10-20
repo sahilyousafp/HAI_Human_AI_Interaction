@@ -30,7 +30,9 @@ type Phase = "idle" | "candidate" | "pinching";
  * - A pinch starts after the fingertips touch (ratio below `press`, other fingers not curled) for `minHoldMs`, and
  *   ends above `release` (hysteresis).
  * - A pinch that moves `tapMaxMove` starts a drag. A pinch released still, before `holdMs`, is a tap however long
- *   it lasted: deliberate pinches on recorded footage last 450-650 ms and drift under 1% of the frame width.
+ *   it lasted: deliberate pinches on recorded footage last 450-650 ms and drift under 1% of the frame width. The tap
+ *   counts once the fingers open past `tapOpen` (within `tapOpenMs`): a hand that only closes toward a pinch and
+ *   stays half closed, as one sweeping past the face does, never clicks.
  * - A pinch kept still for `holdMs` emits one hold (long pinch, which opens the tool palette) and carries on as a
  *   drag, so it can be steered and released. A pinch that moves first never holds.
  * - A fist (checked before pinch, since a fist also closes thumb and index) suspends all drag output.
@@ -60,6 +62,8 @@ export class HandMachine {
   private lastPosture: Posture = "other";
   private confidence = 1;
   private lostSince: number | null = null;
+  /** A released still pinch, waiting for the fingers to open clearly before it counts as a tap. */
+  private pendingTap: { ts: number; position: Point2; until: number } | null = null;
 
   constructor(
     readonly hand: Hand,
@@ -84,6 +88,7 @@ export class HandMachine {
   update(obs: HandObservation | null, ts: number, ctx: HandContext): GestureEvent[] {
     const events: GestureEvent[] = [];
     if (!obs) {
+      this.pendingTap = null; // the fingers were not seen opening
       if (this.phase === "pinching") {
         this.lostSince ??= ts;
         this.tapAllowed = false;
@@ -168,6 +173,7 @@ export class HandMachine {
     const touching = obs.ratio < p.press && obs.others >= p.othersMin;
     switch (this.phase) {
       case "idle":
+        this.settleTap(obs, ts, events);
         if (touching) {
           this.phase = "candidate";
           this.candidateSince = ts;
@@ -193,6 +199,7 @@ export class HandMachine {
       case "pinching": {
         if (obs.ratio > p.release) {
           this.endPinch(ts, events);
+          this.settleTap(obs, ts, events);
           return;
         }
         this.lastPos = obs.position;
@@ -227,7 +234,7 @@ export class HandMachine {
     if (this.dragStarted) {
       events.push(this.event("pinch.drag.end", ts));
     } else if (this.tapAllowed && this.maxMove < p.tapMaxMove) {
-      events.push(this.event("pinch.tap", ts, this.startPos));
+      this.pendingTap = { ts, position: this.startPos, until: ts + p.tapOpenMs };
     } else if (this.maxMove >= p.tapMaxMove) {
       // Short but moving: still a drag.
       events.push(this.event("pinch.drag.start", ts, this.startPos));
@@ -236,6 +243,18 @@ export class HandMachine {
       events.push(this.event("pinch.drag.end", ts));
     }
     this.dragStarted = false;
+  }
+
+  /** A pending tap counts once the fingers open past `tapOpen`, and is dropped if they do not in time. */
+  private settleTap(obs: HandObservation, ts: number, events: GestureEvent[]): void {
+    const tap = this.pendingTap;
+    if (!tap) return;
+    if (obs.ratio >= this.config.pinch.tapOpen) {
+      this.pendingTap = null;
+      events.push(this.event("pinch.tap", ts, tap.position));
+    } else if (ts > tap.until) {
+      this.pendingTap = null;
+    }
   }
 
   private dragUpdate(ts: number): GestureEvent {

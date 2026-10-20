@@ -86,6 +86,25 @@ describe("tap and drag", () => {
     expect(types(events)).toEqual(["pinch.tap"]);
   });
 
+  it("a hand that closes toward a pinch and stays half closed never clicks (sweeping past the face)", () => {
+    // Measured on the hand-cross-face clip: the ratio dips into the buffer for about 200 ms, then sits near 0.23.
+    const events = run([
+      ...repeat(4, () => ({ ratio: 0.165, position: at(0.27) })),
+      ...repeat(15, () => ({ ratio: 0.235, position: at(0.28) })),
+    ]);
+    expect(types(events)).not.toContain("pinch.tap");
+  });
+
+  it("a click counts once the fingers open: a slow release that opens within 200 ms still clicks", () => {
+    const events = run([
+      ...repeat(10, () => ({ ratio: 0.12, position: at(0.5) })),
+      { ratio: 0.24, position: at(0.5) },
+      { ratio: 0.28, position: at(0.5) },
+      ...repeat(3, () => ({ ratio: 0.6, position: at(0.5) })),
+    ]);
+    expect(types(events)).toEqual(["pinch.tap"]);
+  });
+
   it("a still pinch released just before the hold is still a tap", () => {
     const events = run([
       ...repeat(22, () => ({ ratio: 0.12, position: at(0.5) })),

@@ -31,6 +31,12 @@ export interface GestureConfig {
     holdMs: number;
     /** ...while moving less than this fraction of the frame width is a hold (long pinch). */
     holdMaxMove: number;
+    /**
+     * A tap counts only once the fingers open past this ratio within `tapOpenMs` of letting go, so a hand that
+     * closes toward a pinch and stays half closed (sweeping past the face, say) never clicks.
+     */
+    tapOpen: number;
+    tapOpenMs: number;
   };
   posture: {
     /** Tip-to-wrist / knuckle-to-wrist above this means the finger is extended. */
@@ -70,7 +76,9 @@ export interface GestureConfig {
 export const DEFAULT_GESTURES: GestureConfig = {
   engage: { openPalmMs: 300, noHandsMs: 1500, idleMs: 10_000 },
   pinch: {
-    press: 0.16,
+    // 0.16 plus a 5% buffer, so fingertips that only just meet still pinch (one labelled near miss, at 0.166,
+    // falls inside the buffer; every visible gap above it does not).
+    press: 0.168,
     release: 0.2,
     minHoldMs: 60,
     tapMaxMove: 0.04,
@@ -78,6 +86,8 @@ export const DEFAULT_GESTURES: GestureConfig = {
     lostGraceMs: 250,
     holdMs: 800,
     holdMaxMove: 0.04,
+    tapOpen: 0.3,
+    tapOpenMs: 200,
   },
   posture: { extended: 1.35, curled: 1.15, thumbSpread: 0.45, palmFacing: 0.5 },
   clutch: { debounceMs: 100 },
