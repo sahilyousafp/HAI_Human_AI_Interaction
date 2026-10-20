@@ -9,6 +9,7 @@ export interface BridgeConfig {
   host: string;
   port: number;
   allowedOrigins: string[];
+  /** The folder whose `.aex/` holds the settings, the session file and the default project. */
   workspaceRoot: string;
 }
 
@@ -42,5 +43,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.c
   const allowedOrigins = env.AEX_ALLOWED_ORIGINS
     ? env.AEX_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
     : DEFAULT_ALLOWED_ORIGINS;
-  return { host, port, allowedOrigins, workspaceRoot: findWorkspaceRoot(cwd) };
+  // AEX_WORKSPACE keeps a second bridge (the end-to-end tests') apart from the one you work with.
+  const workspaceRoot = env.AEX_WORKSPACE ? resolve(env.AEX_WORKSPACE) : findWorkspaceRoot(cwd);
+  return { host, port, allowedOrigins, workspaceRoot };
 }

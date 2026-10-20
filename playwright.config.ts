@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { defineConfig, devices, type Project } from "@playwright/test";
+import { E2E_BASE_URL, E2E_BRIDGE_PORT, E2E_ORIGINS, E2E_WEB_PORT, E2E_WORKSPACE } from "./e2e/stack.ts";
 import { buildClips } from "./scripts/convert-clips.mjs";
 
 const isCI = Boolean(process.env.CI);
@@ -66,7 +67,7 @@ export default defineConfig({
   retries: isCI ? 1 : 0,
   reporter: isCI ? [["github"], ["list"]] : "list",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: E2E_BASE_URL,
     trace: "retain-on-failure",
   },
   projects: [
@@ -101,16 +102,23 @@ export default defineConfig({
         ]
       : []),
   ],
+  // The tests' own bridge and dev server, never the ones you work with (see e2e/stack.ts).
   webServer: [
     {
       command: "pnpm --filter @aex/bridge start",
-      url: "http://127.0.0.1:4870/health",
+      url: `http://127.0.0.1:${E2E_BRIDGE_PORT}/health`,
+      env: {
+        AEX_PORT: String(E2E_BRIDGE_PORT),
+        AEX_ALLOWED_ORIGINS: E2E_ORIGINS.join(","),
+        AEX_WORKSPACE: E2E_WORKSPACE,
+      },
       reuseExistingServer: !isCI,
       timeout: 30_000,
     },
     {
       command: "pnpm --filter @aex/web dev",
-      url: "http://127.0.0.1:5173",
+      url: E2E_BASE_URL,
+      env: { AEX_WEB_PORT: String(E2E_WEB_PORT), AEX_WORKSPACE: E2E_WORKSPACE },
       reuseExistingServer: !isCI,
       timeout: 60_000,
     },

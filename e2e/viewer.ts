@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { type Bridge, createBridge } from "../apps/bridge/src/server.ts";
 import type { AgentProvider } from "../packages/agent-core/src/index.ts";
+import { E2E_ORIGINS } from "./stack.ts";
 
 export type Camera = {
   target: [number, number, number];
@@ -35,7 +36,7 @@ export async function startTestBridge(
   const bridge = createBridge({
     host: "127.0.0.1",
     port,
-    allowedOrigins: ["http://127.0.0.1:5173", "http://localhost:5173"],
+    allowedOrigins: E2E_ORIGINS,
     version: "e2e",
     token,
     scene: { projectDir, saveDelayMs: 200 },

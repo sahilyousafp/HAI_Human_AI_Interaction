@@ -12,7 +12,8 @@ export default defineConfig({
   },
   server: {
     host: "127.0.0.1",
-    port: 5173,
+    // AEX_WEB_PORT runs a second dev server (the end-to-end tests') beside yours.
+    port: process.env.AEX_WEB_PORT ? Number(process.env.AEX_WEB_PORT) : 5173,
     strictPort: true,
     // The page carries the bridge token; no other origin may read it.
     cors: false,

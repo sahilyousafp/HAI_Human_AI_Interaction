@@ -1,4 +1,7 @@
+import { existsSync } from "node:fs";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { PROTOCOL_VERSION, TOKEN_PROTOCOL_PREFIX, WS_PATH, WS_PROTOCOL } from "@aex/protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
@@ -103,5 +106,14 @@ describe("loopback only", () => {
     expect(() => assertLoopback(host)).toThrow(/only listens on 127\.0\.0\.1/);
     expect(() => createBridge({ host, port: 0, allowedOrigins: [ORIGIN], version: "t" })).toThrow();
     expect(() => loadConfig({ AEX_HOST: host })).toThrow();
+  });
+});
+
+describe("workspace", () => {
+  it("is the folder with pnpm-workspace.yaml, unless AEX_WORKSPACE names another (the end-to-end tests' own)", () => {
+    const root = loadConfig({}).workspaceRoot;
+    expect(existsSync(join(root, "pnpm-workspace.yaml"))).toBe(true);
+    const other = join(tmpdir(), "aex-other-workspace");
+    expect(loadConfig({ AEX_WORKSPACE: other }).workspaceRoot).toBe(resolve(other));
   });
 });

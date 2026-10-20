@@ -15,9 +15,13 @@ function findWorkspaceRoot(start: string): string {
 /**
  * Injects the bridge port and session token into index.html in dev.
  * Read on every page load, so a restarted bridge (new token) is picked up by a reload.
+ * AEX_WORKSPACE points at another bridge's workspace, as the end-to-end tests' own bridge and dev server use.
  */
 export function aexSession(): Plugin {
-  const sessionFile = join(findWorkspaceRoot(process.cwd()), ".aex", "session.json");
+  const workspace = process.env.AEX_WORKSPACE
+    ? resolve(process.env.AEX_WORKSPACE)
+    : findWorkspaceRoot(process.cwd());
+  const sessionFile = join(workspace, ".aex", "session.json");
   return {
     name: "aex-session",
     apply: "serve",

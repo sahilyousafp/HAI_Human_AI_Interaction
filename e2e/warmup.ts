@@ -1,4 +1,5 @@
 import { chromium, type FullConfig } from "@playwright/test";
+import { E2E_BASE_URL } from "./stack.ts";
 
 /**
  * Loads the app once before any test, and runs tracking once. Vite bundles dependencies (three.js, drei,
@@ -11,7 +12,7 @@ import { chromium, type FullConfig } from "@playwright/test";
  */
 export default async function warmup(config: FullConfig): Promise<void> {
   const project = config.projects[0];
-  const baseURL = project?.use.baseURL ?? "http://127.0.0.1:5173";
+  const baseURL = project?.use.baseURL ?? E2E_BASE_URL;
   const browser = await chromium.launch({
     channel: project?.use.channel,
     args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
