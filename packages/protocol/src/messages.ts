@@ -8,6 +8,7 @@ import {
   ExtensionName,
   ExtensionsState,
   McpServerSpec,
+  RequestContext,
 } from "./agent.ts";
 import { GestureBindingsSchema } from "./bindings.ts";
 import { BridgeStatusMessage, Envelope, HelloMessage, MessageId } from "./envelope.ts";
@@ -23,12 +24,17 @@ const UndoState = { canUndo: z.boolean(), canRedo: z.boolean() };
 export const PaletteLayout = z.array(z.string().min(1).max(64).nullable()).length(8);
 export type PaletteLayout = z.infer<typeof PaletteLayout>;
 
+export const SpeechMode = z.enum(["device", "cloud"]);
+export type SpeechMode = z.infer<typeof SpeechMode>;
+
 /** User settings kept by the bridge in .aex/settings.json. */
 export const Settings = z.strictObject({
   /** null until the user changes the layout: the app's default applies. */
   palette: PaletteLayout.nullable(),
   /** What each gesture does, where the user changed it; the rest keep their defaults. */
   gestures: GestureBindingsSchema.nullable().default(null),
+  /** Where speech is turned into text: on this laptop (default), or the browser's cloud service (opt-in). */
+  speech: SpeechMode.default("device"),
 });
 export type Settings = z.infer<typeof Settings>;
 const Project = z.strictObject({ name: z.string(), path: z.string() });
@@ -92,7 +98,12 @@ export const AgentTranscriptMessage = message(
 );
 export const AgentTurnStartMessage = message(
   "agent.turn",
-  z.strictObject({ id: z.string(), request: z.string(), recovered: z.boolean() }),
+  z.strictObject({
+    id: z.string(),
+    request: z.string(),
+    context: RequestContext.optional(),
+    recovered: z.boolean(),
+  }),
 );
 export const AgentEventMessage = message(
   "agent.event",
@@ -130,9 +141,16 @@ export const ProjectOpenMessage = message("project.open", z.strictObject({ path:
 /** Changes one or more settings; what is left out keeps its value. */
 export const SettingsSetMessage = message(
   "settings.set",
-  z.strictObject({ palette: PaletteLayout.optional(), gestures: GestureBindingsSchema.optional() }),
+  z.strictObject({
+    palette: PaletteLayout.optional(),
+    gestures: GestureBindingsSchema.optional(),
+    speech: SpeechMode.optional(),
+  }),
 );
-export const AgentSendMessage = message("agent.send", z.strictObject({ text: z.string().min(1).max(8000) }));
+export const AgentSendMessage = message(
+  "agent.send",
+  z.strictObject({ text: z.string().min(1).max(8000), context: RequestContext.optional() }),
+);
 export const ContextUpdateMessage = message(
   "context.update",
   z.strictObject({ pointed: ElementId.nullable(), camera: ViewCamera.nullable() }),

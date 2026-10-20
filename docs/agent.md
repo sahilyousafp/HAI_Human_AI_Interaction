@@ -73,8 +73,9 @@ User-level servers and skills stay yours to manage in Claude Code itself.
 
 ## Using the panel
 
-- Type a request and press **Enter** to send it (**Shift+Enter** adds a line). You can send while the agent is ready; while it works, the send button becomes **Stop**.
-- **Ask agent** in the tool palette (or the **A** key) opens the panel with the cursor in the input.
+- **Speak** is the main way to ask: press the microphone button (or hold the **`** key) and say what to change while you point at the model. The transcript is sent after 1.5 s, or at once with a nod or **Enter**; a shake or **Escape** discards it. See [voice.md](voice.md).
+- Or type a request and press **Enter** to send it (**Shift+Enter** adds a line). You can send while the agent is ready; while it works, the send button becomes **Stop**.
+- **Ask agent** in the tool palette (or the **A** key) opens the panel and starts listening.
 - Replies stream in as they are written. Each tool call is a chip showing running, needs approval, done, failed or denied. Click a chip to see its input and its result or error.
 - The status shows Not available, Starting, Ready, Working or Recovering.
 - Collapse the panel with its arrow button. While collapsed, it shows how many approvals are waiting.

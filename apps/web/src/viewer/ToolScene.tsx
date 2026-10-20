@@ -1,4 +1,5 @@
-import type { Point3Mm } from "@aex/protocol";
+import type { Point3Mm, SceneDocument } from "@aex/protocol";
+import { elementBounds } from "@aex/scene";
 import { Html, Line } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
@@ -115,4 +116,27 @@ export function SectionClipping({ heightMm, version }: { heightMm: number | null
     invalidate();
   }, [gl, scene, planes, invalidate, version]);
   return null;
+}
+
+/**
+ * Point and speak: a numbered marker over each element captured while the user speaks, so they see what "this" and
+ * "these" will mean before the request is sent.
+ */
+export function ReferenceMarkers({ ids, doc }: { ids: string[]; doc: SceneDocument | null }) {
+  return (
+    <group>
+      {ids.map((id, i) => {
+        const element = doc?.elements[id];
+        if (!element) return null;
+        const { min, max } = elementBounds(element, doc?.levels ?? []);
+        return (
+          <Html key={id} position={toMetres([(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, max[2]])} center>
+            <span className="reference-marker" data-testid="reference-marker" data-element={id}>
+              {i + 1}
+            </span>
+          </Html>
+        );
+      })}
+    </group>
+  );
 }

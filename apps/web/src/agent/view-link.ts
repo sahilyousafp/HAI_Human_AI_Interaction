@@ -1,4 +1,4 @@
-import type { Message, ViewCamera } from "@aex/protocol";
+import type { Message, Point3Mm, ViewCamera } from "@aex/protocol";
 
 /** Captured views are scaled down so their longest side is at most this many pixels. */
 export const CAPTURE_MAX_SIDE = 1280;
@@ -32,6 +32,8 @@ const round = (value: number, step: number) => Math.round(value / step) * step;
  */
 export class ViewLink {
   private capturer: (() => Promise<string>) | null = null;
+  private grounder: (() => Point3Mm | null) | null = null;
+  private readonly pointedListeners = new Set<(id: string | null) => void>();
   private pointed: string | null = null;
   private camera: ViewCamera | null = null;
   private sent = "";
@@ -52,8 +54,34 @@ export class ViewLink {
 
   /** The element under the hand pointer, or null. */
   setPointed(id: string | null): void {
+    if (id === this.pointed) return;
     this.pointed = id;
+    for (const listener of this.pointedListeners) listener(id);
     this.schedule();
+  }
+
+  /** The element under the hand pointer now. */
+  get pointedId(): string | null {
+    return this.pointed;
+  }
+
+  /** Follows the element under the hand pointer (what a spoken "this" may mean). */
+  onPointed(listener: (id: string | null) => void): () => void {
+    this.pointedListeners.add(listener);
+    return () => this.pointedListeners.delete(listener);
+  }
+
+  /** Registers how to find the ground point under the hand pointer; returns a function that unregisters it. */
+  attachGround(ground: () => Point3Mm | null): () => void {
+    this.grounder = ground;
+    return () => {
+      if (this.grounder === ground) this.grounder = null;
+    };
+  }
+
+  /** Where the hand pointer meets the ground now (millimetres), if it is over the ground. */
+  groundPoint(): Point3Mm | null {
+    return this.grounder?.() ?? null;
   }
 
   setCamera(camera: ViewCamera): void {

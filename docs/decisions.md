@@ -2,6 +2,23 @@
 
 Small technical decisions confirmed by experiment, with what was measured. Newest first.
 
+## On-device speech: Moonshine base int8 on WebAssembly, not WebGPU (2026-10-20)
+
+**Question.** Where should the Moonshine speech model run in the browser to stay under one second from the end of speech to the transcript?
+
+**Experiment.** Moonshine base ONNX, int8 files (encoder 20.5 MB, merged decoder 42.5 MB), transformers.js 4.3.1 in a Web Worker in Edge, on the reference laptop (Intel Arc 140T, 16 cores). The fixture "Make this wall three hundred thick" (2.8 s of audio) was transcribed four times after loading.
+
+**Result.**
+
+| Backend | Model load | First transcript | Warm transcripts |
+|---|---|---|---|
+| WebGPU | 1.75 s | 2.75 s | 2.0-2.1 s |
+| WebAssembly | 1.45 s | 0.26 s | 0.20-0.22 s |
+
+Both produced the same text, "Make this wall 300 thick". WebGPU has to unpack int8 weights on every run; it would only be faster with the fp16 or fp32 files (200-250 MB).
+
+**Decision.** The worker always uses WebAssembly with the int8 files. The model loads when the microphone opens, so it is usually ready by the time the user stops speaking. Code: `apps/web/src/voice/transcriber.worker.ts`.
+
 ## Project MCP servers in print mode (2026-10-20)
 
 **Question.** Claude Code asks before it uses servers from a project's `.mcp.json`. Do servers that the app adds with `claude mcp add --scope project` load in `claude -p`, or are they skipped until someone approves them in a terminal?

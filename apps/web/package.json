@@ -14,9 +14,12 @@
     "@aex/perception": "workspace:*",
     "@aex/protocol": "workspace:*",
     "@aex/scene": "workspace:*",
+    "@huggingface/transformers": "4.3.1",
     "@mediapipe/tasks-vision": "1.1.1",
     "@react-three/drei": "10.7.9",
     "@react-three/fiber": "9.8.2",
+    "@ricky0123/vad-web": "0.0.31",
+    "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "three": "0.186.1"

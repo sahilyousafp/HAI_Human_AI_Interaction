@@ -7,6 +7,7 @@ import type {
   ExtensionsState,
   McpServerSpec,
   Message,
+  RequestContext,
 } from "@aex/protocol";
 
 export type ToolOutcome = "running" | "done" | "failed" | "denied";
@@ -28,6 +29,8 @@ export type TurnItem =
 export interface TurnView {
   id: string;
   request: string;
+  /** What a spoken request referred to. */
+  context?: RequestContext;
   recovered: boolean;
   items: TurnItem[];
   /** How the turn ended; unset while it runs. */
@@ -51,8 +54,8 @@ export interface AgentState {
   alwaysAllowed: string[];
   /** The last request the bridge refused (shown under the input). */
   error: string | null;
-  /** Counts "Ask agent" requests: the panel opens and focuses its input when it changes. */
-  focusTick: number;
+  /** Counts requests to show the panel (a voice request starting): it opens on the chat when this changes. */
+  openTick: number;
   /** MCP servers and skills: loaded in the session, and configured in the project. Null until the bridge says. */
   extensions: ExtensionsState | null;
   /** An extension change is being applied. */
@@ -67,7 +70,7 @@ const INITIAL: AgentState = {
   approvals: [],
   alwaysAllowed: [],
   error: null,
-  focusTick: 0,
+  openTick: 0,
   extensions: null,
   extensionsBusy: false,
   extensionsResult: null,
@@ -108,7 +111,13 @@ export function foldEvents(items: TurnItem[], event: AgentEvent): TurnItem[] {
 }
 
 function turnView(turn: AgentTurn): TurnView {
-  let view: TurnView = { id: turn.id, request: turn.request, recovered: turn.recovered, items: [] };
+  let view: TurnView = {
+    id: turn.id,
+    request: turn.request,
+    ...(turn.context ? { context: turn.context } : {}),
+    recovered: turn.recovered,
+    items: [],
+  };
   for (const event of turn.events) view = withEvent(view, event);
   return view;
 }
@@ -163,8 +172,9 @@ export class AgentClient {
         this.update({ status: message.payload.status });
         return true;
       case "agent.turn": {
-        const { id, request, recovered } = message.payload;
-        this.update({ turns: [...this.state.turns, { id, request, recovered, items: [] }], error: null });
+        const { id, request, context, recovered } = message.payload;
+        const turn: TurnView = { id, request, ...(context ? { context } : {}), recovered, items: [] };
+        this.update({ turns: [...this.state.turns, turn], error: null });
         return true;
       }
       case "agent.event": {
@@ -213,12 +223,12 @@ export class AgentClient {
     }
   }
 
-  /** Sends a typed request; false if the bridge is not connected. */
-  request(text: string): boolean {
+  /** Sends a request, typed or spoken (with what it refers to); false if the bridge is not connected. */
+  request(text: string, context?: RequestContext): boolean {
     const id = newId();
     this.sentRequests.set(id, "chat");
     this.update({ error: null });
-    return this.send({ type: "agent.send", id, payload: { text } });
+    return this.send({ type: "agent.send", id, payload: { text, ...(context ? { context } : {}) } });
   }
 
   addServer(server: McpServerSpec): boolean {
@@ -250,9 +260,9 @@ export class AgentClient {
     return true;
   }
 
-  /** Opens the panel with the cursor in the input ("Ask agent" in the palette). */
-  requestFocus(): void {
-    this.update({ focusTick: this.state.focusTick + 1 });
+  /** Shows the panel on the chat (a voice request is starting), without moving the keyboard focus. */
+  requestOpen(): void {
+    this.update({ openTick: this.state.openTick + 1 });
   }
 
   stop(): void {

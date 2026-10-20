@@ -1,6 +1,8 @@
 import type { AgentStatus } from "@aex/protocol";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ToolIcon } from "../tools/ToolOverlays.tsx";
+import { MicButton, VoiceBar } from "../voice/VoiceBar.tsx";
+import type { VoiceInput } from "../voice/voice-input.ts";
 import type { AgentClient, ApprovalView, ToolOutcome, TurnItem, TurnView } from "./agent-client.ts";
 import { ExtensionsView } from "./ExtensionsView.tsx";
 
@@ -235,7 +237,19 @@ function Turn({
  * cards, status, a typed input and stop. Its buttons can be pressed by hand; gestures reach it through the input
  * router (a nod or shake answers the only waiting card, two open palms stop).
  */
-export function AgentPanel({ client }: { client: AgentClient }) {
+export function AgentPanel({
+  client,
+  voice,
+  startVoice,
+  nameOf,
+}: {
+  client: AgentClient;
+  /** Voice is the main way to ask: the microphone button comes first and typing is the fallback. */
+  voice: VoiceInput;
+  startVoice: () => void;
+  /** An element's name, for the references a spoken request carries. */
+  nameOf: (id: string) => string;
+}) {
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [draft, setDraft] = useState("");
@@ -253,19 +267,13 @@ export function AgentPanel({ client }: { client: AgentClient }) {
     writeCollapsed(value);
   };
 
-  // "Ask agent" from the palette opens the panel with the cursor in the input (once the input has rendered).
-  const wantsFocus = useRef(false);
+  // A voice request starting (the microphone button, the talk key, Ask agent) shows the panel on the chat.
   useEffect(() => {
-    if (state.focusTick === 0) return;
-    wantsFocus.current = true;
+    if (state.openTick === 0) return;
     setCollapsed(false);
     writeCollapsed(false);
-  }, [state.focusTick]);
-  useEffect(() => {
-    if (!wantsFocus.current || !input.current) return;
-    wantsFocus.current = false;
-    input.current.focus();
-  });
+    setView("chat");
+  }, [state.openTick]);
 
   // Follow the conversation as it grows, unless the user scrolled up to read. A new request or a new approval card
   // always comes into view: the card is waiting for the user.
@@ -366,8 +374,9 @@ export function AgentPanel({ client }: { client: AgentClient }) {
           >
             {state.turns.length === 0 && state.status?.state !== "unavailable" && (
               <li className="agent-empty muted">
-                Ask for a change to the model, for example "add three floors of 3.5 m to this block". Point at
-                or select elements to say which ones.
+                Press the microphone (or hold the ` key) and say what to change, for example "add three floors
+                of 3.5 m to this block". Point at elements while you speak to say which ones, or select them
+                first.
               </li>
             )}
             {state.turns.map((turn) => (
@@ -380,12 +389,14 @@ export function AgentPanel({ client }: { client: AgentClient }) {
               />
             ))}
           </ol>
+          <VoiceBar voice={voice} nameOf={nameOf} />
           <form className="agent-input" onSubmit={submit}>
+            <MicButton voice={voice} onStart={startVoice} disabled={status === "unavailable"} />
             <textarea
               ref={input}
               value={draft}
-              rows={2}
-              placeholder={working ? "The agent is working..." : "Ask your agent"}
+              rows={1}
+              placeholder={working ? "The agent is working..." : "Speak, or type a request"}
               aria-label="Request for the agent"
               data-testid="agent-input"
               disabled={status === "unavailable"}

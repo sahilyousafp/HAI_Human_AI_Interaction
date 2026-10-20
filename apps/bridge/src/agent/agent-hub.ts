@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { AgentProvider, AgentSession } from "@aex/agent-core";
-import type { AgentEvent, AgentStatus, AgentTurn, ApprovalRequest, Message } from "@aex/protocol";
+import type {
+  AgentEvent,
+  AgentStatus,
+  AgentTurn,
+  ApprovalRequest,
+  Message,
+  RequestContext,
+} from "@aex/protocol";
 import { type Logger, silentLogger } from "../log.ts";
 import { PERMISSION_TOOL, readSessionId, writeAgentConfig, writeSessionId } from "./agent-config.ts";
 
@@ -36,6 +43,22 @@ export interface AgentHubOptions {
 }
 
 const id = () => randomUUID();
+
+/**
+ * The text the agent receives for a request that came with context (a spoken request): a compact block naming what
+ * the user pointed at, then the request. The agent can still call get_user_context for more.
+ */
+export function withContext(text: string, context: RequestContext | undefined): string {
+  if (!context) return text;
+  const refs = context.references.length
+    ? context.references.map((r, i) => `${i + 1}) ${r.type} ${r.id} "${r.name}"`).join(", ")
+    : "none";
+  const selection = context.selection.length ? context.selection.join(", ") : "none";
+  const ground = context.groundPoint
+    ? `${context.groundPoint.map((v) => Math.round(v)).join(", ")} mm`
+    : "none";
+  return `[context] references: ${refs}; selection: ${selection}; ground point: ${ground}\n${text}`;
+}
 
 /**
  * The user's agent session, as the bridge runs it: one long-lived process per open project, sent each request as
@@ -105,7 +128,7 @@ export class AgentHub {
   /** Handles an agent message from a client. Returns false for other messages. */
   handle(message: Message, send: Send): boolean {
     if (message.type === "agent.send") {
-      void this.request(message.payload.text).catch((error: Error) => {
+      void this.request(message.payload.text, message.payload.context).catch((error: Error) => {
         this.log.info("agent request refused", { reason: error.message });
         this.reject(message.id, error.message, send);
       });
@@ -118,8 +141,8 @@ export class AgentHub {
     return false;
   }
 
-  /** Sends a request as a new turn and resolves when the turn has ended. */
-  async request(text: string): Promise<void> {
+  /** Sends a request (and what it refers to, for a spoken one) as a new turn; resolves when the turn has ended. */
+  async request(text: string, context?: RequestContext): Promise<void> {
     if (this.status.state === "unavailable") await this.detect();
     if (this.status.state === "unavailable")
       throw new Error(`${this.status.reason} ${this.status.fix ?? ""}`.trim());
@@ -128,7 +151,13 @@ export class AgentHub {
     if (!projectDir) throw new Error("Open a project first.");
     this.clearIdle();
 
-    const turn: AgentTurn = { id: id(), request: text, events: [], recovered: false };
+    const turn: AgentTurn = {
+      id: id(),
+      request: text,
+      ...(context ? { context } : {}),
+      events: [],
+      recovered: false,
+    };
     this.running = turn;
     try {
       const session = await this.ensureSession(projectDir);
@@ -139,11 +168,11 @@ export class AgentHub {
       this.broadcast({
         type: "agent.turn",
         id: id(),
-        payload: { id: turn.id, request: text, recovered: turn.recovered },
+        payload: { id: turn.id, request: text, ...(context ? { context } : {}), recovered: turn.recovered },
       });
       this.setStatus({ state: "working" });
       this.options.hooks?.started?.(turn);
-      for await (const event of session.send(text)) {
+      for await (const event of session.send(withContext(text, context))) {
         turn.events.push(event);
         if (event.type === "turn.end")
           this.log.info("agent turn ended", { reason: event.reason, durationMs: event.durationMs });

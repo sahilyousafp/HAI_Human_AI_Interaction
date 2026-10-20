@@ -36,5 +36,13 @@ interface Window {
     };
   };
   __AEX_TRACKING__?: { frames: unknown[] };
+  __AEX_VOICE__?: {
+    context: {
+      begin(now: number, hoveredId: string | null): void;
+      hover(id: string | null, now: number): void;
+      end(now: number): void;
+      clear(): void;
+    };
+  };
   __AEX_GESTURES__?: { events: E2EGesture[] };
 }

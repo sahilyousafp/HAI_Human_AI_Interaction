@@ -224,7 +224,9 @@ test.describe("agent panel", () => {
     }
   });
 
-  test("Ask agent in the palette opens the panel with the cursor in the input", async ({ page }) => {
+  test("Ask agent in the palette opens the panel and listens, leaving the keyboard focus alone", async ({
+    page,
+  }) => {
     const bridge = await startWithFakeAgent(page);
     try {
       await expect(status(page)).toHaveAttribute("data-state", "idle");
@@ -232,8 +234,10 @@ test.describe("agent panel", () => {
       await page.locator("body").click({ position: { x: 5, y: 5 } }); // focus away from the panel
       await page.keyboard.press("a");
       await expect(panel(page)).toHaveAttribute("data-collapsed", "false");
-      await expect(page.getByTestId("agent-input")).toBeFocused();
+      await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "on");
+      await expect(page.getByTestId("agent-input")).not.toBeFocused();
       await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "select");
+      await page.getByTestId("mic-button").click(); // stop listening
     } finally {
       await bridge.stop();
     }

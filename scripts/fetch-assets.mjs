@@ -1,9 +1,9 @@
 // Places pinned runtime assets in apps/web/public so the app never fetches them from a CDN at runtime.
-// Models are downloaded once and verified by SHA-256; WASM files are copied from the installed npm package.
+// Models are downloaded once and verified by SHA-256; WASM and worklet files are copied from installed npm packages.
 // Usage: node scripts/fetch-assets.mjs [--check]   (--check verifies without downloading)
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -76,7 +76,13 @@ for (const entry of lock.packageFiles) {
     continue;
   }
   rmSync(target, { recursive: true, force: true });
-  cpSync(join(pkgDir, entry.from), target, { recursive: true });
+  // `include` (a regex on file names) copies only the files the app loads, not a whole dist folder.
+  const include = entry.include ? new RegExp(entry.include) : null;
+  const source = join(pkgDir, entry.from);
+  cpSync(source, target, {
+    recursive: true,
+    filter: (path) => !include || path === source || include.test(basename(path)),
+  });
   writeFileSync(stamp, version);
   console.log(`copied   ${entry.to} (${entry.package}@${version})`);
 }

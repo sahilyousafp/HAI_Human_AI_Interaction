@@ -28,6 +28,28 @@ const clipProjects: Project[] = buildClips(clipDir)
     },
   }));
 
+// One project per speech fixture in test-assets/speech (WAV, played once as Chromium's fake microphone), for the
+// voice tests in e2e/voice/<fixture>.spec.ts.
+const speechDir = join(import.meta.dirname, "test-assets", "speech");
+const voiceProjects: Project[] = ["make-this-wall-300-thick"]
+  .filter((fixture) => existsSync(join(import.meta.dirname, "e2e", "voice", `${fixture}.spec.ts`)))
+  .map((fixture) => ({
+    name: `voice:${fixture}`,
+    testMatch: `voice/${fixture}.spec.ts`,
+    // The speech model loads in each fresh browser context; CPU-only runners transcribe slowly.
+    timeout: 120_000,
+    use: {
+      ...devices["Desktop Chrome"],
+      channel,
+      launchOptions: {
+        args: [
+          ...fakeCamera,
+          `--use-file-for-fake-audio-capture=${join(speechDir, `${fixture}.wav`)}%noloop`,
+        ],
+      },
+    },
+  }));
+
 export default defineConfig({
   testDir: "e2e",
   globalSetup: "./e2e/warmup.ts",
@@ -43,13 +65,14 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: ["clips/**", "visual/**"],
+      testIgnore: ["clips/**", "visual/**", "voice/**"],
       // Starting the camera loads MediaPipe in a fresh browser context each test (about 17 s on a CPU-only Windows
       // runner) and startCamera allows 45 s for frames, so the test needs more than the default 30 s.
       timeout: 60_000,
       use: { ...devices["Desktop Chrome"], channel, launchOptions: { args: fakeCamera } },
     },
     ...clipProjects,
+    ...voiceProjects,
     // Screenshot baselines. Rendering is forced through software WebGL (SwiftShader) so a laptop GPU and a CI runner
     // draw the same pixels; baselines are recorded on Windows (fonts differ elsewhere), so the project runs there.
     ...(process.platform === "win32"

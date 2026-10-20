@@ -1,3 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# vad-web asks for onnxruntime-web ^1.17; give it the build transformers.js pins, so the app serves one ONNX runtime.
+overrides:
+  "@ricky0123/vad-web>onnxruntime-web": "1.31.0-dev.20260914-8d85527a0"

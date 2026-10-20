@@ -1,5 +1,5 @@
-import type { Message } from "@aex/protocol";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { Message, SpeechMode } from "@aex/protocol";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
 import { AgentClient } from "./agent/agent-client.ts";
 import { ViewLink } from "./agent/view-link.ts";
@@ -21,10 +21,15 @@ import { ToolRegistry } from "./tools/registry.ts";
 import { PaletteSettings } from "./tools/ToolOverlays.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
 import { Viewer } from "./viewer/Viewer.tsx";
+import { listenInCloud, listenOnDevice } from "./voice/listeners.ts";
+import { Transcriber } from "./voice/transcriber.ts";
+import { VoiceSettingsCard } from "./voice/VoiceSettingsCard.tsx";
+import { VoiceInput } from "./voice/voice-input.ts";
 
 declare global {
   interface Window {
     __AEX_SCENE__?: SceneClient;
+    __AEX_VOICE__?: VoiceInput;
   }
 }
 
@@ -79,22 +84,96 @@ export function App() {
       ),
     [],
   );
+  // Voice is the main way to ask the agent: transcribed on this laptop unless the user opts into cloud speech.
+  const [speech, setSpeech] = useState<SpeechMode>("device");
+  const speechRef = useRef(speech);
+  speechRef.current = speech;
+  const transcriber = useMemo(() => new Transcriber(), []);
+  const voice = useMemo(
+    () =>
+      new VoiceInput({
+        listen: (events) => {
+          if (speechRef.current === "cloud") return listenInCloud(events);
+          transcriber.load(); // the model loads while the user speaks
+          return listenOnDevice(events);
+        },
+        transcribe: (audio) => transcriber.transcribe(audio),
+        send: (text, context) => agent.request(text, context),
+        context: (recorder) => {
+          const { doc, selection } = sceneClient.getSnapshot();
+          return recorder.resolve(doc, selection, viewLink.groundPoint());
+        },
+      }),
+    [transcriber, agent, sceneClient, viewLink],
+  );
+  const startVoice = () => {
+    agent.requestOpen();
+    void voice.start(() => viewLink.pointedId);
+  };
+  const startVoiceRef = useRef(startVoice);
+  startVoiceRef.current = startVoice;
+  const markers = useSyncExternalStore(voice.context.subscribe, () => voice.context.ids);
+  const micOn = useSyncExternalStore(voice.subscribe, () => voice.micOn);
+
+  // What the hand points at, and what gets tapped into the selection, while the user speaks.
+  useEffect(() => viewLink.onPointed((id) => voice.context.hover(id, Date.now())), [viewLink, voice]);
+  useEffect(() => {
+    let previous = sceneClient.getSnapshot().selection;
+    return sceneClient.subscribe(() => {
+      const { selection } = sceneClient.getSnapshot();
+      if (selection !== previous) voice.context.selected(selection, previous);
+      previous = selection;
+    });
+  }, [sceneClient, voice]);
+
+  // Hold the ` key to talk (not while typing); releasing it ends the utterance.
+  useEffect(() => {
+    const typing = (e: KeyboardEvent) =>
+      (e.target as HTMLElement).closest("input, textarea, select") !== null;
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== "Backquote" || e.repeat || typing(e)) return;
+      e.preventDefault();
+      startVoiceRef.current();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "Backquote") voice.finish();
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [voice]);
+
   const gestures = useMemo(
     () => ({
       bindings: gestureSettings.getSnapshot,
       agent: {
-        answer: (yes: boolean) => agent.answer(yes, bus.engaged),
+        // "Yes" and "no" first answer a spoken request waiting to be sent, then the agent's approval card.
+        answer: (yes: boolean) => {
+          if (voice.reviewing) {
+            if (yes) voice.confirm();
+            else voice.discard();
+            return true;
+          }
+          return agent.answer(yes, bus.engaged);
+        },
         stop: () => agent.stopRunning(),
         ask: () => tools.choose("ask-agent"),
       },
     }),
-    [gestureSettings, agent, bus, tools],
+    [gestureSettings, agent, bus, tools, voice],
   );
 
   // Dev builds only: lets end-to-end tests edit the scene through the same client the UI uses.
   useEffect(() => {
     if (import.meta.env.DEV) window.__AEX_SCENE__ = sceneClient;
   }, [sceneClient]);
+  // Dev builds only: lets end-to-end tests drive what a spoken request captured.
+  useEffect(() => {
+    if (import.meta.env.DEV) window.__AEX_VOICE__ = voice;
+  }, [voice]);
 
   useEffect(() => {
     const conn = connectToBridge(window.__AEX_SESSION__ ?? null, browserDeps, setBridge, (message) => {
@@ -102,6 +181,7 @@ export function App() {
       if (message.type === "settings.snapshot") {
         tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT);
         gestureSettings.load(message.payload.gestures);
+        setSpeech(message.payload.speech);
       }
     });
     connection.current = conn;
@@ -115,9 +195,14 @@ export function App() {
     if (bridge.status !== "connected") return "The agent is not connected: the bridge is offline.";
     const status = agent.getSnapshot().status;
     if (status?.state === "unavailable") return `The agent is not available. ${status.reason}`;
-    agent.requestFocus();
+    startVoiceRef.current(); // Ask agent listens: speak the request
     return null;
   };
+  const changeSpeech = (mode: SpeechMode) => {
+    setSpeech(mode);
+    connection.current?.send({ type: "settings.set", id: crypto.randomUUID(), payload: { speech: mode } });
+  };
+  const nameOf = (id: string) => sceneClient.getSnapshot().doc?.elements[id]?.name ?? id;
 
   const label = LABELS[bridge.status];
   const cameraOn = camera.camera === "on" || camera.camera === "starting";
@@ -137,6 +222,15 @@ export function App() {
           >
             <span className="dot" aria-hidden="true" />
             <span>{cameraOn ? "Camera on" : "Camera off"}</span>
+          </output>
+          <output
+            className="status camera"
+            data-testid="mic-indicator"
+            data-state={micOn ? "on" : "off"}
+            aria-live="polite"
+          >
+            <span className="dot" aria-hidden="true" />
+            <span>{micOn ? "Mic on" : "Mic off"}</span>
           </output>
           <output
             className="status"
@@ -164,13 +258,15 @@ export function App() {
             view={viewLink}
             askAgent={askAgent}
             gestures={gestures}
+            markers={markers}
           >
-            <AgentPanel client={agent} />
+            <AgentPanel client={agent} voice={voice} startVoice={startVoice} nameOf={nameOf} />
           </Viewer>
           {label.hint && <p className="hint">{label.hint}</p>}
         </div>
         <aside className="sidebar" aria-label="Tracking">
           <TrackingPanel onCameraState={setCamera} bus={bus} renderLatency={renderLatency} />
+          <VoiceSettingsCard mode={speech} onMode={changeSpeech} transcriber={transcriber} />
           <GestureSettingsCard settings={gestureSettings} bus={bus} />
           <PaletteSettings controller={tools} />
           <AgentPermissions client={agent} />

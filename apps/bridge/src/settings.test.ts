@@ -22,7 +22,10 @@ describe("SettingsHub", () => {
     const sent: Message[] = [];
     new SettingsHub(settingsFile(tempRoot()), () => {}).greet((m) => sent.push(m));
     expect(sent).toEqual([
-      expect.objectContaining({ type: "settings.snapshot", payload: { palette: null, gestures: null } }),
+      expect.objectContaining({
+        type: "settings.snapshot",
+        payload: { palette: null, gestures: null, speech: "device" },
+      }),
     ]);
   });
 
@@ -47,7 +50,10 @@ describe("SettingsHub", () => {
     const broadcast: Message[] = [];
     expect(new SettingsHub(file, (m) => broadcast.push(m)).handle(set(LAYOUT))).toBe(true);
     expect(broadcast).toEqual([
-      expect.objectContaining({ type: "settings.snapshot", payload: { palette: LAYOUT, gestures: null } }),
+      expect.objectContaining({
+        type: "settings.snapshot",
+        payload: { palette: LAYOUT, gestures: null, speech: "device" },
+      }),
     ]);
 
     const sent: Message[] = [];

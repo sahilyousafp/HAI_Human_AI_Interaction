@@ -18,7 +18,7 @@ Builds on the palette's Ask agent slot (`add-gesture-tool-palette`), pointer and
 
 **Voice activity detection: Silero VAD via `@ricky0123/vad-web`** in an AudioWorklet. It gives speech start and end events, with the end at 800 ms of silence, and buffers only the current utterance in memory. Rejected: fixed push-to-talk only (hands are busy pointing; a key hold is kept as an alternative).
 
-**Transcription: Moonshine base (ONNX) with transformers.js** in a dedicated Web Worker, on WebGPU when available and WASM otherwise. Model files are fetched once by the asset script with SHA-256 checks and served from `apps/web/public/models`, never from a runtime CDN. Rejected: whisper.cpp sidecar (needs a native binary per platform); Web Speech as default (sends audio to a cloud service).
+**Transcription: Moonshine base (ONNX, int8) with transformers.js** in a dedicated Web Worker, on WebAssembly. Measured during implementation: about 0.2 s per two-second phrase on WASM against about 2 s on WebGPU with the same int8 files, so WebGPU is not used (see `docs/decisions.md`). Model files are fetched once by the asset script with SHA-256 checks and served from `apps/web/public/models`, never from a runtime CDN. Rejected: whisper.cpp sidecar (needs a native binary per platform); Web Speech as default (sends audio to a cloud service).
 
 **Audio lifetime.** PCM buffers live only in the worker, are transferred (not copied) from the worklet, and are released after transcription. Nothing goes to IndexedDB, files or the bridge. The tracking-frame rule ("no pixels on the wire") gets a sibling test for audio.
 
@@ -34,5 +34,5 @@ Builds on the palette's Ask agent slot (`add-gesture-tool-palette`), pointer and
 
 - [Moonshine accuracy on architectural vocabulary such as "mullion" or "parapet"] → The transcript is editable before sending (click to edit). A small domain word list is kept for later fine-tuning or prompt hints.
 - [Model download size of about 60 MB on first install] → One-time fetch by the asset script, cached and checksum-verified.
-- [WebGPU unavailable on some iGPUs] → WASM fallback, with the backend shown in the HUD.
+- [Slower CPUs transcribe more slowly on WASM] → The end-of-speech-to-transcript p90 is shown in the Voice settings; a WebGPU path with fp16 weights can be added if it is needed.
 - [Pointer drift while speaking captures the wrong element] → The 300 ms dwell rule plus visible numbered markers before sending, and shake to discard.

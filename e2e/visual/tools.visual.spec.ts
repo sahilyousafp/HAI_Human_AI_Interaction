@@ -60,3 +60,22 @@ test("lowered section", async ({ page }) => {
   await settled(page);
   await expect(page.getByTestId("viewer")).toHaveScreenshot("section-lowered.png");
 });
+
+test("reference markers: two elements captured while speaking show markers 1 and 2", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  bridge = await startTestBridge(page);
+  await openViewer(page);
+  await settled(page);
+  // What point-and-speak records: the pointer rests on a column, then on a wall, each for 400 ms.
+  await page.evaluate(() => {
+    const context = window.__AEX_VOICE__?.context;
+    context?.begin(0, null);
+    context?.hover("col-b2", 0);
+    context?.hover("wall-s", 400);
+    context?.hover(null, 800);
+    context?.end(1000);
+  });
+  await expect(page.getByTestId("reference-marker")).toHaveCount(2);
+  await settled(page);
+  await expect(page.getByTestId("viewer")).toHaveScreenshot("reference-markers.png");
+});

@@ -28,10 +28,16 @@ function setup(detection: Detection = OK) {
         (f) =>
           JSON.parse(readFileSync(join(stateDir, f), "utf8")) as { pid: number; args: string[]; cwd: string },
       );
+  /** Every request text the fake CLI received, in order (its conversation history). */
+  const received = () =>
+    readdirSync(stateDir)
+      .filter((f) => !f.startsWith("start-") && f.endsWith(".json"))
+      .flatMap((f) => JSON.parse(readFileSync(join(stateDir, f), "utf8")) as string[]);
   return {
     hub,
     messages,
     starts,
+    received,
     projectDir: () => projectDir,
     switchProject: () => {
       projectDir = temp("aex-agent-project-");
@@ -213,6 +219,45 @@ describe("AgentHub with a fake Claude Code CLI", () => {
     hub.greet(() => {});
     await vi.waitFor(() => expect(hub.currentStatus.state).toBe("idle"));
     await hub.request("hello");
+    await hub.close();
+  });
+
+  it('"make this 300 thick": the agent receives the transcript with the pointed wall as the first reference', async () => {
+    const { hub, received } = setup();
+    await hub.ready;
+    await hub.request("make this 300 thick", {
+      references: [{ id: "wall-n", type: "wall", name: "North wall" }],
+      selection: [],
+      groundPoint: [12_400.4, 3100, 0],
+    });
+    expect(received().at(-1)).toBe(
+      '[context] references: 1) wall wall-n "North wall"; selection: none; ground point: 12400, 3100, 0 mm\nmake this 300 thick',
+    );
+    // The transcript, not the block, is what the panel shows.
+    expect(transcriptOf(hub).at(-1)).toMatchObject({ request: "make this 300 thick" });
+    await hub.close();
+  });
+
+  it("select first, then speak: the selected slabs are the references", async () => {
+    const { hub, received } = setup();
+    await hub.ready;
+    const slabs = ["slab-0", "slab-1", "slab-2"];
+    await hub.request("make these 250 thick", {
+      references: slabs.map((id) => ({ id, type: "slab", name: id })),
+      selection: slabs,
+      groundPoint: null,
+    });
+    expect(received().at(-1)).toBe(
+      '[context] references: 1) slab slab-0 "slab-0", 2) slab slab-1 "slab-1", 3) slab slab-2 "slab-2"; selection: slab-0, slab-1, slab-2; ground point: none\nmake these 250 thick',
+    );
+    await hub.close();
+  });
+
+  it("a typed request reaches the agent unchanged", async () => {
+    const { hub, received } = setup();
+    await hub.ready;
+    await hub.request("hello");
+    expect(received().at(-1)).toBe("hello");
     await hub.close();
   });
 });

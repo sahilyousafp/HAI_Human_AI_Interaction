@@ -39,6 +39,11 @@ jobs:
       - run: pnpm test
       - run: pnpm licenses:check
       - run: pnpm credentials:check
+      # Model files (MediaPipe, Moonshine speech) are pinned by SHA-256 in the lock file: download them once per lock.
+      - uses: actions/cache@v6
+        with:
+          path: apps/web/public/models
+          key: models-${{ hashFiles('scripts/assets.lock.json') }}
       - run: pnpm assets
 
       - name: Read Playwright version

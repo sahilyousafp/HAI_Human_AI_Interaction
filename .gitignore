@@ -11,3 +11,5 @@ coverage/
 Thumbs.db
 apps/web/public/models/
 apps/web/public/mediapipe/
+apps/web/public/ort/
+apps/web/public/vad/

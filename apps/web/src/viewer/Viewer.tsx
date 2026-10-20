@@ -23,7 +23,7 @@ import type { Hit } from "../tools/types.ts";
 import { elementGeometry, MM, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
 import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
-import { MeasureMarks, SectionClipping, SectionPlane } from "./ToolScene.tsx";
+import { MeasureMarks, ReferenceMarkers, SectionClipping, SectionPlane } from "./ToolScene.tsx";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 
 const FOV = 45;
@@ -331,6 +331,7 @@ export function Viewer({
   view,
   askAgent,
   gestures,
+  markers = [],
   children,
 }: {
   client: SceneClient;
@@ -344,6 +345,8 @@ export function Viewer({
   askAgent: () => string | null;
   /** What each gesture does (the user's settings) and how gestures reach the agent. */
   gestures: RouterOptions;
+  /** Elements captured while the user speaks, numbered in this order. */
+  markers?: string[];
   /** HUD panels over the model (the agent panel); inside the viewer, so the hand can press their buttons. */
   children?: React.ReactNode;
 }) {
@@ -376,6 +379,17 @@ export function Viewer({
   askAgentRef.current = askAgent;
 
   useEffect(() => view.setPointed(hoverId), [view, hoverId]);
+  // Where the hand pointer meets the ground, for a spoken "here".
+  const pointerRef = useRef(pointer);
+  pointerRef.current = pointer;
+  useEffect(
+    () =>
+      view.attachGround(() => {
+        const at = pointerRef.current;
+        return at ? pickRef.current.ground(at[0], at[1], 0) : null;
+      }),
+    [view],
+  );
 
   // Follow theme changes.
   useEffect(() => {
@@ -795,6 +809,7 @@ export function Viewer({
           />
         )}
         {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
+        {markers.length > 0 && <ReferenceMarkers ids={markers} doc={scene.doc} />}
         <CameraRig
           nav={nav}
           navInput={navInput}

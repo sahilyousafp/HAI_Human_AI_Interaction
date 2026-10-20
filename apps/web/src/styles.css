@@ -1661,3 +1661,210 @@ kbd {
 .gesture-settings > .secondary {
   justify-self: start;
 }
+
+/* Voice: the microphone button leads the agent input; the bar above it follows the request from listening to sent. */
+.mic-button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.mic-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 85%, var(--ink));
+}
+.mic-button:disabled {
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  color: var(--muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.mic-button[data-state="listening"],
+.mic-button[data-state="starting"] {
+  background: var(--risk);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--risk) 55%, transparent);
+  animation: mic-pulse 1.4s ease-out infinite;
+}
+@keyframes mic-pulse {
+  to {
+    box-shadow: 0 0 0 12px transparent;
+  }
+}
+.agent-input {
+  align-items: center;
+}
+.voice-bar {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+}
+.voice-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 13.5px;
+}
+.voice-level {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.voice-level > .voice-level-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--risk);
+  transform-origin: left center;
+  transition: transform 80ms linear;
+}
+.voice-transcript {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 500 14.5px / 1.45 var(--f-body);
+  resize: none;
+}
+.voice-countdown {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform-origin: left center;
+  animation-name: voice-countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes voice-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.voice-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.voice-refs li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12.5px;
+}
+.voice-ref-n,
+.reference-marker {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--warn);
+  color: var(--bg);
+  font: 700 12px / 1 var(--f-mono);
+}
+.reference-marker {
+  width: 26px;
+  height: 26px;
+  font-size: 14px;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--warn) 30%, transparent),
+    0 2px 8px rgb(0 0 0 / 0.3);
+  pointer-events: none;
+}
+.voice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.voice-actions .primary {
+  padding: 6px 12px;
+  font-size: 13.5px;
+}
+.voice-actions .muted {
+  font-size: 12.5px;
+}
+.voice-actions kbd {
+  margin-left: 4px;
+  font: 500 11px / 1 var(--f-mono);
+  opacity: 0.8;
+}
+.voice-discarded s {
+  color: var(--muted);
+}
+.voice-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--risk);
+}
+.voice-error .secondary {
+  flex: none;
+}
+.status.camera[data-testid="mic-indicator"][data-state="on"] .dot {
+  background: var(--risk);
+}
+.voice-mode {
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.voice-mode select {
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 13px / 1.3 var(--f-body);
+}
+.voice-settings p {
+  margin: 0;
+  font-size: 12.5px;
+}
+.voice-stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.voice-stats dt {
+  color: var(--muted);
+}
+.voice-stats dd {
+  margin: 0;
+  font-family: var(--f-mono);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mic-button[data-state="listening"],
+  .mic-button[data-state="starting"] {
+    animation: none;
+  }
+}

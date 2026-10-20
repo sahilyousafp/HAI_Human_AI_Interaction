@@ -73,10 +73,21 @@ export const AgentStatus = z.discriminatedUnion("state", [
 ]);
 export type AgentStatus = z.infer<typeof AgentStatus>;
 
+/** What a request refers to: what the user pointed at or tapped while speaking (in order), the selection, the ground point. */
+export const RequestContext = z.strictObject({
+  references: z.array(z.strictObject({ id: z.string(), type: z.string(), name: z.string() })).max(50),
+  selection: z.array(z.string()).max(500),
+  /** Where the hand pointer met the ground when the user stopped speaking, millimetres. */
+  groundPoint: z.tuple([z.number(), z.number(), z.number()]).nullable(),
+});
+export type RequestContext = z.infer<typeof RequestContext>;
+
 /** One request and everything the agent did for it, kept by the bridge so a reloaded page can replay it. */
 export const AgentTurn = z.strictObject({
   id: z.string(),
   request: z.string(),
+  /** What a spoken request referred to. */
+  context: RequestContext.optional(),
   events: z.array(AgentEvent),
   /** Set when this turn ran in a session resumed after a crash. */
   recovered: z.boolean().default(false),
