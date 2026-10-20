@@ -168,6 +168,8 @@ button {
   min-height: 0;
 }
 .stage {
+  /* The width the model's left column (project bar, agent panel) takes; messages centre in the space beside it. */
+  --hud-left: 404px;
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -182,10 +184,10 @@ button {
 .hint {
   position: absolute;
   top: 72px;
-  left: 50%;
+  left: calc(var(--hud-left) + (100% - var(--hud-left)) / 2);
   transform: translateX(-50%);
   margin: 0;
-  max-width: min(60ch, calc(100% - 32px));
+  max-width: min(60ch, calc(100% - var(--hud-left) - 24px));
   color: var(--ink);
   padding: 10px 12px;
   border-left: 3px solid var(--warn);
@@ -281,6 +283,7 @@ button {
 }
 .hand-pointer {
   position: absolute;
+  z-index: 30; /* the hand presses HUD buttons, so its pointer is drawn over every panel */
   width: 22px;
   height: 22px;
   margin: -11px 0 0 -11px;
@@ -370,7 +373,7 @@ button {
   height: 266px;
   margin: -133px 0 0 -133px;
   pointer-events: none;
-  z-index: 3;
+  z-index: 8; /* above the HUD panels: it is what the user is steering */
 }
 .palette-centre,
 .palette-slot {
@@ -427,10 +430,21 @@ button {
 .tool-messages {
   position: absolute;
   top: 72px;
-  left: 50%;
+  left: calc(var(--hud-left) + (100% - var(--hud-left)) / 2);
   transform: translateX(-50%);
-  max-width: min(64ch, calc(100% - 32px));
+  max-width: min(64ch, calc(100% - var(--hud-left) - 24px));
   z-index: 2;
+}
+/* Narrow screens: the agent panel spans the width, so messages sit at the bottom, above the status strip. */
+@media (max-width: 860px) {
+  .stage {
+    --hud-left: 0px;
+  }
+  .tool-messages,
+  .hint {
+    top: auto;
+    bottom: 64px;
+  }
 }
 .tool-notice,
 .tool-question {
