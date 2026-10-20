@@ -285,9 +285,8 @@ export const askAgentTool: Tool = {
   shortcut: "a",
   instant: true,
   run(ctx) {
-    if (!ctx.agentAvailable()) {
-      ctx.flash("The agent is not connected. Agent requests arrive with the Claude agent bridge.");
-    }
+    const problem = ctx.askAgent();
+    if (problem) ctx.flash(problem);
   },
 };
 

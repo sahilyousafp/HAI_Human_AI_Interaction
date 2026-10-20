@@ -1,6 +1,6 @@
 import { DEFAULT_GESTURES } from "@aex/perception";
 import type { GestureEvent, Point2, Point3Mm, SceneDocument, SceneOp } from "@aex/protocol";
-import type { RouterTargets } from "./input-router.ts";
+import type { DragMode, RouterTargets } from "./input-router.ts";
 import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from "./palette.ts";
 import type { ToolRegistry } from "./registry.ts";
 import { EMPTY_OVERLAY, type Hit, type Tool, type ToolContext, type ToolOverlay } from "./types.ts";
@@ -26,13 +26,14 @@ export interface ToolEnvironment {
   handToViewer(position: Point2): Point2;
   /** Width / height of the camera frame. */
   handAspect(): number;
-  /** View navigation for gestures no tool takes. */
-  navigate(event: GestureEvent): void;
+  /** View navigation for gestures no tool takes; a one-hand drag orbits or pans. */
+  navigate(event: GestureEvent, dragMode?: DragMode): void;
   /** Presses the on-screen button at a viewer position, if there is one (hands can press HUD buttons). */
   press(at: Point2): boolean;
   /** Whether there is an on-screen button at a viewer position. */
   isButton(at: Point2): boolean;
-  agentAvailable(): boolean;
+  /** Opens the agent panel ready for a request; returns why it cannot, or null. */
+  askAgent(): string | null;
 }
 
 export interface ToolSnapshot {
@@ -249,16 +250,22 @@ export class ToolController {
     this.closeQuestion(yes);
   }
 
-  /** A fist held for FIST_RESET_MS returns to Select from any tool. */
-  fist(closed: boolean): void {
+  /** A fist held for FIST_RESET_MS runs `held`: by default, back to Select from any tool. */
+  fist(closed: boolean, held: () => void = () => this.choose(DEFAULT_TOOL)): void {
     if (this.fistTimer) clearTimeout(this.fistTimer);
     this.fistTimer = null;
     if (!closed) return;
     const remaining = FIST_RESET_MS - DEFAULT_GESTURES.clutch.debounceMs;
     this.fistTimer = setTimeout(() => {
       this.fistTimer = null;
-      this.choose(DEFAULT_TOOL);
+      held();
     }, remaining);
+  }
+
+  /** Selects the element at a viewer position (or clears the selection over empty space), whatever the tool. */
+  selectAt(at: Point2): void {
+    const hit = this.env?.pick(at);
+    this.env?.select(hit ? [hit.elementId] : []);
   }
 
   clearSection(): void {
@@ -288,9 +295,13 @@ export class ToolController {
         dragCancel: () => this.cancelDrag(),
         nod: () => this.respond(true),
         shake: () => this.cancel(),
-        clutch: (closed) => this.fist(closed),
+        clutch: (closed, held) => this.fist(closed, held),
+        select: (p) => this.selectAt(toViewer(p)),
+        undo: () => this.env?.undo(),
+        redo: () => this.env?.redo(),
+        cancel: () => this.cancel(),
       },
-      navigation: (event) => this.env?.navigate(event),
+      navigation: (event, dragMode) => this.env?.navigate(event, dragMode),
     };
   }
 
@@ -315,7 +326,7 @@ export class ToolController {
         this.answer = answer;
         this.update({ question });
       },
-      agentAvailable: () => env.agentAvailable(),
+      askAgent: () => env.askAgent(),
     };
   }
 

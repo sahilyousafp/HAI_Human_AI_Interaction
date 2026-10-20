@@ -70,6 +70,22 @@ describe("pinch hysteresis and minimum hold", () => {
 });
 
 describe("tap and drag", () => {
+  it("a deliberate pinch is a tap: still for 500 ms, then released (recorded pinches last 450-650 ms)", () => {
+    const events = run([
+      ...repeat(15, () => ({ ratio: 0.12, position: at(0.5) })),
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
+    expect(types(events)).toEqual(["pinch.tap"]);
+  });
+
+  it("a still pinch released just before the hold is still a tap", () => {
+    const events = run([
+      ...repeat(22, () => ({ ratio: 0.12, position: at(0.5) })),
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
+    expect(types(events)).toEqual(["pinch.tap"]);
+  });
+
   it("tap: a 180 ms still pinch emits one tap and no drag events", () => {
     const events = run([...repeat(6, () => ({ ratio: 0.1 })), ...repeat(3, () => ({ ratio: 0.8 }))]);
     expect(types(events)).toEqual(["pinch.tap"]);
@@ -154,18 +170,18 @@ describe("clutch (spec: closed fist acts as a clutch)", () => {
 });
 
 describe("long pinch (hold)", () => {
-  it("hold then steer: one hold at 600 ms, then drag updates and a drag end", () => {
+  it("hold then steer: one hold at 800 ms, then drag updates and a drag end", () => {
     const events = run([
-      ...repeat(22, () => ({ ratio: 0.12, position: at(0.5) })), // about 730 ms still
+      ...repeat(28, () => ({ ratio: 0.12, position: at(0.5) })), // about 930 ms still
       ...repeat(10, (i) => ({ ratio: 0.12, position: at(0.5 + i * 0.01) })), // steer right
       ...repeat(3, () => ({ ratio: 0.8 })),
     ]);
     const t = types(events);
     expect(t.filter((x) => x === "pinch.hold")).toHaveLength(1);
     const hold = events.find((e) => e.type === "pinch.hold");
-    // The pinch starts when the fingertips first touch; the hold fires 600 ms after that.
-    expect(hold && hold.ts - 1000).toBeGreaterThanOrEqual(600);
-    expect(hold && hold.ts - 1000).toBeLessThan(600 + 2 * STEP);
+    // The pinch starts when the fingertips first touch; the hold fires 800 ms after that.
+    expect(hold && hold.ts - 1000).toBeGreaterThanOrEqual(800);
+    expect(hold && hold.ts - 1000).toBeLessThan(800 + 2 * STEP);
     const afterHold = t.slice(t.indexOf("pinch.hold") + 1);
     expect(afterHold.filter((x) => x === "pinch.drag.update").length).toBeGreaterThan(5);
     expect(afterHold.at(-1)).toBe("pinch.drag.end");

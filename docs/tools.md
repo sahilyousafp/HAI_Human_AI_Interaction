@@ -46,7 +46,7 @@ The mouse cursor changes with the tool as well. The pointer stays put through br
 | Tool | Key | Default slot | What it does |
 |---|---|---|---|
 | Select | V | Top | Tap selects the element under the pointer; tap on empty space clears. Drags orbit the view |
-| Ask agent | A | Top right | Opens the agent request. Until the agent bridge arrives it says the agent is not connected |
+| Ask agent | A | Top right | Opens the agent panel with the cursor in its input (see [agent.md](agent.md)). If the agent is not available, it says why |
 | Measure | D | Right | Tap two points on the model: the distance between them is shown in millimetres (rounded to 1 mm). Changes nothing |
 | Section | S | Bottom right | The cut is a plane you can grab: pinch on it (it lights up under the pointer) and drag down to cut lower, up to cut higher; the height is shown in millimetres. A drag off the plane orbits. The section stays when you change tool, until you press Remove (or tap the plane with Delete). From any other tool, its outline can still be grabbed and dragged, and tapping the outline selects the section |
 | Move | M | Bottom | Pinch an element and drag it along the ground; it snaps to 100 mm and is moved in one "Move" transaction when you let go. A drag that starts on empty space orbits instead |

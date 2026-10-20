@@ -2,16 +2,9 @@ import { mkdtempSync, readFileSync, renameSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  type Message,
-  PROTOCOL_VERSION,
-  parseMessage,
-  TOKEN_PROTOCOL_PREFIX,
-  WS_PATH,
-  WS_PROTOCOL,
-} from "@aex/protocol";
 import { afterEach, describe, expect, it } from "vitest";
-import { WebSocket } from "ws";
+import type { WebSocket } from "ws";
+import { connectClient } from "../test/ws-client.ts";
 import {
   defaultProjectDir,
   openProject,
@@ -45,44 +38,8 @@ async function start(scene: Parameters<typeof createBridge>[0]["scene"] = {}): P
   return bridge.start();
 }
 
-/** A connected client that records every message it receives. */
-async function client(address: AddressInfo) {
-  const ws = new WebSocket(
-    `ws://127.0.0.1:${address.port}${WS_PATH}`,
-    [WS_PROTOCOL, `${TOKEN_PROTOCOL_PREFIX}${TOKEN}`],
-    {
-      headers: { origin: ORIGIN },
-    },
-  );
-  sockets.push(ws);
-  const received: Message[] = [];
-  ws.on("message", (d) => {
-    const r = parseMessage(d.toString());
-    if (r.ok) received.push(r.message);
-  });
-  await new Promise((r) => ws.once("open", r));
-  const send = (type: string, payload: unknown, id = `m${Math.random()}`) =>
-    ws.send(JSON.stringify({ type, id, payload }));
-  send("hello", { client: "web", protocolVersion: PROTOCOL_VERSION });
-  const waitFor = async <T extends Message["type"]>(
-    type: T,
-    test: (m: Extract<Message, { type: T }>) => boolean = () => true,
-    timeoutMs = 2000,
-  ) => {
-    const started = Date.now();
-    while (Date.now() - started < timeoutMs) {
-      const hit = received.find(
-        (m): m is Extract<Message, { type: T }> =>
-          m.type === type && test(m as Extract<Message, { type: T }>),
-      );
-      if (hit) return hit;
-      await new Promise((r) => setTimeout(r, 10));
-    }
-    throw new Error(`timed out waiting for ${type}`);
-  };
-  await waitFor("scene.snapshot");
-  return { send, waitFor, received };
-}
+const client = (address: AddressInfo) =>
+  connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
 
 describe("scene store over the bridge", () => {
   it("sends a snapshot of the sample scene on connect", async () => {

@@ -2,6 +2,7 @@ import { pinchPoint } from "@aex/perception";
 import type { GestureEvent, TrackedHand, TrackingFrame } from "@aex/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { InputBus } from "../input/input-bus.ts";
+import { ToolIcon } from "../tools/ToolOverlays.tsx";
 import type { LatencyTracker } from "../viewer/latency.ts";
 import { CAMERA_EFFECTS, type CameraEffectsState, EFFECT_NAMES } from "./camera-effects.ts";
 import { type CameraPrefs, loadCameraPrefs, mirroredFor, saveCameraPrefs } from "./camera-prefs.ts";
@@ -91,6 +92,27 @@ async function listCameras(): Promise<MediaDeviceInfo[]> {
   return devices.filter((d) => d.kind === "videoinput");
 }
 
+const EXPAND_ICON = "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5";
+const SHRINK_ICON = "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5";
+const PREVIEW_KEY = "aex.previewExpanded";
+
+/** Whether the camera preview was left expanded in this browser (a convenience; it defaults to small). */
+function readPreviewExpanded(): boolean {
+  try {
+    return localStorage.getItem(PREVIEW_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writePreviewExpanded(value: boolean): void {
+  try {
+    localStorage.setItem(PREVIEW_KEY, String(value));
+  } catch {
+    // Storage blocked (private window): the choice lasts for this page only.
+  }
+}
+
 function cameraLabel(info: CameraInfo | null): string {
   if (!info?.width || !info.height) return "-";
   const fps = info.frameRate ? `, ${Math.round(info.frameRate)} fps` : "";
@@ -131,6 +153,11 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
   const [prefs, setPrefs] = useState<CameraPrefs>(loadCameraPrefs);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [cameraInfo, setCameraInfo] = useState<CameraInfo | null>(null);
+  const [expanded, setExpanded] = useState(readPreviewExpanded);
+  const setPreviewExpanded = (value: boolean) => {
+    setExpanded(value);
+    writePreviewExpanded(value);
+  };
 
   const updateState = useCallback(
     (next: TrackerState) => {
@@ -302,30 +329,64 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
   return (
     <section className="tracking" aria-label="Camera tracking">
       <div className="main-column">
-        <div className="preview" data-camera={state.camera} data-mirrored={prefs.mirrored}>
-          <video ref={videoRef} className="preview-video" muted playsInline />
-          <canvas
-            ref={canvasRef}
-            className="preview-overlay"
-            width={640}
-            height={480}
-            role="img"
-            aria-label="Tracked hand and face points over the camera preview"
-          />
-          {state.camera !== "on" && (
-            <div className="preview-empty">
-              {state.camera === "starting" ? <p>Starting camera and loading models...</p> : null}
-              {state.camera === "off" ? (
-                <p>The camera is off. Video stays in this browser tab; only hand and face points are used.</p>
-              ) : null}
-              {state.camera === "error" ? (
-                <div className="camera-error" data-testid="camera-error" data-kind={state.error} role="alert">
-                  <strong>{ERROR_TEXT[state.error].title}</strong>
-                  <span>{ERROR_TEXT[state.error].fix}</span>
-                </div>
-              ) : null}
-            </div>
+        <div className="preview-slot" data-expanded={expanded}>
+          {expanded && (
+            <p className="preview-slot-note">
+              The camera preview is shown larger over the model.{" "}
+              <button type="button" className="link-button" onClick={() => setPreviewExpanded(false)}>
+                Shrink it
+              </button>
+            </p>
           )}
+          <div
+            className="preview"
+            data-testid="camera-preview"
+            data-camera={state.camera}
+            data-mirrored={prefs.mirrored}
+            data-expanded={expanded}
+          >
+            <button
+              type="button"
+              className="preview-expand"
+              data-testid="preview-expand"
+              aria-pressed={expanded}
+              aria-label={expanded ? "Shrink the camera preview" : "Expand the camera preview"}
+              title={expanded ? "Shrink the camera preview" : "Expand the camera preview"}
+              onClick={() => setPreviewExpanded(!expanded)}
+            >
+              <ToolIcon path={expanded ? SHRINK_ICON : EXPAND_ICON} size={16} />
+            </button>
+            <video ref={videoRef} className="preview-video" muted playsInline />
+            <canvas
+              ref={canvasRef}
+              className="preview-overlay"
+              width={640}
+              height={480}
+              role="img"
+              aria-label="Tracked hand and face points over the camera preview"
+            />
+            {state.camera !== "on" && (
+              <div className="preview-empty">
+                {state.camera === "starting" ? <p>Starting camera and loading models...</p> : null}
+                {state.camera === "off" ? (
+                  <p>
+                    The camera is off. Video stays in this browser tab; only hand and face points are used.
+                  </p>
+                ) : null}
+                {state.camera === "error" ? (
+                  <div
+                    className="camera-error"
+                    data-testid="camera-error"
+                    data-kind={state.error}
+                    role="alert"
+                  >
+                    <strong>{ERROR_TEXT[state.error].title}</strong>
+                    <span>{ERROR_TEXT[state.error].fix}</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
         {state.camera === "on" && effectsStillOn.length > 0 && (
           <div className="effects-warning" data-testid="camera-effects-warning" role="status">

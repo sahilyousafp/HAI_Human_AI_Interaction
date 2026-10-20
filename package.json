@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "licenses:check": "node scripts/check-licenses.mjs",
+    "credentials:check": "node scripts/credential-boundary.mjs",
     "assets": "node scripts/fetch-assets.mjs"
   },
   "devDependencies": {

@@ -5,16 +5,21 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "dev": "node --watch --watch-preserve-output --import tsx src/main.ts",
     "start": "tsx src/main.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@aex/agent-core": "workspace:*",
     "@aex/protocol": "workspace:*",
     "@aex/scene": "workspace:*",
-    "ws": "8.22.0"
+    "@modelcontextprotocol/node": "2.1.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
     "@types/ws": "8.18.2",
     "tsx": "4.23.15"
   }

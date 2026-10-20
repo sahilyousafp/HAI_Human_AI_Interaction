@@ -23,6 +23,7 @@ const EVENT_LABEL: Partial<Record<GestureEvent["type"], string>> = {
   "twohand.end": "two-hand end",
   "head.nod": "nod",
   "head.shake": "shake",
+  "palms.stop": "two-palm stop",
 };
 
 function describe(event: GestureEvent): string {

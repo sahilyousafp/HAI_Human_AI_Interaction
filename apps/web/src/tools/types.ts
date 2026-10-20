@@ -56,8 +56,8 @@ export interface ToolContext {
   flash(message: string): void;
   /** Asks for a yes or no: nod or Enter answers yes, shake or Escape no. */
   confirm(question: string, answer: (yes: boolean) => void): void;
-  /** Whether an agent session is available (it arrives with the agent bridge). */
-  agentAvailable(): boolean;
+  /** Opens the agent panel ready for a request; returns why it cannot, or null. */
+  askAgent(): string | null;
 }
 
 /**

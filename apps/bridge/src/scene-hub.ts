@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { type Message, type MessageOf, parseScene, type SceneDocument } from "@aex/protocol";
+import { type Message, type MessageOf, parseScene, type SceneDocument, type SceneOp } from "@aex/protocol";
 import { Autosaver, openProject, type ProjectInfo, SAMPLE_SCENE } from "./project.ts";
 import { SceneStore, type StoreResult } from "./scene-store.ts";
 
@@ -41,6 +41,37 @@ export class SceneHub {
 
   get scene(): SceneStore {
     return this.store;
+  }
+
+  /** The open project folder (the agent's working directory), or null when the sample is served from memory. */
+  get projectDir(): string | null {
+    return this.project?.path ?? null;
+  }
+
+  /** An agent turn begins: its changes become one undo step, labelled with the request. */
+  beginTurn(request: string): void {
+    const label = request.length > 60 ? `${request.slice(0, 59).trimEnd()}…` : request;
+    this.store.beginGroup(label);
+  }
+
+  /** The agent turn ended (done, stopped or failed): record it as one undo step and tell clients. */
+  endTurn(): void {
+    const result = this.store.endGroup();
+    if (result?.ok) this.broadcast({ type: "scene.patch", id: id(), payload: result.patch });
+  }
+
+  /** Applies an agent change now, into the running turn, and broadcasts it. A batch that fails changes nothing. */
+  applyFromAgent(ops: SceneOp[]): { ok: true } | { ok: false; error: string } {
+    const result = this.store.applyInGroup(ops);
+    if (!result.ok) return result;
+    this.broadcast({ type: "scene.patch", id: id(), payload: result.patch });
+    if (result.selectionChanged) this.broadcastSelection();
+    return { ok: true };
+  }
+
+  /** Sets the selection for everyone (the agent pointing something out). */
+  select(ids: string[]): void {
+    if (this.store.setSelection(ids)) this.broadcastSelection();
   }
 
   /** Everything a newly connected client needs. */

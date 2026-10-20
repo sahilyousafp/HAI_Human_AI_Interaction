@@ -121,3 +121,36 @@ test.describe("tracking on the fake camera", () => {
     for (let i = 1; i < after.length; i++) expect(after[i]?.seq).toBe((after[i - 1]?.seq ?? 0) + 1);
   });
 });
+
+test.describe("camera preview size", () => {
+  test("expands over the model, shrinks back, and is remembered after a reload", async ({ page }) => {
+    await page.goto("/");
+    await startCamera(page);
+    const preview = page.getByTestId("camera-preview");
+    const expand = page.getByTestId("preview-expand");
+    const small = await preview.boundingBox();
+    await expect(expand).toHaveAttribute("aria-pressed", "false");
+
+    await expand.click();
+    await expect(preview).toHaveAttribute("data-expanded", "true");
+    await expect(expand).toHaveAttribute("aria-pressed", "true");
+    const large = await preview.boundingBox();
+    expect(large?.width).toBeGreaterThan((small?.width ?? 0) * 1.5);
+    // It floats over the model, clear of the sidebar, so the controls stay usable.
+    const sidebar = await page.locator("aside").first().boundingBox();
+    expect((large?.x ?? 0) + (large?.width ?? 0)).toBeLessThanOrEqual(sidebar?.x ?? 0);
+    await expect(page.getByTestId("camera-toggle")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByTestId("camera-preview")).toHaveAttribute("data-expanded", "true");
+
+    // "Shrink it" in the sidebar and the button on the preview both bring it back.
+    await page.getByRole("button", { name: "Shrink it" }).click();
+    await expect(page.getByTestId("camera-preview")).toHaveAttribute("data-expanded", "false");
+    await page.getByTestId("preview-expand").click();
+    await page.getByTestId("preview-expand").click();
+    await expect(page.getByTestId("camera-preview")).toHaveAttribute("data-expanded", "false");
+    await page.reload();
+    await expect(page.getByTestId("camera-preview")).toHaveAttribute("data-expanded", "false");
+  });
+});

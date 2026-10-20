@@ -54,7 +54,7 @@ function setup() {
     press: () => false,
     isButton: () => false,
     onSectionLine: () => false,
-    agentAvailable: () => false,
+    askAgent: () => "The agent is not connected: the bridge is offline.",
   };
   controller.attach(env);
   return { registry, controller, applied, calls, navigated };
@@ -244,7 +244,7 @@ describe("built-in tools", () => {
     expect(controller.getSnapshot().question).toBeNull();
   });
 
-  it("no agent yet: Ask agent explains that the agent is not connected and keeps the tool", () => {
+  it("no agent: Ask agent shows why and keeps the tool", () => {
     const { controller } = setup();
     controller.choose("measure");
     controller.choose("ask-agent");

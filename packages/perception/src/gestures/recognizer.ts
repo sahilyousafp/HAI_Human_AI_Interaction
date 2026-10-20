@@ -38,6 +38,9 @@ export class GestureRecognizer {
     null;
   private lastHead: RecognizerState["lastHead"] = null;
   private readings: Partial<Record<Hand, PinchReading>> = {};
+  /** Since when both palms are open, and whether this hold already stopped. */
+  private palmsSince: number | null = null;
+  private palmsFired = false;
 
   constructor(private readonly config: GestureConfig = DEFAULT_GESTURES) {
     this.machines = { Left: new HandMachine("Left", config), Right: new HandMachine("Right", config) };
@@ -87,6 +90,7 @@ export class GestureRecognizer {
       events.push(...this.machines[hand].update(observations[hand] ?? null, ts, ctx));
     }
     this.updateTwoHand(ts, aspect, events);
+    this.updatePalms(ts, observations, events);
 
     const headEvents = this.head.update(frame.face?.headPose, ts, this.engaged);
     for (const e of headEvents)
@@ -129,6 +133,20 @@ export class GestureRecognizer {
     this.engaged = false;
     this.openSince = null;
     events.push({ type: "disengaged", ts, confidence: 1, reason });
+  }
+
+  /** Both open palms for `stop.palmsMs` while engaged: one stop per hold (lower a hand to stop again). */
+  private updatePalms(ts: number, obs: Partial<Record<Hand, HandObservation>>, events: GestureEvent[]) {
+    const both = this.engaged && obs.Left?.posture === "open-palm" && obs.Right?.posture === "open-palm";
+    if (!both) {
+      this.palmsSince = null;
+      this.palmsFired = false;
+      return;
+    }
+    this.palmsSince ??= ts;
+    if (this.palmsFired || ts - this.palmsSince < this.config.stop.palmsMs) return;
+    this.palmsFired = true;
+    events.push({ type: "palms.stop", ts, confidence: 1 });
   }
 
   private updateTwoHand(ts: number, aspect: number, events: GestureEvent[]) {

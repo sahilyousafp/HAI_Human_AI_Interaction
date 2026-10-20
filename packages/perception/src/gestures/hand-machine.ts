@@ -29,9 +29,10 @@ type Phase = "idle" | "candidate" | "pinching";
  * Per-hand reducer for pinch (tap or drag) and the fist clutch.
  * - A pinch starts after the fingertips touch (ratio below `press`, other fingers not curled) for `minHoldMs`, and
  *   ends above `release` (hysteresis).
- * - Drag start is held back until the pinch outlasts a tap or moves; a short, still pinch is a tap.
- * - A pinch kept still for `holdMs` also emits one hold (long pinch, which opens the tool palette); the same pinch
- *   carries on as a drag, so it can be steered and released. A pinch that moves first never holds.
+ * - A pinch that moves `tapMaxMove` starts a drag. A pinch released still, before `holdMs`, is a tap however long
+ *   it lasted: deliberate pinches on recorded footage last 450-650 ms and drift under 1% of the frame width.
+ * - A pinch kept still for `holdMs` emits one hold (long pinch, which opens the tool palette) and carries on as a
+ *   drag, so it can be steered and released. A pinch that moves first never holds.
  * - A fist (checked before pinch, since a fist also closes thumb and index) suspends all drag output.
  * - Only pinches that began while engaged emit anything ("pinch before engaging is ignored").
  * - Tracking often loses a hand for a few frames while it sweeps fast or passes over the face. A pinch survives a
@@ -197,13 +198,14 @@ export class HandMachine {
         this.lastPos = obs.position;
         this.maxMove = Math.max(this.maxMove, screenDistance(this.startPos, obs.position, aspect));
         if (!this.valid || this.suppressed || !ctx.engaged) return;
-        if (!this.dragStarted && (ts - this.startTs > p.tapMaxMs || this.maxMove >= p.tapMaxMove)) {
+        if (!this.holdDone && this.maxMove >= p.holdMaxMove) this.holdDone = true;
+        const holding = !this.holdDone && ts - this.startTs >= p.holdMs;
+        if (!this.dragStarted && (holding || this.maxMove >= p.tapMaxMove)) {
           this.dragStarted = true;
           events.push(this.event("pinch.drag.start", ts, this.startPos));
           this.lastEmittedPos = this.startPos;
         }
-        if (!this.holdDone && this.maxMove >= p.holdMaxMove) this.holdDone = true;
-        if (!this.holdDone && ts - this.startTs >= p.holdMs) {
+        if (holding) {
           this.holdDone = true;
           events.push(this.event("pinch.hold", ts));
         }
@@ -224,7 +226,7 @@ export class HandMachine {
     const p = this.config.pinch;
     if (this.dragStarted) {
       events.push(this.event("pinch.drag.end", ts));
-    } else if (this.tapAllowed && ts - this.startTs <= p.tapMaxMs && this.maxMove < p.tapMaxMove) {
+    } else if (this.tapAllowed && this.maxMove < p.tapMaxMove) {
       events.push(this.event("pinch.tap", ts, this.startPos));
     } else if (this.maxMove >= p.tapMaxMove) {
       // Short but moving: still a drag.

@@ -15,9 +15,10 @@ export interface GestureConfig {
     release: number;
     /** The ratio must stay below `press` this long before a pinch starts. */
     minHoldMs: number;
-    /** A pinch shorter than this that moves less than `tapMaxMove` is a tap. */
-    tapMaxMs: number;
-    /** Fraction of the frame width. */
+    /**
+     * A pinch released before `holdMs` that moved less than this fraction of the frame width is a tap; moving this far
+     * starts a drag.
+     */
     tapMaxMove: number;
     /**
      * Mean extension of the middle, ring and little fingers must reach this for a pinch to start, so a hand closing
@@ -45,6 +46,10 @@ export interface GestureConfig {
     /** A fist must hold (or be released) this long before clutch starts (or ends). */
     debounceMs: number;
   };
+  stop: {
+    /** Both open palms held toward the camera this long (while engaged) is a stop. */
+    palmsMs: number;
+  };
   head: {
     windowMs: number;
     nodDegrees: number;
@@ -68,14 +73,14 @@ export const DEFAULT_GESTURES: GestureConfig = {
     press: 0.16,
     release: 0.2,
     minHoldMs: 60,
-    tapMaxMs: 250,
     tapMaxMove: 0.02,
     othersMin: 1.3,
     lostGraceMs: 250,
-    holdMs: 600,
+    holdMs: 800,
     holdMaxMove: 0.02,
   },
   posture: { extended: 1.35, curled: 1.15, thumbSpread: 0.45, palmFacing: 0.5 },
   clutch: { debounceMs: 100 },
+  stop: { palmsMs: 500 },
   head: { windowMs: 1200, nodDegrees: 8, shakeDegrees: 10, reversals: 2, cooldownMs: 1000 },
 };

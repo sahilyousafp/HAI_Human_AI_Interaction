@@ -162,6 +162,47 @@ describe("head gestures (spec: nod and shake are recognised)", () => {
   });
 });
 
+describe("two-palm stop (spec: both open palms for 500 ms stop the turn)", () => {
+  // A left open palm is the right one mirrored: the posture checks are symmetric.
+  const openLeft: TrackedHand = {
+    ...openRight,
+    handedness: "Left",
+    image: openRight.image.map(([x, y, z]) => [1 - x, y, z]),
+    world: openRight.world.map(([x, y, z]) => [-x, y, z]),
+  };
+  const palms = (n: number) => repeat(n, { hands: [openLeft, openRight] });
+  const stops = (events: GestureEvent[]) => events.filter((e) => e.type === "palms.stop");
+
+  it("the mirrored template is an open left palm", () => {
+    expect(posture(openLeft)).toBe("open-palm");
+  });
+
+  it("fires once after 500 ms of both palms, and again only after a hand is lowered", () => {
+    const short = play([...engageSteps, ...palms(14)]); // 433 ms
+    expect(stops(short)).toEqual([]);
+    const held = play([...engageSteps, ...palms(30)]);
+    expect(stops(held)).toHaveLength(1);
+    const again = play([...engageSteps, ...palms(20), ...repeat(3, { hands: [openRight] }), ...palms(20)]);
+    expect(stops(again)).toHaveLength(2);
+  });
+
+  it("does nothing while not engaged", () => {
+    const recognizer = new GestureRecognizer({
+      ...DEFAULT_GESTURES,
+      engage: { ...DEFAULT_GESTURES.engage, openPalmMs: 60_000 },
+    });
+    expect(stops(play(palms(30), recognizer))).toEqual([]);
+  });
+});
+
+describe("recorded footage", () => {
+  it("the pinch in the one-hand-pinch clip is a tap, so it selects what it points at", () => {
+    const events = new GestureRecognizer();
+    const out = loadFixture("one-hand-pinch").flatMap((f) => events.process(f));
+    expect(types(out).filter((t) => t.startsWith("pinch."))).toEqual(["pinch.tap"]);
+  });
+});
+
 describe("event stream", () => {
   it("every event validates and timestamps never go backwards", async () => {
     const { GestureEvent } = await import("@aex/protocol");

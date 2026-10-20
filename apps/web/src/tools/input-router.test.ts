@@ -1,9 +1,16 @@
-import type { GestureEvent, Hand, Point2 } from "@aex/protocol";
+import {
+  DEFAULT_BINDINGS,
+  type GestureBindings,
+  type GestureEvent,
+  type Hand,
+  type Point2,
+} from "@aex/protocol";
 import { describe, expect, it } from "vitest";
-import { InputRouter, type RouterTargets } from "./input-router.ts";
+import { InputRouter, type RouterAgent, type RouterTargets } from "./input-router.ts";
 
-function setup(toolTakesDrag = false) {
+function setup(toolTakesDrag = false, options: { bindings?: Partial<GestureBindings>; cards?: number } = {}) {
   const log: string[] = [];
+  let cards = options.cards ?? 0;
   let open = false;
   const targets: RouterTargets = {
     palette: {
@@ -35,11 +42,29 @@ function setup(toolTakesDrag = false) {
       dragCancel: () => log.push("tool.dragCancel"),
       nod: () => log.push("tool.nod"),
       shake: () => log.push("tool.shake"),
-      clutch: (closed) => log.push(`tool.clutch.${closed}`),
+      clutch: (closed, held) => {
+        log.push(`tool.clutch.${closed}`);
+        if (closed) held?.(); // as if the fist were held long enough
+      },
+      select: () => log.push("tool.select"),
+      undo: () => log.push("tool.undo"),
+      redo: () => log.push("tool.redo"),
+      cancel: () => log.push("tool.cancel"),
     },
-    navigation: (e) => log.push(`nav:${e.type}`),
+    navigation: (e, mode) => log.push(`nav:${e.type}${mode === "pan" ? ":pan" : ""}`),
   };
-  return { router: new InputRouter(targets), log };
+  const agent: RouterAgent = {
+    answer: (yes) => {
+      if (cards !== 1) return false;
+      cards = 0;
+      log.push(`agent.${yes ? "allow" : "deny"}`);
+      return true;
+    },
+    stop: () => log.push("agent.stop"),
+    ask: () => log.push("agent.ask"),
+  };
+  const bindings = { ...DEFAULT_BINDINGS, ...options.bindings };
+  return { router: new InputRouter(targets, { bindings: () => bindings, agent }), log };
 }
 
 let ts = 1000;
@@ -134,5 +159,59 @@ describe("InputRouter", () => {
     router.handle({ type: "clutch.start", ts: ts++, confidence: 1, hand: "Right" });
     router.handle({ type: "clutch.end", ts: ts++, confidence: 1, hand: "Right" });
     expect(log).toEqual(["tool.nod", "tool.shake", "tool.clutch.true", "tool.clutch.false"]);
+  });
+});
+
+describe("gesture bindings", () => {
+  it("defaults: tap uses the tool, nod and shake answer the tool, two palms stop the agent", () => {
+    const { router, log } = setup();
+    router.handle(ev("pinch.tap"));
+    router.handle(ev("head.nod"));
+    router.handle(ev("head.shake"));
+    router.handle({ type: "palms.stop", ts: ts++, confidence: 1 } as GestureEvent);
+    expect(log).toEqual(["tool.tap", "tool.nod", "tool.shake", "agent.stop"]);
+  });
+
+  it("yes and no answer the agent's only waiting card first, and then not the tool", () => {
+    const { router, log } = setup(false, { cards: 1 });
+    router.handle(ev("head.shake"));
+    router.handle(ev("head.shake"));
+    expect(log).toEqual(["agent.deny", "tool.shake"]);
+  });
+
+  it("tap set to select selects whatever the tool; long pinch set to undo undoes instead of opening the palette", () => {
+    const { router, log } = setup(false, { bindings: { tap: "select", hold: "undo" } });
+    router.handle(ev("pinch.tap"));
+    router.handle(ev("pinch.drag.start"));
+    router.handle(ev("pinch.hold"));
+    expect(log).toEqual(["tool.select", "tool.dragStart", "nav:pinch.drag.start", "tool.undo"]);
+  });
+
+  it("drag set to pan pans, and set to nothing does nothing (even over a tool that would take it)", () => {
+    const panning = setup(true, { bindings: { drag: "pan" } });
+    panning.router.handle(ev("pinch.drag.start"));
+    panning.router.handle(ev("pinch.drag.update"));
+    expect(panning.log).toEqual(["nav:pinch.drag.start:pan", "nav:pinch.drag.update:pan"]);
+    const off = setup(true, { bindings: { drag: "none" } });
+    off.router.handle(ev("pinch.drag.start"));
+    off.router.handle(ev("pinch.drag.update"));
+    off.router.handle(ev("pinch.drag.end"));
+    expect(off.log).toEqual([]);
+  });
+
+  it("fist set to undo undoes once held; set to nothing ignores the fist", () => {
+    const undo = setup(false, { bindings: { fist: "undo" } });
+    undo.router.handle(ev("clutch.start"));
+    expect(undo.log).toEqual(["tool.clutch.true", "tool.undo"]);
+    const off = setup(false, { bindings: { fist: "none", twohand: "none" } });
+    off.router.handle(ev("clutch.start"));
+    off.router.handle(twoHand("twohand.start"));
+    expect(off.log).toEqual([]);
+  });
+
+  it("nod set to ask the agent opens the agent panel", () => {
+    const { router, log } = setup(false, { bindings: { nod: "ask-agent" } });
+    router.handle(ev("head.nod"));
+    expect(log).toEqual(["agent.ask"]);
   });
 });

@@ -22,6 +22,8 @@ export class SceneStore {
   private seq = 0;
   private selectionIds: string[] = [];
   private readonly history = new History();
+  /** An agent turn in progress: its changes are applied as they come but undone as one step. */
+  private group: { label: string; ops: SceneOp[]; inverse: SceneOp[] } | null = null;
   private readonly listeners = new Set<(doc: SceneDocument) => void>();
 
   constructor(private current: SceneDocument) {}
@@ -59,7 +61,40 @@ export class SceneStore {
     return this.commit(result.doc, "apply", label, ops);
   }
 
+  /** Starts grouping agent changes: everything applied with `applyInGroup` until `endGroup` is one undo step. */
+  beginGroup(label: string): void {
+    this.group = { label, ops: [], inverse: [] };
+  }
+
+  /**
+   * Applies an agent change now (clients see it at once) without its own undo step; it joins the open group.
+   * Without a group it is an ordinary transaction. A batch that fails validation changes nothing.
+   */
+  applyInGroup(ops: SceneOp[], label = "Agent"): StoreResult {
+    if (!this.group) return this.apply(label, ops);
+    const result = applyTransaction(this.current, ops);
+    if (!result.ok) return result;
+    this.group.ops.push(...ops);
+    this.group.inverse = [...result.inverse, ...this.group.inverse];
+    return this.commit(result.doc, "apply", this.group.label, ops);
+  }
+
+  /**
+   * Closes the group and records it as one undo step. Returns a patch with no ops (so clients learn they can now
+   * undo it), or null when the group changed nothing.
+   */
+  endGroup(): StoreResult | null {
+    const group = this.group;
+    this.group = null;
+    return group ? this.recordGroup(group) : null;
+  }
+
   undo(): StoreResult {
+    // Undo during an agent turn undoes the turn so far; the turn's later changes start a new step.
+    if (this.group?.ops.length) {
+      this.recordGroup(this.group);
+      this.group = { label: this.group.label, ops: [], inverse: [] };
+    }
     const step = this.history.undo(this.current);
     if (!step.ok) return step;
     return this.commit(step.doc, "undo", step.label, step.ops);
@@ -69,6 +104,12 @@ export class SceneStore {
     const step = this.history.redo(this.current);
     if (!step.ok) return step;
     return this.commit(step.doc, "redo", step.label, step.ops);
+  }
+
+  private recordGroup(group: { label: string; ops: SceneOp[]; inverse: SceneOp[] }): StoreResult | null {
+    if (group.ops.length === 0) return null;
+    this.history.record({ label: group.label, ops: group.ops, inverse: group.inverse });
+    return this.commit(this.current, "apply", group.label, []);
   }
 
   /** Sets the selection to the given ids that exist in the scene; returns true if it changed. */

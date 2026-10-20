@@ -38,6 +38,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm licenses:check
+      - run: pnpm credentials:check
       - run: pnpm assets
 
       - name: Read Playwright version

@@ -16,14 +16,16 @@ export const DEFAULT_GAINS: NavigationGains = { orbitAzimuth: 270, orbitElevatio
 export interface NavigationInput {
   /** Last two-hand reading, to compute deltas between updates. */
   lastTwoHand: { distance: number; midpoint: [number, number] } | null;
+  /** What a one-hand drag does (the user's gesture setting). */
+  dragMode: "orbit" | "pan";
 }
 
-export const initialInput = (): NavigationInput => ({ lastTwoHand: null });
+export const initialInput = (): NavigationInput => ({ lastTwoHand: null, dragMode: "orbit" });
 
 /**
  * Applies one gesture event to the camera. Pure: returns the new camera state.
  * - One-hand pinch drag orbits like dragging the model with the mouse: dragging right turns the camera to negative
- *   azimuth, dragging down raises the view.
+ *   azimuth, dragging down raises the view. Set to pan, it moves the view like the two-hand midpoint does.
  * - Two-hand pinch: hands apart zooms in; the view pans opposite to the midpoint's motion.
  */
 export function navigate(
@@ -34,6 +36,7 @@ export function navigate(
 ): Turntable {
   switch (event.type) {
     case "pinch.drag.update":
+      if (input.dragMode === "pan") return pan(t, -event.delta[0] * gains.pan, event.delta[1] * gains.pan);
       return orbit(t, -event.delta[0] * gains.orbitAzimuth, event.delta[1] * gains.orbitElevation);
     case "twohand.start":
       input.lastTwoHand = { distance: event.distance, midpoint: event.midpoint };

@@ -18,6 +18,7 @@ AEX turns your webcam into hand and face measurements, entirely inside your brow
 | **Start camera / Stop camera** | Starts or stops the camera and the tracking worker |
 | **Camera** | Which camera to use; remembered in this browser. Switching while the camera runs switches over |
 | **Camera image is mirrored** | Tick if your camera sends a mirrored image (see "Using a phone as the camera"); remembered per camera |
+| **Expand / shrink** (corner of the preview) | Shows the camera preview large over the model's bottom right, clear of the sidebar, so you can check framing and tracking from a distance. **Shrink it** in the sidebar, or the same button, brings it back. Remembered in this browser |
 | **Debug view** | Draws hand skeletons (amber = left hand, teal = right hand), face points and head axes over the mirrored preview |
 | Frame rate | Tracking frames per second, smoothed |
 | Inference | Time the worker spent on the last frame, in ms |

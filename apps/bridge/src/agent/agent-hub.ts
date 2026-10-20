@@ -1,0 +1,252 @@
+import { randomUUID } from "node:crypto";
+import type { AgentProvider, AgentSession } from "@aex/agent-core";
+import type { AgentEvent, AgentStatus, AgentTurn, ApprovalRequest, Message } from "@aex/protocol";
+import { type Logger, silentLogger } from "../log.ts";
+import { PERMISSION_TOOL, readSessionId, writeAgentConfig, writeSessionId } from "./agent-config.ts";
+
+type Send = (message: Message) => void;
+
+/** An idle session is closed after this long; the next request resumes the same conversation. */
+export const IDLE_CLOSE_MS = 20 * 60_000;
+/** How many turns the bridge keeps for a reloaded page. */
+const TRANSCRIPT_TURNS = 50;
+
+export interface TurnHooks {
+  /** A turn began: open the scene transaction it will add to. */
+  started?(turn: { id: string; request: string }): void;
+  /** The user asked to stop the running turn: release anything it waits on (approvals). */
+  stopping?(): void;
+  /** A turn ended (done, stopped or error): commit its transaction. */
+  ended?(turn: { id: string; request: string }): void;
+  /** The session reported what it loaded (servers, tools, skills). */
+  initialized?(event: Extract<AgentEvent, { type: "init" }>): void;
+}
+
+export interface AgentHubOptions {
+  provider: AgentProvider;
+  /** The open project folder: the agent's working directory. */
+  projectDir(): string | null;
+  /** Where the agent reaches the app's scene tools, and the token it must present. */
+  mcp(): { url: string; token: string };
+  idleMs?: number;
+  hooks?: TurnHooks;
+  /** Approval cards waiting for the user, for a page that connects later. */
+  pending?(): ApprovalRequest[];
+  log?: Logger;
+}
+
+const id = () => randomUUID();
+
+/**
+ * The user's agent session, as the bridge runs it: one long-lived process per open project, sent each request as
+ * a turn. The conversation id is kept in the project, so a crash, an idle close or a bridge restart resumes the
+ * same conversation; the transcript is kept here, so a reloaded page shows it again.
+ */
+export class AgentHub {
+  private status: AgentStatus = { state: "starting" };
+  private readonly turns: AgentTurn[] = [];
+  private session: AgentSession | null = null;
+  private sessionProject: string | null = null;
+  /** The previous process ended unexpectedly: the next turn resumes and is marked recovered. */
+  private crashed = false;
+  private running: AgentTurn | null = null;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** An extension changed during a turn: restart once it ends. */
+  private restartAfterTurn = false;
+  /** Resolves once detection has finished (tests wait for it). */
+  readonly ready: Promise<void>;
+  private detecting: Promise<void> | null = null;
+
+  constructor(
+    private readonly options: AgentHubOptions,
+    private readonly broadcast: Send,
+  ) {
+    this.ready = this.detect();
+  }
+
+  /**
+   * Checks that the provider is installed and signed in. Run at start, and again whenever a page connects or a
+   * request arrives while it was not, so installing or signing in and reloading the page is enough.
+   */
+  private detect(): Promise<void> {
+    this.detecting ??= this.options.provider
+      .detect()
+      .then((detection) => {
+        this.setStatus(
+          detection.ok
+            ? { state: "idle" }
+            : { state: "unavailable", reason: detection.message, fix: detection.fix },
+        );
+      })
+      .finally(() => {
+        this.detecting = null;
+      });
+    return this.detecting;
+  }
+
+  get currentStatus(): AgentStatus {
+    return this.status;
+  }
+
+  /** The turn running now, if any (for turn transactions and approvals). */
+  get runningTurn(): AgentTurn | null {
+    return this.running;
+  }
+
+  greet(send: Send): void {
+    send({
+      type: "agent.transcript",
+      id: id(),
+      payload: { turns: this.turns, status: this.status, pending: this.options.pending?.() ?? [] },
+    });
+    if (this.status.state === "unavailable") void this.detect();
+  }
+
+  /** Handles an agent message from a client. Returns false for other messages. */
+  handle(message: Message, send: Send): boolean {
+    if (message.type === "agent.send") {
+      void this.request(message.payload.text).catch((error: Error) => {
+        this.log.info("agent request refused", { reason: error.message });
+        this.reject(message.id, error.message, send);
+      });
+      return true;
+    }
+    if (message.type === "agent.stop") {
+      void this.stop();
+      return true;
+    }
+    return false;
+  }
+
+  /** Sends a request as a new turn and resolves when the turn has ended. */
+  async request(text: string): Promise<void> {
+    if (this.status.state === "unavailable") await this.detect();
+    if (this.status.state === "unavailable")
+      throw new Error(`${this.status.reason} ${this.status.fix ?? ""}`.trim());
+    if (this.running) throw new Error("The agent is still working on the previous request.");
+    const projectDir = this.options.projectDir();
+    if (!projectDir) throw new Error("Open a project first.");
+    this.clearIdle();
+
+    const turn: AgentTurn = { id: id(), request: text, events: [], recovered: false };
+    this.running = turn;
+    try {
+      const session = await this.ensureSession(projectDir);
+      turn.recovered = this.crashed;
+      this.crashed = false;
+      this.turns.push(turn);
+      if (this.turns.length > TRANSCRIPT_TURNS) this.turns.splice(0, this.turns.length - TRANSCRIPT_TURNS);
+      this.broadcast({
+        type: "agent.turn",
+        id: id(),
+        payload: { id: turn.id, request: text, recovered: turn.recovered },
+      });
+      this.setStatus({ state: "working" });
+      this.options.hooks?.started?.(turn);
+      for await (const event of session.send(text)) {
+        turn.events.push(event);
+        if (event.type === "turn.end")
+          this.log.info("agent turn ended", { reason: event.reason, durationMs: event.durationMs });
+        this.broadcast({ type: "agent.event", id: id(), payload: { turnId: turn.id, event } });
+        if (event.type === "init") {
+          if (event.sessionId) writeSessionId(projectDir, event.sessionId);
+          this.options.hooks?.initialized?.(event);
+        }
+      }
+    } finally {
+      this.running = null;
+      this.options.hooks?.ended?.(turn);
+      if (
+        this.status.state === "working" ||
+        this.status.state === "starting" ||
+        this.status.state === "recovering"
+      ) {
+        this.setStatus({ state: "idle" });
+      }
+      this.armIdle();
+      if (this.restartAfterTurn) {
+        this.restartAfterTurn = false;
+        await this.close();
+      }
+    }
+  }
+
+  /**
+   * Ends the agent process so the next request starts a new one with the changed setup (MCP servers, skills). The
+   * conversation resumes. A running turn finishes first.
+   */
+  async restart(): Promise<void> {
+    if (this.running) this.restartAfterTurn = true;
+    else await this.close();
+  }
+
+  /** Stops the running turn; it ends within a few seconds and keeps what it already changed. */
+  async stop(): Promise<void> {
+    if (!this.running) return;
+    this.options.hooks?.stopping?.();
+    await this.session?.interrupt();
+  }
+
+  /** Ends the agent process (on bridge shutdown). */
+  async close(): Promise<void> {
+    this.clearIdle();
+    const session = this.session;
+    this.session = null;
+    await session?.close();
+  }
+
+  private get log(): Logger {
+    return this.options.log ?? silentLogger;
+  }
+
+  private async ensureSession(projectDir: string): Promise<AgentSession> {
+    if (this.session && this.sessionProject === projectDir) return this.session;
+    if (this.session) await this.close(); // another project is open now: its own conversation
+    this.setStatus({ state: this.crashed ? "recovering" : "starting" });
+    const paths = writeAgentConfig(projectDir, this.options.mcp());
+    const resumeSessionId = readSessionId(projectDir);
+    const session = await this.options.provider.start({
+      cwd: projectDir,
+      ...paths,
+      permissionPromptTool: PERMISSION_TOOL,
+      resumeSessionId,
+    });
+    this.log.info("agent session started", {
+      provider: this.options.provider.id,
+      project: projectDir,
+      resumed: Boolean(resumeSessionId),
+      afterCrash: this.crashed,
+    });
+    this.session = session;
+    this.sessionProject = projectDir;
+    session.onExit((expected) => {
+      if (this.session !== session) return;
+      this.session = null;
+      if (!expected) {
+        this.crashed = true;
+        this.log.error("agent process ended unexpectedly; the next request resumes the conversation");
+      }
+    });
+    return session;
+  }
+
+  private armIdle(): void {
+    this.clearIdle();
+    this.idleTimer = setTimeout(() => void this.close(), this.options.idleMs ?? IDLE_CLOSE_MS);
+    this.idleTimer.unref?.();
+  }
+
+  private clearIdle(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+  }
+
+  private setStatus(status: AgentStatus): void {
+    this.status = status;
+    this.broadcast({ type: "agent.status", id: id(), payload: { status } });
+  }
+
+  private reject(requestId: string, message: string, send: Send): void {
+    send({ type: "request.error", id: id(), payload: { requestId, message } });
+  }
+}

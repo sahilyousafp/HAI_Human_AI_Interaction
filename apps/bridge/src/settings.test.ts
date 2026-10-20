@@ -10,19 +10,36 @@ import { SettingsHub } from "./settings.ts";
 const LAYOUT = ["section", "select", "measure", null, "move", "massing", "delete", "undo"];
 const tempRoot = () => mkdtempSync(join(tmpdir(), "aex-settings-"));
 const settingsFile = (root: string) => join(root, ".aex", "settings.json");
-const set = (palette: unknown): Message => {
-  const parsed = parseMessage(JSON.stringify({ type: "settings.set", id: "m1", payload: { palette } }));
+const setSettings = (payload: unknown): Message => {
+  const parsed = parseMessage(JSON.stringify({ type: "settings.set", id: "m1", payload }));
   if (!parsed.ok) throw new Error(parsed.error);
   return parsed.message;
 };
+const set = (palette: unknown) => setSettings({ palette });
 
 describe("SettingsHub", () => {
   it("starts with no palette layout (the app's default applies) and greets with it", () => {
     const sent: Message[] = [];
     new SettingsHub(settingsFile(tempRoot()), () => {}).greet((m) => sent.push(m));
     expect(sent).toEqual([
-      expect.objectContaining({ type: "settings.snapshot", payload: { palette: null } }),
+      expect.objectContaining({ type: "settings.snapshot", payload: { palette: null, gestures: null } }),
     ]);
+  });
+
+  it("gesture bindings persist, and changing them keeps the palette layout", () => {
+    const file = settingsFile(tempRoot());
+    const hub = new SettingsHub(file, () => {});
+    hub.handle(set(LAYOUT));
+    hub.handle(setSettings({ gestures: { tap: "select", fist: "undo" } }));
+    const sent: Message[] = [];
+    new SettingsHub(file, () => {}).greet((m) => sent.push(m));
+    expect(sent[0]).toMatchObject({
+      payload: { palette: LAYOUT, gestures: { tap: "select", fist: "undo" } },
+    });
+  });
+
+  it("rejects an action a gesture does not offer at the protocol", () => {
+    expect(() => setSettings({ gestures: { drag: "undo" } })).toThrow(/drag cannot be set to undo/);
   });
 
   it("layout persists: a saved layout is what a restarted bridge greets with", () => {
@@ -30,7 +47,7 @@ describe("SettingsHub", () => {
     const broadcast: Message[] = [];
     expect(new SettingsHub(file, (m) => broadcast.push(m)).handle(set(LAYOUT))).toBe(true);
     expect(broadcast).toEqual([
-      expect.objectContaining({ type: "settings.snapshot", payload: { palette: LAYOUT } }),
+      expect.objectContaining({ type: "settings.snapshot", payload: { palette: LAYOUT, gestures: null } }),
     ]);
 
     const sent: Message[] = [];

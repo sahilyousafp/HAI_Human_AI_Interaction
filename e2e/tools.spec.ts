@@ -246,8 +246,9 @@ test.describe("built-in tools", () => {
     await start(page);
     await page.keyboard.press("m");
     const box = await viewerBox(page);
-    const empty = { x: box.x + box.width * 0.08, y: box.y + box.height * 0.2 };
-    expect(await page.evaluate(() => window.__AEX_VIEWER__?.pick(0.08, 0.2))).toBeNull();
+    // Top right: empty sky, clear of the project bar and agent panel on the left.
+    const empty = { x: box.x + box.width * 0.92, y: box.y + box.height * 0.2 };
+    expect(await page.evaluate(() => window.__AEX_VIEWER__?.pick(0.92, 0.2))).toBeNull();
     const before = await camera(page);
     const origin = (await element(page, "block-c"))?.origin;
     await mouseDrag(page, empty, { x: empty.x + 150, y: empty.y });
@@ -374,11 +375,11 @@ test.describe("built-in tools", () => {
     await expect.poll(() => element(page, "block-b")).toBeNull();
   });
 
-  test("no agent yet: Ask agent says the agent is not connected and keeps the tool", async ({ page }) => {
+  test("no agent: Ask agent says why and keeps the tool", async ({ page }) => {
     await start(page);
     await page.keyboard.press("d");
     await page.keyboard.press("a");
-    await expect(page.getByTestId("tool-notice")).toContainText("agent is not connected");
+    await expect(page.getByTestId("tool-notice")).toContainText("agent is not available");
     await expect(activeTool(page)).toHaveAttribute("data-tool", "measure");
   });
 });
@@ -544,11 +545,20 @@ test.describe("hand UX regressions", () => {
     await page.keyboard.press("s");
     await page.keyboard.press("x");
     await expect(page.getByTestId("section-status")).toBeVisible();
-    // A point on the section plane (at the top of the model) that is not over any element.
+    // A point on the section plane (at the top of the model) that is not over any element or HUD panel.
     const spot = await page.evaluate(() => {
+      const rect = document.querySelector("[data-testid=viewer] canvas")?.getBoundingClientRect();
+      const onCanvas = (x: number, y: number) =>
+        rect &&
+        document.elementFromPoint(rect.left + x * rect.width, rect.top + y * rect.height)?.tagName ===
+          "CANVAS";
       for (let y = 0.15; y < 0.9; y += 0.02) {
         for (let x = 0.05; x < 0.95; x += 0.02) {
-          if (window.__AEX_VIEWER__?.pick(x, y) === null && window.__AEX_VIEWER__?.overSection(x, y))
+          if (
+            window.__AEX_VIEWER__?.pick(x, y) === null &&
+            window.__AEX_VIEWER__?.overSection(x, y) &&
+            onCanvas(x, y)
+          )
             return [x, y];
         }
       }

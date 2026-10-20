@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { type Message, type MessageOf, PaletteLayout } from "@aex/protocol";
+import {
+  GestureBindingsSchema,
+  type Message,
+  type MessageOf,
+  PaletteLayout,
+  type Settings,
+} from "@aex/protocol";
 
 type Send = (message: Message) => void;
 
@@ -22,18 +28,24 @@ export function updateSettingsFile(file: string, patch: Record<string, unknown>)
 }
 
 /**
- * User settings shared by every client: today the tool palette layout. Kept in .aex/settings.json, so the layout
- * survives reloads, browser changes and restarts. Without a file (tests), settings live in memory.
+ * User settings shared by every client: the tool palette layout and what each gesture does. Kept in
+ * .aex/settings.json, so they survive reloads, browser changes and restarts. Without a file (tests), settings live in
+ * memory.
  */
 export class SettingsHub {
-  private palette: PaletteLayout | null;
+  private settings: Settings;
 
   constructor(
     private readonly file: string | null,
     private readonly broadcast: Send,
   ) {
-    const stored = file ? PaletteLayout.safeParse(readSettingsFile(file).palette) : null;
-    this.palette = stored?.success ? stored.data : null;
+    const stored = file ? readSettingsFile(file) : {};
+    const palette = PaletteLayout.safeParse(stored.palette);
+    const gestures = GestureBindingsSchema.safeParse(stored.gestures);
+    this.settings = {
+      palette: palette.success ? palette.data : null,
+      gestures: gestures.success ? gestures.data : null,
+    };
   }
 
   greet(send: Send): void {
@@ -43,13 +55,18 @@ export class SettingsHub {
   /** Handles a settings message from a client. Returns false for other messages. */
   handle(message: Message): boolean {
     if (message.type !== "settings.set") return false;
-    this.palette = message.payload.palette;
-    if (this.file) updateSettingsFile(this.file, { palette: this.palette });
+    const { palette, gestures } = message.payload;
+    const patch: Partial<Settings> = {
+      ...(palette ? { palette } : {}),
+      ...(gestures ? { gestures } : {}),
+    };
+    this.settings = { ...this.settings, ...patch };
+    if (this.file) updateSettingsFile(this.file, patch);
     this.broadcast(this.snapshot());
     return true;
   }
 
   private snapshot(): MessageOf<"settings.snapshot"> {
-    return { type: "settings.snapshot", id: randomUUID(), payload: { palette: this.palette } };
+    return { type: "settings.snapshot", id: randomUUID(), payload: this.settings };
   }
 }

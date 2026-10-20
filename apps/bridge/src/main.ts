@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { ClaudeCliProvider } from "@aex/agent-core";
 import { loadConfig } from "./config.ts";
 import { defaultProjectDir, readLastProject, writeLastProject } from "./project.ts";
 import { createBridge } from "./server.ts";
@@ -13,6 +14,9 @@ const bridge = createBridge({
   allowedOrigins: config.allowedOrigins,
   version: VERSION,
   settingsFile: join(config.workspaceRoot, ".aex", "settings.json"),
+  // The user's own Claude Code: the installed, self-logged-in CLI, started unmodified.
+  agent: { provider: new ClaudeCliProvider() },
+  log: (line) => console.log(line),
   scene: {
     projectDir: readLastProject(config.workspaceRoot) ?? defaultProjectDir(config.workspaceRoot),
     onProjectOpened: (project) => writeLastProject(config.workspaceRoot, project.path),
@@ -26,7 +30,7 @@ writeSessionFile(config.workspaceRoot, {
   pid: process.pid,
   startedAt: bridge.startedAt,
 });
-console.log(`Bridge listening on http://${address.address}:${address.port} (loopback only)`);
+bridge.log.info(`listening on http://${address.address}:${address.port} (loopback only)`);
 
 let stopping = false;
 async function shutdown() {

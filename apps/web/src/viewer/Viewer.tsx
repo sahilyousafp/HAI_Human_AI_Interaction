@@ -11,12 +11,13 @@ import {
   useSyncExternalStore,
 } from "react";
 import * as THREE from "three";
+import { canvasToPng, type ViewLink } from "../agent/view-link.ts";
 import { isSoftwareRenderer } from "../gpu.ts";
 import type { InputBus } from "../input/input-bus.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
 import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
 import type { ToolController } from "../tools/controller.ts";
-import { InputRouter } from "../tools/input-router.ts";
+import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
 import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
 import type { Hit } from "../tools/types.ts";
 import { elementGeometry, MM, sceneBounds } from "./geometry.ts";
@@ -54,6 +55,14 @@ function handButtonAt(wrapper: HTMLElement | null, [x, y]: Point2): HTMLButtonEl
   const el = document.elementFromPoint(rect.left + x * rect.width, rect.top + y * rect.height);
   const button = el?.closest<HTMLButtonElement>("[data-hand-press]");
   return button && wrapper.contains(button) && !button.disabled ? button : null;
+}
+
+/** Whether a viewer position is over a HUD panel (marked `data-hud`), where the hand must not reach the model. */
+function overHud(wrapper: HTMLElement | null, [x, y]: Point2): boolean {
+  if (!wrapper) return false;
+  const rect = wrapper.getBoundingClientRect();
+  const el = document.elementFromPoint(rect.left + x * rect.width, rect.top + y * rect.height);
+  return Boolean(el?.closest("[data-hud]") && wrapper.contains(el));
 }
 
 declare global {
@@ -196,6 +205,7 @@ function CameraRig({
   sectionRef,
   invalidateRef,
   rendersRef,
+  view,
 }: {
   nav: React.RefObject<Turntable>;
   pendingTs: React.RefObject<number | null>;
@@ -205,6 +215,8 @@ function CameraRig({
   sectionRef: React.RefObject<number | null>;
   invalidateRef: React.RefObject<() => void>;
   rendersRef: React.RefObject<() => number>;
+  /** Reports the camera to the agent and captures the view for it. */
+  view: ViewLink;
 }) {
   const { camera, scene, raycaster, invalidate, gl } = useThree();
   invalidateRef.current = invalidate;
@@ -251,6 +263,16 @@ function CameraRig({
     };
   }, [camera, scene, raycaster, pendingTs, latency, pickRef, sectionRef]);
 
+  // The agent's picture of the view: render the current frame, then read the canvas.
+  useEffect(
+    () =>
+      view.attachCapture(() => {
+        gl.render(scene, camera);
+        return canvasToPng(gl.domElement);
+      }),
+    [view, gl, scene, camera],
+  );
+
   useFrame((_, delta) => {
     const target = nav.current;
     if (!target) return;
@@ -276,6 +298,12 @@ function CameraRig({
       Math.abs(target.distance - next.distance) < near &&
       next.target.every((v, i) => Math.abs(v - (target.target[i] ?? 0)) < near);
     if (!arrived) invalidate(); // keep easing
+    view.setCamera({
+      azimuth: next.azimuth,
+      elevation: next.elevation,
+      distance: next.distance / MM,
+      target: [next.target[0] / MM, next.target[1] / MM, next.target[2] / MM],
+    });
     camera.position.set(...cameraPosition(next));
     camera.lookAt(...next.target);
   });
@@ -287,12 +315,24 @@ export function Viewer({
   bus,
   latency,
   tools,
+  view,
+  askAgent,
+  gestures,
+  children,
 }: {
   client: SceneClient;
   bus: InputBus;
   /** Gesture-to-render latency, shared with the Detection card. */
   latency: LatencyTracker;
   tools: ToolController;
+  /** The agent's view of what the user sees and points at. */
+  view: ViewLink;
+  /** Opens the agent panel for a request ("Ask agent" in the palette); returns why it cannot, or null. */
+  askAgent: () => string | null;
+  /** What each gesture does (the user's settings) and how gestures reach the agent. */
+  gestures: RouterOptions;
+  /** HUD panels over the model (the agent panel); inside the viewer, so the hand can press their buttons. */
+  children?: React.ReactNode;
 }) {
   const software = useMemo(isSoftwareRenderer, []);
   const scene = useSyncExternalStore(client.subscribe, client.getSnapshot);
@@ -319,6 +359,10 @@ export function Viewer({
   const [projectPath, setProjectPath] = useState("");
   const [openingProject, setOpeningProject] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
+  const askAgentRef = useRef(askAgent);
+  askAgentRef.current = askAgent;
+
+  useEffect(() => view.setPointed(hoverId), [view, hoverId]);
 
   // Follow theme changes.
   useEffect(() => {
@@ -377,12 +421,14 @@ export function Viewer({
       undo: () => void client.undo(),
       redo: () => void client.redo(),
       select: (ids) => client.select(ids),
-      pick: ([x, y]) => pickRef.current.hit(x, y),
+      // Under a HUD panel the model is hidden from the hand, as it is from the mouse.
+      pick: ([x, y]) => (overHud(wrapper.current, [x, y]) ? null : pickRef.current.hit(x, y)),
       ground: ([x, y], heightMm = 0) => pickRef.current.ground(x, y, heightMm),
       bounds: () => boundsRef.current,
       handToViewer,
       handAspect: () => handAspect.current,
-      navigate: (event: GestureEvent) => {
+      navigate: (event: GestureEvent, dragMode = "orbit") => {
+        navInput.current.dragMode = dragMode;
         nav.current = navigate(nav.current, navInput.current, event);
         if (movesCamera(event)) {
           invalidateRef.current();
@@ -410,14 +456,13 @@ export function Viewer({
           return distanceToSegment(q, a, b) <= SECTION_LINE_PX;
         });
       },
-      // The agent arrives with the agent bridge change.
-      agentAvailable: () => false,
+      askAgent: () => askAgentRef.current(),
     });
   }, [tools, client, sectionOutlineOnScreen]);
 
   // Hand input: the router sends each gesture to the palette, the active tool or navigation (never the bridge).
   useEffect(() => {
-    const router = new InputRouter(tools.routerTargets);
+    const router = new InputRouter(tools.routerTargets, gestures);
     const offGestures = bus.onGestures((events) => {
       for (const event of events) router.handle(event);
     });
@@ -451,7 +496,7 @@ export function Viewer({
       // The pointer always shows where the hand is; hover and HUD buttons respond only while engaged.
       const button = bus.engaged ? handButtonAt(wrapper.current, at) : null;
       markButton(button);
-      if (!bus.engaged || navigating.current || button) {
+      if (!bus.engaged || navigating.current || button || overHud(wrapper.current, at)) {
         setHoverId(null);
         return;
       }
@@ -471,7 +516,7 @@ export function Viewer({
       offEngaged();
       if (hideTimer) clearTimeout(hideTimer);
     };
-  }, [bus, tools]);
+  }, [bus, tools, gestures]);
 
   // Mouse: a click goes to the active tool; a left drag goes to the tool if it takes it, else orbits; right or
   // middle drag pans; holding the right button still opens the palette; the wheel zooms.
@@ -741,6 +786,7 @@ export function Viewer({
           sectionRef={sectionRef}
           invalidateRef={invalidateRef}
           rendersRef={rendersRef}
+          view={view}
         />
       </Canvas>
 
@@ -768,53 +814,57 @@ export function Viewer({
       <ToolOverlays controller={tools} />
       <UndoStrip client={client} />
 
-      <div className="viewer-toolbar">
-        <div className="project" data-testid="project-status">
-          <strong>{scene.project?.name ?? scene.doc?.name ?? "Loading"}</strong>
-          <span className="muted">{projectStatusText(scene)}</span>
-        </div>
-        <div className="toolbar-buttons">
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => client.undo()}
-            disabled={!scene.canUndo}
-            title="Undo (Ctrl+Z)"
-            data-hand-press
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => client.redo()}
-            disabled={!scene.canRedo}
-            title="Redo (Ctrl+Shift+Z)"
-            data-hand-press
-          >
-            Redo
-          </button>
-          <button type="button" className="secondary" onClick={() => setOpeningProject((v) => !v)}>
-            Open project
-          </button>
-        </div>
-        {openingProject && (
-          <form className="open-project" onSubmit={openProject}>
-            <input
-              type="text"
-              value={projectPath}
-              onChange={(e) => setProjectPath(e.target.value)}
-              placeholder="D:\Projects\My building"
-              aria-label="Project folder path"
-            />
-            <button type="submit" className="primary">
-              Open
+      {/* The project bar and the HUD panels stack down the model's left side. */}
+      <div className="viewer-left">
+        <div className="viewer-toolbar" data-hud>
+          <div className="project" data-testid="project-status">
+            <strong>{scene.project?.name ?? scene.doc?.name ?? "Loading"}</strong>
+            <span className="muted">{projectStatusText(scene)}</span>
+          </div>
+          <div className="toolbar-buttons">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => client.undo()}
+              disabled={!scene.canUndo}
+              title="Undo (Ctrl+Z)"
+              data-hand-press
+            >
+              Undo
             </button>
-          </form>
-        )}
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => client.redo()}
+              disabled={!scene.canRedo}
+              title="Redo (Ctrl+Shift+Z)"
+              data-hand-press
+            >
+              Redo
+            </button>
+            <button type="button" className="secondary" onClick={() => setOpeningProject((v) => !v)}>
+              Open project
+            </button>
+          </div>
+          {openingProject && (
+            <form className="open-project" onSubmit={openProject}>
+              <input
+                type="text"
+                value={projectPath}
+                onChange={(e) => setProjectPath(e.target.value)}
+                placeholder="D:\Projects\My building"
+                aria-label="Project folder path"
+              />
+              <button type="submit" className="primary">
+                Open
+              </button>
+            </form>
+          )}
+        </div>
+        {children}
       </div>
 
-      <div className="viewer-status">
+      <div className="viewer-status" data-hud>
         <ActiveTool controller={tools} />
         <span data-testid="selection-status">
           {selected ? `${selected.name} (${selected.type})` : "Nothing selected"}

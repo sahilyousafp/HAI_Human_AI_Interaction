@@ -39,6 +39,8 @@ export const GestureEvent = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("twohand.end"), ...twoHand }),
   z.strictObject({ type: z.literal("head.nod"), ...base }),
   z.strictObject({ type: z.literal("head.shake"), ...base }),
+  /** Both open palms held toward the camera: stop (the agent's running turn). */
+  z.strictObject({ type: z.literal("palms.stop"), ...base }),
 ]);
 export type GestureEvent = z.infer<typeof GestureEvent>;
 export type GestureType = GestureEvent["type"];

@@ -1,11 +1,16 @@
 import type { Message } from "@aex/protocol";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
+import { AgentClient } from "./agent/agent-client.ts";
+import { ViewLink } from "./agent/view-link.ts";
 import {
   type BridgeConnection,
   browserDeps,
   type ConnectionState,
   connectToBridge,
 } from "./bridge/connection.ts";
+import { GestureSettingsCard } from "./input/GestureSettingsCard.tsx";
+import { GestureSettings } from "./input/gesture-settings.ts";
 import { InputBus } from "./input/input-bus.ts";
 import { TrackingPanel } from "./perception/TrackingPanel.tsx";
 import type { TrackerState } from "./perception/tracker.ts";
@@ -42,6 +47,14 @@ export function App() {
     () => new SceneClient((message: Message) => connection.current?.send(message) ?? false),
     [],
   );
+  const agent = useMemo(
+    () => new AgentClient((message: Message) => connection.current?.send(message) ?? false),
+    [],
+  );
+  const viewLink = useMemo(
+    () => new ViewLink((message: Message) => connection.current?.send(message) ?? false),
+    [],
+  );
   const bus = useMemo(() => new InputBus(), []);
   const renderLatency = useMemo(() => new LatencyTracker(), []);
   const tools = useMemo(() => {
@@ -53,6 +66,30 @@ export function App() {
       connection.current?.send({ type: "settings.set", id: crypto.randomUUID(), payload: { palette } });
     return controller;
   }, []);
+  // What each gesture does is a user setting kept by the bridge too.
+  const gestureSettings = useMemo(
+    () =>
+      new GestureSettings(
+        (gestures) =>
+          connection.current?.send({
+            type: "settings.set",
+            id: crypto.randomUUID(),
+            payload: { gestures },
+          }) ?? false,
+      ),
+    [],
+  );
+  const gestures = useMemo(
+    () => ({
+      bindings: gestureSettings.getSnapshot,
+      agent: {
+        answer: (yes: boolean) => agent.answer(yes, bus.engaged),
+        stop: () => agent.stopRunning(),
+        ask: () => tools.choose("ask-agent"),
+      },
+    }),
+    [gestureSettings, agent, bus, tools],
+  );
 
   // Dev builds only: lets end-to-end tests edit the scene through the same client the UI uses.
   useEffect(() => {
@@ -61,12 +98,26 @@ export function App() {
 
   useEffect(() => {
     const conn = connectToBridge(window.__AEX_SESSION__ ?? null, browserDeps, setBridge, (message) => {
-      if (sceneClient.handle(message)) return;
-      if (message.type === "settings.snapshot") tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT);
+      if (viewLink.handle(message) || agent.handle(message) || sceneClient.handle(message)) return;
+      if (message.type === "settings.snapshot") {
+        tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT);
+        gestureSettings.load(message.payload.gestures);
+      }
     });
     connection.current = conn;
-    return () => conn.close();
-  }, [sceneClient, tools]);
+    return () => {
+      conn.close();
+      viewLink.dispose();
+    };
+  }, [sceneClient, tools, viewLink, agent, gestureSettings]);
+
+  const askAgent = () => {
+    if (bridge.status !== "connected") return "The agent is not connected: the bridge is offline.";
+    const status = agent.getSnapshot().status;
+    if (status?.state === "unavailable") return `The agent is not available. ${status.reason}`;
+    agent.requestFocus();
+    return null;
+  };
 
   const label = LABELS[bridge.status];
   const cameraOn = camera.camera === "on" || camera.camera === "starting";
@@ -105,12 +156,24 @@ export function App() {
       </header>
       <main className="workspace">
         <div className="stage">
-          <Viewer client={sceneClient} bus={bus} latency={renderLatency} tools={tools} />
+          <Viewer
+            client={sceneClient}
+            bus={bus}
+            latency={renderLatency}
+            tools={tools}
+            view={viewLink}
+            askAgent={askAgent}
+            gestures={gestures}
+          >
+            <AgentPanel client={agent} />
+          </Viewer>
           {label.hint && <p className="hint">{label.hint}</p>}
         </div>
         <aside className="sidebar" aria-label="Tracking">
           <TrackingPanel onCameraState={setCamera} bus={bus} renderLatency={renderLatency} />
+          <GestureSettingsCard settings={gestureSettings} bus={bus} />
           <PaletteSettings controller={tools} />
+          <AgentPermissions client={agent} />
         </aside>
       </main>
     </div>
