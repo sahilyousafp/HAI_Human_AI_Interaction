@@ -50,11 +50,11 @@ All values live in `packages/perception/src/gestures/config.ts`; a unit test che
 | `pinch.press` | 0.16 | Thumb-index distance / hand size below this counts as the fingertips touching |
 | `pinch.release` | 0.2 | Above this, the pinch ends (hysteresis) |
 | `pinch.minHoldMs` | 60 | The fingertips must keep touching this long before a pinch starts |
-| `pinch.tapMaxMove` | 0.02 | A pinch released before `holdMs` that moved less than this fraction of the frame width is a tap; moving this far starts a drag |
+| `pinch.tapMaxMove` | 0.04 | A pinch released before `holdMs` that moved less than this fraction of the frame width is a tap; moving this far starts a drag |
 | `pinch.othersMin` | 1.3 | Mean extension of the middle, ring and little fingers needed for a pinch to start |
 | `pinch.lostGraceMs` | 250 | A pinching hand lost by tracking for less than this is still pinching |
 | `pinch.holdMs` | 800 | A pinch held this long... |
-| `pinch.holdMaxMove` | 0.02 | ...while moving less than this fraction of the frame width is a hold (long pinch) |
+| `pinch.holdMaxMove` | 0.04 | ...while moving less than this fraction of the frame width is a hold (long pinch) |
 | `posture.extended` | 1.35 | Finger tip-to-wrist / knuckle-to-wrist above this: extended |
 | `posture.curled` | 1.15 | Below this: curled |
 | `posture.thumbSpread` | 0.45 | Thumb tip to index knuckle / hand size above this: thumb spread |

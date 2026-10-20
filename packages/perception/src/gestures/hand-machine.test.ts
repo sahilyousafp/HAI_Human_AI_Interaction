@@ -78,6 +78,14 @@ describe("tap and drag", () => {
     expect(types(events)).toEqual(["pinch.tap"]);
   });
 
+  it("a pinch that drifts a little (3% of the frame, a shaky hand at arm's length) still clicks", () => {
+    const events = run([
+      ...repeat(12, (i) => ({ ratio: 0.12, position: at(0.5 + i * 0.0025) })),
+      ...repeat(3, () => ({ ratio: 0.8 })),
+    ]);
+    expect(types(events)).toEqual(["pinch.tap"]);
+  });
+
   it("a still pinch released just before the hold is still a tap", () => {
     const events = run([
       ...repeat(22, () => ({ ratio: 0.12, position: at(0.5) })),
@@ -198,8 +206,8 @@ describe("long pinch (hold)", () => {
 
   it("a pinch that moved and then stops does not hold later", () => {
     const events = run([
-      ...repeat(5, (i) => ({ ratio: 0.12, position: at(0.3 + i * 0.01) })),
-      ...repeat(30, () => ({ ratio: 0.12, position: at(0.34) })),
+      ...repeat(5, (i) => ({ ratio: 0.12, position: at(0.3 + i * 0.02) })),
+      ...repeat(30, () => ({ ratio: 0.12, position: at(0.38) })),
     ]);
     expect(types(events)).not.toContain("pinch.hold");
   });
