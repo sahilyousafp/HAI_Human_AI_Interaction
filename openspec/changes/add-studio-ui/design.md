@@ -52,7 +52,7 @@ The web app was a two-column grid: the model, and a 340 px sidebar. `TrackingPan
 - A full-window canvas, fixed, `pointer-events: none`, z 55 (under the pointers at 60). It is redrawn every animation frame from `session.latestFrame`.
 - `handPieces` (pure, unit-tested) anchors each hand at its pointer (`handClient(pinchPoint)`), with one scale (window height x 1.3; x times the frame aspect), mirrored.
 - It returns a palm polygon (rounded by a thick outline) and tapered finger capsules, wider when nearer, ordered back to front.
-- The pieces are drawn opaque white on an offscreen layer with a soft top light, then laid over the page in one pass at 0.88 opacity with a drop shadow, so overlapping fingers never show seams.
+- The pieces are drawn opaque white on an offscreen layer with a soft top light, then laid over the page in one pass at 0.1 opacity with a drop shadow, so overlapping fingers never show seams.
 
 ## Risks / Trade-offs
 

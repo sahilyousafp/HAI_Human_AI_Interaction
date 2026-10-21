@@ -132,7 +132,7 @@ test("Show my hands draws a white hand at its pointer, and input still goes thro
     );
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
   const centre: [number, number] = [viewport.width / 2, viewport.height / 2];
-  await expect.poll(() => opaque(centre[0], centre[1] + 20)).toBeGreaterThan(150);
+  await expect.poll(() => opaque(centre[0], centre[1] + 20)).toBeGreaterThan(15); // a faint hand: about 10% opaque
   expect(await opaque(20, viewport.height - 20)).toBe(0); // only the hand is drawn
   // The overlay never takes input: what is under it is still what the pointer reaches.
   const under = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className ?? "", centre);

@@ -10,7 +10,7 @@ With Show my hands on, the system SHALL draw each tracked hand as a solid white 
 #### Scenario: A hand at its pointer
 - **GIVEN** Show my hands is on and a right hand is tracked with its pinch point at the image centre
 - **WHEN** the next frame is drawn
-- **THEN** an opaque white hand is drawn around the middle of the window, and nothing elsewhere
+- **THEN** a faint white hand (about 10% opaque) is drawn around the middle of the window, and nothing elsewhere
 
 #### Scenario: Off by default and remembered
 - **WHEN** the app starts for the first time

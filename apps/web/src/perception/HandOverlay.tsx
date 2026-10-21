@@ -4,8 +4,8 @@ import { handClient, POINTER_GAIN, pointerSpace } from "../input/hand-mapping.ts
 import { type Capsule, handPieces, type Palm } from "./hand-geometry.ts";
 import type { TrackingSession } from "./tracking-session.ts";
 
-/** How opaque the drawn hands are: solid enough to read over any panel, with the interface still showing through. */
-export const HAND_OPACITY = 0.88;
+/** How opaque the drawn hands are: a faint ghost, so the interface stays fully readable beneath them. */
+export const HAND_OPACITY = 0.1;
 
 function capsulePath(ctx: CanvasRenderingContext2D, c: Capsule): void {
   const [ax, ay] = c.a;

@@ -69,7 +69,7 @@
 - [x] 6.2 `perception/HandOverlay.tsx`:
   - a full-window, click-through canvas under the pointers;
   - one even white layer with a soft top light;
-  - laid over at 0.88 opacity with a shadow;
+  - laid over at 0.1 opacity with a shadow;
   - drawn only while on.
 - [x] 6.3 Pointers span the whole window (`input/hand-mapping.ts`, `pointerSpace`), so hands reach the toolbar's gear
 
