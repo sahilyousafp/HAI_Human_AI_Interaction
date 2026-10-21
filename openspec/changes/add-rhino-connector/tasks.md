@@ -31,4 +31,4 @@
 
 ## 6. Demo
 
-- [ ] 6.1 Write `demos/10-rhino.md` (connect, orbit and zoom by hand, point and tap-select, ask the agent to array the selection, record Rhino latency p90) and record the clip; verify on the maintainer's Rhino 8
+- [ ] 6.1 Write `demos/11-rhino.md` (connect, orbit and zoom by hand, point and tap-select, ask the agent to array the selection, record Rhino latency p90) and record the clip; verify on the maintainer's Rhino 8

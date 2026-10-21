@@ -1,4 +1,5 @@
 import { chromium, type FullConfig } from "@playwright/test";
+import { openSettings } from "./settings.ts";
 import { E2E_BASE_URL } from "./stack.ts";
 
 /**
@@ -49,6 +50,7 @@ export default async function warmup(config: FullConfig): Promise<void> {
       );
     while ((await frameCount()) < 10 && Date.now() - started < 180_000) await page.waitForTimeout(500);
     const firstFrames = Date.now() - started;
+    await openSettings(page, "camera"); // the readouts are on the Camera and tracking page
     await page.waitForTimeout(3000); // let the once-per-second HUD readouts settle
     const hud = async (id: string) => (await page.getByTestId(id).textContent())?.trim();
     console.log(

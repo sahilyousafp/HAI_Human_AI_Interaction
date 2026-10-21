@@ -24,4 +24,4 @@
 
 ## 5. Demo
 
-- [ ] 5.1 Write `demos/12-turn-review.md` (ask for a colonnade, see highlights, shake to reject, rephrase, nod to accept, then the same in Rhino) and record the clip; verify reject leaves both the web scene and the Rhino document exactly as before the turn
+- [ ] 5.1 Write `demos/13-turn-review.md` (ask for a colonnade, see highlights, shake to reject, rephrase, nod to accept, then the same in Rhino) and record the clip; verify reject leaves both the web scene and the Rhino document exactly as before the turn

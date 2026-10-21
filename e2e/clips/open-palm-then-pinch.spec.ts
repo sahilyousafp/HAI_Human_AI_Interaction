@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { openSettings } from "../settings.ts";
 import { gestureEvents, startCamera } from "../tracking.ts";
 
 // Plays the open-palm clip followed by the one-hand-pinch clip (built by scripts/convert-clips.mjs).
 test("HUD shows engaged after the open palm, then a pinch on the right hand", async ({ page }) => {
   await page.goto("/");
   await startCamera(page);
+  await openSettings(page, "camera");
   await expect(page.getByTestId("hud-engaged")).toHaveAttribute("data-state", "engaged", { timeout: 60_000 });
   // The pinch part follows; a tap or drag on the right hand shows up as the last gesture.
   await expect(page.getByTestId("hud-last-gesture")).toHaveText(/(tap|drag start|drag end) \(right\)/, {

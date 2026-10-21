@@ -16,6 +16,7 @@ import {
 } from "./agent.ts";
 import { GestureBindingsSchema } from "./bindings.ts";
 import { BridgeStatusMessage, Envelope, HelloMessage, MessageId } from "./envelope.ts";
+import { FeatureChoices } from "./features.ts";
 import { ElementId, SceneDocument, SceneOp } from "./scene.ts";
 
 function message<T extends string, P extends z.ZodType>(type: T, payload: P) {
@@ -49,6 +50,10 @@ export const Settings = z.strictObject({
   /** Whether Mochi's replies are spoken (on by default; muting is remembered). */
   speakReplies: z.boolean().default(true),
   replyVoice: ReplyVoice.default("af_heart"),
+  /** Features the user switched on or off; the rest are on. */
+  features: FeatureChoices.nullable().default(null),
+  /** Draw the user's hands as white shapes over the whole screen, so people watching a recording can follow. */
+  showHands: z.boolean().default(false),
 });
 export type Settings = z.infer<typeof Settings>;
 const Project = z.strictObject({ name: z.string(), path: z.string() });
@@ -202,6 +207,8 @@ export const SettingsSetMessage = message(
     listenForNames: z.boolean().optional(),
     speakReplies: z.boolean().optional(),
     replyVoice: ReplyVoice.optional(),
+    features: FeatureChoices.optional(),
+    showHands: z.boolean().optional(),
   }),
 );
 export const AgentSendMessage = message(

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { fakeProvider } from "../../apps/bridge/test/fake-provider.ts";
 import { watchOutgoingData } from "../privacy.ts";
+import { openSettings } from "../settings.ts";
 import { openViewer, startTestBridge } from "../viewer.ts";
 
 // The fake microphone plays test-assets/speech/add-three-floors.wav once from when the microphone opens: "Add three
@@ -18,6 +19,7 @@ test("listening for names: speech without a name is ignored, shown nowhere and s
     await openViewer(page);
     await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
     const outgoing = watchOutgoingData(page);
+    await openSettings(page, "voice");
     await page.getByTestId("listen-for-names").check();
     // The utterance was heard and transcribed here (the latency statistic appears), then dropped.
     await expect(page.getByTestId("speech-latency")).not.toHaveText("-", { timeout: 60_000 });

@@ -421,3 +421,23 @@ describe("create tools", () => {
     expect(DEFAULT_CREATE_LAYOUT.slice(0, 5)).toEqual(["wall", "slab", "column", "massing", "copy"]);
   });
 });
+
+describe("tools tied to a feature", () => {
+  it("with the create tools switched off they are not listed, cannot be chosen, and an active one hands back to Select", () => {
+    const { registry, controller } = setup();
+    let createOn = true;
+    registry.setAvailability((tool) => tool.feature !== "createTools" || createOn);
+    controller.choose("wall");
+    expect(controller.getSnapshot().activeId).toBe("wall");
+    createOn = false;
+    registry.refresh();
+    expect(controller.getSnapshot().activeId).toBe("select");
+    expect(registry.list().map((t) => t.id)).not.toContain("wall");
+    expect(registry.byShortcut("w")).toBeUndefined();
+    controller.choose("slab");
+    expect(controller.getSnapshot().activeId).toBe("select");
+    // Tools without a feature stay.
+    controller.choose("massing");
+    expect(controller.getSnapshot().activeId).toBe("massing");
+  });
+});

@@ -15,7 +15,7 @@ Rhino is where precise design happens, and it is the user's daily tool. The same
 
 Out of scope: reviewing agent changes in Rhino with ghosts and one-step reject (next change), palette tools that run Rhino commands (later, through the tool registry), Rhino 9 and macOS (later), packaging on Yak (later).
 
-Demo clip (Week 10): "The same gestures now drive Rhino 8": orbit and zoom a Rhino model by hand, point at a surface, tap to select it in Rhino, then ask the agent to "array this 5 times along X".
+Demo clip (Week 11): "The same gestures now drive Rhino 8": orbit and zoom a Rhino model by hand, point at a surface, tap to select it in Rhino, then ask the agent to "array this 5 times along X".
 
 ## Capabilities
 

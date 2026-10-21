@@ -110,7 +110,11 @@ export class ToolController {
       question: null,
       registryVersion: 0,
     };
-    registry.onChange(() => this.update({ registryVersion: this.snapshot.registryVersion + 1 }));
+    registry.onChange(() => {
+      // A tool switched off while in use hands back to Select.
+      if (!registry.isAvailable(this.snapshot.activeId)) this.choose(DEFAULT_TOOL);
+      this.update({ registryVersion: this.snapshot.registryVersion + 1 });
+    });
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -132,7 +136,7 @@ export class ToolController {
   choose(id: string): void {
     const tool = this.registry.get(id);
     const ctx = this.ctx();
-    if (!tool || !ctx) return;
+    if (!tool || !ctx || !this.registry.isAvailable(id)) return;
     if (tool.instant) {
       tool.run?.(ctx);
       return;

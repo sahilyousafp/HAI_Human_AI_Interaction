@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { fakeProvider } from "../../apps/bridge/test/fake-provider.ts";
+import { openSettings } from "../settings.ts";
 import { openViewer, startTestBridge } from "../viewer.ts";
 
 // The fake microphone plays test-assets/speech/hey-mochi-status.wav once from when the microphone opens: "Hey
@@ -17,6 +18,7 @@ test("listening for names: 'Hey Mochi' counts as the name, and the greeting is t
   try {
     await openViewer(page);
     await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
+    await openSettings(page, "voice");
     await page.getByTestId("listen-for-names").check();
     await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "names");
     const transcript = page.getByTestId("voice-transcript");

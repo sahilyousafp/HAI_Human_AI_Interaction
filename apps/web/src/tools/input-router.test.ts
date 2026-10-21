@@ -1,5 +1,6 @@
 import {
   DEFAULT_BINDINGS,
+  type FeatureId,
   type GestureBindings,
   type GestureEvent,
   type Hand,
@@ -8,7 +9,10 @@ import {
 import { describe, expect, it } from "vitest";
 import { InputRouter, type RouterAgent, type RouterTargets } from "./input-router.ts";
 
-function setup(toolTakesDrag = false, options: { bindings?: Partial<GestureBindings>; cards?: number } = {}) {
+function setup(
+  toolTakesDrag = false,
+  options: { bindings?: Partial<GestureBindings>; cards?: number; off?: FeatureId[] } = {},
+) {
   const log: string[] = [];
   let cards = options.cards ?? 0;
   let open = false;
@@ -64,7 +68,8 @@ function setup(toolTakesDrag = false, options: { bindings?: Partial<GestureBindi
     ask: () => log.push("agent.ask"),
   };
   const bindings = { ...DEFAULT_BINDINGS, ...options.bindings };
-  return { router: new InputRouter(targets, { bindings: () => bindings, agent }), log };
+  const enabled = (feature: FeatureId) => !options.off?.includes(feature);
+  return { router: new InputRouter(targets, { bindings: () => bindings, agent, enabled }), log };
 }
 
 let ts = 1000;
@@ -287,5 +292,29 @@ describe("gesture bindings", () => {
     const { router, log } = setup(false, { bindings: { nod: "ask-agent" } });
     router.handle(ev("head.nod"));
     expect(log).toEqual(["agent.ask"]);
+  });
+});
+
+describe("feature switches", () => {
+  it("switched-off features ignore their gestures", () => {
+    const { router, log } = setup(false, {
+      off: ["twoHandNavigation", "headGestures", "stopGesture", "toolRings"],
+    });
+    router.handle(twoHand("twohand.start"));
+    router.handle({ type: "head.nod", ts: ts++, confidence: 1 });
+    router.handle({ type: "hands.stop", ts: ts++, confidence: 1 });
+    router.handle(ev("pinch.drag.start"));
+    router.handle(ev("pinch.hold"));
+    expect(log).toEqual(["tool.dragStart", "nav:pinch.drag.start"]);
+  });
+
+  it("without the create tools, the left hand's long pinch opens no ring; the right hand's still does", () => {
+    const { router, log } = setup(false, { off: ["createTools"] });
+    router.handle(ev("pinch.drag.start", "Left"));
+    router.handle(ev("pinch.hold", "Left"));
+    expect(log.some((l) => l.startsWith("palette.open"))).toBe(false);
+    router.handle(ev("pinch.drag.start"));
+    router.handle(ev("pinch.hold"));
+    expect(log.at(-1)).toBe("palette.open:tools:Right");
   });
 });

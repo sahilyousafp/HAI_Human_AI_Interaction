@@ -524,6 +524,7 @@ export function AgentPanel({
   client,
   voice,
   startVoice,
+  voiceOn = true,
   nameOf,
   speaker,
   speakReplies,
@@ -533,6 +534,8 @@ export function AgentPanel({
   /** Voice is the main way to ask: the microphone button comes first and typing is the fallback. */
   voice: VoiceInput;
   startVoice: () => void;
+  /** The voice feature is on (Settings > Features): without it there is no microphone, only typing. */
+  voiceOn?: boolean;
   /** An element's name, for the references a spoken request carries. */
   nameOf: (id: string) => string;
   /** Mochi's voice: speaking shows on the toggle, which mutes or unmutes it. */
@@ -717,9 +720,9 @@ export function AgentPanel({
                 />
               ))}
           </ol>
-          <VoiceBar voice={voice} nameOf={nameOf} />
+          {voiceOn && <VoiceBar voice={voice} nameOf={nameOf} />}
           <form className="agent-input" onSubmit={submit}>
-            <MicButton voice={voice} onStart={startVoice} disabled={status === "unavailable"} />
+            {voiceOn && <MicButton voice={voice} onStart={startVoice} disabled={status === "unavailable"} />}
             <SpeakToggle speaker={speaker} on={speakReplies} onChange={onSpeakReplies} />
             <textarea
               ref={input}

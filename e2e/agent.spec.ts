@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
+import { closeSettings, openSettings } from "./settings.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
 type Bridge = Awaited<ReturnType<typeof startTestBridge>>;
@@ -504,17 +505,21 @@ test.describe("tool approval", () => {
       await ask(page, "shell: ls");
       await page.getByTestId("approval-card").getByRole("button", { name: "Always allow" }).click();
       await expect(lastTurn(page)).toHaveAttribute("data-ended", "done");
+      await openSettings(page, "permissions");
       await expect(page.getByTestId("allowed-tool")).toContainText("Bash");
+      await closeSettings(page);
 
       await ask(page, "shell: ls again");
       await expect(lastTurn(page)).toHaveAttribute("data-ended", "done");
       await expect(lastTurn(page).getByTestId("approval-card")).toHaveCount(0);
 
+      await openSettings(page, "permissions");
       await page
         .getByTestId("allowed-tool")
         .getByRole("button", { name: /Stop always allowing/ })
         .click();
       await expect(page.getByTestId("allowed-tool")).toHaveCount(0);
+      await closeSettings(page);
       await ask(page, "shell: ls once more");
       await expect(lastTurn(page).getByTestId("approval-card")).toHaveAttribute("data-outcome", "pending");
     } finally {

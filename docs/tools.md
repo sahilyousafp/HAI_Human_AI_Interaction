@@ -31,13 +31,13 @@ The active tool is always shown at the bottom left of the view. To leave it and 
 
 Escape and a head shake first close an open palette, answer "keep" to a question, or drop a drag in progress; the next one returns to Select.
 
-Hands reach the whole page, the model and the sidebar alike, and press what the mouse clicks: buttons, links, checkboxes and their labels (dropdowns and text fields stay mouse and keyboard). Point at a control so it gets an outline and the pointer shrinks to a dot, then pinch and let go. Any pinch that starts on a control presses it, however long you hold it; it never grabs or orbits. After an undo or redo, a strip says what was undone and offers **Undo again** and **Redo**, so stepping back several changes takes a few taps.
+Hands reach the whole window, the model, the toolbar, the camera view and the settings alike, and press what the mouse clicks: buttons, links, checkboxes and their labels (dropdowns and text fields stay mouse and keyboard). Point at a control so it gets an outline and the pointer shrinks to a dot, then pinch and let go. Any pinch that starts on a control presses it, however long you hold it; it never grabs or orbits. After an undo or redo, a strip says what was undone and offers **Undo again** and **Redo**, so stepping back several changes takes a few taps.
 
-**Scrolling by hand.** Pinch over a list that scrolls (the agent conversation, the extensions, the sidebar) and move the hand up or down: the content follows the hand, as on a phone. Let go while moving and it coasts on and slows down; pinching it again catches it. A pinch that starts on a button inside the list presses the button, unless the hand moves up or down first (2% of the view's height), which scrolls instead.
+**Scrolling by hand.** Pinch over a list that scrolls (the agent conversation, the extensions, the settings) and move the hand up or down: the content follows the hand, as on a phone. Let go while moving and it coasts on and slows down; pinching it again catches it. A pinch that starts on a button inside the list presses the button, unless the hand moves up or down first (2% of the view's height), which scrolls instead.
 
 ## The pointers
 
-Each hand has its own pointer, in the hand's colour in the camera overlay (left amber, right blue-green), and it shows what a pinch would do where it is. Hover in the model and what "this" means when you speak follow the hand that pinched last.
+Each hand has its own pointer, in the hand's colour in the camera overlay (left amber, right blue), and it shows what a pinch would do where it is. Hover in the model and what "this" means when you speak follow the hand that pinched last.
 
 | Pointer | Meaning |
 |---|---|
@@ -73,7 +73,7 @@ Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y keep working as before.
 
 ## Choosing the layout
 
-The **Tool palette** card in the sidebar has a tab for each ring, listing its eight slots clockwise from the top. Pick any registered tool for each slot, or leave it empty. The layouts are saved by the bridge in `.aex/settings.json` in the workspace, so they are the same in every browser and after a restart.
+**Settings > Tool rings** has a switch between the two rings, listing its eight slots clockwise from the top. Pick any registered tool for each slot, or leave it empty. The layouts are saved by the bridge in `.aex/settings.json` in the workspace, so they are the same in every browser and after a restart.
 
 ## Adding a tool
 

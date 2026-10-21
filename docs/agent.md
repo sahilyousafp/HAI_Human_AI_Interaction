@@ -56,7 +56,7 @@ Some tool calls need your say-so.
   - Head gestures only decide a card while it is the only one waiting.
   - A shake that answers a card does not also cancel the active tool.
 - **Unanswered cards are denied after 60 seconds**, and the card says it timed out.
-- **Always allow** pre-approves that tool in this project, kept in `.aex/approvals.json`. Remove it under **Agent permissions** in the sidebar, and the next call asks again.
+- **Always allow** pre-approves that tool in this project, kept in `.aex/approvals.json`. Remove it under **Settings > Agent permissions**, and the next call asks again.
 
 ## Extensions
 

@@ -5,6 +5,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
 import { watchOutgoingData } from "./privacy.ts";
+import { openSettings } from "./settings.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
 // Voice controls that need no speech: these run with Chromium's fake devices (a beeping fake microphone).
@@ -38,6 +39,7 @@ test("no microphone on load: nothing is requested and the indicator shows the mi
   expect(await page.evaluate(() => (window as unknown as { __mic: number }).__mic)).toBe(0);
   await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "off");
   await expect(page.getByTestId("mic-button")).toBeVisible(); // the main way to ask
+  await openSettings(page, "voice");
   await expect(page.getByTestId("listen-for-names")).not.toBeChecked(); // listening for names is opt-in
 });
 
@@ -51,7 +53,10 @@ test("listening from the palette: Ask agent starts the microphone and the indica
   await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
   await page.keyboard.press("a"); // Ask agent
   await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "on");
-  expect(await page.evaluate(() => (window as unknown as { __mic: number }).__mic)).toBeGreaterThan(0);
+  // The indicator turns on as listening starts; the microphone request follows once the speech detector loads.
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __mic: number }).__mic))
+    .toBeGreaterThan(0);
   await expect(page.getByTestId("mic-button")).toHaveAttribute("aria-pressed", "true");
   await page.getByTestId("mic-button").click(); // stop: nothing said yet, so nothing is sent
   await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "off");
@@ -80,6 +85,7 @@ test("default is on-device: the speech setting reads On this laptop and says aud
 }) => {
   bridge = await startTestBridge(page);
   await openViewer(page);
+  await openSettings(page, "voice");
   const mode = page.getByTestId("speech-mode");
   await expect(mode).toHaveValue("device");
   await expect(mode.locator("option:checked")).toHaveText("On this laptop");

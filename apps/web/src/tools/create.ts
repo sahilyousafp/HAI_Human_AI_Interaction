@@ -85,6 +85,7 @@ export function slabBetween(doc: SceneDocument, a: PointMm, b: PointMm): Element
 function dragToDraw(options: {
   id: string;
   label: string;
+  feature: Tool["feature"];
   icon: string;
   shortcut: string;
   hint: string;
@@ -98,6 +99,7 @@ function dragToDraw(options: {
   return {
     id: options.id,
     label: options.label,
+    feature: options.feature,
     icon: options.icon,
     shortcut: options.shortcut,
     activate(ctx) {
@@ -156,6 +158,7 @@ export function wallTool(): Tool {
   return dragToDraw({
     id: "wall",
     label: "Wall",
+    feature: "createTools",
     icon: "M3 20h18M5 20V8h14v12M5 12h14M5 16h14M9 8v4M15 8v4M12 12v4M9 16v4M15 16v4",
     shortcut: "w",
     hint: "Pinch on the ground and drag from one end of the wall to the other.",
@@ -171,6 +174,7 @@ export function slabTool(): Tool {
   return dragToDraw({
     id: "slab",
     label: "Slab",
+    feature: "createTools",
     icon: "M3 14l9-5 9 5-9 5zM3 14v2l9 5 9-5v-2",
     shortcut: "f",
     hint: "Pinch on the ground and drag from one corner of the slab to the opposite one.",
@@ -187,6 +191,7 @@ export function slabTool(): Tool {
 export const columnTool: Tool = {
   id: "column",
   label: "Column",
+  feature: "createTools",
   icon: "M6 3h12v3H6zM6 18h12v3H6zM9 6v12M15 6v12",
   shortcut: "c",
   activate(ctx) {
@@ -220,6 +225,7 @@ export function copyTool(): Tool {
   return {
     id: "copy",
     label: "Copy",
+    feature: "createTools",
     icon: "M8 8h11v11H8zM5 16V5h11",
     shortcut: "p",
     activate(ctx) {

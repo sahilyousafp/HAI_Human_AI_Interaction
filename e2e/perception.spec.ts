@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { closeSettings, openSettings } from "./settings.ts";
 import { frames, framesDuring, startCamera } from "./tracking.ts";
 
 // These tests use Chromium's built-in fake camera (a synthetic pattern with no hands and no face).
@@ -94,6 +95,7 @@ test.describe("tracking on the fake camera", () => {
   test("HUD reports frame rate, inference time and backend, refreshed each second", async ({ page }) => {
     await page.goto("/");
     await startCamera(page);
+    await openSettings(page, "camera");
     await expect(page.getByTestId("hud-backend")).toHaveText(/^(GPU|CPU)$/);
     await expect(page.getByTestId("hud-fps")).toHaveText(/\d+ fps/);
     await expect(page.getByTestId("hud-inference")).toHaveText(/\d+\.\d ms/);
@@ -108,6 +110,7 @@ test.describe("tracking on the fake camera", () => {
     // 45 ms of extra work per frame keeps the rate below 24 fps on any machine.
     await page.goto("/?perfDelay=45");
     await startCamera(page);
+    await openSettings(page, "camera");
     await expect(page.getByTestId("hud-face-cadence")).toHaveText("every 2nd frame", { timeout: 20_000 });
     // Only judge frames processed after the back-off; the rate under load varies by machine.
     const switchedAt = (await frames(page)).at(-1)?.seq ?? 0;
@@ -122,7 +125,25 @@ test.describe("tracking on the fake camera", () => {
   });
 });
 
-test.describe("camera preview size", () => {
+test.describe("camera view", () => {
+  test("floats at the model's bottom right and keeps running while the settings open and close", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await startCamera(page);
+    const view = await page.getByTestId("camera-view").boundingBox();
+    const stage = await page.locator(".stage").boundingBox();
+    if (!view || !stage) throw new Error("not laid out");
+    expect(view.x + view.width).toBeGreaterThan(stage.x + stage.width - 40);
+    expect(view.y + view.height).toBeGreaterThan(stage.y + stage.height - 40);
+    expect(view.width).toBeLessThan(stage.width / 3);
+    await openSettings(page, "camera");
+    await closeSettings(page);
+    const before = (await frames(page)).length;
+    await expect.poll(async () => (await frames(page)).length).toBeGreaterThan(before);
+    await expect(page.getByTestId("camera-indicator")).toHaveAttribute("data-state", "on");
+  });
+
   test("expands over the model, shrinks back, and is remembered after a reload", async ({ page }) => {
     await page.goto("/");
     await startCamera(page);
@@ -136,23 +157,27 @@ test.describe("camera preview size", () => {
     await expect(expand).toHaveAttribute("aria-pressed", "true");
     const large = await preview.boundingBox();
     expect(large?.width).toBeGreaterThan((small?.width ?? 0) * 1.5);
-    // It covers the model area (nearly its full height), clear of the sidebar, so the controls stay usable.
+    // It covers most of the model area, and the controls stay usable.
     const stage = await page.locator(".stage").boundingBox();
-    expect(large?.height ?? 0).toBeGreaterThan((stage?.height ?? 0) * 0.85);
-    const sidebar = await page.locator("aside").first().boundingBox();
-    expect((large?.x ?? 0) + (large?.width ?? 0)).toBeLessThanOrEqual(sidebar?.x ?? 0);
+    expect(large?.height ?? 0).toBeGreaterThan((stage?.height ?? 0) * 0.6);
     await expect(page.getByTestId("camera-toggle")).toBeVisible();
 
     await page.reload();
     await expect(page.getByTestId("camera-preview")).toHaveAttribute("data-expanded", "true");
-
-    // "Shrink it" in the sidebar and the button on the preview both bring it back.
-    await page.getByRole("button", { name: "Shrink it" }).click();
-    await expect(page.getByTestId("camera-preview")).toHaveAttribute("data-expanded", "false");
-    await page.getByTestId("preview-expand").click();
     await page.getByTestId("preview-expand").click();
     await expect(page.getByTestId("camera-preview")).toHaveAttribute("data-expanded", "false");
     await page.reload();
     await expect(page.getByTestId("camera-preview")).toHaveAttribute("data-expanded", "false");
+  });
+
+  test("tucks away into a pill and comes back, the camera still running", async ({ page }) => {
+    await page.goto("/");
+    await startCamera(page);
+    await page.getByTestId("camera-minimise").click();
+    await expect(page.getByTestId("camera-view")).toHaveCount(0);
+    const before = (await frames(page)).length;
+    await expect.poll(async () => (await frames(page)).length).toBeGreaterThan(before);
+    await page.getByTestId("camera-restore").click();
+    await expect(page.getByTestId("camera-view")).toBeVisible();
   });
 });

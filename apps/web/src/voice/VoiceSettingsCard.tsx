@@ -1,5 +1,6 @@
 import type { ReplyVoice, SpeechMode } from "@aex/protocol";
 import { useSyncExternalStore } from "react";
+import { ListGroup, ListRow, Switch } from "../ui/controls.tsx";
 import { cloudSpeechAvailable } from "./listeners.ts";
 import type { Speaker } from "./speaker.ts";
 import { KOKORO_VOICES } from "./speaker-messages.ts";
@@ -38,91 +39,137 @@ export function VoiceSettingsCard({
   const spoken = useSyncExternalStore(speaker.subscribe, speaker.getSnapshot);
   const firstAudio = p90(spoken.firstAudio);
   return (
-    <section className="palette-settings voice-settings" data-testid="voice-settings" aria-label="Voice">
-      <header className="detection-head">
-        <h2>Voice</h2>
-        <span className="muted">hold ` or press the microphone</span>
-      </header>
-      <label className="voice-mode">
-        <span>Speech to text</span>
-        <select data-testid="speech-mode" value={mode} onChange={(e) => onMode(e.target.value as SpeechMode)}>
-          <option value="device">On this laptop</option>
-          <option value="cloud" disabled={!cloudSpeechAvailable()}>
-            Browser speech service (sends audio to a third party)
-          </option>
-        </select>
-      </label>
-      <p className="muted" data-testid="speech-mode-note">
-        {mode === "device"
-          ? "Audio never leaves this laptop: it is turned into text here and then dropped."
-          : "Your browser sends what you say to its vendor's servers (Google for Chrome, Microsoft for Edge) to turn it into text."}
-      </p>
-      <label className="voice-names">
-        <input
-          type="checkbox"
-          data-testid="listen-for-names"
-          checked={listenForNames}
-          onChange={(e) => onListenForNames(e.target.checked)}
-        />
-        <span>
-          Listen for names
-          <span className="muted">
-            {" "}
-            The microphone stays on. Only what starts with a team name ("Mochi, ...", "Architect, ...")
-            becomes a request; everything else is dropped at once.
+    <div className="settings-page-body voice-settings" data-testid="voice-settings">
+      <ListGroup
+        title="Speech to text"
+        footer={
+          <span data-testid="speech-mode-note">
+            {mode === "device"
+              ? "Audio never leaves this laptop: it is turned into text here and then dropped."
+              : "Your browser sends what you say to its vendor's servers (Google for Chrome, Microsoft for Edge) to turn it into text."}
           </span>
-        </span>
-      </label>
-      {mode === "device" && (
-        <dl className="voice-stats">
-          <dt>Runs on</dt>
-          <dd data-testid="speech-backend" className={stats.backend ? "" : "placeholder"}>
-            {stats.backend ?? "starts with your first request"}
-          </dd>
-          <dt>End of speech to text, p90</dt>
-          <dd data-testid="speech-latency">{latency === null ? "-" : `${latency} ms`}</dd>
-        </dl>
-      )}
-      <label className="voice-names">
-        <input
-          type="checkbox"
-          data-testid="speak-replies"
-          checked={speakReplies}
-          onChange={(e) => onSpeakReplies(e.target.checked)}
-        />
-        <span>
-          Speak Mochi's replies
-          <span className="muted"> Generated on this laptop; talking to Mochi interrupts it.</span>
-        </span>
-      </label>
-      {speakReplies && (
-        <>
-          <label className="voice-mode">
-            <span>Mochi's voice</span>
+        }
+      >
+        <ListRow
+          label="Speech to text"
+          htmlFor="speech-mode"
+          control={
             <select
-              data-testid="reply-voice"
-              value={replyVoice}
-              onChange={(e) => onReplyVoice(e.target.value as ReplyVoice)}
+              id="speech-mode"
+              className="list-select"
+              data-testid="speech-mode"
+              value={mode}
+              onChange={(e) => onMode(e.target.value as SpeechMode)}
             >
-              {Object.entries(KOKORO_VOICES).map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
+              <option value="device">On this laptop</option>
+              <option value="cloud" disabled={!cloudSpeechAvailable()}>
+                Browser service (sends audio to a third party)
+              </option>
             </select>
-          </label>
-          <dl className="voice-stats">
-            <dt>Speaks with</dt>
-            <dd data-testid="reply-engine" className={spoken.engine === null ? "placeholder" : ""}>
-              {spoken.engine === null && "starts with Mochi's first reply"}
-              {spoken.engine === "none" && "no voice on this computer"}
-              {spoken.engine !== null && spoken.engine !== "none" && spoken.engine}
-            </dd>
-            <dt>First sound, p90</dt>
-            <dd data-testid="reply-latency">{firstAudio === null ? "-" : `${firstAudio} ms`}</dd>
-          </dl>
-        </>
-      )}
-    </section>
+          }
+        />
+        {mode === "device" && (
+          <>
+            <ListRow
+              label="Runs on"
+              control={
+                <span
+                  data-testid="speech-backend"
+                  className={stats.backend ? "list-value" : "list-value placeholder"}
+                >
+                  {stats.backend ?? "starts with your first request"}
+                </span>
+              }
+            />
+            <ListRow
+              label="End of speech to text, p90"
+              control={
+                <span className="list-value" data-testid="speech-latency">
+                  {latency === null ? "-" : `${latency} ms`}
+                </span>
+              }
+            />
+          </>
+        )}
+      </ListGroup>
+
+      <ListGroup
+        title="Listening"
+        footer={
+          'Hold ` or press the microphone to speak a request. With Listen for names on, only what starts with a team name ("Mochi, ...", "Architect, ...") becomes a request; everything else is dropped at once.'
+        }
+      >
+        <ListRow
+          label="Listen for names"
+          detail="The microphone stays on"
+          control={
+            <Switch
+              label="Listen for names"
+              testId="listen-for-names"
+              checked={listenForNames}
+              onChange={onListenForNames}
+            />
+          }
+        />
+      </ListGroup>
+
+      <ListGroup title="Mochi's replies" footer="Generated on this laptop; talking to Mochi interrupts it.">
+        <ListRow
+          label="Speak Mochi's replies"
+          control={
+            <Switch
+              label="Speak Mochi's replies"
+              testId="speak-replies"
+              checked={speakReplies}
+              onChange={onSpeakReplies}
+            />
+          }
+        />
+        {speakReplies && (
+          <>
+            <ListRow
+              label="Voice"
+              htmlFor="reply-voice"
+              control={
+                <select
+                  id="reply-voice"
+                  className="list-select"
+                  data-testid="reply-voice"
+                  value={replyVoice}
+                  onChange={(e) => onReplyVoice(e.target.value as ReplyVoice)}
+                >
+                  {Object.entries(KOKORO_VOICES).map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              }
+            />
+            <ListRow
+              label="Speaks with"
+              control={
+                <span
+                  data-testid="reply-engine"
+                  className={spoken.engine === null ? "list-value placeholder" : "list-value"}
+                >
+                  {spoken.engine === null && "starts with Mochi's first reply"}
+                  {spoken.engine === "none" && "no voice on this computer"}
+                  {spoken.engine !== null && spoken.engine !== "none" && spoken.engine}
+                </span>
+              }
+            />
+            <ListRow
+              label="First sound, p90"
+              control={
+                <span className="list-value" data-testid="reply-latency">
+                  {firstAudio === null ? "-" : `${firstAudio} ms`}
+                </span>
+              }
+            />
+          </>
+        )}
+      </ListGroup>
+    </div>
   );
 }

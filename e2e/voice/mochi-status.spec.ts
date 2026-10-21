@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { fakeProvider } from "../../apps/bridge/test/fake-provider.ts";
 import { watchOutgoingData } from "../privacy.ts";
+import { openSettings } from "../settings.ts";
 import { openViewer, startTestBridge } from "../viewer.ts";
 
 // The fake microphone plays test-assets/speech/mochi-status.wav once from when the microphone opens: "Mochi, what
@@ -19,6 +20,7 @@ test("listening for names: a named utterance becomes a request with its countdow
     await openViewer(page);
     await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
     const outgoing = watchOutgoingData(page);
+    await openSettings(page, "voice");
     await page.getByTestId("listen-for-names").check();
     const indicator = page.getByTestId("mic-indicator");
     await expect(indicator).toHaveAttribute("data-state", "names");

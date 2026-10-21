@@ -13,21 +13,24 @@ AEX turns your webcam into hand and face measurements, entirely inside your brow
 
 ## What you see
 
-| Control or readout | What it does |
-|---|---|
-| **Start camera / Stop camera** | Starts or stops the camera and the tracking worker |
-| **Camera** | Which camera to use; remembered in this browser. Switching while the camera runs switches over |
-| **Camera image is mirrored** | Tick if your camera sends a mirrored image (see "Using a phone as the camera"); remembered per camera |
-| **Expand / shrink** (corner of the preview) | Shows the camera preview over the whole model area (the largest view that fits, with the model dimmed behind it; the sidebar stays visible), so you can check framing and tracking from a distance. The hand pointer stays on top. **Shrink it** in the sidebar, or the same button, brings it back. Remembered in this browser |
-| **Debug view** | Draws hand skeletons (amber = left hand, teal = right hand), face points and head axes over the mirrored preview |
-| Frame rate | Tracking frames per second, smoothed |
-| Inference | Time the worker spent on the last frame, in ms |
-| Camera delivers | The size and frame rate the camera actually gives (60 fps is asked for, cameras that cannot give 30) |
-| Backend | GPU (WebGL in the worker) or CPU (fallback) |
-| Camera effects | Background blur, automatic framing and eye contact applied by the operating system: "off", the ones still on, or "not reported" when the browser cannot tell |
-| Face tracking | "every frame", or "every 2nd frame" when the machine is under load |
-| Head yaw / pitch / roll | Degrees. Yaw is positive when you turn to your left, pitch when you look up, roll when you tilt to your right |
-| Frames / dropped | Frames processed and camera frames skipped because the worker was busy |
+The camera view floats at the bottom right of the model: the mirrored preview with the tracked points drawn over it, **Start camera / Stop camera**, whether you are engaged, what each hand is doing with how reliably it is found, and the last gesture. Everything else is in **Settings > Camera and tracking** (the gear at the top right, or Ctrl+,). The camera keeps running whatever the view and the settings show.
+
+| Control or readout | Where | What it does |
+|---|---|---|
+| **Start camera / Stop camera** | Camera view | Starts or stops the camera and the tracking worker |
+| **Expand / shrink** | Camera view, top right | Shows the camera over the whole model (the largest view that fits, the model dimmed behind it), so you can check framing and tracking from a distance. The hand pointers stay on top. The same button brings it back. Remembered in this browser |
+| **Hide** | Camera view, top right | Tucks the view into a small **Camera** pill (the camera keeps running); press the pill to bring it back. Remembered in this browser |
+| **Camera** | Settings | Which camera to use; remembered in this browser. Switching while the camera runs switches over |
+| **Camera image is mirrored** | Settings | Turn on if your camera sends a mirrored image (see "Using a phone as the camera"); remembered per camera |
+| **Show tracked points** | Settings | Draws hand skeletons (amber = left hand, blue = right hand), face points and head axes over the mirrored preview |
+| Frame rate | Settings | Tracking frames per second, smoothed |
+| Inference | Settings | Time the worker spent on the last frame, in ms |
+| Camera delivers | Settings | The size and frame rate the camera actually gives (60 fps is asked for, cameras that cannot give 30) |
+| Backend | Settings | GPU (WebGL in the worker) or CPU (fallback) |
+| Camera effects | Settings | Background blur, automatic framing and eye contact applied by the operating system: "off", the ones still on, or "not reported" when the browser cannot tell |
+| Face tracking | Settings | "every frame", or "every 2nd frame" when the machine is under load |
+| Head yaw / pitch / roll | Settings | Degrees. Yaw is positive when you turn to your left, pitch when you look up, roll when you tilt to your right |
+| Frames / dropped | Settings | Frames processed and camera frames skipped because the worker was busy |
 
 Readouts refresh once per second; the overlay redraws every animation frame. How often each hand and the face are found, the live pinch distance and the response times are in the Detection card (see [gestures.md](gestures.md#in-the-hud)).
 

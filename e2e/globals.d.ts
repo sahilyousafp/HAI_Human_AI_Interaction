@@ -3,6 +3,8 @@ type E2EPoint = [number, number];
 type E2EGesture = { type: string; ts: number; confidence: number; [key: string]: unknown };
 
 interface Window {
+  /** The camera session: the overlay draws `latestFrame` (landmarks only). */
+  __AEX_CAMERA__?: { latestFrame: unknown };
   __AEX_VIEWER__?: {
     camera(): { target: [number, number, number]; azimuth: number; elevation: number; distance: number };
     meshCount(): number;

@@ -15,9 +15,11 @@ import { createPortal } from "react-dom";
 import * as THREE from "three";
 import { canvasToPng, type ViewLink } from "../agent/view-link.ts";
 import { isSoftwareRenderer } from "../gpu.ts";
+import { handPointer, viewerToHand } from "../input/hand-mapping.ts";
 import { grabScroll } from "../input/hand-scroll.ts";
 import type { InputBus } from "../input/input-bus.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
+import type { FeatureFlags } from "../settings/feature-flags.ts";
 import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
 import type { ToolController } from "../tools/controller.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
@@ -39,8 +41,6 @@ const FOV = 45;
 const EASE_MS = 100;
 /** The eased camera counts as arrived (and rendering stops) within this of its target. */
 const SETTLED = { degrees: 0.01, distance: 0.001 };
-/** Hands rarely reach the frame edges comfortably, so the pointer amplifies motion around the centre. */
-const POINTER_GAIN = 1.3;
 /** Holding the right mouse button this long without moving opens the tool palette; moving sooner pans. */
 const RIGHT_HOLD_MS = 400;
 /** The hand pointer stays put this long when tracking drops the hand for a few frames, instead of blinking out. */
@@ -59,6 +59,11 @@ function distanceToSegment([px, py]: Point2, [ax, ay]: Point2, [bx, by]: Point2)
 /** What a hand can press, like a click: buttons, links, checkboxes and their labels, and anything marked so. */
 const PRESSABLE =
   'button, a[href], summary, label, input[type="checkbox"], input[type="radio"], [data-hand-press]';
+
+/** Whether a ring may open by mouse or keyboard: rings are switched on, and the create ring needs the create tools. */
+function ringAllowed(features: FeatureFlags, ring: "tools" | "create"): boolean {
+  return features.on("toolRings") && (ring !== "create" || features.on("createTools"));
+}
 
 /** A DOM element (the scene's `Element` type shadows the DOM's name in this file). */
 type DomElement = globalThis.Element;
@@ -97,14 +102,14 @@ function scrollableAt(wrapper: HTMLElement | null, at: Point2): HTMLElement | nu
 }
 
 /**
- * Whether a viewer position is off the model for picking: over a HUD panel (marked `data-hud`), or outside the
- * viewer altogether (a hand pointer over the sidebar).
+ * Whether a viewer position is off the model for picking: anything on top of the model's canvas there (a panel, the
+ * camera view, the settings) hides it from the hand as from the mouse, and so does being outside the viewer.
  */
 function overHud(wrapper: HTMLElement | null, at: Point2): boolean {
   if (!wrapper) return false;
   if (at[0] < 0 || at[0] > 1 || at[1] < 0 || at[1] > 1) return true;
   const el = elementAt(wrapper, at);
-  return Boolean(el?.closest("[data-hud]") && wrapper.contains(el));
+  return !(el instanceof HTMLCanvasElement && wrapper.contains(el));
 }
 
 declare global {
@@ -172,46 +177,6 @@ function projectStatusText(scene: SceneState): string {
   if (scene.savedAt) return `Saved ${new Date(scene.savedAt).toLocaleTimeString()}`;
   if (scene.project) return "All changes saved";
   return "Sample (not saved)";
-}
-
-/** Where a hand points across the workspace (0..1, y down) from its pinch point in camera-frame coordinates. */
-export function handToWorkspace([x, y]: Point2): Point2 {
-  const map = (v: number) => Math.min(1, Math.max(0, 0.5 + (v - 0.5) * POINTER_GAIN));
-  return [map(x), map(y)];
-}
-
-/** The part of the workspace (the model and the sidebar) on screen, which hand pointers span. */
-function workspaceRect(wrapper: HTMLElement | null): DOMRect | null {
-  const ws = wrapper?.closest(".workspace")?.getBoundingClientRect();
-  if (!ws) return wrapper?.getBoundingClientRect() ?? null;
-  const left = Math.max(ws.left, 0);
-  const top = Math.max(ws.top, 0);
-  return new DOMRect(
-    left,
-    top,
-    Math.min(ws.right, innerWidth) - left,
-    Math.min(ws.bottom, innerHeight) - top,
-  );
-}
-
-/** A hand's pointer as a viewer position (0..1 across the viewer; beyond it over the sidebar) and on screen (px). */
-function handPointer(wrapper: HTMLElement | null, hand: Point2): { at: Point2; client: Point2 } {
-  const ws = workspaceRect(wrapper);
-  const viewer = wrapper?.getBoundingClientRect();
-  const [u, v] = handToWorkspace(hand);
-  if (!ws || !viewer || viewer.width === 0 || viewer.height === 0) return { at: [u, v], client: [0, 0] };
-  const client: Point2 = [ws.left + u * ws.width, ws.top + v * ws.height];
-  return { at: [(client[0] - viewer.left) / viewer.width, (client[1] - viewer.top) / viewer.height], client };
-}
-
-/** The pinch point (camera frame) whose pointer lands on a viewer position: `handPointer` inverted. */
-function viewerToHand(wrapper: HTMLElement | null, [x, y]: Point2): Point2 {
-  const ws = workspaceRect(wrapper);
-  const viewer = wrapper?.getBoundingClientRect();
-  if (!ws || !viewer) return [x, y];
-  const u = (viewer.left + x * viewer.width - ws.left) / ws.width;
-  const v = (viewer.top + y * viewer.height - ws.top) / ws.height;
-  return [0.5 + (u - 0.5) / POINTER_GAIN, 0.5 + (v - 0.5) / POINTER_GAIN];
 }
 
 interface HandPointerState {
@@ -477,6 +442,7 @@ export function Viewer({
   view,
   askAgent,
   gestures,
+  features,
   markers = [],
   children,
 }: {
@@ -491,6 +457,8 @@ export function Viewer({
   askAgent: () => string | null;
   /** What each gesture does (the user's settings) and how gestures reach the agent. */
   gestures: RouterOptions;
+  /** Which features are switched on (Settings > Features). */
+  features: FeatureFlags;
   /** Elements captured while the user speaks, numbered in this order. */
   markers?: string[];
   /** HUD panels over the model (the agent panel); inside the viewer, so the hand can press their buttons. */
@@ -500,6 +468,7 @@ export function Viewer({
   const scene = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const toolState = useSyncExternalStore(tools.subscribe, tools.getSnapshot);
   const sun = useSyncExternalStore(view.onSun, () => view.sun);
+  const featureState = useSyncExternalStore(features.subscribe, features.getSnapshot);
   // Picking another tool ends a sun study: the viewer's own light returns.
   const studiedTool = useRef(toolState.activeId);
   useEffect(() => {
@@ -620,13 +589,13 @@ export function Viewer({
         }
       },
       press: (at) => {
-        const target = pressableAt(wrapper.current, at);
+        const target = features.on("handPress") ? pressableAt(wrapper.current, at) : null;
         target?.click();
         return target !== null;
       },
-      isButton: (at) => pressableAt(wrapper.current, at) !== null,
+      isButton: (at) => features.on("handPress") && pressableAt(wrapper.current, at) !== null,
       scrollAt: (at) => {
-        const area = scrollableAt(wrapper.current, at);
+        const area = features.on("handScrolling") ? scrollableAt(wrapper.current, at) : null;
         return area ? grabScroll(area, () => wrapper.current?.clientHeight ?? 1) : null;
       },
       onSectionLine: (at) => {
@@ -642,7 +611,7 @@ export function Viewer({
       },
       askAgent: () => askAgentRef.current(),
     });
-  }, [tools, client, sectionOutlineOnScreen]);
+  }, [tools, client, sectionOutlineOnScreen, features]);
 
   // Hand input: the router sends each gesture to the palette, the active tool or navigation (never the bridge).
   // Both hands are pointers: each shows what a pinch would do there and lights the control it would press. The
@@ -762,8 +731,8 @@ export function Viewer({
       const at = viewerAt(e.clientX, e.clientY);
       const start = { x: e.clientX, y: e.clientY, button: e.button, moved: false, byTool: false };
       drag = { ...start, holdTimer: null };
-      if (e.button === 2) {
-        const ring = e.shiftKey ? "create" : "tools";
+      const ring = e.shiftKey ? "create" : "tools";
+      if (e.button === 2 && ringAllowed(features, ring)) {
         drag.holdTimer = setTimeout(() => {
           if (!drag || drag.moved) return;
           tools.openPalette({ center: at, aspect: el.clientWidth / el.clientHeight }, "pointer", ring);
@@ -825,7 +794,7 @@ export function Viewer({
       el.removeEventListener("wheel", wheel);
       el.removeEventListener("contextmenu", menu);
     };
-  }, [tools]);
+  }, [tools, features]);
 
   // Keyboard (not while typing): Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo; hold Space for the tools ring at the
   // pointer, Shift+Space for the create ring; one key per tool; Enter and Escape answer a confirmation (Escape also closes the palette).
@@ -849,9 +818,9 @@ export function Viewer({
       if (e.key === " ") {
         e.preventDefault();
         const canvas = wrapper.current?.querySelector("canvas");
-        if (!e.repeat && !tools.paletteOpen && canvas) {
+        const ring = e.shiftKey ? "create" : "tools";
+        if (!e.repeat && !tools.paletteOpen && canvas && ringAllowed(features, ring)) {
           const aspect = canvas.clientWidth / canvas.clientHeight;
-          const ring = e.shiftKey ? "create" : "tools";
           tools.openPalette({ center: lastMouse.current ?? [0.5, 0.5], aspect }, "pointer", ring);
         }
         return;
@@ -878,7 +847,7 @@ export function Viewer({
       window.removeEventListener("keydown", keydown);
       window.removeEventListener("keyup", keyup);
     };
-  }, [client, tools, view]);
+  }, [client, tools, view, features]);
 
   // Latency readout refreshes twice a second.
   useEffect(() => {
@@ -1154,9 +1123,11 @@ export function Viewer({
         <span data-testid="selection-status">
           {selected ? `${selected.name} (${selected.type})` : "Nothing selected"}
         </span>
-        <span data-testid="hud-latency">
-          {p90 === null ? "Gesture to render: -" : `Gesture to render p90: ${Math.round(p90)} ms`}
-        </span>
+        {featureState.latencyReadout && (
+          <span data-testid="hud-latency">
+            {p90 === null ? "Gesture to render: -" : `Gesture to render p90: ${Math.round(p90)} ms`}
+          </span>
+        )}
       </div>
     </section>
   );

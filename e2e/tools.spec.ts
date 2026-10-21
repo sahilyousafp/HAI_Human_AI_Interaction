@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
+import { closeSettings, openSettings } from "./settings.ts";
 import { camera, findElementOnScreen, handAt, now, openViewer, startTestBridge } from "./viewer.ts";
 
 // Tools act on the scene, so every test runs against its own bridge and throwaway project.
@@ -184,6 +185,7 @@ test.describe("palette", () => {
         shortcut: "k",
       }),
     );
+    await openSettings(page, "rings");
     await expect(
       page.getByTestId("palette-setting-0").locator("option", { hasText: "Bake to Rhino" }),
     ).toHaveCount(1);
@@ -191,10 +193,13 @@ test.describe("palette", () => {
 
   test("layout persists: Section moved to the top slot is still there after a reload", async ({ page }) => {
     await start(page);
+    await openSettings(page, "rings");
     await page.getByTestId("palette-setting-0").selectOption("section");
     await page.waitForTimeout(300); // the bridge writes .aex/settings.json
     await page.reload();
+    await openSettings(page, "rings");
     await expect(page.getByTestId("palette-setting-0")).toHaveValue("section");
+    await closeSettings(page);
     await page.keyboard.down(" ");
     await expect(page.getByTestId("palette-slot-0")).toHaveAttribute("data-tool", "section");
     await page.keyboard.up(" ");

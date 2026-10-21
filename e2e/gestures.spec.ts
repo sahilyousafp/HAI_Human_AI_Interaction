@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
+import { closeSettings, openSettings } from "./settings.ts";
 import { findElementOnScreen, handAt, now, openViewer, startTestBridge } from "./viewer.ts";
 
 let bridge: Bridge | null = null;
@@ -8,7 +9,11 @@ test.afterEach(async () => {
   bridge = null;
 });
 
-const card = (page: Page) => page.getByTestId("gesture-settings");
+/** The Gestures page of the settings, opened. */
+const card = async (page: Page) => {
+  await openSettings(page, "gestures");
+  return page.getByTestId("gesture-settings");
+};
 const tapAt = async (page: Page, at: [number, number]) => {
   const ts = await now(page);
   await page.evaluate(
@@ -24,7 +29,7 @@ test.describe("gesture settings", () => {
   }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
-    const settings = card(page);
+    const settings = await card(page);
     await expect(settings.locator(".gesture-row")).toHaveCount(9); // open palm (fixed) and eight settable gestures
     await expect(settings.locator('[data-slot="engage"]')).toContainText("Engage (always)");
     await expect(settings.getByTestId("gesture-tap-right")).toHaveValue("use-tool");
@@ -48,10 +53,11 @@ test.describe("gesture settings", () => {
   test("a detected gesture lights its row", async ({ page }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
+    const settings = await card(page);
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-    await tapAt(page, [0.9, 0.2]);
-    await expect(card(page).locator('[data-slot="tap"]')).toHaveAttribute("data-lit", "true");
-    await expect(card(page).locator('[data-slot="tap"]')).toHaveAttribute("data-lit", "false", {
+    await tapAt(page, [0.4, 0.85]); // on the model, beside the settings sheet
+    await expect(settings.locator('[data-slot="tap"]')).toHaveAttribute("data-lit", "true");
+    await expect(settings.locator('[data-slot="tap"]')).toHaveAttribute("data-lit", "false", {
       timeout: 3000,
     });
   });
@@ -61,11 +67,12 @@ test.describe("gesture settings", () => {
   }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
-    await card(page).getByTestId("gesture-tap-right").selectOption("select");
+    await (await card(page)).getByTestId("gesture-tap-right").selectOption("select");
     await page.reload();
     await openViewer(page);
-    await expect(card(page).getByTestId("gesture-tap-right")).toHaveValue("select");
-    await expect(card(page).getByTestId("gesture-tap-left")).toHaveValue("use-tool");
+    await expect((await card(page)).getByTestId("gesture-tap-right")).toHaveValue("select");
+    await expect((await card(page)).getByTestId("gesture-tap-left")).toHaveValue("use-tool");
+    await closeSettings(page);
 
     await page.keyboard.press("d"); // Measure: a tap would normally place a measuring point
     const at = await findElementOnScreen(page, "block-b");
@@ -74,14 +81,14 @@ test.describe("gesture settings", () => {
     await expect(page.getByTestId("selection-status")).toHaveText("Block B tower (massing)");
     await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "measure");
 
-    await card(page).getByRole("button", { name: "Reset to defaults" }).click();
-    await expect(card(page).getByTestId("gesture-tap-right")).toHaveValue("use-tool");
+    await (await card(page)).getByRole("button", { name: "Reset to defaults" }).click();
+    await expect((await card(page)).getByTestId("gesture-tap-right")).toHaveValue("use-tool");
   });
 
   test("fist set to undo undoes the last change once the fist is held", async ({ page }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
-    await card(page).getByTestId("gesture-fist-right").selectOption("undo");
+    await (await card(page)).getByTestId("gesture-fist-right").selectOption("undo");
     await page.evaluate(() =>
       window.__AEX_SCENE__?.apply("Move Block B", [
         { op: "update", id: "block-b", patch: { origin: [0, 0, 0] } },

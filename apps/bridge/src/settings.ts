@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  FeatureChoices,
   GestureBindingsSchema,
   type Message,
   type MessageOf,
@@ -30,9 +31,10 @@ export function updateSettingsFile(file: string, patch: Record<string, unknown>)
 }
 
 /**
- * User settings shared by every client: the two palette rings' layouts, what each gesture does, the speech mode, whether
- * the microphone listens for team names and how Mochi's replies are spoken. Kept in .aex/settings.json, so they
- * survive reloads, browser changes and restarts. Without a file (tests), settings live in memory.
+ * User settings shared by every client: the two palette rings' layouts, what each gesture does, which features
+ * are on, whether the user's hands are drawn over the screen, the speech mode, whether the microphone listens for
+ * team names and how Mochi's replies are spoken. Kept in .aex/settings.json, so they survive reloads, browser
+ * changes and restarts. Without a file (tests), settings live in memory.
  */
 export class SettingsHub {
   private settings: Settings;
@@ -47,6 +49,7 @@ export class SettingsHub {
     const gestures = GestureBindingsSchema.safeParse(stored.gestures);
     const speech = SpeechMode.safeParse(stored.speech);
     const replyVoice = ReplyVoice.safeParse(stored.replyVoice);
+    const features = FeatureChoices.safeParse(stored.features);
     this.settings = {
       palette: palette.success ? palette.data : null,
       createPalette: createPalette.success ? createPalette.data : null,
@@ -55,6 +58,8 @@ export class SettingsHub {
       listenForNames: stored.listenForNames === true,
       speakReplies: stored.speakReplies !== false,
       replyVoice: replyVoice.success ? replyVoice.data : "af_heart",
+      features: features.success ? features.data : null,
+      showHands: stored.showHands === true,
     };
   }
 
@@ -65,8 +70,17 @@ export class SettingsHub {
   /** Handles a settings message from a client. Returns false for other messages. */
   handle(message: Message): boolean {
     if (message.type !== "settings.set") return false;
-    const { palette, createPalette, gestures, speech, listenForNames, speakReplies, replyVoice } =
-      message.payload;
+    const {
+      palette,
+      createPalette,
+      gestures,
+      speech,
+      listenForNames,
+      speakReplies,
+      replyVoice,
+      features,
+      showHands,
+    } = message.payload;
     const patch: Partial<Settings> = {
       ...(palette ? { palette } : {}),
       ...(createPalette ? { createPalette } : {}),
@@ -75,6 +89,9 @@ export class SettingsHub {
       ...(listenForNames !== undefined ? { listenForNames } : {}),
       ...(speakReplies !== undefined ? { speakReplies } : {}),
       ...(replyVoice ? { replyVoice } : {}),
+      // Feature choices merge, so switching one feature never resets the others.
+      ...(features ? { features: { ...this.settings.features, ...features } } : {}),
+      ...(showHands !== undefined ? { showHands } : {}),
     };
     this.settings = { ...this.settings, ...patch };
     if (this.file) updateSettingsFile(this.file, patch);

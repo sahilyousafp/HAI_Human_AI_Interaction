@@ -15,15 +15,15 @@ Week 9 clip. Target length 45-55 s, 16:9, captions burned in, sound on (Mochi sp
 
 | # | Time | Do | Voice-over / caption |
 |---|---|---|---|
-| 1 | 0-4 s | Raise both hands: two pointers, amber left and blue-green right. | "Both hands are pointers now." |
+| 1 | 0-4 s | Raise both hands: two pointers, amber left and blue right. | "Both hands are pointers now." |
 | 2 | 4-12 s | Left hand: long pinch, the amber create ring opens; steer up to **Wall**, let go. | "The left hand has its own ring: create." |
 | 3 | 12-22 s | Left hand pinches on the ground and drags: the wall follows with its length; let go. Draw a second wall at a corner. | "Pinch, drag, let go: a wall." |
 | 4 | 22-28 s | While the left hand holds the next wall mid-drag, the right hand orbits the view; let go with the left. | "One hand draws while the other turns the view." |
 | 5 | 28-34 s | Left hand: create ring, **Slab**; drag between the walls' far corners. | "Slabs by corners." |
 | 6 | 34-40 s | Right hand taps the first wall to select it; say "make this 300 thick" and nod. | "Exact sizes by voice." |
-| 7 | 40-46 s | Right hand pinches on the sidebar and flicks it up: it coasts. | "And both hands scroll." |
+| 7 | 40-46 s | Right hand presses the gear to open Settings, then pinches on the list and flicks it up: it coasts. | "And both hands scroll." |
 | 8 | 46-52 s | Ask Mochi for something slow; while it works, clench both fists ("Open both hands to stop" appears), then open both hands: Mochi stops. | "Stop is two fists, then open hands. Showing my hands no longer stops anything." |
-| 9 | 52-55 s | Lower your hands. | "Next: the same gestures in Rhino 8." |
+| 9 | 52-55 s | Lower your hands. | "Next: a studio you can film: settings in a sheet, and my hands drawn over the screen." |
 
 ## Check on the real camera (fill in before posting)
 

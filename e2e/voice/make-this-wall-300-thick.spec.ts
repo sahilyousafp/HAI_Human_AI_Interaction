@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { fakeProvider } from "../../apps/bridge/test/fake-provider.ts";
 import { watchOutgoingData } from "../privacy.ts";
+import { openSettings } from "../settings.ts";
 import { findElementOnScreen, handAt, openViewer, startTestBridge } from "../viewer.ts";
 
 // The fake microphone plays test-assets/speech/make-this-wall-300-thick.wav once from when the microphone opens:
@@ -41,6 +42,7 @@ test("transcript of a known sample: heard, transcribed on this laptop, and the m
     await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "off");
     // No audio on the network: nothing the page sent (HTTP or bridge messages) carried audio data.
     expect(outgoing()).toEqual([]);
+    await openSettings(page, "voice");
     await expect(page.getByTestId("speech-backend")).toHaveText("WASM");
   } finally {
     await bridge.stop();

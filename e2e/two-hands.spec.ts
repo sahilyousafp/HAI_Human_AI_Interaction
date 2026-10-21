@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
+import { openSettings } from "./settings.ts";
 import { handAt, now, openViewer, startTestBridge } from "./viewer.ts";
 
 // Both hands are pointers: each taps, presses, scrolls and opens its own ring. Hand input is injected into the same
@@ -53,30 +54,31 @@ async function openGround(page: Page): Promise<[Point, Point]> {
   });
 }
 
-test("the left hand presses a control in the sidebar, lights it while pointing, and takes the focus", async ({
+test("the left hand opens the settings and switches a feature off, each control lit while pointed at", async ({
   page,
 }) => {
   bridge = await startTestBridge(page);
   await openViewer(page);
   await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-  const tab = page.getByTestId("ring-tab-create");
-  const at = await viewerPointOf(page, '[data-testid="ring-tab-create"]');
-  expect(at[0]).toBeGreaterThan(1); // the sidebar lies beyond the viewer's right edge
-  const hand = await handAt(page, at);
-  await page.evaluate(([r, l]) => window.__AEX_INPUT__?.pointer(r, l), [
-    await handAt(page, [0.6, 0.5]),
-    hand,
-  ] as const);
-  await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-mode", "press");
-  await expect(tab).toHaveAttribute("data-hand-hover", "left");
-  await expect(page.getByTestId("hand-pointer-right")).toHaveAttribute("data-mode", "select");
-  await gesture(page, "pinch.tap", "Left", hand);
-  await expect(tab).toHaveAttribute("aria-selected", "true");
+  const right = await handAt(page, [0.4, 0.5]);
+  /** Points the left hand at a control, checks it lights up, and taps it. */
+  const pressByHand = async (testId: string) => {
+    const hand = await handAt(page, await viewerPointOf(page, `[data-testid="${testId}"]`));
+    await page.evaluate(([r, l]) => window.__AEX_INPUT__?.pointer(r, l), [right, hand] as const);
+    await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-mode", "press");
+    await expect(page.getByTestId(testId)).toHaveAttribute("data-hand-hover", "left");
+    await gesture(page, "pinch.tap", "Left", hand);
+  };
+  await expect(page.getByTestId("hud-latency")).toBeVisible();
+  await pressByHand("settings-button"); // in the toolbar: the hands reach the whole window
+  await expect(page.getByTestId("settings-panel")).toHaveAttribute("data-open", "true");
+  await page.waitForTimeout(500); // the sheet slides in
+  if (await page.getByTestId("settings-back").isVisible()) await page.getByTestId("settings-back").click();
+  await pressByHand("settings-open-features");
+  await pressByHand("feature-latencyReadout");
+  await expect(page.getByTestId("feature-latencyReadout")).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByTestId("hud-latency")).toHaveCount(0);
   // The hand that pinched last drives hover in the model and what "this" means.
-  await page.evaluate(([r, l]) => window.__AEX_INPUT__?.pointer(r, l), [
-    await handAt(page, [0.6, 0.5]),
-    hand,
-  ] as const);
   await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-focus", "true");
 });
 
@@ -121,19 +123,18 @@ test("the left hand's long pinch opens the create ring; Wall draws a wall by han
   await expect.poll(() => Object.keys(bridge?.scene.scene.doc.elements ?? {}).length).toBe(before);
 });
 
-test("a pinch-drag scrolls the sidebar with the hand, and a quick release coasts on", async ({ page }) => {
+test("a pinch-drag scrolls the settings with the hand, and a quick release coasts on", async ({ page }) => {
   bridge = await startTestBridge(page);
   await openViewer(page);
+  await openSettings(page, "gestures");
+  await page.waitForTimeout(500); // the sheet slides in
   await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-  const sidebar = page.locator(".sidebar");
-  const scrollTop = () => sidebar.evaluate((el) => el.scrollTop);
-  expect(await sidebar.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
-  await sidebar.evaluate((el) => {
-    el.scrollTop = 0;
-  });
-  // A spot in the sidebar that is not a control: the camera preview's frame.
-  const at = await viewerPointOf(page, ".sidebar .gestures-head");
-  await sidebar.evaluate((el) => {
+  const body = page.locator(".settings-body");
+  const scrollTop = () => body.evaluate((el) => el.scrollTop);
+  expect(await body.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  // A spot in the list that is not a control: a gesture's description.
+  const at = await viewerPointOf(page, '[data-slot="tap"] .gesture-what');
+  await body.evaluate((el) => {
     el.scrollTop = 0;
   });
   const start = await handAt(page, at);

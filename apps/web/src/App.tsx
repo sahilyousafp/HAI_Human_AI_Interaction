@@ -1,4 +1,4 @@
-import type { Message, MessageOf, ReplyVoice, SpeechMode } from "@aex/protocol";
+import type { FeatureId, Message, MessageOf, ReplyVoice, SpeechMode } from "@aex/protocol";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
 import { addressOf } from "./agent/addressing.ts";
@@ -13,14 +13,20 @@ import {
 import { GestureSettingsCard } from "./input/GestureSettingsCard.tsx";
 import { GestureSettings } from "./input/gesture-settings.ts";
 import { InputBus } from "./input/input-bus.ts";
-import { TrackingPanel } from "./perception/TrackingPanel.tsx";
-import type { TrackerState } from "./perception/tracker.ts";
+import { CameraSettings } from "./perception/CameraSettings.tsx";
+import { CameraView } from "./perception/CameraView.tsx";
+import { HandOverlay } from "./perception/HandOverlay.tsx";
+import { TrackingSession } from "./perception/tracking-session.ts";
 import { SceneClient } from "./scene/scene-client.ts";
+import { FeatureSettings } from "./settings/FeatureSettings.tsx";
+import { FeatureFlags } from "./settings/feature-flags.ts";
+import { SettingsPanel, type SettingsSection } from "./settings/SettingsPanel.tsx";
 import { DEFAULT_LAYOUT, registerBuiltinTools } from "./tools/builtin.ts";
 import { ToolController } from "./tools/controller.ts";
 import { DEFAULT_CREATE_LAYOUT } from "./tools/create.ts";
 import { ToolRegistry } from "./tools/registry.ts";
-import { PaletteSettings } from "./tools/ToolOverlays.tsx";
+import { PaletteSettings, ToolIcon } from "./tools/ToolOverlays.tsx";
+import { ListGroup, ListRow, Switch } from "./ui/controls.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
 import { Viewer } from "./viewer/Viewer.tsx";
 import { listenInCloud, listenOnDevice } from "./voice/listeners.ts";
@@ -32,10 +38,14 @@ import { VoiceInput } from "./voice/voice-input.ts";
 declare global {
   interface Window {
     __AEX_SCENE__?: SceneClient;
+    __AEX_CAMERA__?: TrackingSession;
     __AEX_VOICE__?: VoiceInput;
     __AEX_SPEECH__?: { speaker: Speaker; roundTrip(text: string): Promise<string | null> };
   }
 }
+
+const SETTINGS_ICON =
+  "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z";
 
 /** The microphone indicator: listening for names looks different from a request being spoken. */
 const MIC_LABEL = { on: "Mic on", names: "Listening for names", off: "Mic off" } as const;
@@ -52,7 +62,6 @@ const LABELS: Record<ConnectionState["status"], { text: string; hint?: string }>
 
 export function App() {
   const [bridge, setBridge] = useState<ConnectionState>({ status: "connecting" });
-  const [camera, setCamera] = useState<TrackerState>({ camera: "off" });
   const connection = useRef<BridgeConnection | null>(null);
   const sceneClient = useMemo(
     () => new SceneClient((message: Message) => connection.current?.send(message) ?? false),
@@ -67,10 +76,34 @@ export function App() {
     [],
   );
   const bus = useMemo(() => new InputBus(), []);
+  // The camera and its tracking live as long as the page: the settings sheet and the camera view only show them.
+  const session = useMemo(() => {
+    const perfDelayMs = Number(new URLSearchParams(location.search).get("perfDelay") ?? 0) || 0;
+    return new TrackingSession(bus, { perfDelayMs });
+  }, [bus]);
+  const camera = useSyncExternalStore(session.subscribe, () => session.getSnapshot().state);
+  // Which features are on (Settings > Features) is a user setting kept by the bridge.
+  const features = useMemo(
+    () =>
+      new FeatureFlags(
+        (choice) =>
+          connection.current?.send({
+            type: "settings.set",
+            id: crypto.randomUUID(),
+            payload: { features: choice },
+          }) ?? false,
+      ),
+    [],
+  );
+  const featureState = useSyncExternalStore(features.subscribe, features.getSnapshot);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showHands, setShowHands] = useState(false);
   const renderLatency = useMemo(() => new LatencyTracker(), []);
   const tools = useMemo(() => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
+    // A tool tied to a feature (the create tools) is available only while that feature is on.
+    registry.setAvailability((tool) => !tool.feature || features.on(tool.feature));
     const controller = new ToolController(registry, { tools: DEFAULT_LAYOUT, create: DEFAULT_CREATE_LAYOUT });
     // The rings' layouts are user settings kept by the bridge, so they follow the workspace across browsers and
     // restarts.
@@ -81,7 +114,8 @@ export function App() {
         payload: ring === "tools" ? { palette: layout } : { createPalette: layout },
       });
     return controller;
-  }, []);
+  }, [features]);
+  useEffect(() => features.subscribe(() => tools.registry.refresh()), [features, tools]);
   // What each gesture does is a user setting kept by the bridge too.
   const gestureSettings = useMemo(
     () =>
@@ -144,6 +178,7 @@ export function App() {
     [transcriber, agent, sceneClient, viewLink, speaker],
   );
   const startVoice = () => {
+    if (!features.on("voice")) return;
     speaker.stop(); // talking to the agent interrupts its voice before listening starts
     agent.requestOpen();
     void voice.start(() => viewLink.pointedId);
@@ -154,6 +189,11 @@ export function App() {
   const micState = useSyncExternalStore(voice.subscribe, () => voice.micState);
   const [listenForNames, setListenForNames] = useState(false);
   useEffect(() => voice.setHovered(() => viewLink.pointedId), [voice, viewLink]);
+  // Listening for names needs the voice feature on.
+  useEffect(
+    () => voice.setListenForNames(listenForNames && featureState.voice),
+    [voice, listenForNames, featureState],
+  );
 
   // What the hand points at, and what gets tapped into the selection, while the user speaks.
   useEffect(() => viewLink.onPointed((id) => voice.context.hover(id, Date.now())), [viewLink, voice]);
@@ -165,6 +205,18 @@ export function App() {
       previous = selection;
     });
   }, [sceneClient, voice]);
+
+  // Ctrl+, opens and closes the settings, as in most apps.
+  useEffect(() => {
+    const keydown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+        e.preventDefault();
+        setSettingsOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, []);
 
   // Hold the ` key to talk (not while typing); releasing it ends the utterance.
   useEffect(() => {
@@ -189,6 +241,7 @@ export function App() {
   const gestures = useMemo(
     () => ({
       bindings: gestureSettings.getSnapshot,
+      enabled: (feature: FeatureId) => features.on(feature),
       agent: {
         // "Yes" and "no" first answer a spoken request waiting to be sent, then the agent's approval card.
         answer: (yes: boolean) => {
@@ -208,9 +261,15 @@ export function App() {
         ask: () => tools.choose("ask-agent"),
       },
     }),
-    [gestureSettings, agent, bus, tools, voice, speaker],
+    [gestureSettings, agent, bus, tools, voice, speaker, features],
   );
 
+  // The camera session goes on the page once mounted; dev builds hand it to end-to-end tests too.
+  useEffect(() => {
+    const disconnect = session.connect();
+    if (import.meta.env.DEV) window.__AEX_CAMERA__ = session;
+    return disconnect;
+  }, [session]);
   // Dev builds only: lets end-to-end tests edit the scene through the same client the UI uses.
   useEffect(() => {
     if (import.meta.env.DEV) window.__AEX_SCENE__ = sceneClient;
@@ -240,7 +299,8 @@ export function App() {
         gestureSettings.load(message.payload.gestures);
         setSpeech(message.payload.speech);
         setListenForNames(message.payload.listenForNames);
-        voice.setListenForNames(message.payload.listenForNames);
+        features.load(message.payload.features);
+        setShowHands(message.payload.showHands);
         setSpeakReplies(message.payload.speakReplies);
         speaker.setMuted(!message.payload.speakReplies);
         setReplyVoice(message.payload.replyVoice);
@@ -251,9 +311,10 @@ export function App() {
       conn.close();
       viewLink.dispose();
     };
-  }, [sceneClient, tools, viewLink, agent, gestureSettings, voice, speaker]);
+  }, [sceneClient, tools, viewLink, agent, gestureSettings, speaker, features]);
 
   const askAgent = () => {
+    if (!features.on("agent")) return "The agent is switched off in Settings > Features.";
     if (bridge.status !== "connected") return "The agent is not connected: the bridge is offline.";
     const status = agent.getSnapshot().status;
     if (status?.state === "unavailable") return `The agent is not available. ${status.reason}`;
@@ -269,8 +330,11 @@ export function App() {
   };
   const changeListenForNames = (on: boolean) => {
     setListenForNames(on);
-    voice.setListenForNames(on);
     saveSetting({ listenForNames: on });
+  };
+  const changeShowHands = (on: boolean) => {
+    setShowHands(on);
+    saveSetting({ showHands: on });
   };
   const changeSpeakReplies = (on: boolean) => {
     setSpeakReplies(on);
@@ -285,6 +349,66 @@ export function App() {
 
   const label = LABELS[bridge.status];
   const cameraOn = camera.camera === "on" || camera.camera === "starting";
+  const changedFeatures = Object.values(featureState).filter((on) => !on).length;
+  const sections: SettingsSection[] = [
+    {
+      id: "camera",
+      title: "Camera and tracking",
+      icon: "M3 7h4l2-3h6l2 3h4v12H3zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+      tint: "var(--tint-gray)",
+      detail: cameraOn ? "On" : "Off",
+      render: () => <CameraSettings session={session} renderLatency={renderLatency} />,
+    },
+    {
+      id: "features",
+      title: "Features",
+      icon: "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4",
+      tint: "var(--tint-blue)",
+      detail: changedFeatures > 0 ? `${changedFeatures} off` : "All on",
+      render: () => <FeatureSettings flags={features} />,
+    },
+    {
+      id: "gestures",
+      title: "Gestures",
+      icon: "M8 13V5a2 2 0 0 1 4 0v6M12 11V4a2 2 0 0 1 4 0v7M16 11V6a2 2 0 0 1 4 0v8a7 7 0 0 1-12.5 4.3L4 14a2 2 0 0 1 3-2.6l1 1.1",
+      tint: "var(--tint-orange)",
+      render: () => <GestureSettingsCard settings={gestureSettings} bus={bus} />,
+    },
+    {
+      id: "rings",
+      title: "Tool rings",
+      icon: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+      tint: "var(--tint-purple)",
+      render: () => <PaletteSettings controller={tools} />,
+    },
+    {
+      id: "voice",
+      title: "Voice",
+      icon: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
+      tint: "var(--tint-red)",
+      render: () => (
+        <VoiceSettingsCard
+          mode={speech}
+          onMode={changeSpeech}
+          listenForNames={listenForNames}
+          onListenForNames={changeListenForNames}
+          speakReplies={speakReplies}
+          onSpeakReplies={changeSpeakReplies}
+          replyVoice={replyVoice}
+          onReplyVoice={changeReplyVoice}
+          speaker={speaker}
+          transcriber={transcriber}
+        />
+      ),
+    },
+    {
+      id: "permissions",
+      title: "Agent permissions",
+      icon: "M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z",
+      tint: "var(--tint-green)",
+      render: () => <AgentPermissions client={agent} />,
+    },
+  ];
   return (
     <div className="shell">
       <header className="topbar">
@@ -302,15 +426,17 @@ export function App() {
             <span className="dot" aria-hidden="true" />
             <span>{cameraOn ? "Camera on" : "Camera off"}</span>
           </output>
-          <output
-            className="status camera"
-            data-testid="mic-indicator"
-            data-state={micState}
-            aria-live="polite"
-          >
-            <span className="dot" aria-hidden="true" />
-            <span>{MIC_LABEL[micState]}</span>
-          </output>
+          {featureState.voice && (
+            <output
+              className="status camera"
+              data-testid="mic-indicator"
+              data-state={micState}
+              aria-live="polite"
+            >
+              <span className="dot" aria-hidden="true" />
+              <span>{MIC_LABEL[micState]}</span>
+            </output>
+          )}
           <output
             className="status"
             data-testid="bridge-status"
@@ -325,6 +451,18 @@ export function App() {
               </span>
             )}
           </output>
+          <button
+            type="button"
+            className="settings-button"
+            data-testid="settings-button"
+            data-hand-press
+            aria-expanded={settingsOpen}
+            aria-label="Settings (Ctrl+,)"
+            title="Settings (Ctrl+,)"
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            <ToolIcon path={SETTINGS_ICON} size={17} />
+          </button>
         </div>
       </header>
       <main className="workspace">
@@ -337,39 +475,50 @@ export function App() {
             view={viewLink}
             askAgent={askAgent}
             gestures={gestures}
+            features={features}
             markers={markers}
           >
-            <AgentPanel
-              client={agent}
-              voice={voice}
-              startVoice={startVoice}
-              nameOf={nameOf}
-              speaker={speaker}
-              speakReplies={speakReplies}
-              onSpeakReplies={changeSpeakReplies}
-            />
+            {featureState.agent && (
+              <AgentPanel
+                client={agent}
+                voice={voice}
+                startVoice={startVoice}
+                voiceOn={featureState.voice}
+                nameOf={nameOf}
+                speaker={speaker}
+                speakReplies={speakReplies}
+                onSpeakReplies={changeSpeakReplies}
+              />
+            )}
           </Viewer>
+          <CameraView session={session} />
           {label.hint && <p className="hint">{label.hint}</p>}
         </div>
-        <aside className="sidebar" aria-label="Tracking">
-          <TrackingPanel onCameraState={setCamera} bus={bus} renderLatency={renderLatency} />
-          <VoiceSettingsCard
-            mode={speech}
-            onMode={changeSpeech}
-            listenForNames={listenForNames}
-            onListenForNames={changeListenForNames}
-            speakReplies={speakReplies}
-            onSpeakReplies={changeSpeakReplies}
-            replyVoice={replyVoice}
-            onReplyVoice={changeReplyVoice}
-            speaker={speaker}
-            transcriber={transcriber}
-          />
-          <GestureSettingsCard settings={gestureSettings} bus={bus} />
-          <PaletteSettings controller={tools} />
-          <AgentPermissions client={agent} />
-        </aside>
+        <SettingsPanel
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          sections={sections}
+          quick={
+            <ListGroup
+              title="For recordings"
+              footer="Draws your hands as white shapes over the whole screen, at their pointers, so people watching can follow what your hands do."
+            >
+              <ListRow
+                label="Show my hands"
+                control={
+                  <Switch
+                    label="Show my hands"
+                    testId="show-hands"
+                    checked={showHands}
+                    onChange={changeShowHands}
+                  />
+                }
+              />
+            </ListGroup>
+          }
+        />
       </main>
+      <HandOverlay session={session} on={showHands} />
     </div>
   );
 }

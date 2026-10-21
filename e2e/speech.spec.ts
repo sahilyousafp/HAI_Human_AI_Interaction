@@ -5,6 +5,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
 import { watchOutgoingData } from "./privacy.ts";
+import { closeSettings, openSettings } from "./settings.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
 // Mochi's spoken replies with the Kokoro voice. They need WebGPU (docs/decisions.md): on a machine without it
@@ -57,6 +58,7 @@ test("round trip: what the voice says is heard back by the recogniser", async ({
   const words = (heard ?? "").toLowerCase();
   // Heard as "architect is working on the staircor." on the reference laptop: the recogniser joins the last words.
   expect(words).toMatch(/architect is working on the stair ?cor/);
+  await openSettings(page, "voice");
   await expect(page.getByTestId("reply-engine")).toHaveText("Kokoro on this laptop (WebGPU)");
   expect(remote()).toEqual([]);
 });
@@ -72,6 +74,7 @@ test("first sentence starts early, and no speech service is called", async ({ pa
   await expect(page.getByTestId("agent-turn").last()).toHaveAttribute("data-ended", "running");
   await expect(page.getByTestId("agent-turn").last()).toHaveAttribute("data-ended", "done");
   await expect(speaking(page)).toHaveAttribute("data-speaking", "false", { timeout: 20_000 });
+  await openSettings(page, "voice");
   await expect(page.getByTestId("reply-latency")).not.toHaveText("-");
   expect(remote()).toEqual([]);
   expect(outgoing()).toEqual([]);
@@ -95,7 +98,9 @@ test("muted: the reply appears in the panel and nothing is spoken; muting is rem
   await start(page);
   await speaking(page).click();
   await expect(speaking(page)).toHaveAttribute("aria-pressed", "true");
+  await openSettings(page, "voice");
   await expect(page.getByTestId("speak-replies")).not.toBeChecked();
+  await closeSettings(page);
   await ask(page, "two sentences");
   await expect(page.getByTestId("agent-turn").last()).toHaveAttribute("data-ended", "done");
   await expect(page.getByTestId("agent-turn").last()).toContainText("Climate is running the winter study.");

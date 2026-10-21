@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { SceneClient } from "../scene/scene-client.ts";
+import { Segmented } from "../ui/controls.tsx";
 import { redoTool, undoTool } from "./builtin.ts";
 import type { Ring, ToolController } from "./controller.ts";
 import { SLOT_COUNT, SLOT_NAMES } from "./palette.ts";
@@ -52,7 +53,8 @@ function Palette({ controller }: { controller: ToolController }) {
       </span>
       <span className="palette-centre" aria-hidden="true" />
       {Array.from({ length: SLOT_COUNT }, (_, slot) => {
-        const tool = layout[slot] ? controller.registry.get(layout[slot] as string) : undefined;
+        const id = layout[slot];
+        const tool = id && controller.registry.isAvailable(id) ? controller.registry.get(id) : undefined;
         const angle = (slot * 2 * Math.PI) / SLOT_COUNT;
         const style = {
           transform: `translate(${Math.sin(angle) * RING_RADIUS}px, ${-Math.cos(angle) * RING_RADIUS}px)`,
@@ -234,25 +236,16 @@ export function PaletteSettings({ controller }: { controller: ToolController }) 
   const tools = controller.registry.list();
   return (
     <section className="palette-settings" aria-label="Tool palette">
-      <header className="detection-head">
-        <h2>Tool palette</h2>
-        <span className="muted">{RING_HOW[ring]}</span>
-      </header>
-      <div className="ring-tabs" role="tablist" aria-label="Ring">
-        {(["tools", "create"] as const).map((r) => (
-          <button
-            key={r}
-            type="button"
-            role="tab"
-            className="ring-tab"
-            data-testid={`ring-tab-${r}`}
-            aria-selected={ring === r}
-            onClick={() => setRing(r)}
-          >
-            {RING_NAMES[r]}
-          </button>
-        ))}
-      </div>
+      <Segmented<Ring>
+        label="Ring"
+        value={ring}
+        onChange={setRing}
+        options={[
+          { value: "tools", label: RING_NAMES.tools, testId: "ring-tab-tools" },
+          { value: "create", label: RING_NAMES.create, testId: "ring-tab-create" },
+        ]}
+      />
+      <p className="muted ring-how">Opens with the {RING_HOW[ring]}.</p>
       <div className="palette-settings-grid">
         {SLOT_NAMES.map((name, slot) => (
           <label key={name} className="field">

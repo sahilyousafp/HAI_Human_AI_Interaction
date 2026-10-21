@@ -32,6 +32,8 @@ describe("SettingsHub", () => {
           listenForNames: false,
           speakReplies: true,
           replyVoice: "af_heart",
+          features: null,
+          showHands: false,
         },
       }),
     ]);
@@ -54,6 +56,18 @@ describe("SettingsHub", () => {
       /drag.left cannot be set to undo/,
     );
     expect(() => setSettings({ gestures: { drag: "undo" } })).toThrow(/drag cannot be set to undo/);
+  });
+
+  it("feature switches merge and persist, and Show my hands is remembered", () => {
+    const file = settingsFile(tempRoot());
+    const hub = new SettingsHub(file, () => {});
+    hub.handle(setSettings({ features: { createTools: false } }));
+    hub.handle(setSettings({ features: { voice: false }, showHands: true }));
+    const sent: Message[] = [];
+    new SettingsHub(file, () => {}).greet((m) => sent.push(m));
+    expect(sent[0]).toMatchObject({
+      payload: { features: { createTools: false, voice: false }, showHands: true },
+    });
   });
 
   it("the create ring's layout persists apart from the tools ring", () => {
@@ -79,6 +93,8 @@ describe("SettingsHub", () => {
           listenForNames: false,
           speakReplies: true,
           replyVoice: "af_heart",
+          features: null,
+          showHands: false,
         },
       }),
     ]);

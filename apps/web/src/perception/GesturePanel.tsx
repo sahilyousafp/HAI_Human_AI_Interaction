@@ -3,7 +3,7 @@ import type { GestureEvent } from "@aex/protocol";
 import { useSyncExternalStore } from "react";
 import { type GestureStore, LAST_GESTURE_HOLD_MS } from "./gesture-store.ts";
 
-const HAND_LABEL: Record<HandDisplay, string> = {
+export const HAND_LABEL: Record<HandDisplay, string> = {
   idle: "relaxed",
   "open-palm": "open palm",
   pinch: "pinch",
@@ -26,7 +26,8 @@ const EVENT_LABEL: Partial<Record<GestureEvent["type"], string>> = {
   "hands.stop": "stop (fists, then open hands)",
 };
 
-function describe(event: GestureEvent): string {
+/** A gesture as the HUD names it, with its hand: "tap (left)". */
+export function describeGesture(event: GestureEvent): string {
   const label = EVENT_LABEL[event.type] ?? event.type;
   return "hand" in event && event.hand !== "both" ? `${label} (${event.hand.toLowerCase()})` : label;
 }
@@ -80,7 +81,7 @@ export function GesturePanel({ store, cameraOn }: { store: GestureStore; cameraO
         </div>
         <div>
           <dt>Last gesture</dt>
-          <dd data-testid="hud-last-gesture">{lastVisible ? describe(lastVisible) : "-"}</dd>
+          <dd data-testid="hud-last-gesture">{lastVisible ? describeGesture(lastVisible) : "-"}</dd>
         </div>
         <div>
           <dt>Recogniser</dt>

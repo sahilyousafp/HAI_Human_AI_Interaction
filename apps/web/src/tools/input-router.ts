@@ -1,6 +1,7 @@
 import {
   actionFor,
   DEFAULT_BINDINGS,
+  type FeatureId,
   type GestureAction,
   type GestureBindings,
   type GestureEvent,
@@ -56,6 +57,8 @@ export interface RouterOptions {
   /** What each gesture does now (the user can change it in the settings). */
   bindings?: () => GestureBindings;
   agent?: RouterAgent;
+  /** Whether a feature is switched on (Settings > Features); everything is on without it. */
+  enabled?: (feature: FeatureId) => boolean;
 }
 
 type Owner = "palette" | "tool" | "navigation" | "ignored";
@@ -89,6 +92,16 @@ export class InputRouter {
     return this.options.bindings?.() ?? DEFAULT_BINDINGS;
   }
 
+  private on(feature: FeatureId): boolean {
+    return this.options.enabled?.(feature) ?? true;
+  }
+
+  /** A ring that can open now: rings are switched on, and the create ring needs the create tools. */
+  private ringOpens(ring: Ring | undefined): ring is Ring {
+    if (!ring || !this.on("toolRings")) return false;
+    return ring !== "create" || this.on("createTools");
+  }
+
   handle(event: GestureEvent): void {
     const { palette, tool } = this.targets;
     const b = this.bindings;
@@ -98,7 +111,7 @@ export class InputRouter {
         if (owner === "tool" || palette.isOpen) return;
         const action = actionFor(b, "hold", event.hand);
         const ring = RINGS[action];
-        if (!ring) {
+        if (!this.ringOpens(ring)) {
           this.run(action, event.position, event.hand);
           return;
         }
@@ -144,7 +157,7 @@ export class InputRouter {
       case "twohand.start":
       case "twohand.update":
       case "twohand.end":
-        if (actionFor(b, "twohand") === "none") return;
+        if (actionFor(b, "twohand") === "none" || !this.on("twoHandNavigation")) return;
         if (!palette.isOpen || event.type === "twohand.end") this.targets.navigation(event);
         return;
       case "clutch.start":
@@ -152,13 +165,13 @@ export class InputRouter {
         this.clutch(event.hand, event.type === "clutch.start");
         return;
       case "head.nod":
-        this.run(actionFor(b, "nod"));
+        if (this.on("headGestures")) this.run(actionFor(b, "nod"));
         return;
       case "head.shake":
-        this.run(actionFor(b, "shake"));
+        if (this.on("headGestures")) this.run(actionFor(b, "shake"));
         return;
       case "hands.stop":
-        this.run(actionFor(b, "stop"));
+        if (this.on("stopGesture")) this.run(actionFor(b, "stop"));
         return;
       case "disengaged":
         this.closePalette(false);

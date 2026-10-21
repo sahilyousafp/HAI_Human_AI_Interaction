@@ -1,4 +1,4 @@
-import type { Element, Point2, Point3Mm, SceneDocument, SceneOp } from "@aex/protocol";
+import type { Element, FeatureId, Point2, Point3Mm, SceneDocument, SceneOp } from "@aex/protocol";
 
 /** What is under a viewer position: an element and the surface point that was hit, millimetres. */
 export interface Hit {
@@ -76,6 +76,8 @@ export interface Tool {
   shortcut: string;
   /** Instant tools (undo, redo, ask agent) run once and leave the previous tool active. */
   instant?: boolean;
+  /** The feature that switches this tool on and off (Settings > Features); without one it is always available. */
+  feature?: FeatureId;
   run?(ctx: ToolContext): void;
   activate?(ctx: ToolContext): void;
   deactivate?(ctx: ToolContext): void;

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openSettings } from "../settings.ts";
 import { framesDuring, startCamera } from "../tracking.ts";
 
 // Plays test-assets/clips/one-hand-pinch.mp4: the maintainer raises their RIGHT hand and pinches.
@@ -19,6 +20,7 @@ test("the Detection card reports the right hand's detection rate, its pinch dist
   await startCamera(page);
   await framesDuring(page, 3000);
   // The clip loops; the right hand is in view most of each loop and the left hand never.
+  await openSettings(page, "camera");
   const percent = async (id: string) => Number((await page.getByTestId(id).textContent())?.replace("%", ""));
   await expect.poll(() => percent("detect-right"), { timeout: 30_000 }).toBeGreaterThan(50);
   expect(await percent("detect-left")).toBe(0);
@@ -33,6 +35,7 @@ test("a mirrored camera setting flips the image before tracking, and the camera 
 }) => {
   await page.goto("/");
   await startCamera(page);
+  await openSettings(page, "camera");
   await expect(page.getByTestId("hud-camera")).toHaveText(/^640 x 480, \d+ fps$/);
   // The fake camera is listed by name once permission is granted.
   await expect(page.getByTestId("camera-select").locator("option")).not.toHaveCount(1);
@@ -48,5 +51,6 @@ test("a mirrored camera setting flips the image before tracking, and the camera 
 
   // The setting is remembered for this camera.
   await page.reload();
+  await openSettings(page, "camera");
   await expect(page.getByTestId("camera-mirrored")).toBeChecked();
 });

@@ -15,7 +15,7 @@ Engage first by holding an open palm toward the camera (see [gestures.md](gestur
 | Let go while still moving (a flick) | The view coasts on and slows to a stop, for orbit, zoom, pan and turn alike. Pinching again, clicking or scrolling catches it |
 | Close a hand into a fist mid-drag | Clutch: move your hand back without moving the view, then pinch again |
 | Point (a relaxed hand, not pinching) | A ring follows your pinch point, anywhere on the page; the element under it is highlighted |
-| Both hands in view | Each hand has its own pointer (left amber, right blue-green) and taps, presses and scrolls on its own. Hover in the model follows the hand that pinched last |
+| Both hands in view | Each hand has its own pointer (left amber, right blue) and taps, presses and scrolls on its own. Hover in the model follows the hand that pinched last |
 | One hand busy, the other pinches | A hand holding a ring open or already dragging keeps its gesture; the other hand's pinch is its own tap or drag, not a two-hand zoom |
 | Pinch and let go without moving (tap) | Select the highlighted element; a tap on empty space clears the selection |
 

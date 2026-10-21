@@ -26,7 +26,7 @@ Nothing but engagement produces a command until you are engaged. Lowering both h
 
 ## Changing what gestures do
 
-The **Gestures** card in the sidebar lists every gesture with how to make it and what it does, each in a dropdown of the actions that gesture can take. One-hand gestures (tap, long pinch, drag, fist) have a dropdown for each hand. The bridge keeps your choices in `.aex/settings.json`, so they follow the workspace across browsers and restarts. **Reset to defaults** puts everything back. While you try a gesture, its row lights up when the camera sees it, which shows which gestures work well for you.
+**Settings > Gestures** lists every gesture with how to make it and what it does, each in a dropdown of the actions that gesture can take. One-hand gestures (tap, long pinch, drag, fist) have a dropdown for each hand. The bridge keeps your choices in `.aex/settings.json`, so they follow the workspace across browsers and restarts. **Reset to defaults** puts everything back. While you try a gesture, its row lights up when the camera sees it, which shows which gestures work well for you.
 
 | Gesture | Default | Can also |
 |---|---|---|
