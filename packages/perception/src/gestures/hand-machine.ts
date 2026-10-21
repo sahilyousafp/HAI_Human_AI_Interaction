@@ -53,6 +53,8 @@ export class HandMachine {
   private valid = false;
   /** The hold was emitted, or ruled out because the hand moved. */
   private holdDone = false;
+  /** This pinch emitted its hold (a ring opened). */
+  private didHold = false;
   /** Resumed after a two-hand gesture: a quick release must not count as a tap. */
   private tapAllowed = true;
   private suppressed = false;
@@ -77,6 +79,21 @@ export class HandMachine {
 
   get position(): Point2 {
     return this.lastPos;
+  }
+
+  /** When the current pinch began (the fingertips first touched). */
+  get pinchStartTs(): number {
+    return this.startTs;
+  }
+
+  /** The current pinch was a long pinch (it emitted a hold, which opens a ring). */
+  get holdEmitted(): boolean {
+    return this.phase === "pinching" && this.didHold;
+  }
+
+  /** The current pinch is a drag of its own (orbiting, steering a ring, a tool, scrolling). */
+  get dragging(): boolean {
+    return this.phase === "pinching" && this.dragStarted;
   }
 
   get display(): HandDisplay {
@@ -194,6 +211,7 @@ export class HandMachine {
         this.dragStarted = false;
         this.tapAllowed = true;
         this.holdDone = false;
+        this.didHold = false;
         this.valid = ctx.engaged;
         return;
       case "pinching": {
@@ -214,6 +232,7 @@ export class HandMachine {
         }
         if (holding) {
           this.holdDone = true;
+          this.didHold = true;
           events.push(this.event("pinch.hold", ts));
         }
         if (this.dragStarted) events.push(this.dragUpdate(ts));

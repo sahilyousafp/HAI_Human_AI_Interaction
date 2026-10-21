@@ -1,7 +1,15 @@
 import type { GestureEvent, Point2, SceneDocument, SceneOp } from "@aex/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_LAYOUT, MASSING_SIZE, registerBuiltinTools } from "./builtin.ts";
-import { DEFAULT_TOOL, FIST_RESET_MS, ToolController, type ToolEnvironment } from "./controller.ts";
+import {
+  DEFAULT_TOOL,
+  FIST_RESET_MS,
+  SCROLL_SLOP,
+  type ScrollGrab,
+  ToolController,
+  type ToolEnvironment,
+} from "./controller.ts";
+import { COLUMN, DEFAULT_CREATE_LAYOUT, SLAB, WALL } from "./create.ts";
 import { InputRouter } from "./input-router.ts";
 import { ToolRegistry } from "./registry.ts";
 
@@ -28,10 +36,14 @@ const doc = (): SceneDocument => ({
   },
 });
 
+/** Where the test's stand-in page has a scrolled list (right of x = 0.95) and buttons (above y = 0.05). */
+const LIST_X = 0.95;
+const BUTTON_Y = 0.05;
+
 function setup() {
   const registry = new ToolRegistry();
   registerBuiltinTools(registry);
-  const controller = new ToolController(registry, DEFAULT_LAYOUT);
+  const controller = new ToolController(registry, { tools: DEFAULT_LAYOUT, create: DEFAULT_CREATE_LAYOUT });
   const applied: Array<{ label: string; ops: SceneOp[] }> = [];
   const calls: string[] = [];
   const navigated: GestureEvent[] = [];
@@ -51,8 +63,19 @@ function setup() {
     handToViewer: (p) => p,
     handAspect: () => 4 / 3,
     navigate: (e) => void navigated.push(e),
-    press: () => false,
-    isButton: () => false,
+    press: (at) => {
+      if (at[1] >= BUTTON_Y) return false;
+      calls.push("press");
+      return true;
+    },
+    isButton: (at) => at[1] < BUTTON_Y,
+    scrollAt: (at): ScrollGrab | null =>
+      at[0] > LIST_X
+        ? {
+            move: (dy) => void calls.push(`scroll:${dy.toFixed(2)}`),
+            release: () => void calls.push("scroll.end"),
+          }
+        : null,
     onSectionLine: () => false,
     askAgent: () => "The agent is not connected: the bridge is offline.",
   };
@@ -75,7 +98,7 @@ describe("palette and active tool", () => {
 
   it("flick right to choose: Measure is in the right-hand slot and becomes active", () => {
     const { controller } = setup();
-    expect(controller.getSnapshot().layout[2]).toBe("measure");
+    expect(controller.getSnapshot().layouts.tools[2]).toBe("measure");
     flick(controller, [0.2, 0]);
     expect(controller.getSnapshot().activeId).toBe("measure");
     expect(controller.getSnapshot().palette).toBeNull();
@@ -250,5 +273,151 @@ describe("built-in tools", () => {
     controller.choose("ask-agent");
     expect(controller.getSnapshot().overlay.notice).toMatch(/agent is not connected/);
     expect(controller.getSnapshot().activeId).toBe("measure");
+  });
+});
+
+describe("two hands", () => {
+  const ev = (type: string, hand: "Left" | "Right", position: Point2) =>
+    ({ type, ts: 1, confidence: 1, hand, position, delta: [0, 0] }) as GestureEvent;
+
+  it("the left hand's long pinch opens the create ring; steering up and letting go picks Wall", () => {
+    const { controller } = setup();
+    const router = new InputRouter(controller.routerTargets);
+    router.handle(ev("pinch.drag.start", "Left", [0.4, 0.4]));
+    router.handle(ev("pinch.hold", "Left", [0.4, 0.4]));
+    expect(controller.getSnapshot().palette).toMatchObject({ ring: "create", hand: "Left" });
+    router.handle(ev("pinch.drag.update", "Left", [0.4, 0.2])); // up: the top slot
+    router.handle(ev("pinch.drag.end", "Left", [0.4, 0.2]));
+    expect(controller.getSnapshot().activeId).toBe("wall");
+  });
+
+  it("the active tool takes one hand's drag at a time: the other hand's drag navigates", () => {
+    const { controller } = setup();
+    controller.choose("move");
+    const on = toViewer(30_000, 10_000);
+    expect(controller.dragStart(on, "Left")).toBe(true);
+    expect(controller.dragStart(on, "Right")).toBe(false);
+    controller.dragEnd(on, "Left");
+    expect(controller.dragStart(on, "Right")).toBe(true);
+  });
+
+  it("a pinch-drag on a scrolled list scrolls it with the hand, whichever hand", () => {
+    const { controller, calls } = setup();
+    expect(controller.dragStart([0.97, 0.5], "Left")).toBe(true);
+    controller.drag([0.97, 0.6], "Left");
+    controller.dragEnd([0.97, 0.6], "Left");
+    expect(calls).toEqual(["scroll:0.10", "scroll.end"]);
+  });
+
+  it("a pinch on a button presses it, unless it moves up or down first in a scrolled list: then it scrolls", () => {
+    const pressed = setup();
+    expect(pressed.controller.dragStart([0.97, 0.02], "Right")).toBe(true);
+    pressed.controller.drag([0.97, 0.02 + SCROLL_SLOP / 2], "Right");
+    pressed.controller.dragEnd([0.97, 0.02 + SCROLL_SLOP / 2], "Right");
+    expect(pressed.calls).toEqual(["press"]);
+
+    const scrolled = setup();
+    scrolled.controller.dragStart([0.97, 0.02], "Right");
+    scrolled.controller.drag([0.97, 0.12], "Right");
+    scrolled.controller.dragEnd([0.97, 0.12], "Right");
+    expect(scrolled.calls).toEqual(["scroll:0.10", "scroll.end"]);
+  });
+});
+
+describe("create tools", () => {
+  /** The single element a create transaction adds. */
+  const created = (applied: Array<{ label: string; ops: SceneOp[] }>) => {
+    const op = applied[0]?.ops[0];
+    if (applied.length !== 1 || op?.op !== "create") throw new Error("expected one create");
+    return { label: applied[0]?.label, element: op.element };
+  };
+
+  it("wall: a drag on the ground draws a 200 mm thick, 3000 mm high wall between the snapped ends", () => {
+    const { controller, applied } = setup();
+    controller.choose("wall");
+    expect(controller.dragStart(toViewer(2_030, 2_040))).toBe(true);
+    controller.drag(toViewer(5_000, 2_000));
+    const draft = controller.getSnapshot().overlay.draft;
+    expect(draft).toMatchObject({ type: "wall", start: [2_000, 2_000], end: [5_000, 2_000] });
+    expect(controller.getSnapshot().overlay.notice).toMatch(/^Wall 3000 mm/);
+    expect(applied).toEqual([]); // nothing is created until the hand lets go
+    controller.drag(toViewer(6_210, 2_000));
+    controller.dragEnd(toViewer(6_210, 2_000));
+    const { label, element } = created(applied);
+    expect(label).toBe("Add Wall 1");
+    expect(element).toMatchObject({
+      type: "wall",
+      level: "L0",
+      start: [2_000, 2_000],
+      end: [6_200, 2_000],
+      thickness: WALL.thickness,
+      height: WALL.height,
+    });
+    expect(controller.getSnapshot().overlay.draft).toBeNull();
+  });
+
+  it("wall: a drag shorter than 300 mm places nothing and says why", () => {
+    const { controller, applied } = setup();
+    controller.choose("wall");
+    controller.dragStart(toViewer(2_000, 2_000));
+    controller.drag(toViewer(2_200, 2_000));
+    controller.dragEnd(toViewer(2_200, 2_000));
+    expect(applied).toEqual([]);
+    expect(controller.getSnapshot().overlay.notice).toMatch(/at least 300 mm/);
+  });
+
+  it("slab: a drag between two corners draws a counter-clockwise rectangle, 200 mm thick", () => {
+    const { controller, applied } = setup();
+    controller.choose("slab");
+    controller.dragStart(toViewer(8_000, 6_000));
+    controller.drag(toViewer(2_000, 1_000)); // dragged down and to the left
+    controller.dragEnd(toViewer(2_000, 1_000));
+    const { element } = created(applied);
+    expect(element).toMatchObject({
+      type: "slab",
+      thickness: SLAB.thickness,
+      outline: [
+        [2_000, 1_000],
+        [8_000, 1_000],
+        [8_000, 6_000],
+        [2_000, 6_000],
+      ],
+    });
+  });
+
+  it("column: a tap places a 400 x 400 mm column, 3000 mm high, snapped to 100 mm", () => {
+    const { controller, applied } = setup();
+    controller.choose("column");
+    controller.tap(toViewer(3_040, 7_960));
+    const { element } = created(applied);
+    expect(element).toMatchObject({
+      type: "column",
+      position: [3_000, 8_000],
+      section: COLUMN.section,
+      height: COLUMN.height,
+    });
+  });
+
+  it("copy: dragging an element places a snapped copy and leaves the original", () => {
+    const { controller, applied } = setup();
+    controller.choose("copy");
+    expect(controller.dragStart(toViewer(30_000, 10_000))).toBe(true);
+    controller.drag(toViewer(30_000, 23_040));
+    expect(controller.getSnapshot().overlay.draft).toMatchObject({ origin: [24_000, 17_000, 0] });
+    controller.dragEnd(toViewer(30_000, 23_040));
+    const { label, element } = created(applied);
+    expect(label).toBe("Copy Block B");
+    expect(element).toMatchObject({ type: "massing", name: "Block B copy", origin: [24_000, 17_000, 0] });
+    expect(element.id).not.toBe("block-b");
+  });
+
+  it("copy: a drag that starts off the model does not take the drag (the view orbits)", () => {
+    const { controller } = setup();
+    controller.choose("copy");
+    expect(controller.dragStart(toViewer(2_000, 2_000))).toBe(false);
+  });
+
+  it("the create ring's default layout lists the create tools first, clockwise from the top", () => {
+    expect(DEFAULT_CREATE_LAYOUT.slice(0, 5)).toEqual(["wall", "slab", "column", "massing", "copy"]);
   });
 });

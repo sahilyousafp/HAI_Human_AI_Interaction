@@ -18,6 +18,7 @@ import type { TrackerState } from "./perception/tracker.ts";
 import { SceneClient } from "./scene/scene-client.ts";
 import { DEFAULT_LAYOUT, registerBuiltinTools } from "./tools/builtin.ts";
 import { ToolController } from "./tools/controller.ts";
+import { DEFAULT_CREATE_LAYOUT } from "./tools/create.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { PaletteSettings } from "./tools/ToolOverlays.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
@@ -70,10 +71,15 @@ export function App() {
   const tools = useMemo(() => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const controller = new ToolController(registry, DEFAULT_LAYOUT);
-    // The layout is a user setting kept by the bridge, so it follows the workspace across browsers and restarts.
-    controller.onLayoutChange = (palette) =>
-      connection.current?.send({ type: "settings.set", id: crypto.randomUUID(), payload: { palette } });
+    const controller = new ToolController(registry, { tools: DEFAULT_LAYOUT, create: DEFAULT_CREATE_LAYOUT });
+    // The rings' layouts are user settings kept by the bridge, so they follow the workspace across browsers and
+    // restarts.
+    controller.onLayoutChange = (layout, ring) =>
+      connection.current?.send({
+        type: "settings.set",
+        id: crypto.randomUUID(),
+        payload: ring === "tools" ? { palette: layout } : { createPalette: layout },
+      });
     return controller;
   }, []);
   // What each gesture does is a user setting kept by the bridge too.
@@ -193,7 +199,8 @@ export function App() {
           }
           return agent.answer(yes, bus.engaged);
         },
-        // Both open palms stop everything: the team's work and Mochi's voice, even after its reply has ended.
+        // Both fists, then open hands, stop everything: the team's work and Mochi's voice, even after its reply
+        // has ended.
         stop: () => {
           speaker.stop();
           agent.stopRunning();
@@ -228,7 +235,8 @@ export function App() {
     const conn = connectToBridge(window.__AEX_SESSION__ ?? null, browserDeps, setBridge, (message) => {
       if (viewLink.handle(message) || agent.handle(message) || sceneClient.handle(message)) return;
       if (message.type === "settings.snapshot") {
-        tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT);
+        tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT, "tools");
+        tools.loadLayout(message.payload.createPalette ?? DEFAULT_CREATE_LAYOUT, "create");
         gestureSettings.load(message.payload.gestures);
         setSpeech(message.payload.speech);
         setListenForNames(message.payload.listenForNames);

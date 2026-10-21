@@ -61,7 +61,7 @@ These values live in `apps/bridge/src/agent/team.ts`; a unit test checks that th
 ## Stopping
 
 - **One task:** open it from the team strip or its hand-off chip and press **Stop**, or ask "Mochi, stop Architect". A queued task is taken off the queue.
-- **Everything:** press **Stop all** in the team strip or the stop button, or hold up both open palms. Mochi's turn and every task stop, and no report follows.
+- **Everything:** press **Stop all** in the team strip or the stop button, or clench both hands into fists and then open them toward the camera. Mochi's turn and every task stop, and no report follows.
 - A stopped task ends within 3 seconds and keeps what it already changed, as one undo step.
 
 ## The agent panel
@@ -100,7 +100,7 @@ Mochi's replies and reports are spoken, sentence by sentence as they arrive, so 
 
 - **The voice is generated on this laptop.** Kokoro-82M (Apache-2.0) runs in a Web Worker on WebGPU, in full precision, with `phonemize` (MIT) for English pronunciation. `pnpm assets` downloads the model (325 MB) and two voices once and checks their SHA-256. Neither the reply text nor the audio is sent anywhere; an automated test checks that no request leaves the machine while Mochi speaks.
 - **Without WebGPU**, a voice installed on the computer speaks instead (one that works without the network), and the Voice settings name it. Kokoro on WebAssembly is slower than real time, so it is not used (see [decisions.md](decisions.md)).
-- **Talking interrupts.** Pressing the microphone, holding the talk key, pressing stop or holding up both palms stops the voice at once.
+- **Talking interrupts.** Pressing the microphone, holding the talk key, pressing stop or the stop gesture (both fists, then open hands) stops the voice at once.
 - **Mute** with the speaker button beside the microphone, or **Speak Mochi's replies** in the Voice settings. The choice is remembered. Choose between two voices there too.
 - The Voice settings show which voice speaks and the 90th percentile of the time from a sentence being complete to its first sound. The target is under 1.2 s; on the reference laptop a short sentence takes about 1 s (measurements in [decisions.md](decisions.md)).
 - The model loads when you send a request, so it is usually ready by the time Mochi answers.

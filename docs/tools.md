@@ -1,18 +1,24 @@
 # Tools and the tool palette
 
-Many design actions are faster done directly than through the agent: measure a facade, cut a section, nudge a block. The tool palette puts them under your hand. None of these tools need the agent, and every change they make is an ordinary scene transaction, so Undo always reverses it.
+Many design actions are faster done directly than through the agent: measure a facade, cut a section, draw a wall, nudge a block. The tool palette puts them under your hands. None of these tools need the agent, and every change they make is an ordinary scene transaction, so Undo always reverses it.
 
-## Opening the palette
+## Two rings, one per hand
 
-| How | Do |
-|---|---|
-| Hand | Engage (open palm), then pinch and keep the hand still for a moment (a long pinch). The palette opens around your hand |
-| Keyboard | Hold Space. The palette opens at the mouse pointer |
-| Mouse | Hold the right button without moving. A right button drag still pans the view |
+The palette is two rings of eight tools. The **tools ring** (select, measure, section, move and so on) belongs to the right hand; the **create ring** (wall, slab, column, massing, copy) to the left. Both hands are full pointers otherwise: each can tap, press buttons, scroll and drag, so the left hand can draw a wall while the right orbits the view.
+
+## Opening a ring
+
+| How | Tools ring | Create ring |
+|---|---|---|
+| Hand | Engage (open palm), then pinch with the right hand and keep it still for a moment (a long pinch). The ring opens around your hand | The same with the left hand |
+| Keyboard | Hold Space. The ring opens at the mouse pointer | Hold Shift+Space |
+| Mouse | Hold the right button without moving. A right button drag still pans the view | Hold Shift and the right button |
+
+Which ring each hand opens is a setting (the **Gestures** card: Long pinch, per hand).
 
 Then move toward a tool and release (the pinch, Space or the right button). The tool in that direction is highlighted once you are outside the small circle in the middle (4% of the image width); release there to cancel. Each slot keeps its direction, so with practice a quick flick picks a tool without looking.
 
-While the palette is open, the view does not move. A long pinch while you are holding something (an element with Move, the section plane with Section) keeps holding it instead of opening the palette.
+While a ring is open, the hand that opened it steers it; the other hand keeps working (tapping, pressing, scrolling, orbiting). One ring is open at a time. A long pinch while you are holding something (an element with Move, the section plane with Section, a wall being drawn) keeps holding it instead of opening a ring.
 
 ## Getting back out, and the HUD by hand
 
@@ -25,18 +31,20 @@ The active tool is always shown at the bottom left of the view. To leave it and 
 
 Escape and a head shake first close an open palette, answer "keep" to a question, or drop a drag in progress; the next one returns to Select.
 
-Every button over the view (Undo, Redo, the cancel x, Remove section, Delete and Keep) can be pressed by hand: point at it so it gets an outline and the pointer shrinks to a dot, then pinch and let go. Any pinch that starts on a button presses it, however long you hold it; it never grabs or orbits. After an undo or redo, a strip says what was undone and offers **Undo again** and **Redo**, so stepping back several changes takes a few taps.
+Hands reach the whole page, the model and the sidebar alike, and press what the mouse clicks: buttons, links, checkboxes and their labels (dropdowns and text fields stay mouse and keyboard). Point at a control so it gets an outline and the pointer shrinks to a dot, then pinch and let go. Any pinch that starts on a control presses it, however long you hold it; it never grabs or orbits. After an undo or redo, a strip says what was undone and offers **Undo again** and **Redo**, so stepping back several changes takes a few taps.
 
-## The pointer
+**Scrolling by hand.** Pinch over a list that scrolls (the agent conversation, the extensions, the sidebar) and move the hand up or down: the content follows the hand, as on a phone. Let go while moving and it coasts on and slows down; pinching it again catches it. A pinch that starts on a button inside the list presses the button, unless the hand moves up or down first (2% of the view's height), which scrolls instead.
 
-The hand pointer shows what a pinch would do where it is:
+## The pointers
+
+Each hand has its own pointer, in the hand's colour in the camera overlay (left amber, right blue-green), and it shows what a pinch would do where it is. Hover in the model and what "this" means when you speak follow the hand that pinched last.
 
 | Pointer | Meaning |
 |---|---|
 | Plain ring | Select: tap selects, a drag orbits |
 | Ring with the tool's icon (red for Delete) | The active tool acts here |
 | Rounded square with up and down arrows | Over the section plane (with Section) or its outline (with any tool): pinch to grab it and drag |
-| Small dot | Over a button (tap to press), or the palette is open (steer and release) |
+| Small dot | Over a control (tap to press), or this hand's ring is open (steer and release) |
 | Dashed grey ring | Tracking sees your hand but you are not engaged: show an open palm |
 
 The mouse cursor changes with the tool as well. The pointer stays put through brief tracking dropouts instead of blinking out.
@@ -45,21 +53,27 @@ The mouse cursor changes with the tool as well. The pointer stays put through br
 
 | Tool | Key | Default slot | What it does |
 |---|---|---|---|
-| Select | V | Top | Tap selects the element under the pointer; tap on empty space clears. Drags orbit the view |
-| Ask agent | A | Top right | Opens the agent panel with the cursor in its input (see [agent.md](agent.md)). If the agent is not available, it says why |
-| Measure | D | Right | Tap two points on the model: the distance between them is shown in millimetres (rounded to 1 mm). Changes nothing |
-| Section | S | Bottom right | The cut is a plane you can grab: pinch on it (it lights up under the pointer) and drag down to cut lower, up to cut higher; the height is shown in millimetres. A drag off the plane orbits. The section stays when you change tool, until you press Remove (or tap the plane with Delete). From any other tool, its outline can still be grabbed and dragged, and tapping the outline selects the section |
-| Move | M | Bottom | Pinch an element and drag it along the ground; it snaps to 100 mm and is moved in one "Move" transaction when you let go. A drag that starts on empty space orbits instead |
-| Add massing | B | Bottom left | Tap the ground: a 6000 x 6000 x 3500 mm block is placed there, centred on the tap and snapped to 100 mm |
-| Delete | X | Left | Tap an element: it turns red and asks you to confirm. Nod or press Enter to delete it; shake your head or press Escape to keep it. Tapping the section plane removes the section |
-| Undo | U | Top left | Undoes the last change at once and keeps your current tool; Undo again on the strip that appears steps further back |
-| Redo | R | (not in the ring) | Redoes at once and keeps your current tool |
+| Select | V | Top (tools) | Tap selects the element under the pointer; tap on empty space clears. Drags orbit the view |
+| Ask agent | A | Top right (tools) | Opens the agent panel on the conversation and starts listening (see [agent.md](agent.md)). If the agent is not available, it says why |
+| Measure | D | Right (tools) | Tap two points on the model: the distance between them is shown in millimetres (rounded to 1 mm). Changes nothing |
+| Section | S | Bottom right (tools) | The cut is a plane you can grab: pinch on it (it lights up under the pointer) and drag down to cut lower, up to cut higher; the height is shown in millimetres. A drag off the plane orbits. The section stays when you change tool, until you press Remove (or tap the plane with Delete). From any other tool, its outline can still be grabbed and dragged, and tapping the outline selects the section |
+| Move | M | Bottom (tools) | Pinch an element and drag it along the ground; it snaps to 100 mm and is moved in one "Move" transaction when you let go. A drag that starts on empty space orbits instead |
+| Add massing | B | Bottom left (tools), Bottom right (create) | Tap the ground: a 6000 x 6000 x 3500 mm block is placed there, centred on the tap and snapped to 100 mm |
+| Delete | X | Left (tools), Top left (create) | Tap an element: it turns red and asks you to confirm. Nod or press Enter to delete it; shake your head or press Escape to keep it. Tapping the section plane removes the section |
+| Undo | U | Top left (tools), Left (create) | Undoes the last change at once and keeps your current tool; Undo again on the strip that appears steps further back |
+| Redo | R | Bottom left (create) | Redoes at once and keeps your current tool |
+| Wall | W | Top (create) | Pinch on the ground and drag from one end of the wall to the other: the wall shows as you drag, with its length, and is added when you let go (200 mm thick, 3000 mm high, ends snapped to 100 mm). Shorter than 300 mm adds nothing |
+| Slab | F | Top right (create) | Pinch on the ground and drag from one corner to the opposite one: a 200 mm slab fills the rectangle (sides at least 300 mm, corners snapped to 100 mm) |
+| Column | C | Right (create) | Tap the ground: a 400 x 400 mm column, 3000 mm high, is placed there, snapped to 100 mm |
+| Copy | P | Bottom (create) | Pinch an element and drag: a copy follows, snapped to 100 mm, and is added where you let go; the original stays. A drag that starts on empty space orbits instead |
+
+Everything the create tools add sits on the ground level and is one undo step, named after the element ("Add Wall 3"). Exact sizes come afterwards: select the element and say "make this 300 thick", or ask the agent.
 
 Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y keep working as before.
 
 ## Choosing the layout
 
-The **Tool palette** card in the sidebar lists the eight slots, clockwise from the top. Pick any registered tool for each slot, or leave it empty. The layout is saved by the bridge in `.aex/settings.json` in the workspace, so it is the same in every browser and after a restart.
+The **Tool palette** card in the sidebar has a tab for each ring, listing its eight slots clockwise from the top. Pick any registered tool for each slot, or leave it empty. The layouts are saved by the bridge in `.aex/settings.json` in the workspace, so they are the same in every browser and after a restart.
 
 ## Adding a tool
 

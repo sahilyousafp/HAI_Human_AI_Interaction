@@ -17,6 +17,8 @@ export interface RecognizerState {
   hands: Partial<Record<Hand, HandDisplay>>;
   pinch: Partial<Record<Hand, PinchReading>>;
   twoHand: boolean;
+  /** Both fists were held: opening both hands now stops. */
+  stopArmed: boolean;
   /** Most recent head gesture, for the HUD. */
   lastHead: { type: "head.nod" | "head.shake"; ts: number } | null;
 }
@@ -38,9 +40,9 @@ export class GestureRecognizer {
     null;
   private lastHead: RecognizerState["lastHead"] = null;
   private readings: Partial<Record<Hand, PinchReading>> = {};
-  /** Since when both palms are open, and whether this hold already stopped. */
-  private palmsSince: number | null = null;
-  private palmsFired = false;
+  /** Since when both hands are fists; then, once armed, when they last were (the stop gesture). */
+  private fistsSince: number | null = null;
+  private stopArmedAt: number | null = null;
 
   constructor(private readonly config: GestureConfig = DEFAULT_GESTURES) {
     this.machines = { Left: new HandMachine("Left", config), Right: new HandMachine("Right", config) };
@@ -56,6 +58,7 @@ export class GestureRecognizer {
       hands,
       pinch: { ...this.readings },
       twoHand: this.twoHandActive,
+      stopArmed: this.stopArmedAt !== null,
       lastHead: this.lastHead,
     };
   }
@@ -90,7 +93,7 @@ export class GestureRecognizer {
       events.push(...this.machines[hand].update(observations[hand] ?? null, ts, ctx));
     }
     this.updateTwoHand(ts, aspect, events);
-    this.updatePalms(ts, observations, events);
+    this.updateStop(ts, observations, events);
 
     const headEvents = this.head.update(frame.face?.headPose, ts, this.engaged);
     for (const e of headEvents)
@@ -135,26 +138,48 @@ export class GestureRecognizer {
     events.push({ type: "disengaged", ts, confidence: 1, reason });
   }
 
-  /** Both open palms for `stop.palmsMs` while engaged: one stop per hold (lower a hand to stop again). */
-  private updatePalms(ts: number, obs: Partial<Record<Hand, HandObservation>>, events: GestureEvent[]) {
-    const both = this.engaged && obs.Left?.posture === "open-palm" && obs.Right?.posture === "open-palm";
-    if (!both) {
-      this.palmsSince = null;
-      this.palmsFired = false;
+  /**
+   * The stop: both hands closed into fists together for `stop.fistsMs` (while engaged) arms it, and both palms
+   * opened toward the camera within `stop.openMs` of the fists opening fires it, once. Open palms alone never stop,
+   * so showing both hands to the camera is safe.
+   */
+  private updateStop(ts: number, obs: Partial<Record<Hand, HandObservation>>, events: GestureEvent[]) {
+    const s = this.config.stop;
+    const fists = this.engaged && obs.Left?.posture === "fist" && obs.Right?.posture === "fist";
+    if (fists) {
+      this.fistsSince ??= ts;
+      if (ts - this.fistsSince >= s.fistsMs) this.stopArmedAt = ts; // stays armed while the fists are held
       return;
     }
-    this.palmsSince ??= ts;
-    if (this.palmsFired || ts - this.palmsSince < this.config.stop.palmsMs) return;
-    this.palmsFired = true;
-    events.push({ type: "palms.stop", ts, confidence: 1 });
+    this.fistsSince = null;
+    if (this.stopArmedAt === null) return;
+    if (!this.engaged || ts - this.stopArmedAt > s.openMs) {
+      this.stopArmedAt = null;
+      return;
+    }
+    if (obs.Left?.posture === "open-palm" && obs.Right?.posture === "open-palm") {
+      this.stopArmedAt = null;
+      events.push({ type: "hands.stop", ts, confidence: 1 });
+    }
   }
 
+  /**
+   * Both hands pinching is a two-hand pinch (navigation) when the pinches began together (within
+   * `twoHand.startWindowMs`), or when neither hand is doing something of its own yet. A hand that opened a ring keeps
+   * it, and a hand already dragging (drawing a wall, orbiting) keeps its drag: the other hand's pinch is then its own
+   * tap or drag, so the two hands work independently.
+   */
   private updateTwoHand(ts: number, aspect: number, events: GestureEvent[]) {
     const { Left, Right } = this.machines;
     const both = this.engaged && Left.pinching && Right.pinching;
     if (!both) {
       if (this.twoHandActive) this.endTwoHand(ts, events, true);
       return;
+    }
+    if (!this.twoHandActive) {
+      const together = Math.abs(Left.pinchStartTs - Right.pinchStartTs) <= this.config.twoHand.startWindowMs;
+      const own = Left.holdEmitted || Right.holdEmitted || (!together && (Left.dragging || Right.dragging));
+      if (own) return;
     }
     const [a, b] = [Left.position, Right.position].sort((p, q) => p[0] - q[0]) as [Point2, Point2];
     const dx = b[0] - a[0];

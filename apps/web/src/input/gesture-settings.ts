@@ -1,13 +1,13 @@
 import {
+  type BindingKey,
   DEFAULT_BINDINGS,
   type GestureAction,
   type GestureBindings,
-  type GestureSlot,
   resolveBindings,
 } from "@aex/protocol";
 
 /**
- * What each gesture does, as the user set it. The bridge keeps the choice (in .aex/settings.json), so it follows the
+ * What each gesture does, as the user set it (one-hand gestures for each hand on its own). The bridge keeps the choice (in .aex/settings.json), so it follows the
  * workspace across browsers and restarts; the input router reads it on every gesture.
  */
 export class GestureSettings {
@@ -29,8 +29,8 @@ export class GestureSettings {
     this.update(resolveBindings(stored));
   }
 
-  set(slot: GestureSlot, action: GestureAction): void {
-    this.update({ ...this.bindings, [slot]: action });
+  set(key: BindingKey, action: GestureAction): void {
+    this.update({ ...this.bindings, [key]: action });
     this.save(this.bindings);
   }
 

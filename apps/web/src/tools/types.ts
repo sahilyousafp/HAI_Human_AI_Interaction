@@ -1,4 +1,4 @@
-import type { Point2, Point3Mm, SceneDocument, SceneOp } from "@aex/protocol";
+import type { Element, Point2, Point3Mm, SceneDocument, SceneOp } from "@aex/protocol";
 
 /** What is under a viewer position: an element and the surface point that was hit, millimetres. */
 export interface Hit {
@@ -25,6 +25,8 @@ export interface ToolOverlay {
   marked: string | null;
   /** Section: the pointer is over the section plane, so a pinch would grab it. */
   sectionHover: boolean;
+  /** Create tools and Copy: the element being drawn or placed, shown before it is created. */
+  draft: Element | null;
 }
 
 export const EMPTY_OVERLAY: ToolOverlay = {
@@ -34,6 +36,7 @@ export const EMPTY_OVERLAY: ToolOverlay = {
   movePreview: null,
   marked: null,
   sectionHover: false,
+  draft: null,
 };
 
 /** What a tool can do. Positions are viewer coordinates: 0..1 across and down the 3D view. */

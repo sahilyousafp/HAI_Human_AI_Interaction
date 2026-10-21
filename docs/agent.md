@@ -25,7 +25,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose --inc
 - **Reloading the page** shows every agent's conversation again. The bridge keeps the last 50 turns of each.
 - **If the process ends unexpectedly**, the next request starts a new one with `--resume`, and the turn shows "Session recovered".
 - **After 20 idle minutes** an agent's process is closed. Its next turn resumes the conversation.
-- **Stop** (the stop button, **Stop all**, or both open palms toward the camera for half a second) sends Claude Code's interrupt request to every agent that is working; one task can be stopped on its own. If a turn has not ended within 1.5 s, the process is ended and the next turn resumes. Either way it ends within 3 seconds, and what it already changed stays as one undo step.
+- **Stop** (the stop button, **Stop all**, or both hands clenched into fists and then opened toward the camera) sends Claude Code's interrupt request to every agent that is working; one task can be stopped on its own. If a turn has not ended within 1.5 s, the process is ended and the next turn resumes. Either way it ends within 3 seconds, and what it already changed stays as one undo step.
 
 ## What the agent can do in the scene
 

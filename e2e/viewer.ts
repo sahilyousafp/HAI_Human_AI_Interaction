@@ -99,10 +99,18 @@ export async function findElementOnScreen(page: Page, elementId: string): Promis
   return hit as [number, number];
 }
 
-/** Hand pointer coordinates that land on a viewer position (inverse of the viewer's pointer gain). */
-export const handAt = ([x, y]: [number, number]): [number, number] => [
-  0.5 + (x - 0.5) / 1.3,
-  0.5 + (y - 0.5) / 1.3,
-];
+/**
+ * The pinch point (camera frame) that puts a hand's pointer on a viewer position. Hands span the whole workspace
+ * (the model and the sidebar), so the viewer works out the inverse from the page's layout.
+ */
+export const handAt = (page: Page, [x, y]: [number, number]): Promise<[number, number]> =>
+  page.evaluate(
+    ([vx, vy]) => {
+      const at = window.__AEX_VIEWER__?.handAt(vx, vy);
+      if (!at) throw new Error("the viewer is not ready");
+      return at;
+    },
+    [x, y] as const,
+  );
 
 export const now = (page: Page) => page.evaluate(() => performance.timeOrigin + performance.now());

@@ -14,21 +14,29 @@ const tapAt = async (page: Page, at: [number, number]) => {
   await page.evaluate(
     ({ position, ts }) =>
       window.__AEX_INPUT__?.gestures([{ type: "pinch.tap", ts, confidence: 1, hand: "Right", position }]),
-    { position: handAt(at), ts },
+    { position: await handAt(page, at), ts },
   );
 };
 
 test.describe("gesture settings", () => {
-  test("lists every gesture with what it does, each with its own choices", async ({ page }) => {
+  test("lists every gesture with what it does, one-hand gestures for each hand, each with its own choices", async ({
+    page,
+  }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
     const settings = card(page);
     await expect(settings.locator(".gesture-row")).toHaveCount(9); // open palm (fixed) and eight settable gestures
     await expect(settings.locator('[data-slot="engage"]')).toContainText("Engage (always)");
-    await expect(settings.getByTestId("gesture-tap")).toHaveValue("use-tool");
-    await expect(settings.getByLabel("Pinch tap")).toBeVisible();
+    await expect(settings.getByTestId("gesture-tap-right")).toHaveValue("use-tool");
+    await expect(settings.getByTestId("gesture-tap-left")).toHaveValue("use-tool");
+    await expect(settings.getByLabel("Pinch tap, left hand")).toBeVisible();
+    // A long pinch opens a different ring per hand.
+    await expect(settings.getByTestId("gesture-hold-right")).toHaveValue("tools-ring");
+    await expect(settings.getByTestId("gesture-hold-left")).toHaveValue("create-ring");
+    await expect(settings.getByTestId("gesture-stop")).toHaveValue("stop-agent");
+    await expect(settings.locator('[data-slot="stop"]')).toContainText("Two fists, then open hands");
     // A drag offers only what a drag can do.
-    const dragChoices = await settings.getByTestId("gesture-drag").locator("option").allTextContents();
+    const dragChoices = await settings.getByTestId("gesture-drag-right").locator("option").allTextContents();
     expect(dragChoices).toEqual([
       "Active tool, else orbit (default)",
       "Orbit the view",
@@ -53,10 +61,11 @@ test.describe("gesture settings", () => {
   }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
-    await card(page).getByTestId("gesture-tap").selectOption("select");
+    await card(page).getByTestId("gesture-tap-right").selectOption("select");
     await page.reload();
     await openViewer(page);
-    await expect(card(page).getByTestId("gesture-tap")).toHaveValue("select");
+    await expect(card(page).getByTestId("gesture-tap-right")).toHaveValue("select");
+    await expect(card(page).getByTestId("gesture-tap-left")).toHaveValue("use-tool");
 
     await page.keyboard.press("d"); // Measure: a tap would normally place a measuring point
     const at = await findElementOnScreen(page, "block-b");
@@ -66,13 +75,13 @@ test.describe("gesture settings", () => {
     await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "measure");
 
     await card(page).getByRole("button", { name: "Reset to defaults" }).click();
-    await expect(card(page).getByTestId("gesture-tap")).toHaveValue("use-tool");
+    await expect(card(page).getByTestId("gesture-tap-right")).toHaveValue("use-tool");
   });
 
   test("fist set to undo undoes the last change once the fist is held", async ({ page }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
-    await card(page).getByTestId("gesture-fist").selectOption("undo");
+    await card(page).getByTestId("gesture-fist-right").selectOption("undo");
     await page.evaluate(() =>
       window.__AEX_SCENE__?.apply("Move Block B", [
         { op: "update", id: "block-b", patch: { origin: [0, 0, 0] } },
@@ -96,7 +105,7 @@ test("select a block by hand with the default settings", async ({ page }) => {
   await openViewer(page);
   const at = await findElementOnScreen(page, "block-c");
   await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-  await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), handAt(at));
+  await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, at));
   await tapAt(page, at);
   await expect(page.getByTestId("selection-status")).toContainText("(massing)");
   await expect.poll(() => bridge?.scene.scene.selection).toEqual(["block-c"]);

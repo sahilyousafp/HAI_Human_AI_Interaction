@@ -1,4 +1,5 @@
 import {
+  actionFor,
   DEFAULT_BINDINGS,
   type GestureAction,
   type GestureBindings,
@@ -6,6 +7,7 @@ import {
   type Hand,
   type Point2,
 } from "@aex/protocol";
+import type { Ring } from "./controller.ts";
 
 export type DragMode = "orbit" | "pan";
 
@@ -13,18 +15,19 @@ export type DragMode = "orbit" | "pan";
 export interface RouterTargets {
   palette: {
     readonly isOpen: boolean;
-    open(position: Point2): void;
+    open(position: Point2, ring: Ring, hand: Hand): void;
     steer(position: Point2): void;
     release(): void;
     cancel(): void;
   };
   tool: {
-    tap(position: Point2): void;
-    /** True if the active tool takes the drag; otherwise the drag navigates. */
-    dragStart(position: Point2): boolean;
-    drag(position: Point2): void;
-    dragEnd(position: Point2): void;
-    dragCancel(): void;
+    tap(position: Point2, hand: Hand): void;
+    /** True if the controller takes the drag (a press, a scroll or the active tool); otherwise it navigates. */
+    dragStart(position: Point2, hand: Hand): boolean;
+    drag(position: Point2, hand: Hand): void;
+    dragEnd(position: Point2, hand: Hand): void;
+    /** Drops a hand's drag (every hand's when none is given). */
+    dragCancel(hand?: Hand): void;
     /** Yes to the tool's open question. */
     nod(): void;
     /** No to the open question, or cancel. */
@@ -57,19 +60,25 @@ export interface RouterOptions {
 
 type Owner = "palette" | "tool" | "navigation" | "ignored";
 
+const RINGS: Partial<Record<GestureAction, Ring>> = { "tools-ring": "tools", "create-ring": "create" };
+
 /**
- * Sends each gesture to exactly one place, through the gesture's binding (what the user set it to do), so
- * navigation never needs to know about the palette or the tools:
- * - while the palette is open, it gets the drag of the hand that opened it, and nothing navigates;
- * - otherwise a drag goes to the active tool if it takes it (Move on an element, Section), else to navigation;
- * - a long pinch opens the palette; if that hand was orbiting, the orbit is ended first. A long pinch while a tool
- *   holds something (an element being moved, the section plane) keeps holding it: holding still is not a request
- *   for the palette then;
+ * Sends each gesture to exactly one place, through the gesture's binding for the hand that made it (what the user set
+ * it to do), so navigation never needs to know about the palette or the tools. Both hands are equal pointers:
+ * - a long pinch opens that hand's ring (the right hand's tools, the left hand's create tools by default); if that
+ *   hand was orbiting, the orbit is ended first. While a ring is open it gets the drag of the hand that opened it;
+ *   the other hand keeps tapping, pressing, scrolling and navigating. A long pinch while a tool holds something (an
+ *   element being moved, the section plane) keeps holding it: holding still is not a request for a ring then;
+ * - a drag goes to the controller if it takes it (a button press, a scroll, the active tool), else to navigation;
+ * - both hands closed into fists are the start of the stop gesture, so neither hand's fist action runs then;
  * - "yes" and "no" answer the agent's approval card when exactly one waits, else the tool's question.
  */
 export class InputRouter {
   private readonly owners = new Map<Hand, Owner>();
   private paletteHand: Hand | null = null;
+  private readonly fists = new Set<Hand>();
+  /** Both hands were fists together: their fist actions stay off until both are open again. */
+  private bothFists = false;
 
   constructor(
     private readonly targets: RouterTargets,
@@ -87,26 +96,26 @@ export class InputRouter {
       case "pinch.hold": {
         const owner = this.owners.get(event.hand);
         if (owner === "tool" || palette.isOpen) return;
-        if (b.hold !== "palette") {
-          this.run(b.hold, event.position);
+        const action = actionFor(b, "hold", event.hand);
+        const ring = RINGS[action];
+        if (!ring) {
+          this.run(action, event.position, event.hand);
           return;
         }
         if (owner === "navigation") this.targets.navigation({ ...event, type: "pinch.drag.end" });
-        palette.open(event.position);
+        palette.open(event.position, ring, event.hand);
         this.paletteHand = event.hand;
         this.owners.set(event.hand, "palette");
         return;
       }
       case "pinch.drag.start": {
-        if (palette.isOpen) {
-          this.owners.set(event.hand, event.hand === this.paletteHand ? "palette" : "navigation");
-          return;
-        }
         let owner: Owner = "ignored";
-        if (b.drag === "tool-or-orbit") owner = tool.dragStart(event.position) ? "tool" : "navigation";
-        else if (b.drag !== "none") owner = "navigation";
+        const drag = actionFor(b, "drag", event.hand);
+        if (drag === "tool-or-orbit")
+          owner = tool.dragStart(event.position, event.hand) ? "tool" : "navigation";
+        else if (drag !== "none") owner = "navigation";
         this.owners.set(event.hand, owner);
-        if (owner === "navigation") this.targets.navigation(event, this.dragMode);
+        if (owner === "navigation") this.targets.navigation(event, this.dragMode(event.hand));
         return;
       }
       case "pinch.drag.update":
@@ -118,43 +127,45 @@ export class InputRouter {
           if (end) this.closePalette(true);
           else palette.steer(event.position);
         } else if (owner === "tool") {
-          if (end) tool.dragEnd(event.position);
-          else tool.drag(event.position);
-        } else if (owner === "navigation" && !palette.isOpen) {
-          this.targets.navigation(event, this.dragMode);
+          if (end) tool.dragEnd(event.position, event.hand);
+          else tool.drag(event.position, event.hand);
+        } else if (owner === "navigation") {
+          this.targets.navigation(event, this.dragMode(event.hand));
         }
         return;
       }
-      case "pinch.tap":
-        if (palette.isOpen) return;
-        if (b.tap === "use-tool") tool.tap(event.position);
-        else this.run(b.tap, event.position);
+      case "pinch.tap": {
+        if (palette.isOpen && event.hand === this.paletteHand) return;
+        const action = actionFor(b, "tap", event.hand);
+        if (action === "use-tool") tool.tap(event.position, event.hand);
+        else this.run(action, event.position, event.hand);
         return;
+      }
       case "twohand.start":
       case "twohand.update":
       case "twohand.end":
-        if (b.twohand === "none") return;
+        if (actionFor(b, "twohand") === "none") return;
         if (!palette.isOpen || event.type === "twohand.end") this.targets.navigation(event);
         return;
       case "clutch.start":
       case "clutch.end":
-        if (b.fist === "none") return;
-        if (b.fist === "cancel") tool.clutch(event.type === "clutch.start");
-        else tool.clutch(event.type === "clutch.start", () => this.run(b.fist));
+        this.clutch(event.hand, event.type === "clutch.start");
         return;
       case "head.nod":
-        this.run(b.nod);
+        this.run(actionFor(b, "nod"));
         return;
       case "head.shake":
-        this.run(b.shake);
+        this.run(actionFor(b, "shake"));
         return;
-      case "palms.stop":
-        this.run(b.palms);
+      case "hands.stop":
+        this.run(actionFor(b, "stop"));
         return;
       case "disengaged":
         this.closePalette(false);
         if ([...this.owners.values()].includes("tool")) tool.dragCancel();
         this.owners.clear();
+        this.fists.clear();
+        this.bothFists = false;
         this.targets.navigation(event);
         return;
       default:
@@ -162,17 +173,34 @@ export class InputRouter {
     }
   }
 
-  private get dragMode(): DragMode {
-    return this.bindings.drag === "pan" ? "pan" : "orbit";
+  private dragMode(hand: Hand): DragMode {
+    return actionFor(this.bindings, "drag", hand) === "pan" ? "pan" : "orbit";
+  }
+
+  /** One hand's fist runs its action once held; both fists together are the stop gesture's start instead. */
+  private clutch(hand: Hand, closed: boolean): void {
+    const { tool } = this.targets;
+    if (closed) this.fists.add(hand);
+    else this.fists.delete(hand);
+    if (this.fists.size === 2) this.bothFists = true;
+    if (this.bothFists) {
+      tool.clutch(false); // drops a fist timer that may have started on the first hand
+      if (this.fists.size === 0) this.bothFists = false;
+      return;
+    }
+    const action = actionFor(this.bindings, "fist", hand);
+    if (action === "none") return;
+    if (action === "cancel") tool.clutch(closed);
+    else tool.clutch(closed, () => this.run(action));
   }
 
   /** A one-shot action, from any discrete gesture. */
-  private run(action: GestureAction, position?: Point2): void {
+  private run(action: GestureAction, position?: Point2, hand: Hand = "Right"): void {
     const { tool } = this.targets;
     const agent = this.options.agent;
     switch (action) {
       case "use-tool":
-        if (position) tool.tap(position);
+        if (position) tool.tap(position, hand);
         return;
       case "select":
         if (position) tool.select(position);
@@ -199,7 +227,7 @@ export class InputRouter {
         agent?.stop();
         return;
       default:
-        return; // "none", and the continuous actions that only drags and two-hand pinches take
+        return; // "none", the rings (only a long pinch opens one), and the continuous actions drags take
     }
   }
 

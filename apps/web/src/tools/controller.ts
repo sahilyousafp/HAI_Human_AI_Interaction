@@ -1,5 +1,5 @@
 import { DEFAULT_GESTURES } from "@aex/perception";
-import type { GestureEvent, Point2, Point3Mm, SceneDocument, SceneOp } from "@aex/protocol";
+import type { GestureEvent, Hand, Point2, Point3Mm, SceneDocument, SceneOp } from "@aex/protocol";
 import type { DragMode, RouterTargets } from "./input-router.ts";
 import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from "./palette.ts";
 import type { ToolRegistry } from "./registry.ts";
@@ -10,6 +10,29 @@ export const FIST_RESET_MS = 600;
 /** How long a passing message (undo, agent not connected) stays. */
 export const FLASH_MS = 4000;
 export const DEFAULT_TOOL = "select";
+/**
+ * A pinch-drag that starts on a button inside a scrolled area presses the button, unless it moves this far up or
+ * down first (a share of the viewer's height): then it scrolls the area instead.
+ */
+export const SCROLL_SLOP = 0.02;
+
+/** The two rings a long pinch opens: the right hand's tools and the left hand's create tools (by default). */
+export type Ring = "tools" | "create";
+/** Who is pointing: a hand, or the mouse. Each has its own press, scroll and ring; one of them drags a tool. */
+export type PointerSource = Hand | "mouse";
+
+/** A scrolled area a hand has grabbed: it follows the hand and coasts on when released quickly. */
+export interface ScrollGrab {
+  /** The hand moved by this much of the viewer's height (positive is down). */
+  move(dy: number): void;
+  release(): void;
+}
+
+/** What a pointer's pinch-drag is doing: pressing a button, scrolling an area, or the active tool. */
+type Grab =
+  | { kind: "press"; start: Point2 }
+  | { kind: "scroll"; scroll: ScrollGrab; last: Point2 }
+  | { kind: "tool"; last: Point2 };
 
 /** What the viewer provides: the scene, picking, and how to turn hand positions into viewer positions. */
 export interface ToolEnvironment {
@@ -32,16 +55,18 @@ export interface ToolEnvironment {
   press(at: Point2): boolean;
   /** Whether there is an on-screen button at a viewer position. */
   isButton(at: Point2): boolean;
+  /** Grabs the scrolled area at a viewer position (one with more to show), or null if there is none. */
+  scrollAt(at: Point2): ScrollGrab | null;
   /** Opens the agent panel ready for a request; returns why it cannot, or null. */
   askAgent(): string | null;
 }
 
 export interface ToolSnapshot {
   activeId: string;
-  /** Tool id per slot, clockwise from the top; null is an empty slot. */
-  layout: Array<string | null>;
-  /** Open palette, in viewer coordinates for drawing. */
-  palette: { center: Point2; highlighted: number | null } | null;
+  /** Each ring's tool id per slot, clockwise from the top; null is an empty slot. */
+  layouts: Record<Ring, Array<string | null>>;
+  /** Open palette, in viewer coordinates for drawing, with which ring it is and the hand that opened it. */
+  palette: { center: Point2; highlighted: number | null; ring: Ring; hand: Hand | null } | null;
   overlay: ToolOverlay;
   /** The question waiting for a yes or no, if any. */
   question: string | null;
@@ -56,26 +81,30 @@ export interface ToolSnapshot {
 export class ToolController {
   private readonly palette = new PaletteMachine();
   private paletteSource: "hand" | "pointer" = "pointer";
+  private paletteRing: Ring = "tools";
+  private paletteHand: Hand | null = null;
   private env: ToolEnvironment | null = null;
-  private dragging = false;
-  /** A pinch began on an on-screen button: it presses the button when released there, however long it lasted. */
-  private pressing = false;
-  private lastDragAt: Point2 = [0, 0];
+  /**
+   * Each pointer's drag. A pinch that began on an on-screen button presses it when released, however long it
+   * lasted; one that began on a scrolled area scrolls it; otherwise the active tool may take it, for one pointer at
+   * a time.
+   */
+  private readonly grabs = new Map<PointerSource, Grab>();
   private answer: ((yes: boolean) => void) | null = null;
   private fistTimer: ReturnType<typeof setTimeout> | null = null;
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private snapshot: ToolSnapshot;
   private readonly listeners = new Set<() => void>();
-  /** Called when the user changes the layout (to persist it). */
-  onLayoutChange: (layout: Array<string | null>) => void = () => {};
+  /** Called when the user changes a ring's layout (to persist it). */
+  onLayoutChange: (layout: Array<string | null>, ring: Ring) => void = () => {};
 
   constructor(
     readonly registry: ToolRegistry,
-    layout: Array<string | null>,
+    layouts: Record<Ring, Array<string | null>>,
   ) {
     this.snapshot = {
       activeId: DEFAULT_TOOL,
-      layout: normaliseLayout(layout),
+      layouts: { tools: normaliseLayout(layouts.tools), create: normaliseLayout(layouts.create) },
       palette: null,
       overlay: EMPTY_OVERLAY,
       question: null,
@@ -109,21 +138,21 @@ export class ToolController {
       return;
     }
     if (id === this.snapshot.activeId) return;
-    this.cancelDrag();
+    this.cancelToolDrag();
     this.closeQuestion(false);
     this.active?.deactivate?.(ctx);
     this.update({ activeId: id, overlay: { ...this.snapshot.overlay, notice: null } });
     tool.activate?.(ctx);
   }
 
-  setLayout(layout: Array<string | null>): void {
-    this.update({ layout: normaliseLayout(layout) });
-    this.onLayoutChange(this.snapshot.layout);
+  setLayout(layout: Array<string | null>, ring: Ring = "tools"): void {
+    this.update({ layouts: { ...this.snapshot.layouts, [ring]: normaliseLayout(layout) } });
+    this.onLayoutChange(this.snapshot.layouts[ring], ring);
   }
 
   /** Applies a layout that came from elsewhere (settings loaded from the bridge) without echoing it back. */
-  loadLayout(layout: Array<string | null>): void {
-    this.update({ layout: normaliseLayout(layout) });
+  loadLayout(layout: Array<string | null>, ring: Ring = "tools"): void {
+    this.update({ layouts: { ...this.snapshot.layouts, [ring]: normaliseLayout(layout) } });
   }
 
   // Palette
@@ -132,9 +161,17 @@ export class ToolController {
     return this.palette.isOpen;
   }
 
-  openPalette(space: PaletteSpace, source: "hand" | "pointer"): void {
-    this.cancelDrag();
+  /** Opens a ring at a point; a hand that opens it gives up its own drag first. */
+  openPalette(
+    space: PaletteSpace,
+    source: "hand" | "pointer",
+    ring: Ring = "tools",
+    hand: Hand | null = null,
+  ): void {
+    this.cancelDrag(hand ?? "mouse");
     this.paletteSource = source;
+    this.paletteRing = ring;
+    this.paletteHand = hand;
     this.palette.open(space);
     this.publishPalette();
   }
@@ -148,7 +185,7 @@ export class ToolController {
   releasePalette(): void {
     const slot = this.palette.release();
     this.publishPalette();
-    const id = slot === null ? null : this.snapshot.layout[slot];
+    const id = slot === null ? null : this.snapshot.layouts[this.paletteRing][slot];
     if (id) this.choose(id);
   }
 
@@ -176,7 +213,7 @@ export class ToolController {
    */
   hover(at: Point2): void {
     const ctx = this.ctx();
-    if (!ctx || this.dragging) return;
+    if (!ctx || this.toolDragger !== null) return;
     const line = this.onSectionLine(at);
     const ownHover = this.active?.onHover;
     ownHover?.call(this.active, ctx, at);
@@ -196,52 +233,93 @@ export class ToolController {
   cancel(): void {
     if (this.palette.isOpen) this.cancelPalette();
     else if (this.answer) this.closeQuestion(false);
-    else if (this.dragging) this.cancelDrag();
+    else if (this.toolDragger !== null) this.cancelToolDrag();
     else this.choose(DEFAULT_TOOL);
   }
 
-  /** True if the active tool takes the drag; otherwise the caller navigates. */
-  dragStart(at: Point2): boolean {
+  /** The pointer whose drag the active tool has, if any. */
+  private get toolDragger(): PointerSource | null {
+    for (const [source, grab] of this.grabs) if (grab.kind === "tool") return source;
+    return null;
+  }
+
+  /**
+   * True if the controller takes the drag (a button press, a scroll, or the active tool); otherwise the caller
+   * navigates. The active tool takes one pointer's drag at a time: while one hand moves an element or draws a wall,
+   * the other hand's drag navigates.
+   */
+  dragStart(at: Point2, source: PointerSource = "mouse"): boolean {
     const ctx = this.ctx();
     if (!ctx) return false;
+    this.cancelDrag(source);
     if (this.env?.isButton(at)) {
       // Pinches longer than a quick tap arrive as drags; on a button they are presses, never grabs or orbits.
-      this.pressing = true;
+      this.grabs.set(source, { kind: "press", start: at });
       return true;
     }
+    const scroll = this.env?.scrollAt(at) ?? null;
+    if (scroll) {
+      this.grabs.set(source, { kind: "scroll", scroll, last: at });
+      return true;
+    }
+    if (this.toolDragger !== null) return false;
     // A drag that starts on the section's outline grabs the section from any tool.
     if (this.onSectionLine(at) && this.snapshot.activeId !== "section") this.choose("section");
-    this.dragging = this.active?.onDragStart?.(ctx, at, ctx.pick(at)) ?? false;
-    this.lastDragAt = at;
-    return this.dragging;
+    if (!this.active?.onDragStart?.(ctx, at, ctx.pick(at))) return false;
+    this.grabs.set(source, { kind: "tool", last: at });
+    return true;
   }
 
-  drag(at: Point2): void {
-    const ctx = this.ctx();
-    if (!ctx || !this.dragging || this.pressing) return;
-    const delta: Point2 = [at[0] - this.lastDragAt[0], at[1] - this.lastDragAt[1]];
-    this.lastDragAt = at;
-    this.active?.onDrag?.(ctx, at, delta);
-  }
-
-  dragEnd(at: Point2): void {
-    if (this.pressing) {
-      this.pressing = false;
-      this.env?.press(at);
+  drag(at: Point2, source: PointerSource = "mouse"): void {
+    const grab = this.grabs.get(source);
+    if (!grab) return;
+    if (grab.kind === "press") {
+      // Moving up or down from a button in a scrolled area scrolls it instead of pressing.
+      if (Math.abs(at[1] - grab.start[1]) < SCROLL_SLOP) return;
+      const scroll = this.env?.scrollAt(grab.start) ?? null;
+      if (!scroll) return;
+      this.grabs.set(source, { kind: "scroll", scroll, last: grab.start });
+      this.drag(at, source);
+      return;
+    }
+    const delta: Point2 = [at[0] - grab.last[0], at[1] - grab.last[1]];
+    grab.last = at;
+    if (grab.kind === "scroll") {
+      grab.scroll.move(delta[1]);
       return;
     }
     const ctx = this.ctx();
-    if (!ctx || !this.dragging) return;
-    this.dragging = false;
-    this.active?.onDragEnd?.(ctx, at);
+    if (ctx) this.active?.onDrag?.(ctx, at, delta);
   }
 
-  cancelDrag(): void {
-    this.pressing = false;
-    const ctx = this.ctx();
-    if (!ctx || !this.dragging) return;
-    this.dragging = false;
-    this.active?.onDragCancel?.(ctx);
+  dragEnd(at: Point2, source: PointerSource = "mouse"): void {
+    const grab = this.grabs.get(source);
+    this.grabs.delete(source);
+    if (grab?.kind === "press") this.env?.press(at);
+    else if (grab?.kind === "scroll") grab.scroll.release();
+    else if (grab?.kind === "tool") {
+      const ctx = this.ctx();
+      if (ctx) this.active?.onDragEnd?.(ctx, at);
+    }
+  }
+
+  /** Drops a pointer's drag (every pointer's when none is given), committing nothing. */
+  cancelDrag(source?: PointerSource): void {
+    for (const [s, grab] of [...this.grabs]) {
+      if (source !== undefined && s !== source) continue;
+      this.grabs.delete(s);
+      if (grab.kind === "scroll") grab.scroll.release();
+      if (grab.kind === "tool") {
+        const ctx = this.ctx();
+        if (ctx) this.active?.onDragCancel?.(ctx);
+      }
+    }
+  }
+
+  /** Drops the active tool's drag, whichever pointer has it. */
+  private cancelToolDrag(): void {
+    const dragger = this.toolDragger;
+    if (dragger !== null) this.cancelDrag(dragger);
   }
 
   // Confirmation: nod or Enter answers yes, shake or Escape no.
@@ -281,18 +359,18 @@ export class ToolController {
         get isOpen() {
           return controller.paletteOpen;
         },
-        open: (position) =>
-          this.openPalette({ center: position, aspect: this.env?.handAspect() ?? 4 / 3 }, "hand"),
+        open: (position, ring, hand) =>
+          this.openPalette({ center: position, aspect: this.env?.handAspect() ?? 4 / 3 }, "hand", ring, hand),
         steer: (position) => this.steerPalette(position),
         release: () => this.releasePalette(),
         cancel: () => this.cancelPalette(),
       },
       tool: {
         tap: (p) => this.tap(toViewer(p)),
-        dragStart: (p) => this.dragStart(toViewer(p)),
-        drag: (p) => this.drag(toViewer(p)),
-        dragEnd: (p) => this.dragEnd(toViewer(p)),
-        dragCancel: () => this.cancelDrag(),
+        dragStart: (p, hand) => this.dragStart(toViewer(p), hand),
+        drag: (p, hand) => this.drag(toViewer(p), hand),
+        dragEnd: (p, hand) => this.dragEnd(toViewer(p), hand),
+        dragCancel: (hand) => this.cancelDrag(hand),
         nod: () => this.respond(true),
         shake: () => this.cancel(),
         clutch: (closed, held) => this.fist(closed, held),
@@ -359,7 +437,9 @@ export class ToolController {
     }
     const center =
       this.paletteSource === "hand" ? (this.env?.handToViewer(state.center) ?? state.center) : state.center;
-    this.update({ palette: { center, highlighted: state.highlighted } });
+    this.update({
+      palette: { center, highlighted: state.highlighted, ring: this.paletteRing, hand: this.paletteHand },
+    });
   }
 
   private update(partial: Partial<ToolSnapshot>): void {

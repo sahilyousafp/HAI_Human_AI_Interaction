@@ -439,7 +439,7 @@ export class AgentClient {
     return true;
   }
 
-  /** Stops everything, if anything works (two open palms by default). */
+  /** Stops everything, if anything works (both fists, then open hands, by default). */
   stopRunning(): void {
     if (this.busy) this.stop();
   }

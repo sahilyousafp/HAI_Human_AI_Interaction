@@ -1,5 +1,5 @@
 import { pinchPoint } from "@aex/perception";
-import type { GestureEvent, TrackedHand, TrackingFrame } from "@aex/protocol";
+import type { GestureEvent, Hand, Point2, TrackedHand, TrackingFrame } from "@aex/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { InputBus } from "../input/input-bus.ts";
 import { ToolIcon } from "../tools/ToolOverlays.tsx";
@@ -184,6 +184,7 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
             detectionStore.push(latestFrame.current, latestFaceRan.current, gestureState, events);
           }
           bus.setEngaged(gestureState.engaged);
+          bus.setStopArmed(gestureState.stopArmed);
           bus.emitGestures(events);
           if (import.meta.env.DEV && events.length > 0) {
             if (!window.__AEX_GESTURES__) window.__AEX_GESTURES__ = { events: [] };
@@ -195,14 +196,11 @@ export function TrackingPanel({ onCameraState, bus, renderLatency }: TrackingPan
         onFrame: (frame, frameStats, faceRan, rawHands) => {
           latestFrame.current = frame;
           latestFaceRan.current = faceRan;
-          // The pointer follows the right hand's pinch point, or the left hand if only it is visible; with both
-          // hands in view, the left one gets a second pointer.
-          const right = frame.hands.find((h) => h.handedness === "Right");
-          const left = frame.hands.find((h) => h.handedness === "Left");
-          const primary = right ?? left;
+          // Every visible hand is a pointer, at its pinch point.
+          const hands: Partial<Record<Hand, Point2>> = {};
+          for (const h of frame.hands) hands[h.handedness] = pinchPoint(h);
           bus.emitPointer({
-            position: primary ? pinchPoint(primary) : null,
-            secondary: right && left ? pinchPoint(left) : null,
+            hands,
             ...(frame.aspect ? { aspect: frame.aspect } : {}),
             ts: frame.captureTs,
           });

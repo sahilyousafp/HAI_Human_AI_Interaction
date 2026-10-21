@@ -26,6 +26,7 @@ describe("SettingsHub", () => {
         type: "settings.snapshot",
         payload: {
           palette: null,
+          createPalette: null,
           gestures: null,
           speech: "device",
           listenForNames: false,
@@ -40,16 +41,27 @@ describe("SettingsHub", () => {
     const file = settingsFile(tempRoot());
     const hub = new SettingsHub(file, () => {});
     hub.handle(set(LAYOUT));
-    hub.handle(setSettings({ gestures: { tap: "select", fist: "undo" } }));
+    hub.handle(setSettings({ gestures: { "tap.left": "select", "fist.right": "undo" } }));
     const sent: Message[] = [];
     new SettingsHub(file, () => {}).greet((m) => sent.push(m));
     expect(sent[0]).toMatchObject({
-      payload: { palette: LAYOUT, gestures: { tap: "select", fist: "undo" } },
+      payload: { palette: LAYOUT, gestures: { "tap.left": "select", "fist.right": "undo" } },
     });
   });
 
-  it("rejects an action a gesture does not offer at the protocol", () => {
+  it("rejects an action a gesture does not offer at the protocol, also in older settings", () => {
+    expect(() => setSettings({ gestures: { "drag.left": "undo" } })).toThrow(
+      /drag.left cannot be set to undo/,
+    );
     expect(() => setSettings({ gestures: { drag: "undo" } })).toThrow(/drag cannot be set to undo/);
+  });
+
+  it("the create ring's layout persists apart from the tools ring", () => {
+    const file = settingsFile(tempRoot());
+    new SettingsHub(file, () => {}).handle(setSettings({ createPalette: LAYOUT }));
+    const sent: Message[] = [];
+    new SettingsHub(file, () => {}).greet((m) => sent.push(m));
+    expect(sent[0]).toMatchObject({ payload: { palette: null, createPalette: LAYOUT } });
   });
 
   it("layout persists: a saved layout is what a restarted bridge greets with", () => {
@@ -61,6 +73,7 @@ describe("SettingsHub", () => {
         type: "settings.snapshot",
         payload: {
           palette: LAYOUT,
+          createPalette: null,
           gestures: null,
           speech: "device",
           listenForNames: false,

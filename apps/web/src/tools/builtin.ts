@@ -1,9 +1,10 @@
 import type { Element, Point3Mm, SceneOp } from "@aex/protocol";
+import { columnTool, copyTool, slabTool, wallTool } from "./create.ts";
+import { snap } from "./grid.ts";
 import type { ToolRegistry } from "./registry.ts";
 import type { Tool, ToolContext } from "./types.ts";
 
-/** Move and Add massing snap to this grid, millimetres. */
-export const SNAP_MM = 100;
+export { SNAP_MM, snap } from "./grid.ts";
 /** Size of a new massing block: width, depth, height, millimetres. */
 export const MASSING_SIZE: [number, number, number] = [6000, 6000, 3500];
 /** Section: a full camera-frame height of hand movement sweeps this many times the model's height. */
@@ -25,8 +26,6 @@ export function overSectionPlane(
   const pad = SECTION_PAD_MM;
   return p[0] >= min[0] - pad && p[0] <= max[0] + pad && p[1] >= min[1] - pad && p[1] <= max[1] + pad;
 }
-
-export const snap = (mm: number, step = SNAP_MM): number => Math.round(mm / step) * step;
 
 const distanceMm = (a: Point3Mm, b: Point3Mm) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
@@ -290,7 +289,10 @@ export const askAgentTool: Tool = {
   },
 };
 
-/** The palette ring at first start, clockwise from the top. Redo is available by key and in settings. */
+/**
+ * The tools ring at first start, clockwise from the top: the right hand's long pinch opens it. Redo is in the create
+ * ring, by key and in settings.
+ */
 export const DEFAULT_LAYOUT: Array<string | null> = [
   "select",
   "ask-agent",
@@ -313,6 +315,10 @@ export function registerBuiltinTools(registry: ToolRegistry): void {
     undoTool,
     redoTool,
     askAgentTool,
+    wallTool(),
+    slabTool(),
+    columnTool,
+    copyTool(),
   ]) {
     registry.register(tool);
   }

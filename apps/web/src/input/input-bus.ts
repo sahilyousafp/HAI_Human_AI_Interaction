@@ -1,11 +1,9 @@
-import type { GestureEvent, Point2 } from "@aex/protocol";
+import type { GestureEvent, Hand, Point2 } from "@aex/protocol";
 
-/** Where the hand pointer is (mirrored, normalised preview coordinates) and when it was captured. */
+/** Where the hand pointers are (mirrored, normalised preview coordinates) and when they were captured. */
 export interface PointerSample {
-  /** The right hand's pinch point, or the left hand's when only it is visible. Hover and selection follow it. */
-  position: Point2 | null;
-  /** The left hand's pinch point while both hands are visible, shown as a second, quieter pointer. */
-  secondary?: Point2 | null;
+  /** Each visible hand's pinch point: both hands point, hover and press alike. */
+  hands: Partial<Record<Hand, Point2>>;
   /** Width / height of the camera frame the positions are in. */
   aspect?: number;
   ts: number;
@@ -13,7 +11,7 @@ export interface PointerSample {
 
 type GestureListener = (events: GestureEvent[]) => void;
 type PointerListener = (sample: PointerSample) => void;
-type EngagedListener = (engaged: boolean) => void;
+type FlagListener = (value: boolean) => void;
 
 /**
  * Carries hand input from the tracking panel to whatever consumes it (the viewer, later the tool palette).
@@ -22,11 +20,18 @@ type EngagedListener = (engaged: boolean) => void;
 export class InputBus {
   private readonly gestureListeners = new Set<GestureListener>();
   private readonly pointerListeners = new Set<PointerListener>();
-  private readonly engagedListeners = new Set<EngagedListener>();
+  private readonly engagedListeners = new Set<FlagListener>();
+  private readonly stopArmedListeners = new Set<FlagListener>();
   private engagedNow = false;
+  private stopArmedNow = false;
 
   get engaged(): boolean {
     return this.engagedNow;
+  }
+
+  /** Both hands are fists: opening them now stops the agents (the HUD says so). */
+  get stopArmed(): boolean {
+    return this.stopArmedNow;
   }
 
   onGestures(listener: GestureListener): () => void {
@@ -39,9 +44,14 @@ export class InputBus {
     return () => this.pointerListeners.delete(listener);
   }
 
-  onEngaged(listener: EngagedListener): () => void {
+  onEngaged(listener: FlagListener): () => void {
     this.engagedListeners.add(listener);
     return () => this.engagedListeners.delete(listener);
+  }
+
+  onStopArmed(listener: FlagListener): () => void {
+    this.stopArmedListeners.add(listener);
+    return () => this.stopArmedListeners.delete(listener);
   }
 
   emitGestures(events: GestureEvent[]): void {
@@ -57,5 +67,11 @@ export class InputBus {
     if (engaged === this.engagedNow) return;
     this.engagedNow = engaged;
     for (const listener of this.engagedListeners) listener(engaged);
+  }
+
+  setStopArmed(armed: boolean): void {
+    if (armed === this.stopArmedNow) return;
+    this.stopArmedNow = armed;
+    for (const listener of this.stopArmedListeners) listener(armed);
   }
 }

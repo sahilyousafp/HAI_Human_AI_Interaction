@@ -52,9 +52,18 @@ export interface GestureConfig {
     /** A fist must hold (or be released) this long before clutch starts (or ends). */
     debounceMs: number;
   };
+  twoHand: {
+    /**
+     * Both pinches must begin within this of each other to become a two-hand pinch (navigation). A hand that already
+     * holds (a ring is open) or drags on its own keeps its own gesture, and the other hand's pinch stays separate.
+     */
+    startWindowMs: number;
+  };
   stop: {
-    /** Both open palms held toward the camera this long (while engaged) is a stop. */
-    palmsMs: number;
+    /** Both hands closed into fists together this long arms the stop... */
+    fistsMs: number;
+    /** ...and both palms opened toward the camera within this of the fists opening stops. */
+    openMs: number;
   };
   head: {
     windowMs: number;
@@ -91,6 +100,7 @@ export const DEFAULT_GESTURES: GestureConfig = {
   },
   posture: { extended: 1.35, curled: 1.15, thumbSpread: 0.45, palmFacing: 0.5 },
   clutch: { debounceMs: 100 },
-  stop: { palmsMs: 500 },
+  twoHand: { startWindowMs: 300 },
+  stop: { fistsMs: 250, openMs: 1000 },
   head: { windowMs: 1200, nodDegrees: 8, shakeDegrees: 10, reversals: 2, cooldownMs: 1000 },
 };

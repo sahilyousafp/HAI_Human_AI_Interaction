@@ -88,7 +88,7 @@ test('"make this 300 thick" while pointing: the wall gets marker 1 and is the fi
     await page.getByTestId("mic-button").click();
     // Point at the wall while speaking (the phrase starts a second after the microphone opens).
     await expect(page.getByTestId("voice-bar")).toContainText("Listening", { timeout: 30_000 });
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), handAt(wall));
+    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, wall));
     const marker = page.getByTestId("reference-marker");
     await expect(marker).toHaveText("1");
     await expect(marker).toHaveAttribute("data-element", "wall-s");

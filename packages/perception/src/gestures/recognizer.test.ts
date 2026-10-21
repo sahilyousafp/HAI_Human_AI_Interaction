@@ -162,28 +162,59 @@ describe("head gestures (spec: nod and shake are recognised)", () => {
   });
 });
 
-describe("two-palm stop (spec: both open palms for 500 ms stop the turn)", () => {
-  // A left open palm is the right one mirrored: the posture checks are symmetric.
-  const openLeft: TrackedHand = {
-    ...openRight,
-    handedness: "Left",
-    image: openRight.image.map(([x, y, z]) => [1 - x, y, z]),
-    world: openRight.world.map(([x, y, z]) => [-x, y, z]),
-  };
-  const palms = (n: number) => repeat(n, { hands: [openLeft, openRight] });
-  const stops = (events: GestureEvent[]) => events.filter((e) => e.type === "palms.stop");
+// A left hand is the right one mirrored: the posture checks are symmetric.
+const mirrorToLeft = (h: TrackedHand): TrackedHand => ({
+  ...h,
+  handedness: "Left",
+  image: h.image.map(([x, y, z]) => [1 - x, y, z]),
+  world: h.world.map(([x, y, z]) => [-x, y, z]),
+});
+const openLeft = mirrorToLeft(openRight);
+const fistRight = template("two-hands", (h) => h.handedness === "Right" && posture(h) === "fist");
+const fistLeft = mirrorToLeft(fistRight);
+const neutralLeft = mirrorToLeft(neutralRight);
 
-  it("the mirrored template is an open left palm", () => {
+describe("stop (spec: both fists, then both hands opened, stop the agents)", () => {
+  const fists = (n: number) => repeat(n, { hands: [fistLeft, fistRight] });
+  const palms = (n: number) => repeat(n, { hands: [openLeft, openRight] });
+  const stops = (events: GestureEvent[]) => events.filter((e) => e.type === "hands.stop");
+
+  it("the templates have the postures they are named for", () => {
     expect(posture(openLeft)).toBe("open-palm");
+    expect(posture(fistLeft)).toBe("fist");
+    expect(posture(fistRight)).toBe("fist");
   });
 
-  it("fires once after 500 ms of both palms, and again only after a hand is lowered", () => {
-    const short = play([...engageSteps, ...palms(14)]); // 433 ms
-    expect(stops(short)).toEqual([]);
-    const held = play([...engageSteps, ...palms(30)]);
-    expect(stops(held)).toHaveLength(1);
-    const again = play([...engageSteps, ...palms(20), ...repeat(3, { hands: [openRight] }), ...palms(20)]);
-    expect(stops(again)).toHaveLength(2);
+  it("fists held for 250 ms then both hands opened fire one stop", () => {
+    const events = play([...engageSteps, ...fists(10), ...palms(30)]);
+    expect(stops(events)).toHaveLength(1);
+  });
+
+  it("open palms alone never stop, however long they are held", () => {
+    expect(stops(play([...engageSteps, ...palms(90)]))).toEqual([]);
+  });
+
+  it("fists held too briefly, one fist only, or opening too late do not stop", () => {
+    expect(stops(play([...engageSteps, ...fists(5), ...palms(10)]))).toEqual([]); // 167 ms of fists
+    expect(
+      stops(play([...engageSteps, ...repeat(12, { hands: [openLeft, fistRight] }), ...palms(10)])),
+    ).toEqual([]);
+    // Hands relaxed for 1.2 s between the fists and the palms.
+    const late = play([
+      ...engageSteps,
+      ...fists(10),
+      ...repeat(36, { hands: [neutralLeft, neutralRight] }),
+      ...palms(10),
+    ]);
+    expect(stops(late)).toEqual([]);
+  });
+
+  it("is armed while both fists are held, so the HUD can say to open the hands", () => {
+    const recognizer = new GestureRecognizer();
+    play([...engageSteps, ...fists(10)], recognizer);
+    expect(recognizer.state.stopArmed).toBe(true);
+    play(palms(3), recognizer);
+    expect(recognizer.state.stopArmed).toBe(false);
   });
 
   it("does nothing while not engaged", () => {
@@ -191,7 +222,48 @@ describe("two-palm stop (spec: both open palms for 500 ms stop the turn)", () =>
       ...DEFAULT_GESTURES,
       engage: { ...DEFAULT_GESTURES.engage, openPalmMs: 60_000 },
     });
-    expect(stops(play(palms(30), recognizer))).toEqual([]);
+    expect(stops(play([...fists(10), ...palms(10)], recognizer))).toEqual([]);
+  });
+});
+
+describe("independent hands (spec: two pinches are one gesture only when they start together)", () => {
+  const twoHandStarts = (events: GestureEvent[]) => events.filter((e) => e.type === "twohand.start");
+
+  it("a long pinch on one hand keeps its ring: the other hand's pinch is its own tap", () => {
+    const events = play([
+      ...engageSteps,
+      ...repeat(4, { hands: [neutralLeft, neutralRight] }),
+      ...repeat(30, { hands: [neutralLeft, pinchRight] }), // right holds (long pinch at 800 ms)
+      ...repeat(6, { hands: [pinchLeft, pinchRight] }), // left pinches while the right still holds
+      ...repeat(4, { hands: [neutralLeft, pinchRight] }), // left lets go
+    ]);
+    expect(events).toContainEqual(expect.objectContaining({ type: "pinch.hold", hand: "Right" }));
+    expect(twoHandStarts(events)).toEqual([]);
+    expect(events).toContainEqual(expect.objectContaining({ type: "pinch.tap", hand: "Left" }));
+  });
+
+  it("a hand already dragging keeps its drag while the other hand taps", () => {
+    const events = play([
+      ...engageSteps,
+      ...repeat(4, { hands: [neutralLeft, neutralRight] }),
+      ...repeat(15, (i) => ({ hands: [neutralLeft, shift(pinchRight, -0.006 * i)] })), // right drags
+      ...repeat(6, (i) => ({ hands: [pinchLeft, shift(pinchRight, -0.09 - 0.006 * i)] })),
+      ...repeat(4, (i) => ({ hands: [neutralLeft, shift(pinchRight, -0.126 - 0.006 * i)] })),
+    ]);
+    expect(twoHandStarts(events)).toEqual([]);
+    expect(events).toContainEqual(expect.objectContaining({ type: "pinch.tap", hand: "Left" }));
+    const rightUpdates = events.filter((e) => e.type === "pinch.drag.update" && e.hand === "Right");
+    expect(rightUpdates.length).toBeGreaterThan(15);
+  });
+
+  it("one hand pinching still, then the other: still a two-hand pinch", () => {
+    const events = play([
+      ...engageSteps,
+      ...repeat(4, { hands: [neutralLeft, neutralRight] }),
+      ...repeat(12, { hands: [neutralLeft, pinchRight] }), // 400 ms, before a long pinch
+      ...repeat(10, { hands: [pinchLeft, pinchRight] }),
+    ]);
+    expect(twoHandStarts(events)).toHaveLength(1);
   });
 });
 

@@ -448,7 +448,7 @@ function TeamStrip({
               className="team-stop"
               data-testid="team-stop"
               data-hand-press
-              title="Stop every agent (or hold up both open palms)"
+              title="Stop every agent (or clench both fists, then open your hands)"
               onClick={() => client.stop()}
             >
               Stop all
@@ -517,8 +517,8 @@ function TaskHead({
 /**
  * The agent panel over the model: the conversation with Mochi, the team lead, the team strip and each specialist's
  * work on its tasks, tool calls as chips, approval cards, status, a typed input and stop. Its buttons can be pressed
- * by hand; gestures reach it through the input router (a nod or shake answers the only waiting card, two open palms
- * stop everything).
+ * by hand; gestures reach it through the input router (a nod or shake answers the only waiting card, both fists then
+ * open hands stop everything).
  */
 export function AgentPanel({
   client,
@@ -739,7 +739,7 @@ export function AgentPanel({
                 data-testid="agent-stop"
                 data-hand-press
                 aria-label="Stop the agent"
-                title="Stop (or hold up both open palms)"
+                title="Stop (or clench both fists, then open your hands)"
                 onClick={() => client.stop()}
               >
                 <ToolIcon path={STOP_ICON} size={16} />

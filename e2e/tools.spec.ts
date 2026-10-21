@@ -115,7 +115,7 @@ test.describe("palette", () => {
     await start(page);
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
     const ts = await now(page);
-    const p = handAt([0.4, 0.5]);
+    const p = await handAt(page, [0.4, 0.5]);
     const right: [number, number] = [p[0] + 0.12, p[1]];
     const ev = (type: string, dt: number, position: [number, number], extra = {}) => ({
       type,
@@ -400,14 +400,14 @@ test.describe("hand UX regressions", () => {
     await start(page);
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
     const ts = await now(page);
-    const p = handAt([0.4, 0.5]);
+    const p = await handAt(page, [0.4, 0.5]);
     await inject(page, [
       ev("pinch.drag.start", ts, p),
       ev("pinch.hold", ts + 600, p),
       ev("pinch.drag.end", ts + 700, p),
     ]);
     await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), p);
-    await expect(page.getByTestId("hand-pointer")).toBeVisible();
+    await expect(page.getByTestId("hand-pointer-right")).toBeVisible();
   });
 
   test("holding still on the section plane keeps holding it instead of opening the palette", async ({
@@ -417,7 +417,7 @@ test.describe("hand UX regressions", () => {
     await page.keyboard.press("s");
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
     const ts = await now(page);
-    const p = handAt([0.5, 0.45]);
+    const p = await handAt(page, [0.5, 0.45]);
     await inject(page, [ev("pinch.drag.start", ts, p), ev("pinch.hold", ts + 600, p)]);
     await expect(page.getByTestId("tool-palette")).toHaveCount(0);
     const before = (await tools(page)).overlay.sectionMm ?? 0;
@@ -440,7 +440,7 @@ test.describe("hand UX regressions", () => {
         (b.x + b.width / 2 - box.x) / box.width,
         (b.y + b.height / 2 - box.y) / box.height,
       ];
-      await inject(page, [ev("pinch.tap", await now(page), handAt(at))]);
+      await inject(page, [ev("pinch.tap", await now(page), await handAt(page, at))]);
     };
     // Cancel: back to Select from the active tool chip.
     await page.keyboard.press("d");
@@ -467,9 +467,9 @@ test.describe("hand UX regressions", () => {
   }) => {
     await start(page);
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-    const pointer = page.getByTestId("hand-pointer");
-    const pointAt = (at: [number, number]) =>
-      page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), handAt(at));
+    const pointer = page.getByTestId("hand-pointer-right");
+    const pointAt = async (at: [number, number]) =>
+      page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, at));
     await pointAt([0.3, 0.6]);
     await expect(pointer).toHaveAttribute("data-mode", "select");
     await expect(pointer.locator("svg")).toHaveCount(0);
@@ -489,7 +489,7 @@ test.describe("hand UX regressions", () => {
     if (!b) throw new Error("no cancel button");
     await pointAt([(b.x + b.width / 2 - box.x) / box.width, (b.y + b.height / 2 - box.y) / box.height]);
     await expect(pointer).toHaveAttribute("data-mode", "press");
-    await expect(page.getByTestId("tool-cancel")).toHaveAttribute("data-hand-hover", "");
+    await expect(page.getByTestId("tool-cancel")).toHaveAttribute("data-hand-hover", "right");
   });
 
   test("the pointer survives a short tracking dropout, and shows dimmed when not engaged", async ({
@@ -497,8 +497,8 @@ test.describe("hand UX regressions", () => {
   }) => {
     await start(page);
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-    const pointer = page.getByTestId("hand-pointer");
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), handAt([0.4, 0.5]));
+    const pointer = page.getByTestId("hand-pointer-right");
+    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, [0.4, 0.5]));
     await expect(pointer).toBeVisible();
     await page.evaluate(() => window.__AEX_INPUT__?.pointer(null)); // one frame without the hand
     await page.waitForTimeout(100);
@@ -506,7 +506,7 @@ test.describe("hand UX regressions", () => {
     await page.waitForTimeout(300); // gone for longer: the pointer goes
     await expect(pointer).toHaveCount(0);
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(false));
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), handAt([0.4, 0.5]));
+    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, [0.4, 0.5]));
     await expect(pointer).toHaveAttribute("data-engaged", "false");
   });
 
@@ -529,7 +529,10 @@ test.describe("hand UX regressions", () => {
     const box = await viewerBox(page);
     const b = await page.getByTestId("section-clear").boundingBox();
     if (!b) throw new Error("no remove button");
-    const at = handAt([(b.x + b.width / 2 - box.x) / box.width, (b.y + b.height / 2 - box.y) / box.height]);
+    const at = await handAt(page, [
+      (b.x + b.width / 2 - box.x) / box.width,
+      (b.y + b.height / 2 - box.y) / box.height,
+    ]);
     const ts = await now(page);
     // A pinch held about half a second: the recogniser reports it as a drag, not a tap.
     await inject(page, [

@@ -23,7 +23,7 @@ const EVENT_LABEL: Partial<Record<GestureEvent["type"], string>> = {
   "twohand.end": "two-hand end",
   "head.nod": "nod",
   "head.shake": "shake",
-  "palms.stop": "two-palm stop",
+  "hands.stop": "stop (fists, then open hands)",
 };
 
 function describe(event: GestureEvent): string {
@@ -56,6 +56,11 @@ export function GesturePanel({ store, cameraOn }: { store: GestureStore; cameraO
           {state.engaged ? "Engaged" : "Not engaged"}
         </span>
         {state.twoHand && <span className="gesture-pill two">Two hands</span>}
+        {state.stopArmed && (
+          <span className="gesture-pill stop" data-testid="hud-stop-armed">
+            Open both hands to stop
+          </span>
+        )}
       </div>
       {cameraOn && !state.engaged && (
         <p className="gesture-hint">Hold an open palm toward the camera to engage.</p>

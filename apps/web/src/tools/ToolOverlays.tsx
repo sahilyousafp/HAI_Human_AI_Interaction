@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { SceneClient } from "../scene/scene-client.ts";
 import { redoTool, undoTool } from "./builtin.ts";
-import type { ToolController } from "./controller.ts";
+import type { Ring, ToolController } from "./controller.ts";
 import { SLOT_COUNT, SLOT_NAMES } from "./palette.ts";
 
 /** An x, for the controls that close or remove something. */
@@ -28,20 +28,26 @@ export function ToolIcon({ path, size = 22 }: { path: string; size?: number }) {
   );
 }
 
+/** What each ring is called on screen. */
+export const RING_NAMES: Record<Ring, string> = { tools: "Tools ring", create: "Create ring" };
+
 /** The radial palette: 8 slots around where it was opened, the highlighted one filled. */
 function Palette({ controller }: { controller: ToolController }) {
-  const { palette, layout } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const { palette, layouts } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   if (!palette) return null;
+  const layout = layouts[palette.ring];
   const highlightedId = palette.highlighted === null ? null : layout[palette.highlighted];
   const highlightedLabel = highlightedId ? controller.registry.get(highlightedId)?.label : undefined;
   return (
     <div
       className="tool-palette"
       data-testid="tool-palette"
+      data-ring={palette.ring}
+      data-hand={palette.hand?.toLowerCase() ?? ""}
       style={{ left: `${palette.center[0] * 100}%`, top: `${palette.center[1] * 100}%` }}
     >
       <span className="visually-hidden" role="status">
-        Tool palette open:{" "}
+        {RING_NAMES[palette.ring]} open:{" "}
         {highlightedLabel ?? "move toward a tool and release, or release in the centre to cancel"}
       </span>
       <span className="palette-centre" aria-hidden="true" />
@@ -211,16 +217,42 @@ export function UndoStrip({ client }: { client: SceneClient }) {
   );
 }
 
-/** Which tools sit in which slot of the ring; available tools include any registered at runtime. */
+/** How each ring opens, for its settings tab. */
+const RING_HOW: Record<Ring, string> = {
+  tools: "right hand's long pinch, Space or hold right-click",
+  create: "left hand's long pinch, Shift+Space or Shift and hold right-click",
+};
+
+/**
+ * Which tools sit in which slot of each ring, one tab per ring; available tools include any registered at
+ * runtime.
+ */
 export function PaletteSettings({ controller }: { controller: ToolController }) {
-  const { layout } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const { layouts } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const [ring, setRing] = useState<Ring>("tools");
+  const layout = layouts[ring];
   const tools = controller.registry.list();
   return (
     <section className="palette-settings" aria-label="Tool palette">
       <header className="detection-head">
         <h2>Tool palette</h2>
-        <span className="muted">long pinch, Space or hold right-click</span>
+        <span className="muted">{RING_HOW[ring]}</span>
       </header>
+      <div className="ring-tabs" role="tablist" aria-label="Ring">
+        {(["tools", "create"] as const).map((r) => (
+          <button
+            key={r}
+            type="button"
+            role="tab"
+            className="ring-tab"
+            data-testid={`ring-tab-${r}`}
+            aria-selected={ring === r}
+            onClick={() => setRing(r)}
+          >
+            {RING_NAMES[r]}
+          </button>
+        ))}
+      </div>
       <div className="palette-settings-grid">
         {SLOT_NAMES.map((name, slot) => (
           <label key={name} className="field">
@@ -231,7 +263,7 @@ export function PaletteSettings({ controller }: { controller: ToolController }) 
               onChange={(e) => {
                 const next = [...layout];
                 next[slot] = e.target.value || null;
-                controller.setLayout(next);
+                controller.setLayout(next, ring);
               }}
             >
               <option value="">Empty</option>

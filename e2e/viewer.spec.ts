@@ -88,13 +88,13 @@ test.describe("hand pointer and selection", () => {
     await openViewer(page);
     const at = await findElementOnScreen(page, "block-b");
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), handAt(at));
-    await expect(page.getByTestId("hand-pointer")).toBeVisible();
+    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, at));
+    await expect(page.getByTestId("hand-pointer-right")).toBeVisible();
     const ts = await now(page);
     await page.evaluate(
       ({ position, ts }) =>
         window.__AEX_INPUT__?.gestures([{ type: "pinch.tap", ts, confidence: 1, hand: "Right", position }]),
-      { position: handAt(at), ts },
+      { position: await handAt(page, at), ts },
     );
     await expect(page.getByTestId("selection-status")).toHaveText("Block B tower (massing)");
     await expect.poll(() => bridge?.scene.scene.selection).toEqual(["block-b"]);
@@ -116,11 +116,11 @@ test.describe("hand pointer and selection", () => {
     await page.evaluate(
       ({ position, ts }) =>
         window.__AEX_INPUT__?.gestures([{ type: "pinch.tap", ts, confidence: 1, hand: "Right", position }]),
-      { position: handAt(empty as [number, number]), ts },
+      { position: await handAt(page, empty as [number, number]), ts },
     );
     await expect(page.getByTestId("selection-status")).toHaveText("Nothing selected");
   });
-  test("with both hands visible the left hand gets a second, grey pointer; hover stays with the right", async ({
+  test("both hands are pointers, each in its own colour; not engaged, both still show, dimmed", async ({
     page,
   }) => {
     bridge = await startTestBridge(page);
@@ -128,31 +128,42 @@ test.describe("hand pointer and selection", () => {
     const at = await findElementOnScreen(page, "block-b");
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
     // One hand: one pointer.
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), handAt(at));
-    await expect(page.getByTestId("hand-pointer")).toBeVisible();
-    await expect(page.getByTestId("hand-pointer-secondary")).toHaveCount(0);
-    // Both hands: the left one shows in light grey, away from the right one.
+    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, at));
+    await expect(page.getByTestId("hand-pointer-right")).toBeVisible();
+    await expect(page.getByTestId("hand-pointer-left")).toHaveCount(0);
+    // Both hands: two full pointers, in the colours the camera overlay draws each hand in.
     await page.evaluate(([p, q]) => window.__AEX_INPUT__?.pointer(p, q), [
-      handAt(at),
-      handAt([0.15, 0.2]),
+      await handAt(page, at),
+      await handAt(page, [0.15, 0.2]),
     ] as const);
-    const secondary = page.getByTestId("hand-pointer-secondary");
-    await expect(secondary).toBeVisible();
+    const left = page.getByTestId("hand-pointer-left");
+    await expect(left).toBeVisible();
+    await expect(left).toHaveAttribute("data-mode", "select");
     const colors = await page.evaluate(() => {
       const css = (id: string) => {
         const el = document.querySelector(`[data-testid="${id}"]`);
         return el ? getComputedStyle(el).borderTopColor : null;
       };
-      return { primary: css("hand-pointer"), secondary: css("hand-pointer-secondary") };
+      const hand = getComputedStyle(document.documentElement).getPropertyValue("--hand-left").trim();
+      const probe = document.createElement("div");
+      probe.style.color = hand;
+      document.body.append(probe);
+      const leftHand = getComputedStyle(probe).color;
+      probe.remove();
+      return { right: css("hand-pointer-right"), left: css("hand-pointer-left"), leftHand };
     });
-    expect(colors.secondary).not.toBe(colors.primary);
-    // Not engaged: the pointer still shows where the hand is, dimmed, and nothing is hovered.
+    expect(colors.left).toBe(colors.leftHand);
+    expect(colors.left).not.toBe(colors.right);
+    // Hover in the model follows the right hand until the left one pinches.
+    await expect(page.getByTestId("hand-pointer-right")).toHaveAttribute("data-focus", "true");
+    // Not engaged: the pointers still show where the hands are, dimmed.
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(false));
     await page.evaluate(([p, q]) => window.__AEX_INPUT__?.pointer(p, q), [
-      handAt(at),
-      handAt([0.15, 0.2]),
+      await handAt(page, at),
+      await handAt(page, [0.15, 0.2]),
     ] as const);
-    await expect(page.getByTestId("hand-pointer")).toHaveAttribute("data-engaged", "false");
+    await expect(page.getByTestId("hand-pointer-right")).toHaveAttribute("data-engaged", "false");
+    await expect(left).toHaveAttribute("data-engaged", "false");
   });
 });
 

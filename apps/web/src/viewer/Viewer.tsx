@@ -1,4 +1,4 @@
-import type { Element, GestureEvent, Point2, Point3Mm, SceneDocument, SunSetting } from "@aex/protocol";
+import type { Element, GestureEvent, Hand, Point2, Point3Mm, SceneDocument, SunSetting } from "@aex/protocol";
 import { sunLightDirection } from "@aex/scene";
 import { Edges, Grid } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
@@ -11,9 +11,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 import * as THREE from "three";
 import { canvasToPng, type ViewLink } from "../agent/view-link.ts";
 import { isSoftwareRenderer } from "../gpu.ts";
+import { grabScroll } from "../input/hand-scroll.ts";
 import type { InputBus } from "../input/input-bus.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
 import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
@@ -54,20 +56,54 @@ function distanceToSegment([px, py]: Point2, [ax, ay]: Point2, [bx, by]: Point2)
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-/** The on-screen button (marked `data-hand-press`) at a viewer position, if any: hands can press HUD buttons. */
-function handButtonAt(wrapper: HTMLElement | null, [x, y]: Point2): HTMLButtonElement | null {
+/** What a hand can press, like a click: buttons, links, checkboxes and their labels, and anything marked so. */
+const PRESSABLE =
+  'button, a[href], summary, label, input[type="checkbox"], input[type="radio"], [data-hand-press]';
+
+/** A DOM element (the scene's `Element` type shadows the DOM's name in this file). */
+type DomElement = globalThis.Element;
+
+/** The page element at a viewer position (it may lie outside the viewer, over the sidebar). */
+function elementAt(wrapper: HTMLElement | null, [x, y]: Point2): DomElement | null {
   if (!wrapper) return null;
   const rect = wrapper.getBoundingClientRect();
-  const el = document.elementFromPoint(rect.left + x * rect.width, rect.top + y * rect.height);
-  const button = el?.closest<HTMLButtonElement>("[data-hand-press]");
-  return button && wrapper.contains(button) && !button.disabled ? button : null;
+  return document.elementFromPoint(rect.left + x * rect.width, rect.top + y * rect.height);
 }
 
-/** Whether a viewer position is over a HUD panel (marked `data-hud`), where the hand must not reach the model. */
-function overHud(wrapper: HTMLElement | null, [x, y]: Point2): boolean {
+/**
+ * The control a pinch would press at a viewer position, if any: hands press what the mouse clicks. A label counts
+ * only for a checkbox or radio button (a click on it toggles that); dropdowns and text fields need the mouse.
+ */
+function pressableAt(wrapper: HTMLElement | null, at: Point2): HTMLElement | null {
+  const target = elementAt(wrapper, at)?.closest<HTMLElement>(PRESSABLE) ?? null;
+  if (!target || (target as HTMLButtonElement | HTMLInputElement).disabled) return null;
+  if (target instanceof HTMLLabelElement) {
+    const control = target.control;
+    const toggles =
+      control instanceof HTMLInputElement && (control.type === "checkbox" || control.type === "radio");
+    return toggles && !control.disabled ? target : null;
+  }
+  return target;
+}
+
+/** The nearest scrolled area at a viewer position that has more to show (a pinch-drag there scrolls it). */
+function scrollableAt(wrapper: HTMLElement | null, at: Point2): HTMLElement | null {
+  for (let el = elementAt(wrapper, at); el && el !== document.body; el = el.parentElement) {
+    if (!(el instanceof HTMLElement)) continue;
+    const { overflowY } = getComputedStyle(el);
+    if ((overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight + 1) return el;
+  }
+  return null;
+}
+
+/**
+ * Whether a viewer position is off the model for picking: over a HUD panel (marked `data-hud`), or outside the
+ * viewer altogether (a hand pointer over the sidebar).
+ */
+function overHud(wrapper: HTMLElement | null, at: Point2): boolean {
   if (!wrapper) return false;
-  const rect = wrapper.getBoundingClientRect();
-  const el = document.elementFromPoint(rect.left + x * rect.width, rect.top + y * rect.height);
+  if (at[0] < 0 || at[0] > 1 || at[1] < 0 || at[1] > 1) return true;
+  const el = elementAt(wrapper, at);
   return Boolean(el?.closest("[data-hud]") && wrapper.contains(el));
 }
 
@@ -90,13 +126,16 @@ declare global {
       sectionOutline(): Point2[];
       /** The sun a study set, or null for the viewer's own light. */
       sun(): SunSetting | null;
+      /** The pinch point (camera frame) that puts a hand's pointer at a viewer position: the inverse mapping. */
+      handAt(x: number, y: number): Point2;
     };
     /** Dev builds only: the tool controller, for end-to-end tests. */
     __AEX_TOOLS__?: ToolController;
     /** Dev builds only: inject hand input exactly as the tracker would. */
     __AEX_INPUT__?: {
       gestures(events: GestureEvent[]): void;
-      pointer(position: Point2 | null, secondary?: Point2 | null): void;
+      /** The right hand's pinch point, and the left hand's (null where that hand is not in view). */
+      pointer(right: Point2 | null, left?: Point2 | null): void;
       engaged(engaged: boolean): void;
     };
   }
@@ -135,10 +174,55 @@ function projectStatusText(scene: SceneState): string {
   return "Sample (not saved)";
 }
 
-/** Pointer position on the viewer (0..1, y down) from the hand pointer in camera-frame coordinates. */
-export function handToViewer([x, y]: Point2): Point2 {
+/** Where a hand points across the workspace (0..1, y down) from its pinch point in camera-frame coordinates. */
+export function handToWorkspace([x, y]: Point2): Point2 {
   const map = (v: number) => Math.min(1, Math.max(0, 0.5 + (v - 0.5) * POINTER_GAIN));
   return [map(x), map(y)];
+}
+
+/** The part of the workspace (the model and the sidebar) on screen, which hand pointers span. */
+function workspaceRect(wrapper: HTMLElement | null): DOMRect | null {
+  const ws = wrapper?.closest(".workspace")?.getBoundingClientRect();
+  if (!ws) return wrapper?.getBoundingClientRect() ?? null;
+  const left = Math.max(ws.left, 0);
+  const top = Math.max(ws.top, 0);
+  return new DOMRect(
+    left,
+    top,
+    Math.min(ws.right, innerWidth) - left,
+    Math.min(ws.bottom, innerHeight) - top,
+  );
+}
+
+/** A hand's pointer as a viewer position (0..1 across the viewer; beyond it over the sidebar) and on screen (px). */
+function handPointer(wrapper: HTMLElement | null, hand: Point2): { at: Point2; client: Point2 } {
+  const ws = workspaceRect(wrapper);
+  const viewer = wrapper?.getBoundingClientRect();
+  const [u, v] = handToWorkspace(hand);
+  if (!ws || !viewer || viewer.width === 0 || viewer.height === 0) return { at: [u, v], client: [0, 0] };
+  const client: Point2 = [ws.left + u * ws.width, ws.top + v * ws.height];
+  return { at: [(client[0] - viewer.left) / viewer.width, (client[1] - viewer.top) / viewer.height], client };
+}
+
+/** The pinch point (camera frame) whose pointer lands on a viewer position: `handPointer` inverted. */
+function viewerToHand(wrapper: HTMLElement | null, [x, y]: Point2): Point2 {
+  const ws = workspaceRect(wrapper);
+  const viewer = wrapper?.getBoundingClientRect();
+  if (!ws || !viewer) return [x, y];
+  const u = (viewer.left + x * viewer.width - ws.left) / ws.width;
+  const v = (viewer.top + y * viewer.height - ws.top) / ws.height;
+  return [0.5 + (u - 0.5) / POINTER_GAIN, 0.5 + (v - 0.5) / POINTER_GAIN];
+}
+
+interface HandPointerState {
+  /** Viewer position (0..1 across the viewer; beyond it over the sidebar). */
+  at: Point2;
+  /** Where it is drawn on screen, px. */
+  client: Point2;
+  /** Over a control a pinch would press. */
+  overControl: boolean;
+  /** The focus hand: it drives hover in the model and what "this" and "here" mean. */
+  focus: boolean;
 }
 
 function ElementMesh({
@@ -150,6 +234,7 @@ function ElementMesh({
   marked,
   offsetMm,
   sectionMm,
+  draft = false,
 }: {
   element: Element;
   doc: SceneDocument;
@@ -162,6 +247,8 @@ function ElementMesh({
   offsetMm: [number, number] | null;
   /** Section height, mm, or null. */
   sectionMm: number | null;
+  /** Not created yet (a create tool or Copy is placing it): see-through, and never picked. */
+  draft?: boolean;
 }) {
   const geometry = useMemo(() => elementGeometry(element, doc.levels), [element, doc.levels]);
   useEffect(() => () => geometry.dispose(), [geometry]);
@@ -177,6 +264,14 @@ function ElementMesh({
   if (selected) color = colors.selected;
   if (marked) color = colors.risk;
   const offset: [number, number, number] = offsetMm ? [offsetMm[0] * MM, offsetMm[1] * MM, 0] : [0, 0, 0];
+  if (draft) {
+    return (
+      <mesh geometry={geometry} raycast={() => null} renderOrder={1}>
+        <meshStandardMaterial color={colors.selected} transparent opacity={0.55} depthWrite={false} />
+        <Edges threshold={20} color={colors.selected} />
+      </mesh>
+    );
+  }
   return (
     <mesh geometry={geometry} position={offset} castShadow receiveShadow userData={{ elementId: element.id }}>
       <meshStandardMaterial color={color} roughness={0.9} metalness={0} />
@@ -424,10 +519,10 @@ export function Viewer({
   const rendersRef = useRef<() => number>(() => 0);
   const framed = useRef(false);
   const navigating = useRef(false);
-  const [pointer, setPointer] = useState<Point2 | null>(null);
+  /** Each visible hand's pointer: its viewer position, where it is on screen, and whether it is over a control. */
+  const [pointers, setPointers] = useState<Partial<Record<Hand, HandPointerState>>>({});
   const [engaged, setEngaged] = useState(bus.engaged);
-  const [overButton, setOverButton] = useState(false);
-  const [secondaryPointer, setSecondaryPointer] = useState<Point2 | null>(null);
+  const [stopArmed, setStopArmed] = useState(bus.stopArmed);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [p90, setP90] = useState<number | null>(null);
   const [projectPath, setProjectPath] = useState("");
@@ -437,13 +532,12 @@ export function Viewer({
   askAgentRef.current = askAgent;
 
   useEffect(() => view.setPointed(hoverId), [view, hoverId]);
-  // Where the hand pointer meets the ground, for a spoken "here".
-  const pointerRef = useRef(pointer);
-  pointerRef.current = pointer;
+  // Where the focus hand's pointer meets the ground, for a spoken "here".
+  const groundAtRef = useRef<Point2 | null>(null);
   useEffect(
     () =>
       view.attachGround(() => {
-        const at = pointerRef.current;
+        const at = groundAtRef.current;
         return at ? pickRef.current.ground(at[0], at[1], 0) : null;
       }),
     [view],
@@ -510,7 +604,7 @@ export function Viewer({
       pick: ([x, y]) => (overHud(wrapper.current, [x, y]) ? null : pickRef.current.hit(x, y)),
       ground: ([x, y], heightMm = 0) => pickRef.current.ground(x, y, heightMm),
       bounds: () => boundsRef.current,
-      handToViewer,
+      handToViewer: (p) => handPointer(wrapper.current, p).at,
       handAspect: () => handAspect.current,
       navigate: (event: GestureEvent, dragMode = "orbit") => {
         navInput.current.dragMode = dragMode;
@@ -526,11 +620,15 @@ export function Viewer({
         }
       },
       press: (at) => {
-        const button = handButtonAt(wrapper.current, at);
-        button?.click();
-        return button !== null;
+        const target = pressableAt(wrapper.current, at);
+        target?.click();
+        return target !== null;
       },
-      isButton: (at) => handButtonAt(wrapper.current, at) !== null,
+      isButton: (at) => pressableAt(wrapper.current, at) !== null,
+      scrollAt: (at) => {
+        const area = scrollableAt(wrapper.current, at);
+        return area ? grabScroll(area, () => wrapper.current?.clientHeight ?? 1) : null;
+      },
       onSectionLine: (at) => {
         const corners = sectionOutlineOnScreen();
         const el = wrapper.current;
@@ -547,60 +645,98 @@ export function Viewer({
   }, [tools, client, sectionOutlineOnScreen]);
 
   // Hand input: the router sends each gesture to the palette, the active tool or navigation (never the bridge).
+  // Both hands are pointers: each shows what a pinch would do there and lights the control it would press. The
+  // focus hand (the one that pinched last, else the right) also drives hover in the model and a spoken "this".
   useEffect(() => {
     const router = new InputRouter(tools.routerTargets, gestures);
+    let focus: Hand = "Right";
     const offGestures = bus.onGestures((events) => {
-      for (const event of events) router.handle(event);
+      for (const event of events) {
+        if (event.type.startsWith("pinch.") && "hand" in event && event.hand !== "both") focus = event.hand;
+        router.handle(event);
+      }
     });
-    let hideTimer: ReturnType<typeof setTimeout> | null = null;
-    let hoveredButton: HTMLButtonElement | null = null;
-    const markButton = (button: HTMLButtonElement | null) => {
-      if (button === hoveredButton) return;
-      hoveredButton?.removeAttribute("data-hand-hover");
-      button?.setAttribute("data-hand-hover", "");
-      hoveredButton = button;
-      setOverButton(button !== null);
+    const hideTimers: Partial<Record<Hand, ReturnType<typeof setTimeout>>> = {};
+    const hovered: Partial<Record<Hand, HTMLElement | null>> = {};
+    // A control under a pointer is marked with the hand(s) over it ("left", "right" or "both"), for its outline.
+    const outline = (el: HTMLElement | null) => {
+      if (!el) return;
+      const over = (["Left", "Right"] as const).filter((h) => hovered[h] === el);
+      if (over.length === 0) el.removeAttribute("data-hand-hover");
+      else el.setAttribute("data-hand-hover", over.length === 2 ? "both" : (over[0] as Hand).toLowerCase());
     };
+    const markHover = (hand: Hand, target: HTMLElement | null) => {
+      const before = hovered[hand] ?? null;
+      if (before === target) return;
+      hovered[hand] = target;
+      outline(before);
+      outline(target);
+    };
+    const shown: Partial<Record<Hand, HandPointerState>> = {};
+    const publish = () => setPointers({ ...shown });
     const offPointer = bus.onPointer((sample) => {
       if (sample.aspect) handAspect.current = sample.aspect;
-      if (!sample.position) {
-        // Tracking often drops a hand for a frame or two: keep the pointer a moment rather than blink.
-        hideTimer ??= setTimeout(() => {
-          hideTimer = null;
-          setPointer(null);
-          setSecondaryPointer(null);
-          setHoverId(null);
-          markButton(null);
-        }, POINTER_HOLD_MS);
-        return;
+      for (const hand of ["Left", "Right"] as const) {
+        const position = sample.hands[hand];
+        if (!position) {
+          // Tracking often drops a hand for a frame or two: keep its pointer a moment rather than blink.
+          if (shown[hand] && !hideTimers[hand]) {
+            hideTimers[hand] = setTimeout(() => {
+              delete hideTimers[hand];
+              delete shown[hand];
+              markHover(hand, null);
+              publish();
+            }, POINTER_HOLD_MS);
+          }
+          continue;
+        }
+        clearTimeout(hideTimers[hand]);
+        delete hideTimers[hand];
+        const { at, client } = handPointer(wrapper.current, position);
+        // The pointer always shows where the hand is; controls respond only while engaged.
+        const target = bus.engaged ? pressableAt(wrapper.current, at) : null;
+        markHover(hand, target);
+        shown[hand] = { at, client, overControl: target !== null, focus: false };
       }
-      if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = null;
-      const at = handToViewer(sample.position);
-      setPointer(at);
-      setSecondaryPointer(sample.secondary ? handToViewer(sample.secondary) : null);
-      // The pointer always shows where the hand is; hover and HUD buttons respond only while engaged.
-      const button = bus.engaged ? handButtonAt(wrapper.current, at) : null;
-      markButton(button);
-      if (!bus.engaged || navigating.current || button || overHud(wrapper.current, at)) {
+      let focusHand: Hand | null = null;
+      if (shown[focus]) focusHand = focus;
+      else if (shown.Right) focusHand = "Right";
+      else if (shown.Left) focusHand = "Left";
+      for (const hand of ["Left", "Right"] as const) {
+        const state = shown[hand];
+        if (state) shown[hand] = { ...state, focus: hand === focusHand };
+      }
+      publish();
+      const pointer = focusHand ? shown[focusHand] : undefined;
+      groundAtRef.current = pointer?.at ?? null;
+      if (
+        !pointer ||
+        !bus.engaged ||
+        navigating.current ||
+        pointer.overControl ||
+        overHud(wrapper.current, pointer.at)
+      ) {
         setHoverId(null);
         return;
       }
-      setHoverId(pickRef.current.id(at[0], at[1]));
-      tools.hover(at);
+      setHoverId(pickRef.current.id(pointer.at[0], pointer.at[1]));
+      tools.hover(pointer.at);
     });
     const offEngaged = bus.onEngaged((value) => {
       setEngaged(value);
       if (!value) {
         setHoverId(null);
-        markButton(null);
+        markHover("Left", null);
+        markHover("Right", null);
       }
     });
+    const offStopArmed = bus.onStopArmed(setStopArmed);
     return () => {
       offGestures();
       offPointer();
       offEngaged();
-      if (hideTimer) clearTimeout(hideTimer);
+      offStopArmed();
+      for (const timer of Object.values(hideTimers)) clearTimeout(timer);
     };
   }, [bus, tools, gestures]);
 
@@ -627,9 +763,10 @@ export function Viewer({
       const start = { x: e.clientX, y: e.clientY, button: e.button, moved: false, byTool: false };
       drag = { ...start, holdTimer: null };
       if (e.button === 2) {
+        const ring = e.shiftKey ? "create" : "tools";
         drag.holdTimer = setTimeout(() => {
           if (!drag || drag.moved) return;
-          tools.openPalette({ center: at, aspect: el.clientWidth / el.clientHeight }, "pointer");
+          tools.openPalette({ center: at, aspect: el.clientWidth / el.clientHeight }, "pointer", ring);
         }, RIGHT_HOLD_MS);
       }
       el.setPointerCapture(e.pointerId);
@@ -690,8 +827,8 @@ export function Viewer({
     };
   }, [tools]);
 
-  // Keyboard (not while typing): Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo; hold Space for the palette at the
-  // pointer; one key per tool; Enter and Escape answer a confirmation (Escape also closes the palette).
+  // Keyboard (not while typing): Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo; hold Space for the tools ring at the
+  // pointer, Shift+Space for the create ring; one key per tool; Enter and Escape answer a confirmation (Escape also closes the palette).
   useEffect(() => {
     const typing = (e: KeyboardEvent) =>
       (e.target as HTMLElement).closest("input, textarea, select") !== null;
@@ -714,7 +851,8 @@ export function Viewer({
         const canvas = wrapper.current?.querySelector("canvas");
         if (!e.repeat && !tools.paletteOpen && canvas) {
           const aspect = canvas.clientWidth / canvas.clientHeight;
-          tools.openPalette({ center: lastMouse.current ?? [0.5, 0.5], aspect }, "pointer");
+          const ring = e.shiftKey ? "create" : "tools";
+          tools.openPalette({ center: lastMouse.current ?? [0.5, 0.5], aspect }, "pointer", ring);
         }
         return;
       }
@@ -761,6 +899,7 @@ export function Viewer({
       project: (point) => pickRef.current.project(point),
       sectionOutline: () => sectionOutlineOnScreen(),
       sun: () => view.sun,
+      handAt: (x, y) => viewerToHand(wrapper.current, [x, y]),
       overSection: (x, y) =>
         overSectionPlane(
           {
@@ -774,8 +913,11 @@ export function Viewer({
     window.__AEX_TOOLS__ = tools;
     window.__AEX_INPUT__ = {
       gestures: (events) => bus.emitGestures(events),
-      pointer: (position, secondary = null) =>
-        bus.emitPointer({ position, secondary, ts: performance.timeOrigin + performance.now() }),
+      pointer: (right, left = null) =>
+        bus.emitPointer({
+          hands: { ...(right ? { Right: right } : {}), ...(left ? { Left: left } : {}) },
+          ts: performance.timeOrigin + performance.now(),
+        }),
       engaged: (engaged) => bus.setEngaged(engaged),
     };
   }, [bus, client, latency, tools, sectionOutlineOnScreen, view]);
@@ -783,14 +925,18 @@ export function Viewer({
   // The hand pointer shows what a pinch would do here: press a button, steer the palette, grab the section, or the
   // active tool's own action (its icon).
   const activeIcon = tools.registry.get(toolState.activeId)?.icon ?? null;
-  let pointerMode: string = toolState.activeId;
-  if (!engaged) pointerMode = "idle";
-  else if (toolState.palette) pointerMode = "palette";
-  else if (overButton) pointerMode = "press";
-  else if (toolState.overlay.sectionHover) pointerMode = "grab";
-  let pointerGlyph =
-    pointerMode === toolState.activeId && toolState.activeId !== "select" ? activeIcon : null;
-  if (pointerMode === "grab") pointerGlyph = "M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4";
+  const pointerLook = (hand: Hand, p: HandPointerState): { mode: string; glyph: string | null } => {
+    let mode: string = toolState.activeId;
+    if (!engaged) mode = "idle";
+    else if (toolState.palette?.hand === hand) mode = "palette";
+    else if (p.overControl) mode = "press";
+    else if (p.focus && toolState.overlay.sectionHover) mode = "grab";
+    if (mode === "grab") return { mode, glyph: "M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4" };
+    return {
+      mode,
+      glyph: mode === toolState.activeId && toolState.activeId !== "select" ? activeIcon : null,
+    };
+  };
 
   const selection = new Set(scene.selection);
   const { overlay } = toolState;
@@ -882,6 +1028,20 @@ export function Viewer({
               sectionMm={overlay.sectionMm}
             />
           ))}
+        {scene.doc && overlay.draft && (
+          <ElementMesh
+            key="draft"
+            element={overlay.draft}
+            doc={scene.doc}
+            colors={colors}
+            selected={false}
+            hovered={false}
+            marked={false}
+            offsetMm={null}
+            sectionMm={overlay.sectionMm}
+            draft
+          />
+        )}
         <SectionClipping heightMm={overlay.sectionMm} version={scene.doc} />
         {overlay.sectionMm !== null && (
           <SectionPlane
@@ -906,25 +1066,34 @@ export function Viewer({
         />
       </Canvas>
 
-      {secondaryPointer && (
-        <div
-          className="hand-pointer left-hand"
-          data-testid="hand-pointer-secondary"
-          style={{ left: `${secondaryPointer[0] * 100}%`, top: `${secondaryPointer[1] * 100}%` }}
-          aria-hidden="true"
-        />
+      {/* Both hands' pointers, drawn over the whole page: they reach the sidebar too. */}
+      {createPortal(
+        (["Left", "Right"] as const).map((hand) => {
+          const p = pointers[hand];
+          if (!p) return null;
+          const { mode, glyph } = pointerLook(hand, p);
+          return (
+            <div
+              key={hand}
+              className="hand-pointer"
+              data-testid={`hand-pointer-${hand.toLowerCase()}`}
+              data-hand={hand.toLowerCase()}
+              data-mode={mode}
+              data-engaged={engaged}
+              data-focus={p.focus}
+              style={{ left: `${p.client[0]}px`, top: `${p.client[1]}px` }}
+              aria-hidden="true"
+            >
+              {glyph && <ToolIcon path={glyph} size={14} />}
+            </div>
+          );
+        }),
+        document.body,
       )}
-      {pointer && (
-        <div
-          className="hand-pointer"
-          data-testid="hand-pointer"
-          data-mode={pointerMode}
-          data-engaged={engaged}
-          style={{ left: `${pointer[0] * 100}%`, top: `${pointer[1] * 100}%` }}
-          aria-hidden="true"
-        >
-          {pointerGlyph && <ToolIcon path={pointerGlyph} size={14} />}
-        </div>
+      {stopArmed && (
+        <p className="stop-armed" data-testid="stop-armed" role="status">
+          Open both hands to stop
+        </p>
       )}
 
       <ToolOverlays controller={tools} />

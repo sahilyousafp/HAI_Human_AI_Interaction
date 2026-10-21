@@ -9,13 +9,14 @@ Engage first by holding an open palm toward the camera (see [gestures.md](gestur
 | Do | Effect |
 |---|---|
 | Pinch and drag with one hand | Orbit, like dragging the model with the mouse. Drag down looks from higher. The view stays between 5 and 89 degrees above the ground |
-| Pinch with both hands, move them apart or together | Zoom in or out |
+| Pinch with both hands at once, move them apart or together | Zoom in or out |
 | Pinch with both hands, move them together sideways or up and down | Pan; the view moves the opposite way |
 | Pinch with both hands and turn them like a dial | Turn the view the same way (turns under 0.6 degrees per frame are ignored as tracking jitter) |
 | Let go while still moving (a flick) | The view coasts on and slows to a stop, for orbit, zoom, pan and turn alike. Pinching again, clicking or scrolling catches it |
 | Close a hand into a fist mid-drag | Clutch: move your hand back without moving the view, then pinch again |
-| Point (a relaxed hand, not pinching) | A ring follows your pinch point; the element under it is highlighted |
-| Both hands in view | The left hand gets a second, light grey ring; hover and selection stay with the right hand |
+| Point (a relaxed hand, not pinching) | A ring follows your pinch point, anywhere on the page; the element under it is highlighted |
+| Both hands in view | Each hand has its own pointer (left amber, right blue-green) and taps, presses and scrolls on its own. Hover in the model follows the hand that pinched last |
+| One hand busy, the other pinches | A hand holding a ring open or already dragging keeps its gesture; the other hand's pinch is its own tap or drag, not a two-hand zoom |
 | Pinch and let go without moving (tap) | Select the highlighted element; a tap on empty space clears the selection |
 
 Hand navigation runs entirely in the browser. It keeps working while the bridge is offline; only edits wait for the bridge.

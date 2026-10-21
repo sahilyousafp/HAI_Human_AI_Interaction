@@ -22,6 +22,7 @@ const state = (hands: RecognizerState["hands"] = {}): RecognizerState => ({
   hands,
   pinch: {},
   twoHand: false,
+  stopArmed: false,
   lastHead: null,
 });
 

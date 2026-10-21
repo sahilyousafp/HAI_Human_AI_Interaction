@@ -1,11 +1,16 @@
 import {
   ACTION_LABELS,
+  BINDING_KEYS,
+  type BindingKey,
+  bindingKey,
   DEFAULT_BINDINGS,
   GESTURE_SLOT_IDS,
   GESTURE_SLOTS,
   type GestureAction,
+  type GestureBindings,
   type GestureSlot,
   type GestureType,
+  type Hand,
 } from "@aex/protocol";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { GestureSettings } from "./gesture-settings.ts";
@@ -24,18 +29,52 @@ const DETECTED_BY: Partial<Record<GestureType, GestureSlot | "engage">> = {
   "clutch.start": "fist",
   "head.nod": "nod",
   "head.shake": "shake",
-  "palms.stop": "palms",
+  "hands.stop": "stop",
 };
+
+/** One gesture's dropdown of the actions it can take, for one hand or for both. */
+function ActionSelect({
+  id,
+  slot,
+  bindingId,
+  bindings,
+  settings,
+  label,
+}: {
+  id: string;
+  slot: GestureSlot;
+  bindingId: BindingKey;
+  bindings: GestureBindings;
+  settings: GestureSettings;
+  label?: string;
+}) {
+  return (
+    <select
+      id={id}
+      data-testid={id}
+      aria-label={label}
+      value={bindings[bindingId]}
+      onChange={(e) => settings.set(bindingId, e.target.value as GestureAction)}
+    >
+      {GESTURE_SLOTS[slot].actions.map((action) => (
+        <option key={action} value={action}>
+          {ACTION_LABELS[action]}
+          {action === DEFAULT_BINDINGS[bindingId] ? " (default)" : ""}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 /**
  * Settings: every gesture the app recognises, how to make it, and what it does, each changeable from a dropdown of
- * the actions that gesture can take. A row lights up when its gesture is detected, so trying a gesture shows whether
- * the camera sees it.
+ * the actions that gesture can take; one-hand gestures have one for each hand. A row lights up when its gesture is
+ * detected, so trying a gesture shows whether the camera sees it.
  */
 export function GestureSettingsCard({ settings, bus }: { settings: GestureSettings; bus: InputBus }) {
   const bindings = useSyncExternalStore(settings.subscribe, settings.getSnapshot);
   const [lit, setLit] = useState<{ slot: GestureSlot | "engage"; at: number } | null>(null);
-  const changed = GESTURE_SLOT_IDS.some((slot) => bindings[slot] !== DEFAULT_BINDINGS[slot]);
+  const changed = BINDING_KEYS.some((key) => bindings[key] !== DEFAULT_BINDINGS[key]);
 
   useEffect(
     () =>
@@ -73,29 +112,45 @@ export function GestureSettingsCard({ settings, bus }: { settings: GestureSettin
           <span className="gesture-fixed">Engage (always)</span>
         </li>
         {GESTURE_SLOT_IDS.map((slot) => {
-          const { label, how, actions } = GESTURE_SLOTS[slot];
+          const { label, how, perHand } = GESTURE_SLOTS[slot];
           const id = `gesture-${slot}`;
           return (
             <li key={slot} className="gesture-row" data-slot={slot} data-lit={isLit(slot)}>
               <div className="gesture-what">
-                <label className="gesture-name" htmlFor={id}>
-                  {label}
-                </label>
+                {perHand ? (
+                  <span className="gesture-name">{label}</span>
+                ) : (
+                  <label className="gesture-name" htmlFor={id}>
+                    {label}
+                  </label>
+                )}
                 <span className="muted">{how}</span>
               </div>
-              <select
-                id={id}
-                data-testid={id}
-                value={bindings[slot]}
-                onChange={(e) => settings.set(slot, e.target.value as GestureAction)}
-              >
-                {actions.map((action) => (
-                  <option key={action} value={action}>
-                    {ACTION_LABELS[action]}
-                    {action === DEFAULT_BINDINGS[slot] ? " (default)" : ""}
-                  </option>
-                ))}
-              </select>
+              {perHand ? (
+                <div className="gesture-hands">
+                  {(["Left", "Right"] as const).map((hand: Hand) => (
+                    <div key={hand} className="gesture-hand" data-hand={hand.toLowerCase()}>
+                      <label htmlFor={`${id}-${hand.toLowerCase()}`}>{hand}</label>
+                      <ActionSelect
+                        id={`${id}-${hand.toLowerCase()}`}
+                        slot={slot}
+                        bindingId={bindingKey(slot, hand)}
+                        bindings={bindings}
+                        settings={settings}
+                        label={`${label}, ${hand.toLowerCase()} hand`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <ActionSelect
+                  id={id}
+                  slot={slot}
+                  bindingId={bindingKey(slot)}
+                  bindings={bindings}
+                  settings={settings}
+                />
+              )}
             </li>
           );
         })}

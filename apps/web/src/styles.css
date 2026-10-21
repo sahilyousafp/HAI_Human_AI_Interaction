@@ -24,7 +24,6 @@
   --model-edge: #1c2328;
   --model-hover: #8fd3da;
   --strip-seen: #5d7480;
-  --pointer-secondary: #c9d1d4;
   --strip-dropped: color-mix(in srgb, var(--risk) 70%, var(--panel));
   --f-body: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   --f-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
@@ -54,7 +53,6 @@
     --model-edge: #39434a;
     --model-hover: #bfe3e6;
     --strip-seen: #8ea0a7;
-    --pointer-secondary: #c4ccd0;
     --strip-dropped: color-mix(in srgb, var(--risk) 55%, var(--panel));
     color-scheme: light;
   }
@@ -326,8 +324,8 @@ button {
   font: inherit;
 }
 .hand-pointer {
-  position: absolute;
-  z-index: 30; /* the hand presses HUD buttons, so its pointer is drawn over every panel */
+  position: fixed;
+  z-index: 60; /* the hands press controls anywhere on the page, so their pointers are drawn over everything */
   width: 22px;
   height: 22px;
   margin: -11px 0 0 -11px;
@@ -383,9 +381,13 @@ button {
     transition: none;
   }
 }
-[data-hand-press][data-hand-hover] {
+/* Whatever a hand would press (anything clickable, anywhere on the page) is outlined while a pointer is over it. */
+[data-hand-hover] {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+[data-hand-hover="left"] {
+  outline-color: var(--hand-left);
 }
 /* The mouse cursor follows the tool too. */
 .viewer[data-tool="measure"] canvas,
@@ -401,12 +403,35 @@ button {
 .viewer[data-section-hover="true"] canvas {
   cursor: ns-resize;
 }
-.hand-pointer.left-hand {
-  border-color: var(--pointer-secondary);
-  /* Light grey on a light viewer needs a fine dark edge to stay visible. */
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.28),
-    inset 0 0 0 1px rgb(0 0 0 / 0.18);
+/* Each hand's pointer has its colour in the tracking overlay: the left amber, the right the accent. */
+.hand-pointer[data-hand="left"] {
+  border-color: var(--hand-left);
+  color: var(--hand-left);
+}
+.hand-pointer[data-hand="left"][data-mode="press"] {
+  background: color-mix(in srgb, var(--hand-left) 45%, transparent);
+}
+.hand-pointer[data-hand="left"][data-mode="palette"] {
+  background: var(--hand-left);
+}
+.hand-pointer[data-hand="left"][data-mode="delete"] {
+  border-color: var(--risk);
+  color: var(--risk);
+}
+.stop-armed {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  z-index: 9;
+  margin: 0;
+  padding: 10px 16px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--risk);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--viewer-bg) 88%, transparent);
+  color: var(--ink);
+  font: 600 14px / 1.2 var(--f-body);
+  pointer-events: none;
 }
 
 /* Tool palette (radial, opened at the hand or pointer) and tool messages */
@@ -460,6 +485,11 @@ button {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--bg);
+}
+/* The left hand's ring takes the left hand's colour, so which ring is open is clear at a glance. */
+.tool-palette[data-hand="left"] .palette-slot[data-highlighted="true"] {
+  border-color: var(--hand-left);
+  background: var(--hand-left);
 }
 .palette-label {
   max-width: 60px;
@@ -607,6 +637,26 @@ kbd {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 12px;
+}
+.ring-tabs {
+  display: flex;
+  justify-self: start;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.ring-tab {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: 500 12.5px / 1.3 var(--f-body);
+  cursor: pointer;
+}
+.ring-tab[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--ink);
 }
 
 .tracking {
@@ -770,6 +820,10 @@ kbd {
 .gesture-pill.two {
   color: var(--ink);
   border-color: var(--accent);
+}
+.gesture-pill.stop {
+  color: var(--ink);
+  border-color: var(--risk);
 }
 .gesture-hint {
   margin: 0;
@@ -1985,6 +2039,24 @@ kbd {
 }
 .gesture-fixed {
   font-size: 13px;
+}
+.gesture-hands {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.gesture-hand {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.gesture-hands .gesture-hand > label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.gesture-hand[data-hand="left"] > label {
+  color: var(--hand-left);
 }
 .gesture-note {
   margin: 0;

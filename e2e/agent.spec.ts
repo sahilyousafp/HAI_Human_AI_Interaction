@@ -198,13 +198,13 @@ test.describe("agent panel", () => {
     }
   });
 
-  test("two-palm stop: both open palms stop the running turn", async ({ page }) => {
+  test("stop gesture: both fists, then open hands, stop the running turn", async ({ page }) => {
     const bridge = await startWithFakeAgent(page);
     try {
       await ask(page, "slow");
       await expect(status(page)).toHaveAttribute("data-state", "working");
       await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-      await inject(page, "palms.stop");
+      await inject(page, "hands.stop");
       await expect(lastTurn(page)).toHaveAttribute("data-ended", "stopped", { timeout: 3000 });
     } finally {
       await bridge.stop();

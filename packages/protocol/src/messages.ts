@@ -36,8 +36,10 @@ export type ReplyVoice = z.infer<typeof ReplyVoice>;
 
 /** User settings kept by the bridge in .aex/settings.json. */
 export const Settings = z.strictObject({
-  /** null until the user changes the layout: the app's default applies. */
+  /** The tools ring (the right hand's long pinch); null until the user changes it: the app's default applies. */
   palette: PaletteLayout.nullable(),
+  /** The create ring (the left hand's long pinch); null until the user changes it. */
+  createPalette: PaletteLayout.nullable().default(null),
   /** What each gesture does, where the user changed it; the rest keep their defaults. */
   gestures: GestureBindingsSchema.nullable().default(null),
   /** Where speech is turned into text: on this laptop (default), or the browser's cloud service (opt-in). */
@@ -194,6 +196,7 @@ export const SettingsSetMessage = message(
   "settings.set",
   z.strictObject({
     palette: PaletteLayout.optional(),
+    createPalette: PaletteLayout.optional(),
     gestures: GestureBindingsSchema.optional(),
     speech: SpeechMode.optional(),
     listenForNames: z.boolean().optional(),

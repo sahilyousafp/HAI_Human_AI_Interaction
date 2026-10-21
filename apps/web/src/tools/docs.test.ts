@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LAYOUT, registerBuiltinTools } from "./builtin.ts";
+import { DEFAULT_CREATE_LAYOUT } from "./create.ts";
 import { SLOT_NAMES } from "./palette.ts";
 import { ToolRegistry } from "./registry.ts";
 
@@ -24,11 +25,17 @@ describe("docs/tools.md", () => {
     expect(documented).toEqual(actual);
   });
 
-  it("gives each tool the slot it has in the default layout", () => {
+  it("gives each tool the slots it has in the two rings' default layouts", () => {
     for (const row of rows) {
-      const tool = registry.list().find((t) => t.label === row.label);
-      const slot = DEFAULT_LAYOUT.indexOf(tool?.id ?? "");
-      expect(row.slot).toBe(slot < 0 ? "(not in the ring)" : SLOT_NAMES[slot]);
+      const id = registry.list().find((t) => t.label === row.label)?.id ?? "";
+      const slots = [
+        [DEFAULT_LAYOUT, "tools"],
+        [DEFAULT_CREATE_LAYOUT, "create"],
+      ] as const;
+      const where = slots
+        .filter(([layout]) => layout.includes(id))
+        .map(([layout, ring]) => `${SLOT_NAMES[layout.indexOf(id)]} (${ring})`);
+      expect(row.slot).toBe(where.length > 0 ? where.join(", ") : "(not in a ring)");
     }
   });
 });
