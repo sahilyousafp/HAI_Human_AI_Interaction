@@ -22,7 +22,7 @@ Week 8 clip. Target length 50-60 s, 16:9, captions burned in, sound on (Mochi sp
 | 5 | 30-38 s | Say "Mochi, status?" and nod. Mochi answers aloud while both keep working. | "I can ask what everyone is doing at any time." |
 | 6 | 38-48 s | Both chips turn **done**; Mochi speaks its report. | "And it tells me when they are done." |
 | 7 | 48-55 s | Press Architect's hand-off chip: its tool calls. Back. Press Undo once: the core goes, labelled "Architect: ...". | "Every specialist's work is one undo step." |
-| 8 | 55-60 s | Lower your hands. | "Next: reviewing each agent's changes before they land." |
+| 8 | 55-60 s | Lower your hands. | "Next: both hands, and drawing walls with the left." |
 
 ## Check on the real microphone (fill in before posting)
 

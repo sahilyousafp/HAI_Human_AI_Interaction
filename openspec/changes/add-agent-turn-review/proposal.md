@@ -14,7 +14,7 @@ When an agent edits a model, the user needs to see exactly what changed and deci
 
 Out of scope: partial accept (keeping some changes of a turn and not others), side-by-side before and after views, reviewing non-model actions such as files written by the agent (those already go through tool approval).
 
-Demo clip (Week 9): "The agent proposes, I nod to accept": ask for a colonnade, see the new columns glow, shake to reject, rephrase, nod to accept. Same thing in Rhino.
+Demo clip (Week 12): "The agent proposes, I nod to accept": ask for a colonnade, see the new columns glow, shake to reject, rephrase, nod to accept. Same thing in Rhino.
 
 ## Capabilities
 

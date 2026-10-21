@@ -1,6 +1,6 @@
 # Plan: gesture + agent interaction layer for AEC
 
-Decided 2026-10-19, updated the same day with the gesture tool palette. Research notes: `docs/research/`. Interactive decision page: `docs/decision/index.html`. Every milestone is specified as an OpenSpec change under `openspec/changes/`.
+Decided 2026-10-19, updated the same day with the gesture tool palette, and on 2026-10-21 with the agent team, two-hand input and hand modelling tools. Research notes: `docs/research/`. Interactive decision page: `docs/decision/index.html`. Every milestone is specified as an OpenSpec change under `openspec/changes/`.
 
 ## Decision
 
@@ -49,15 +49,31 @@ The user's own Claude Code setup (MCP servers, skills) loads in the agent sessio
 | 5 | `add-gesture-tool-palette` | Tools in the palm of your hand | Marking menus: why direction beats aiming |
 | 6 | `add-claude-agent-bridge` | First agent edit | Your MCP servers, skills and approvals by nod |
 | 7 | `add-voice-point-and-speak` | "Make this wall 300 thick" | On-device speech and what "this" means |
-| 8 | `add-rhino-connector` | Same gestures drive Rhino 8 | What I reused from RhinoAI vs wrote |
-| 9 | `add-agent-turn-review` | The agent proposes, I nod | One undo per agent turn, in Rhino too |
-| 10 | providers (to specify) | Same task, three models | The AgentProvider interface |
-| 11 | overlay (to specify) | HUD floating over Rhino | Click-through windows on Windows |
-| 12 | custom gestures (to specify) | Training my own gestures | Landmarks to LiteRT.js |
-| 13 | release v0.1 (to specify) | Launch reel | Lessons + how to contribute |
+| 8 | `add-mochi-agent-team` | "Mochi, ask Architect": a team of my own Claude | One session per agent: delegation, status, spoken replies |
+| 9 | `add-two-hand-input` | Both hands: the left draws walls, the right navigates | Two pointers, two rings, and a stop that never fires by accident |
+| 10 | `add-rhino-connector` | Same gestures drive Rhino 8 | What I reused from RhinoAI vs wrote |
+| 11 | `add-modelling-tools` (to specify) | Openings, roofs and arrays by hand | Snapping to geometry, in the viewer and in Rhino |
+| 12 | `add-agent-turn-review` | The agent proposes, I nod | One undo per agent turn, in Rhino too |
+| 13 | providers (to specify) | Same task, three models | The AgentProvider interface |
+| 14 | overlay (to specify) | HUD floating over Rhino | Click-through windows on Windows |
+| 15 | custom gestures (to specify) | Training my own gestures | Landmarks to LiteRT.js |
+| 16 | release v0.1 (to specify) | Launch reel | Lessons + how to contribute |
 
-Weeks 10-13 get their OpenSpec changes once weeks 1-9 have taught us what they need. After v0.1: Blender/Bonsai IFC connector, coarse gaze (WebEyeTrack), dynamic gestures, a small user study.
+Weeks 1-8 are built and their changes archived (`openspec/specs/` holds the current specs); week 9 is next. Weeks 11 and 13-16 get their OpenSpec changes once the weeks before them have taught us what they need. After v0.1: Blender/Bonsai IFC connector, coarse gaze (WebEyeTrack), dynamic gestures, a small user study.
+
+### Clips to record
+
+Each built week ends in a clip; its script is in `demos/`. Tick a week once its clip is posted.
+
+- [ ] Week 1: `demos/01-decision-and-setup.md`
+- [ ] Week 2: `demos/02-tracking.md`
+- [ ] Week 3: `demos/03-gestures.md` (can be posted with week 2)
+- [ ] Week 4: `demos/04-navigate.md`
+- [ ] Week 5: `demos/05-tool-palette.md`
+- [ ] Week 6: `demos/06-first-agent-edit.md`
+- [ ] Week 7: `demos/07-point-and-speak.md`
+- [ ] Week 8: `demos/08-mochi-team.md` (fill in its real-microphone checks before posting)
 
 ## Change dependencies
 
-Archive in order: each change builds on the capabilities of the ones before it. `add-gesture-tool-palette` adds a requirement to `gesture-recognition`; `add-rhino-connector` adds requirements to `local-access-control` and `scene-tools`. Those base changes must be archived first.
+Archive in order: each change builds on the capabilities of the ones before it (weeks 1-8 are archived). `add-gesture-tool-palette` adds a requirement to `gesture-recognition`; `add-rhino-connector` adds requirements to `local-access-control` and `scene-tools`. Those base changes must be archived first. `add-two-hand-input` changes `gesture-recognition`, `viewport-navigation`, `tool-palette`, `direct-tools` and `agent-panel`.

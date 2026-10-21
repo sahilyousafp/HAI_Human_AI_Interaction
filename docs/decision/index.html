@@ -384,7 +384,7 @@ footer { padding-block: 32px 48px; font-size: 12.5px; color: var(--muted); }
 <section id="timeline">
   <div class="sec-head">
     <span class="label">A4 / programme</span>
-    <h2>Thirteen milestones, two clips a week</h2>
+    <h2>Sixteen milestones, two clips a week</h2>
     <p class="muted">Every milestone ends in something you can film. Set your real weekly hours and how much of that goes to recording and editing. The schedule stretches or compresses to fit. Start date: Monday 26 October 2026.</p>
   </div>
   <div class="sheet">
@@ -845,12 +845,15 @@ footer { padding-block: 32px 48px; font-size: 12.5px; color: var(--muted); }
     ["Gesture tool palette", 6, "Tools in the palm of your hand: measure, section, move", "Marking menus: why direction beats aiming", 0],
     ["Agent bridge", 7, "First agent edit: \"add three floors\"", "Driving claude -p over stream-json, and the plan rules", 0],
     ["Voice + pointing", 6, "Point at a wall, say \"make it 300 thick\"", "Local speech with Silero VAD + Moonshine", 0],
+    ["Agent team", 7, "\"Mochi, ask Architect\": a design team of my own Claude", "One session per agent: delegation, status, spoken replies", 0],
+    ["Two-hand input", 6, "Both hands: the left draws walls, the right navigates", "Two pointers, two rings, a stop that never misfires", 0],
     ["Rhino connector", 7, "The same gestures now drive Rhino 8", "RhinoAI MCP vs rhinomcp: what I reused", 1],
+    ["Modelling tools", 6, "Openings, roofs and arrays by hand", "Snapping to geometry, in the viewer and in Rhino", 1],
     ["Ghost previews", 6, "The agent proposes, I nod to accept", "DisplayConduit ghosts and one undo per agent turn", 1],
     ["More providers", 5, "Same task with Claude, Codex and a local model", "The AgentProvider interface", 0],
     ["Overlay over Rhino", 6, "A transparent HUD floating over Rhino", "Click-through Electron windows on Windows", 1],
     ["Custom gestures", 7, "Training my own gestures on HaGRIDv2", "From landmarks to an MLP to LiteRT.js", 0],
-    ["Release v0.1", 5, "v0.1 launch reel", "What 13 weeks taught me + how to contribute", 0]
+    ["Release v0.1", 5, "v0.1 launch reel", "What 16 weeks taught me + how to contribute", 0]
   ];
   var TOTAL = MS.reduce(function (a, m) { return a + m[1]; }, 0);
   var START = new Date(2026, 9, 26);
@@ -891,7 +894,7 @@ footer { padding-block: 32px 48px; font-size: 12.5px; color: var(--muted); }
 
   /* ---------- A5: risks ---------- */
   var RISKS = [
-    ["High", "Subscription rules change again. Anthropic changed them several times in 2026.", "Provider interface from day one; API key or Max credits as the documented default; Codex and Ollama ready by week 9."],
+    ["High", "Subscription rules change again. Anthropic changed them several times in 2026.", "Provider interface from day one; API key or Max credits as the documented default; Codex and Ollama ready by week 13."],
     ["High", "Scope creep against a 6-hour week.", "Each milestone must end in a filmable clip. Cut features, never cut the clip."],
     ["Medium", "Webcam frame rate on a laptop iGPU with hands and face both running.", "Benchmark in week 2; run face tracking every other frame; keep tracking in a Web Worker."],
     ["Medium", "Gesture fatigue and accidental triggers (gorilla arm, the Midas touch problem).", "Engage posture plus a clutch; elbows-on-desk mapping; voice handles discrete commands."],

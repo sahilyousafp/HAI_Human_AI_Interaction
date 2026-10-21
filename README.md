@@ -2,7 +2,7 @@
 
 **Hands, face and voice for AEC agents.** An open-source interaction layer that lets an architect work with their own AI agent and their design software using a normal laptop webcam: point at a wall, say "make it 300 thick", nod to accept.
 
-> Status: week 1 of a 13-week build in public. The workspace, local bridge and CI are in place. Camera tracking arrives in week 2.
+> Status: week 8 of a 16-week build in public. Hand and face tracking, gestures, hand navigation, a tool palette, your own Claude as a small design team (Mochi and its specialists) and on-device voice in and out all work in the built-in viewer. Next: both hands as equal pointers and hand-drawn walls, slabs and columns.
 
 ## Why
 
@@ -19,9 +19,9 @@ AI agents can already drive design tools (McNeel ships an official Rhino MCP ser
 - Windows 11 (primary), macOS or Linux
 - Node 24 and pnpm 10
 - Microsoft Edge or Chrome
-- A webcam (from week 2)
-- [Claude Code](https://claude.com/claude-code), installed and signed in (from week 5)
-- Rhino 8 with the Rhino MCP Platform plugin (optional, from week 7)
+- A webcam
+- [Claude Code](https://claude.com/claude-code), installed and signed in, for the agent team
+- Rhino 8 with the Rhino MCP Platform plugin (optional, from week 10)
 
 ## Run it
 
@@ -43,10 +43,14 @@ Open http://127.0.0.1:5173. The header shows **Connected** when the web app has 
 | 5 | Gesture tool palette: move, measure, section, add massing, no AI needed |
 | 6 | Your own Claude edits the model; your MCP servers and skills included |
 | 7 | Point and speak |
-| 8-9 | Rhino 8 connector and reviewable agent turns |
-| 10-13 | More providers, overlay over Rhino, custom gestures, v0.1 |
+| 8 | Mochi and the agent team: named specialists, status, spoken replies |
+| 9 | Both hands as equal pointers; the left hand's create ring: walls, slabs, columns |
+| 10 | Rhino 8 connector |
+| 11 | More modelling by hand: openings, roofs, arrays, snapping |
+| 12 | Reviewable agent turns: nod to keep, shake to revert |
+| 13-16 | More providers, overlay over Rhino, custom gestures, v0.1 |
 
-The full plan is in [docs/PLAN.md](docs/PLAN.md), with research notes in [docs/research](docs/research) and the reasoning behind the architecture in [docs/decision](docs/decision/index.html). Work is specified with OpenSpec in [openspec/changes](openspec/changes).
+The full plan is in [docs/PLAN.md](docs/PLAN.md), with research notes in [docs/research](docs/research) and the reasoning behind the architecture in [docs/decision](docs/decision/index.html). Work is specified with OpenSpec: current behaviour in [openspec/specs](openspec/specs), planned changes in [openspec/changes](openspec/changes).
 
 ## Repository layout
 

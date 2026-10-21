@@ -22,7 +22,7 @@ Week 7 clip. Target length 40-55 s, 16:9, captions burned in. Speech is transcri
 | 5 | 20-23 s | Nod. The request goes to the agent at once. | "A nod sends it." |
 | 6 | 23-38 s | The agent's chips (`get_elements`, `update_elements`); the wall gets thicker. | "It changes exactly that wall." |
 | 7 | 38-45 s | Say "add three floors" without pointing, then shake your head: **Discarded**. | "Changed my mind: a shake throws it away." |
-| 8 | 45-50 s | Lower your hands. | "Next: reviewing the agent's changes before they land." |
+| 8 | 45-50 s | Lower your hands. | "Next: a design team of agents, led by Mochi." |
 
 ## Check on the real microphone (fill in before posting)
 
