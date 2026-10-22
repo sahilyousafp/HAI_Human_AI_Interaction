@@ -23,8 +23,11 @@ import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from
 import type { ToolRegistry } from "./registry.ts";
 import { EMPTY_OVERLAY, type Hit, type Tool, type ToolContext, type ToolOverlay } from "./types.ts";
 
-/** Holding a fist this long returns to Select (the fist is recognised after the clutch debounce). */
-export const FIST_RESET_MS = 600;
+/**
+ * Holding a fist still this long returns to Select (the fist is recognised after the clutch debounce). A fist that
+ * moves is a fist drag, which pans the view and drops this timer.
+ */
+export const FIST_RESET_MS = 1500;
 /** How long a passing message (undo, agent not connected) stays. */
 export const FLASH_MS = 4000;
 export const DEFAULT_TOOL = "select";

@@ -10,7 +10,8 @@ AEX turns smoothed hand and head tracking into a small gesture vocabulary. Every
 | Pinch tap | Touch thumb and index briefly, keep the other fingers relaxed open (like an OK sign) | `pinch.tap` |
 | Pinch drag | Pinch and move, then open the fingers | `pinch.drag.start`, `.update`, `.end` |
 | Long pinch | Pinch and keep the hand still for a moment; then steer and release (opens the hand's ring: tools on the right, create on the left) | `pinch.hold` |
-| Clutch | Close the hand into a fist; move; open again | `clutch.start`, `clutch.end` |
+| Clutch | Close the hand into a fist; open again. A fist closed while the hand was dragging stays a clutch: move your hand back without moving the view | `clutch.start`, `clutch.end` |
+| Fist drag | Close the hand into a fist at rest, then move it | `fist.drag.start`, `.update`, `.end` |
 | Two-hand pinch | Pinch with both hands at once; spread, bring together, move or rotate them | `twohand.start`, `.update`, `.end` |
 | Nod | Nod your head down and up | `head.nod` |
 | Shake | Shake your head left and right | `head.shake` |
@@ -34,8 +35,9 @@ Nothing but engagement produces a command until you are engaged. Lowering both h
 | Pinch tap (each hand) | Use the active tool | Select what it points at (whatever the tool), undo, redo, cancel, ask or stop the agent, nothing |
 | Long pinch (each hand) | Right: open the tools ring. Left: open the create ring | The other ring, select, undo, redo, cancel, ask or stop the agent, nothing |
 | Pinch drag (each hand) | Active tool, else orbit | Always orbit, pan the view, nothing |
+| Fist drag (each hand) | Pan the view | Orbit the view, nothing |
 | Two-hand pinch | Zoom, pan and turn the view | Nothing |
-| Fist (each hand, held half a second) | Cancel, back to Select | Undo, redo, ask or stop the agent, nothing |
+| Fist hold (each hand, kept still for 1.5 s) | Cancel, back to Select | Undo, redo, ask or stop the agent, nothing |
 | Nod | Yes: confirm the tool's question, or allow the agent's only waiting approval | Undo, redo, cancel, ask or stop the agent, nothing |
 | Shake | No: cancel, or deny the agent's only waiting approval | Undo, redo, cancel, ask or stop the agent, nothing |
 | Two fists, then open hands | Stop the agents | Undo, cancel, nothing |
@@ -66,6 +68,7 @@ All values live in `packages/perception/src/gestures/config.ts`; a unit test che
 | `posture.thumbSpread` | 0.45 | Thumb tip to index knuckle / hand size above this: thumb spread |
 | `posture.palmFacing` | 0.5 | Palm normal toward the camera (-1 to 1) above this: facing |
 | `clutch.debounceMs` | 100 | A fist must hold (or be released) this long |
+| `clutch.moveMin` | 0.03 | A fist that moves this fraction of the frame width from where it closed is a fist drag (it pans) and never a hold (cancel) |
 | `twoHand.startWindowMs` | 300 | Two pinches that begin within this of each other are a two-hand pinch; otherwise a hand that already holds or drags keeps its own gesture |
 | `stop.fistsMs` | 250 | Both hands fists together this long (while engaged) arm the stop... |
 | `stop.openMs` | 1000 | ...and both palms opened within this of the fists opening stop the agents |
@@ -103,7 +106,11 @@ stateDiagram-v2
   Idle --> Clutch: fist held debounceMs
   Pinching --> Clutch: fist held debounceMs / drag end
   Clutch --> Idle: fist released debounceMs
+  Clutch --> FistDrag: moved moveMin (fist closed at rest, engaged)
+  FistDrag --> Clutch: first frame that is not a fist
 ```
+
+A fist that closed at rest, and then moves `clutch.moveMin` (3% of the frame width) from where it closed, is a **fist drag**: it starts at the closing position, so no movement is lost to the threshold, and it follows the centre of the palm (the wrist and the four knuckles), which stays put as the fingers curl, where the fingertips travel 7 to 10% of the frame width on the way into a fist. It ends at the first frame that is no longer a fist, so the hand opening adds no movement. A fist closed while the hand was dragging, closed while not engaged, or closed while the other hand is a fist too (the stop gesture) is only a clutch until it opens. A fist that moves is never a hold: the fist hold (cancel) needs it still.
 
 Inside Pinching, a drag starts once the pinch moves more than `tapMaxMove`, or when it becomes a hold. Released still before that, it is a tap however long it lasted: deliberate pinches on the recorded clips last 450 to 650 ms and drift less than 1% of the frame width, so a time limit turned real taps into tiny drags (and nothing got selected). When both hands pinch together, the two-hand stream takes over and single-hand drags pause; when one hand lets go, the other continues as a fresh drag. A pinch that comes later, while the other hand holds a ring or drags, stays a gesture of its own.
 

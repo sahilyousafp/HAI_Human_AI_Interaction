@@ -12,6 +12,8 @@ export interface HandObservation {
   posture: Posture;
   /** Pinch point, mirrored, normalised. */
   position: Point2;
+  /** Centre of the palm, mirrored, normalised: what a fist is followed by (it stays put as the fingers curl). */
+  palm?: Point2;
   confidence: number;
   aspect?: number;
 }
@@ -19,6 +21,8 @@ export interface HandObservation {
 export interface HandContext {
   /** Commands may only be emitted while engaged. */
   engaged: boolean;
+  /** Both hands are fists: that is the start of the stop gesture, so neither hand fist-drags. */
+  bothFists?: boolean;
 }
 
 export type HandDisplay = "idle" | "open-palm" | "pinch" | "drag" | "clutch";
@@ -35,7 +39,12 @@ type Phase = "idle" | "candidate" | "pinching";
  *   stays half closed, as one sweeping past the face does, never clicks.
  * - A pinch kept still for `holdMs` emits one hold (long pinch, which opens the tool palette) and carries on as a
  *   drag, so it can be steered and released. A pinch that moves first never holds.
- * - A fist (checked before pinch, since a fist also closes thumb and index) suspends all drag output.
+ * - A fist (checked before pinch, since a fist also closes thumb and index) suspends all pinch output. A fist that
+ *   closed at rest and then moves `clutch.moveMin` from where its clutch started is a fist drag: it starts at the
+ *   clutch position (no movement is lost), follows the palm, and ends at the first frame that is no longer a fist,
+ *   before the hand's opening can add noise. A fist that closed while its hand was dragging is only a clutch (the
+ *   user is repositioning), so moving it emits nothing; so is a fist closed while not engaged, and so is a fist
+ *   while the other hand is a fist too (the stop gesture).
  * - Only pinches that began while engaged emit anything ("pinch before engaging is ignored").
  * - Tracking often loses a hand for a few frames while it sweeps fast or passes over the face. A pinch survives a
  *   loss of up to `lostGraceMs` (a drag carries on from wherever the hand reappears), and a pinch interrupted by a
@@ -66,6 +75,8 @@ export class HandMachine {
   private lostSince: number | null = null;
   /** A released still pinch, waiting for the fingers to open clearly before it counts as a tap. */
   private pendingTap: { ts: number; position: Point2; until: number } | null = null;
+  /** The running clutch, if it may become a fist drag: where it closed, where the drag last reported, and where it is. */
+  private fist: { start: Point2; emitted: Point2; last: Point2; dragging: boolean } | null = null;
 
   constructor(
     readonly hand: Hand,
@@ -106,15 +117,17 @@ export class HandMachine {
     const events: GestureEvent[] = [];
     if (!obs) {
       this.pendingTap = null; // the fingers were not seen opening
-      if (this.phase === "pinching") {
+      if (this.phase === "pinching" || this.fist?.dragging) {
         this.lostSince ??= ts;
         this.tapAllowed = false;
         if (ts - this.lostSince < this.config.pinch.lostGraceMs) return events;
       }
       this.lostSince = null;
       this.endPinch(ts, events);
+      this.endFistDrag(ts, events);
       if (this.clutched) {
         this.clutched = false;
+        this.fist = null;
         if (ctx.engaged)
           events.push({ type: "clutch.end", ts, confidence: this.confidence, hand: this.hand });
       }
@@ -127,25 +140,40 @@ export class HandMachine {
     this.confidence = obs.confidence;
     this.lastPosture = obs.posture;
 
+    const palm = obs.palm ?? obs.position;
     if (obs.posture === "fist") {
       if (this.phase === "candidate") this.phase = "idle"; // the touch belonged to the fist forming
+      // A fist that comes back after a gap too short to end the clutch measures its movement from here.
+      if (this.fist && this.notFistSince !== null) this.fist.start = palm;
       this.notFistSince = null;
       this.fistSince ??= ts;
       if (!this.clutched && ts - this.fistSince >= this.config.clutch.debounceMs) {
         this.clutched = true;
+        // A fist closed while dragging is a clutch to reposition, not a fist drag.
+        this.fist =
+          ctx.engaged && !this.dragStarted
+            ? { start: palm, emitted: palm, last: palm, dragging: false }
+            : null;
         // End any drag so the resumed one starts fresh at the new position: no jump.
         this.endPinch(ts, events, { silent: !this.dragStarted });
         if (ctx.engaged)
           events.push({ type: "clutch.start", ts, confidence: obs.confidence, hand: this.hand });
+      } else if (this.clutched && ctx.bothFists) {
+        this.endFistDrag(ts, events);
+        this.fist = null; // a pure clutch until the hand opens
+      } else if (this.clutched) {
+        this.followFist(palm, obs.aspect ?? DEFAULT_ASPECT, ts, ctx, events);
       }
       return events; // fist frames never advance the pinch: a fist must not read as a pinch or a tap
     }
 
     this.fistSince = null;
     this.notFistSince ??= ts;
+    this.endFistDrag(ts, events); // at the first frame that is not a fist, before the debounce below
     if (this.clutched) {
       if (ts - this.notFistSince < this.config.clutch.debounceMs) return events;
       this.clutched = false;
+      this.fist = null;
       if (ctx.engaged) events.push({ type: "clutch.end", ts, confidence: obs.confidence, hand: this.hand });
     }
 
@@ -177,11 +205,47 @@ export class HandMachine {
     this.holdDone = true; // a pinch resumed from a two-hand gesture is mid-gesture, not a fresh long pinch
   }
 
-  /** Ends any pinch (e.g. on disengage), emitting drag end if a drag was running. */
+  /** Ends any pinch or fist drag (e.g. on disengage), emitting drag end if a drag was running. */
   cancel(ts: number): GestureEvent[] {
     const events: GestureEvent[] = [];
     this.endPinch(ts, events, { silent: !this.dragStarted });
+    this.endFistDrag(ts, events);
+    this.fist = null; // a fist that is still closed after re-engaging is a clutch until it opens
     return events;
+  }
+
+  /** Follows a clutched hand: it becomes a fist drag once it has moved `clutch.moveMin` from where it closed. */
+  private followFist(palm: Point2, aspect: number, ts: number, ctx: HandContext, events: GestureEvent[]) {
+    const fist = this.fist;
+    if (!fist || !ctx.engaged) return;
+    fist.last = palm;
+    if (!fist.dragging) {
+      if (screenDistance(fist.start, palm, aspect) < this.config.clutch.moveMin) return;
+      fist.dragging = true;
+      fist.emitted = fist.start;
+      events.push(this.fistEvent("fist.drag.start", ts, fist.start));
+    }
+    const delta: Point2 = [palm[0] - fist.emitted[0], palm[1] - fist.emitted[1]];
+    fist.emitted = palm;
+    events.push({
+      type: "fist.drag.update",
+      ts,
+      confidence: this.confidence,
+      hand: this.hand,
+      position: palm,
+      delta,
+    });
+  }
+
+  private endFistDrag(ts: number, events: GestureEvent[]) {
+    const fist = this.fist;
+    if (!fist?.dragging) return;
+    fist.dragging = false;
+    events.push(this.fistEvent("fist.drag.end", ts, fist.last));
+  }
+
+  private fistEvent(type: "fist.drag.start" | "fist.drag.end", ts: number, position: Point2): GestureEvent {
+    return { type, ts, confidence: this.confidence, hand: this.hand, position };
   }
 
   private advancePinch(obs: HandObservation, ts: number, ctx: HandContext, events: GestureEvent[]) {

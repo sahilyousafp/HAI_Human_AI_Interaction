@@ -143,7 +143,7 @@ test.describe("palette", () => {
     await expect(activeTool(page)).toHaveAttribute("data-tool", "measure");
   });
 
-  test("fist returns to Select after 600 ms; a shorter fist does not", async ({ page }) => {
+  test("a still fist returns to Select after 1.5 s; a shorter fist does not", async ({ page }) => {
     await start(page);
     await page.keyboard.press("m");
     const clutch = (type: string) =>
@@ -152,11 +152,13 @@ test.describe("palette", () => {
         { type, ts: Date.now() },
       );
     await clutch("clutch.start");
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(1000);
     await clutch("clutch.end");
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(800);
     await expect(activeTool(page)).toHaveAttribute("data-tool", "move");
     await clutch("clutch.start");
+    await page.waitForTimeout(1200);
+    await expect(activeTool(page)).toHaveAttribute("data-tool", "move");
     await expect(activeTool(page)).toHaveAttribute("data-tool", "select", { timeout: 1500 });
   });
 

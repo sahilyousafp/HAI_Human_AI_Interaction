@@ -1,7 +1,16 @@
+import type { Point2, TrackedHand } from "@aex/protocol";
 import { describe, expect, it } from "vitest";
 import { loadFixture, loadPinchLabels } from "../testing/fixtures.ts";
 import { DEFAULT_GESTURES } from "./config.ts";
-import { othersExtension, palmFacing, pinchPoint, pinchRatio, posture, screenDistance } from "./features.ts";
+import {
+  othersExtension,
+  palmFacing,
+  palmPoint,
+  pinchPoint,
+  pinchRatio,
+  posture,
+  screenDistance,
+} from "./features.ts";
 
 const handsOf = (clip: Parameters<typeof loadFixture>[0]) => loadFixture(clip).flatMap((f) => f.hands);
 
@@ -90,5 +99,55 @@ describe("geometry helpers", () => {
   it("screenDistance measures in fractions of the frame width", () => {
     expect(screenDistance([0.2, 0.5], [0.5, 0.5])).toBeCloseTo(0.3, 9);
     expect(screenDistance([0.5, 0.2], [0.5, 0.5], 4 / 3)).toBeCloseTo(0.225, 9);
+  });
+});
+
+describe("palm point", () => {
+  it("is the mirrored mean of the wrist and the four knuckles", () => {
+    const image: TrackedHand["image"] = Array.from({ length: 21 }, () => [0, 0, 0]);
+    image[0] = [0.2, 0.8, 0]; // wrist
+    image[5] = [0.4, 0.4, 0]; // index knuckle
+    image[9] = [0.5, 0.4, 0]; // middle knuckle
+    image[13] = [0.6, 0.4, 0]; // ring knuckle
+    image[17] = [0.8, 0.4, 0]; // little knuckle
+    const hand: TrackedHand = { handedness: "Right", score: 1, image, world: image };
+    const [x, y] = palmPoint(hand);
+    expect(x).toBeCloseTo(1 - 0.5, 9);
+    expect(y).toBeCloseTo(0.48, 9);
+  });
+
+  it("stays put as a hand closes into a fist, where the fingertips travel (design decision 3)", () => {
+    // Recorded fists: the pinch point (thumb and index tips) moves 7-10% of the frame width while the hand closes
+    // and up to 3.6% while it is held; the palm point moves at most 1.4% and 0.9%.
+    type Sample = { ts: number; aspect: number; hand: TrackedHand };
+    /** How far a point strays from where it was in the first sample, as a fraction of the frame width. */
+    const spread = ([first, ...rest]: Sample[], point: (h: TrackedHand) => Point2) =>
+      first ? Math.max(0, ...rest.map((x) => screenDistance(point(first.hand), point(x.hand), x.aspect))) : 0;
+    let closingPinch = 0;
+    let closingPalm = 0;
+    let heldPalm = 0;
+    for (const clip of ["two-hands", "one-hand-pinch", "open-palm"] as const) {
+      const frames = loadFixture(clip);
+      for (const side of ["Left", "Right"] as const) {
+        const track = frames.flatMap((f): Sample[] => {
+          const hand = f.hands.find((h) => h.handedness === side);
+          return hand ? [{ ts: f.captureTs, aspect: f.aspect ?? 4 / 3, hand }] : [];
+        });
+        const isFist = (x?: Sample) => x !== undefined && posture(x.hand) === "fist";
+        for (const [i, first] of track.entries()) {
+          if (!isFist(first) || isFist(track[i - 1])) continue; // only the frame a fist forms
+          let end = i;
+          while (isFist(track[end + 1])) end++;
+          const closing = track.slice(Math.max(0, i - 8), i + 1).filter((x) => first.ts - x.ts <= 300);
+          const held = track.slice(i, end + 1).filter((x) => x.ts - first.ts >= 100);
+          closingPinch = Math.max(closingPinch, spread(closing, pinchPoint));
+          closingPalm = Math.max(closingPalm, spread(closing, palmPoint));
+          heldPalm = Math.max(heldPalm, spread(held, palmPoint));
+        }
+      }
+    }
+    expect(closingPinch).toBeGreaterThan(0.05);
+    expect(closingPalm).toBeLessThan(closingPinch / 4);
+    expect(heldPalm).toBeLessThan(0.015);
   });
 });

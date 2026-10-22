@@ -73,6 +73,9 @@ const RINGS: Partial<Record<GestureAction, Ring>> = { "tools-ring": "tools", "cr
  *   the other hand keeps tapping, pressing, scrolling and navigating. A long pinch while a tool holds something (an
  *   element being moved, the section plane) keeps holding it: holding still is not a request for a ring then;
  * - a drag goes to the controller if it takes it (a button press, a scroll, the active tool), else to navigation;
+ * - a fist drag always goes to navigation, with the mode its hand's setting says (pan, orbit), unless that is nothing,
+ *   another navigation is running (the other hand's drag, a two-hand pinch), a ring is open, or both hands are fists;
+ *   it also drops the fist hold, so a moving fist never cancels;
  * - both hands closed into fists are the start of the stop gesture, so neither hand's fist action runs then;
  * - "yes" and "no" answer the agent's approval card when exactly one waits, else the tool's question.
  */
@@ -82,6 +85,7 @@ export class InputRouter {
   private readonly fists = new Set<Hand>();
   /** Both hands were fists together: their fist actions stay off until both are open again. */
   private bothFists = false;
+  private twoHand = false;
 
   constructor(
     private readonly targets: RouterTargets,
@@ -154,9 +158,15 @@ export class InputRouter {
         else this.run(action, event.position, event.hand);
         return;
       }
+      case "fist.drag.start":
+      case "fist.drag.update":
+      case "fist.drag.end":
+        this.fistDrag(event);
+        return;
       case "twohand.start":
       case "twohand.update":
       case "twohand.end":
+        this.twoHand = event.type !== "twohand.end";
         if (actionFor(b, "twohand") === "none" || !this.on("twoHandNavigation")) return;
         if (!palette.isOpen || event.type === "twohand.end") this.targets.navigation(event);
         return;
@@ -179,6 +189,7 @@ export class InputRouter {
         this.owners.clear();
         this.fists.clear();
         this.bothFists = false;
+        this.twoHand = false;
         this.targets.navigation(event);
         return;
       default:
@@ -188,6 +199,32 @@ export class InputRouter {
 
   private dragMode(hand: Hand): DragMode {
     return actionFor(this.bindings, "drag", hand) === "pan" ? "pan" : "orbit";
+  }
+
+  /** A fist drag moves the view the way its hand's setting says; the rest of its rules are in the class comment. */
+  private fistDrag(event: Extract<GestureEvent, { type: `fist.drag.${string}` }>): void {
+    const action = actionFor(this.bindings, "fistdrag", event.hand);
+    const mode: DragMode = action === "pan" ? "pan" : "orbit";
+    if (event.type === "fist.drag.start") {
+      const otherNavigates = [...this.owners].some(
+        ([hand, owner]) => hand !== event.hand && owner === "navigation",
+      );
+      const free =
+        action !== "none" &&
+        !this.bothFists &&
+        !this.twoHand &&
+        !this.targets.palette.isOpen &&
+        !otherNavigates;
+      this.owners.set(event.hand, free ? "navigation" : "ignored");
+      if (free) {
+        this.targets.tool.clutch(false); // a fist that moves is not a hold: drop the pending cancel
+        this.targets.navigation(event, mode);
+      }
+      return;
+    }
+    const owner = this.owners.get(event.hand);
+    if (event.type === "fist.drag.end") this.owners.delete(event.hand);
+    if (owner === "navigation") this.targets.navigation(event, mode);
   }
 
   /** One hand's fist runs its action once held; both fists together are the stop gesture's start instead. */

@@ -1,6 +1,6 @@
 import type { GestureEvent, Hand, Point2, TrackingFrame } from "@aex/protocol";
 import { DEFAULT_GESTURES, type GestureConfig } from "./config.ts";
-import { DEFAULT_ASPECT, othersExtension, pinchPoint, pinchRatio, posture } from "./features.ts";
+import { DEFAULT_ASPECT, othersExtension, palmPoint, pinchPoint, pinchRatio, posture } from "./features.ts";
 import { type HandDisplay, HandMachine, type HandObservation } from "./hand-machine.ts";
 import { HeadMachine } from "./head-machine.ts";
 
@@ -76,6 +76,7 @@ export class GestureRecognizer {
         others: othersExtension(hand),
         posture: posture(hand, this.config),
         position: pinchPoint(hand),
+        palm: palmPoint(hand),
         confidence: hand.score,
         aspect,
       };
@@ -88,7 +89,10 @@ export class GestureRecognizer {
 
     this.updateEngagement(ts, observations, events);
 
-    const ctx = { engaged: this.engaged };
+    const ctx = {
+      engaged: this.engaged,
+      bothFists: observations.Left?.posture === "fist" && observations.Right?.posture === "fist",
+    };
     for (const hand of ["Left", "Right"] as const) {
       events.push(...this.machines[hand].update(observations[hand] ?? null, ts, ctx));
     }

@@ -479,6 +479,11 @@ button {
 .hand-pointer[data-mode="grab"] {
   border-radius: 7px;
 }
+/* A fist that would pan, or a drag that is panning: four arrows, filled in while the view moves. */
+.hand-pointer[data-mode="pan"][data-panning="true"] {
+  background: var(--accent);
+  color: var(--viewer-bg);
+}
 .hand-pointer[data-engaged="false"] {
   border-style: dashed;
   border-color: var(--muted);
@@ -520,6 +525,9 @@ button {
   background: color-mix(in srgb, var(--hand-left) 45%, transparent);
 }
 .hand-pointer[data-hand="left"][data-mode="palette"] {
+  background: var(--hand-left);
+}
+.hand-pointer[data-hand="left"][data-mode="pan"][data-panning="true"] {
   background: var(--hand-left);
 }
 .hand-pointer[data-hand="left"][data-mode="delete"] {

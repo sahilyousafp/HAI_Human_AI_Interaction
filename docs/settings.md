@@ -10,7 +10,7 @@ The first page lists the sections; each opens its own page with a back button, a
 | **Camera and tracking** | Which camera, whether its image is mirrored, what is drawn over the preview, the live Gestures and Detection cards, and the frame rate, inference time and backend ([perception.md](perception.md)) |
 | **Features** | One switch per feature: see below |
 | **Drawing aids** | Grid, Ortho, Endpoint, Midpoint, Centre, Project and Perpendicular for the create tools and Move ([tools.md](tools.md)) |
-| **Gestures** | What each gesture does, for each hand where a gesture belongs to one ([gestures.md](gestures.md)) |
+| **Gestures** | What each gesture does, for each hand where a gesture belongs to one, including what a fist drag does (pan by default) and what a still fist does (cancel) ([gestures.md](gestures.md)) |
 | **Tool rings** | The eight slots of the tools ring and of the create ring ([tools.md](tools.md)) |
 | **Voice** | Speech to text, listening for names and Mochi's spoken replies ([voice.md](voice.md)) |
 | **Agent permissions** | The tools you always allow, to revoke ([agent.md](agent.md)) |

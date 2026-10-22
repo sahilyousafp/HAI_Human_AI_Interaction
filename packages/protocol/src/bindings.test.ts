@@ -16,6 +16,7 @@ describe("gesture bindings", () => {
       expect(actionFor(DEFAULT_BINDINGS, "tap", hand)).toBe("use-tool");
       expect(actionFor(DEFAULT_BINDINGS, "drag", hand)).toBe("tool-or-orbit");
       expect(actionFor(DEFAULT_BINDINGS, "fist", hand)).toBe("cancel");
+      expect(actionFor(DEFAULT_BINDINGS, "fistdrag", hand)).toBe("pan");
     }
     expect(actionFor(DEFAULT_BINDINGS, "stop")).toBe("stop-agent");
     expect(actionFor(DEFAULT_BINDINGS, "twohand", "Left")).toBe("navigate");
@@ -47,6 +48,24 @@ describe("gesture bindings", () => {
     expect(actionFor(b, "stop")).toBe("none");
     // A newer per-hand choice wins over an older shared one.
     expect(actionFor(resolveBindings({ tap: "select", "tap.right": "undo" }), "tap", "Right")).toBe("undo");
+  });
+
+  it("a fist drag is set per hand to pan, orbit or nothing, and the fist hold keeps its actions", () => {
+    const b = resolveBindings({ "fistdrag.left": "orbit", "fistdrag.right": "none" });
+    expect(actionFor(b, "fistdrag", "Left")).toBe("orbit");
+    expect(actionFor(b, "fistdrag", "Right")).toBe("none");
+    expect(GESTURE_SLOTS.fistdrag.actions).toEqual(["pan", "orbit", "none"]);
+    expect(GESTURE_SLOTS.fist.actions).toEqual(["undo", "redo", "cancel", "ask-agent", "stop-agent", "none"]);
+    expect(GestureBindingsSchema.safeParse({ "fistdrag.left": "cancel" }).success).toBe(false);
+    expect(GestureBindingsSchema.safeParse({ "fist.left": "pan" }).success).toBe(false);
+  });
+
+  it("settings saved before the fist drag existed load with it set to pan on both hands", () => {
+    const old = { "tap.left": "select", "fist.right": "undo", nod: "none" };
+    expect(GestureBindingsSchema.safeParse(old).success).toBe(true);
+    const b = resolveBindings(old);
+    for (const hand of ["Left", "Right"] as const) expect(actionFor(b, "fistdrag", hand)).toBe("pan");
+    expect(actionFor(b, "fist", "Right")).toBe("undo");
   });
 
   it("ignores actions a gesture does not offer and unknown gestures", () => {

@@ -1,4 +1,6 @@
 import {
+  actionFor,
+  DEFAULT_BINDINGS,
   DRAWING_AIDS,
   type Element,
   type GestureEvent,
@@ -57,6 +59,8 @@ import { MeasureMarks, ReferenceMarkers, SectionClipping, SectionPlane, SnapMark
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 
 const FOV = 45;
+/** The pan pointer's icon: arrows in the four directions. */
+const PAN_ICON = "M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3";
 /** Camera easing time constant: smooths hand jitter without adding visible lag. */
 /**
  * The camera eases toward where gestures put it. Hand input arrives about every 40 ms (one tracking frame); easing
@@ -627,6 +631,16 @@ export function Viewer({
   /** The project the view was last framed for (the path), so each opened project is framed once. */
   const framed = useRef<string | null | undefined>(undefined);
   const navigating = useRef(false);
+  /** Per hand: it is a fist (a clutch), and its drag is moving the view by panning. Drives the pan pointer. */
+  const [handShape, setHandShape] = useState<Partial<Record<Hand, { fist: boolean; panning: boolean }>>>({});
+  const shapeOf = useCallback((hand: Hand, patch: Partial<{ fist: boolean; panning: boolean }>) => {
+    setHandShape((all) => {
+      const now = { fist: false, panning: false, ...all[hand] };
+      return now.fist === (patch.fist ?? now.fist) && now.panning === (patch.panning ?? now.panning)
+        ? all
+        : { ...all, [hand]: { ...now, ...patch } };
+    });
+  }, []);
   /** Each visible hand's pointer: its viewer position, where it is on screen, and whether it is over a control. */
   const [pointers, setPointers] = useState<Partial<Record<Hand, HandPointerState>>>({});
   const [engaged, setEngaged] = useState(bus.engaged);
@@ -763,9 +777,17 @@ export function Viewer({
           invalidateRef.current();
           pendingTs.current = Math.max(pendingTs.current ?? 0, event.ts);
         }
-        if (event.type === "pinch.drag.start" || event.type === "twohand.start") navigating.current = true;
-        if (event.type === "pinch.drag.end" || event.type === "twohand.end" || event.type === "disengaged") {
+        const dragStart = event.type === "pinch.drag.start" || event.type === "fist.drag.start";
+        const dragEnd = event.type === "pinch.drag.end" || event.type === "fist.drag.end";
+        if (dragStart || event.type === "twohand.start") navigating.current = true;
+        if (dragEnd || event.type === "twohand.end" || event.type === "disengaged")
           navigating.current = false;
+        // A drag that pans shows the pan pointer for as long as it moves the view.
+        if ("hand" in event && event.hand !== "both") {
+          if (dragStart) shapeOf(event.hand, { panning: dragMode === "pan" });
+          if (dragEnd) shapeOf(event.hand, { panning: false });
+        } else if (event.type === "disengaged") {
+          setHandShape({});
         }
       },
       press: (at, source) => {
@@ -791,7 +813,7 @@ export function Viewer({
       },
       askAgent: () => askAgentRef.current(),
     });
-  }, [tools, client, sectionOutlineOnScreen, features, aids, controlFor]);
+  }, [tools, client, sectionOutlineOnScreen, features, aids, controlFor, shapeOf]);
 
   // Hand input: the router sends each gesture to the palette, the active tool or navigation (never the bridge).
   // Both hands are pointers: each shows what a pinch would do there and lights the control it would press. The
@@ -802,6 +824,11 @@ export function Viewer({
     const offGestures = bus.onGestures((events) => {
       for (const event of events) {
         if (event.type.startsWith("pinch.") && "hand" in event && event.hand !== "both") focus = event.hand;
+        if (event.type === "clutch.start" || event.type === "clutch.end")
+          shapeOf(
+            event.hand,
+            event.type === "clutch.start" ? { fist: true } : { fist: false, panning: false },
+          );
         router.handle(event);
       }
     });
@@ -919,7 +946,7 @@ export function Viewer({
       offStopArmed();
       for (const timer of Object.values(hideTimers)) clearTimeout(timer);
     };
-  }, [bus, tools, gestures, features]);
+  }, [bus, tools, gestures, features, shapeOf]);
 
   // Mouse: a click goes to the active tool; a left drag goes to the tool if it takes it, else orbits; right or
   // middle drag pans; holding the right button still opens the palette; the wheel zooms.
@@ -1107,13 +1134,17 @@ export function Viewer({
   // The hand pointer shows what a pinch would do here: press a button, steer the palette, grab the section, or the
   // active tool's own action (its icon).
   const activeIcon = tools.registry.get(toolState.activeId)?.icon ?? null;
+  const fistPans = (hand: Hand) =>
+    actionFor(gestures.bindings?.() ?? DEFAULT_BINDINGS, "fistdrag", hand) === "pan";
   const pointerLook = (hand: Hand, p: HandPointerState): { mode: string; glyph: string | null } => {
     let mode: string = toolState.activeId;
     if (!engaged) mode = "idle";
     else if (toolState.palette?.hand === hand) mode = "palette";
+    else if (handShape[hand]?.panning || (handShape[hand]?.fist && fistPans(hand))) mode = "pan";
     else if (p.overControl) mode = "press";
     else if (p.focus && toolState.overlay.sectionHover) mode = "grab";
     if (mode === "grab") return { mode, glyph: "M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4" };
+    if (mode === "pan") return { mode, glyph: PAN_ICON };
     return {
       mode,
       glyph: mode === toolState.activeId && toolState.activeId !== "select" ? activeIcon : null,
@@ -1270,10 +1301,11 @@ export function Viewer({
               data-mode={mode}
               data-engaged={engaged}
               data-focus={p.focus}
+              data-panning={handShape[hand]?.panning ?? false}
               style={{ left: `${p.client[0]}px`, top: `${p.client[1]}px` }}
               aria-hidden="true"
             >
-              {glyph && <ToolIcon path={glyph} size={14} />}
+              {glyph && <ToolIcon path={glyph} size={mode === "pan" ? 20 : 14} />}
             </div>
           );
         }),

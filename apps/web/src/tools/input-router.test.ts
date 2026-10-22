@@ -295,6 +295,89 @@ describe("gesture bindings", () => {
   });
 });
 
+describe("fist drag", () => {
+  const fistDrag = (router: InputRouter, hand: Hand = "Right") => {
+    router.handle(ev("fist.drag.start", hand));
+    router.handle(ev("fist.drag.update", hand));
+    router.handle(ev("fist.drag.end", hand));
+  };
+
+  it("pans by default, drops the pending fist hold first, and never reaches the tool", () => {
+    const { router, log } = setup(true); // the active tool would take a pinch drag
+    fistDrag(router);
+    expect(log).toEqual([
+      "tool.clutch.false",
+      "nav:fist.drag.start:pan",
+      "nav:fist.drag.update:pan",
+      "nav:fist.drag.end:pan",
+    ]);
+  });
+
+  it("each hand has its own choice: orbit on one, pan on the other, nothing on a third setting", () => {
+    const { router, log } = setup(false, { bindings: { "fistdrag.left": "orbit" } });
+    fistDrag(router, "Left");
+    fistDrag(router, "Right");
+    expect(log.filter((l) => l.startsWith("nav:"))).toEqual([
+      "nav:fist.drag.start",
+      "nav:fist.drag.update",
+      "nav:fist.drag.end",
+      "nav:fist.drag.start:pan",
+      "nav:fist.drag.update:pan",
+      "nav:fist.drag.end:pan",
+    ]);
+    const off = setup(false, { bindings: { "fistdrag.right": "none" } });
+    fistDrag(off.router);
+    expect(off.log).toEqual([]);
+  });
+
+  it("is ignored while the other hand navigates, while two hands pinch, and while a ring is open", () => {
+    const orbiting = setup();
+    orbiting.router.handle(ev("pinch.drag.start", "Right"));
+    orbiting.log.length = 0;
+    fistDrag(orbiting.router, "Left");
+    expect(orbiting.log).toEqual([]);
+
+    const pinching = setup();
+    pinching.router.handle(twoHand("twohand.start"));
+    pinching.log.length = 0;
+    fistDrag(pinching.router, "Left");
+    expect(pinching.log.filter((l) => l.includes("fist"))).toEqual([]);
+    pinching.router.handle(twoHand("twohand.end"));
+    pinching.log.length = 0;
+    fistDrag(pinching.router, "Left"); // free again once the two-hand pinch ends
+    expect(pinching.log).toContain("nav:fist.drag.start:pan");
+
+    const ring = setup();
+    ring.router.handle(ev("pinch.drag.start", "Right"));
+    ring.router.handle(ev("pinch.hold", "Right"));
+    ring.log.length = 0;
+    fistDrag(ring.router, "Left");
+    expect(ring.log).toEqual([]);
+  });
+
+  it("is ignored while both hands are fists, and again free once they have opened", () => {
+    const { router, log } = setup(false, { bindings: { "fist.left": "none", "fist.right": "none" } });
+    router.handle(ev("clutch.start", "Left"));
+    router.handle(ev("clutch.start", "Right"));
+    log.length = 0;
+    fistDrag(router, "Right");
+    expect(log).toEqual([]);
+    router.handle(ev("clutch.end", "Left"));
+    router.handle(ev("clutch.end", "Right"));
+    fistDrag(router, "Right");
+    expect(log).toContain("nav:fist.drag.start:pan");
+  });
+
+  it("disengaging forgets a running fist drag", () => {
+    const { router, log } = setup();
+    router.handle(ev("fist.drag.start"));
+    router.handle({ type: "disengaged", ts: ts++, confidence: 1, reason: "idle" });
+    log.length = 0;
+    router.handle(ev("fist.drag.update")); // a stray update: nothing owns it any more
+    expect(log).toEqual([]);
+  });
+});
+
 describe("feature switches", () => {
   it("switched-off features ignore their gestures", () => {
     const { router, log } = setup(false, {

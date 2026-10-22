@@ -27,7 +27,7 @@ The active tool is always shown at the bottom left of the view. To leave it and 
 - press its **x** button (with the mouse, or with a hand: point at it and tap with a quick pinch),
 - press Escape,
 - shake your head,
-- or hold a closed fist for 600 ms.
+- or hold a closed fist still for 1.5 s (a fist that moves pans the view instead, see [navigation.md](navigation.md)).
 
 Escape and a head shake first close an open palette, answer "keep" to a question, or drop a drag in progress; the next one returns to Select.
 

@@ -80,6 +80,7 @@ Each built week ends in a clip; its script is in `demos/`. Tick a week once its 
 - [ ] Week 10: `demos/10-studio-ui.md`
 - [ ] Week 11: `demos/11-precision-and-import.md`
 - [ ] Week 12: `demos/12-3d-snapping-and-project-files.md`
+- [ ] Bonus: `demos/12b-fist-pan.md` (fist-drag pan; `add-fist-drag-pan`; fill in its real-camera checks before posting)
 
 ## Change dependencies
 

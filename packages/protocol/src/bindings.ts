@@ -73,9 +73,16 @@ export const GESTURE_SLOTS = {
     actions: ["tool-or-orbit", "orbit", "pan", "none"],
     default: "tool-or-orbit",
   },
+  fistdrag: {
+    label: "Fist drag",
+    how: "Close the hand into a fist and move it",
+    perHand: true,
+    actions: ["pan", "orbit", "none"],
+    default: "pan",
+  },
   fist: {
-    label: "Fist",
-    how: "Close the hand and hold for half a second",
+    label: "Fist hold",
+    how: "Close the hand into a fist and keep it still for a second and a half",
     perHand: true,
     actions: COMMANDS,
     default: "cancel",

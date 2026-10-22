@@ -19,6 +19,8 @@ const EVENT_LABEL: Partial<Record<GestureEvent["type"], string>> = {
   "pinch.drag.end": "drag end",
   "clutch.start": "clutch",
   "clutch.end": "clutch released",
+  "fist.drag.start": "fist drag start",
+  "fist.drag.end": "fist drag end",
   "twohand.start": "two-hand start",
   "twohand.end": "two-hand end",
   "head.nod": "nod",

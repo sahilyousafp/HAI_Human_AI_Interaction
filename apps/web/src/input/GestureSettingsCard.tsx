@@ -27,6 +27,7 @@ const DETECTED_BY: Partial<Record<GestureType, GestureSlot | "engage">> = {
   "pinch.drag.start": "drag",
   "twohand.start": "twohand",
   "clutch.start": "fist",
+  "fist.drag.start": "fistdrag",
   "head.nod": "nod",
   "head.shake": "shake",
   "hands.stop": "stop",

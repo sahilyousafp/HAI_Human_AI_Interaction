@@ -9,6 +9,7 @@ const THUMB_TIP = 4;
 const INDEX_MCP = 5;
 const INDEX_TIP = 8;
 const MIDDLE_MCP = 9;
+const RING_MCP = 13;
 const PINKY_MCP = 17;
 const FINGERS = {
   index: [8, 5],
@@ -97,6 +98,16 @@ export function pinchPoint(hand: TrackedHand): Point2 {
   const t = point(hand.image, THUMB_TIP);
   const i = point(hand.image, INDEX_TIP);
   return [1 - (t[0] + i[0]) / 2, (t[1] + i[1]) / 2];
+}
+
+/**
+ * Centre of the palm (the wrist and the four finger knuckles), mirrored like `pinchPoint`. Unlike the fingertips it
+ * does not move as the fingers curl, so it is the point a closed fist is followed by.
+ */
+export function palmPoint(hand: TrackedHand): Point2 {
+  const joints = [WRIST, INDEX_MCP, MIDDLE_MCP, RING_MCP, PINKY_MCP].map((i) => point(hand.image, i));
+  const n = joints.length;
+  return [1 - joints.reduce((sum, j) => sum + j[0], 0) / n, joints.reduce((sum, j) => sum + j[1], 0) / n];
 }
 
 /** Distance between two normalised points, in fractions of the frame width. */

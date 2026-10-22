@@ -110,7 +110,8 @@ export function coast(t: Turntable, input: NavigationInput, dtMs: number): Turnt
 /**
  * Applies one gesture event to the camera. Pure apart from `input`: returns the new camera state.
  * - One-hand pinch drag orbits like dragging the model with the mouse: dragging right turns the camera to negative
- *   azimuth, dragging down raises the view. Set to pan, it moves the view like the two-hand midpoint does.
+ *   azimuth, dragging down raises the view. Set to pan, it moves the view like the two-hand midpoint does. A fist drag
+ *   is the same drag made with a closed hand, and its hand's own setting says whether it pans or orbits.
  * - Two-hand pinch: hands apart zooms in; the view pans opposite to the midpoint's motion; turning the hands like a
  *   dial turns the view.
  * - Releasing while still moving is a flick: `input.momentum` is set and `coast` keeps the view moving. Grabbing
@@ -130,10 +131,12 @@ export function navigate(
   };
   switch (event.type) {
     case "pinch.drag.start":
+    case "fist.drag.start":
       input.momentum = null;
       input.samples = [];
       return t;
     case "pinch.drag.update":
+    case "fist.drag.update":
       if (input.dragMode === "pan")
         return record({ panX: -event.delta[0] * gains.pan, panY: event.delta[1] * gains.pan });
       return record({
@@ -164,6 +167,7 @@ export function navigate(
       });
     }
     case "pinch.drag.end":
+    case "fist.drag.end":
     case "twohand.end":
       input.momentum = fling(input.samples, event.ts);
       input.samples = [];
@@ -176,4 +180,4 @@ export function navigate(
 
 /** True for the events that move the camera (used to stamp gesture-to-render latency). */
 export const movesCamera = (event: GestureEvent): boolean =>
-  event.type === "pinch.drag.update" || event.type === "twohand.update";
+  event.type === "pinch.drag.update" || event.type === "fist.drag.update" || event.type === "twohand.update";

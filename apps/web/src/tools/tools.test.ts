@@ -131,7 +131,8 @@ describe("palette and active tool", () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());
 
-    it("after the fist is held 600 ms (the clutch is recognised 100 ms in)", () => {
+    it("after the fist is held still for 1.5 s (the clutch is recognised 100 ms in)", () => {
+      expect(FIST_RESET_MS).toBe(1500);
       const { controller } = setup();
       controller.choose("move");
       controller.fist(true);

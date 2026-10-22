@@ -51,6 +51,11 @@ export interface GestureConfig {
   clutch: {
     /** A fist must hold (or be released) this long before clutch starts (or ends). */
     debounceMs: number;
+    /**
+     * A fist that moves this fraction of the frame width from where it closed is a fist drag (it pans), and never a
+     * hold (cancel). Measured on the palm point, which stays put while the fingers curl.
+     */
+    moveMin: number;
   };
   twoHand: {
     /**
@@ -99,7 +104,7 @@ export const DEFAULT_GESTURES: GestureConfig = {
     tapOpenMs: 200,
   },
   posture: { extended: 1.35, curled: 1.15, thumbSpread: 0.45, palmFacing: 0.5 },
-  clutch: { debounceMs: 100 },
+  clutch: { debounceMs: 100, moveMin: 0.03 },
   twoHand: { startWindowMs: 300 },
   stop: { fistsMs: 250, openMs: 1000 },
   head: { windowMs: 1200, nodDegrees: 8, shakeDegrees: 10, reversals: 2, cooldownMs: 1000 },

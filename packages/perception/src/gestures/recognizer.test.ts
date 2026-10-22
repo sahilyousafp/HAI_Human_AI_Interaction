@@ -267,6 +267,135 @@ describe("independent hands (spec: two pinches are one gesture only when they st
   });
 });
 
+describe("fist drag (spec: a moving fist is a fist drag)", () => {
+  const fistDrags = (events: GestureEvent[]) => events.filter((e) => e.type.startsWith("fist.drag."));
+  const still = (hand: TrackedHand, n: number): Step[] => repeat(n, { hands: [neutralLeft, hand] });
+  const toTheRight = (n: number, perFrame: number): Step[] =>
+    // Image x is unmirrored, so a hand moving left in the image moves right on screen.
+    repeat(n, (i) => ({ hands: [neutralLeft, shift(fistRight, -perFrame * (i + 1))] }));
+  const sumX = (events: GestureEvent[]) =>
+    events.reduce((sum, e) => (e.type === "fist.drag.update" ? sum + e.delta[0] : sum), 0);
+
+  it("a fist closed at rest, then moved 10%, starts, updates by 10% in total and ends; nothing else", () => {
+    const events = play([
+      ...engageSteps,
+      ...still(fistRight, 8),
+      ...toTheRight(10, 0.01),
+      ...still(neutralRight, 6),
+    ]);
+    expect(types(fistDrags(events))).toEqual([
+      "fist.drag.start",
+      ...Array(events.filter((e) => e.type === "fist.drag.update").length).fill("fist.drag.update"),
+      "fist.drag.end",
+    ]);
+    expect(events.filter((e) => e.type === "fist.drag.update").length).toBeGreaterThanOrEqual(8);
+    expect(sumX(events)).toBeCloseTo(0.1, 2);
+    expect(events).toContainEqual(expect.objectContaining({ type: "clutch.start", hand: "Right" }));
+    expect(events.filter((e) => e.type.startsWith("pinch."))).toEqual([]);
+  });
+
+  it("starts where the fist closed, so the movement before the threshold is not lost", () => {
+    const events = play([...engageSteps, ...still(fistRight, 8), ...toTheRight(10, 0.01)]);
+    const start = events.find((e) => e.type === "fist.drag.start");
+    const clutch = events.find((e) => e.type === "clutch.start");
+    expect(start).toBeDefined();
+    expect(clutch).toBeDefined();
+    // The fist formed at rest, so the start sits at the resting palm (the first update carries the rest).
+    const firstUpdate = events.find((e) => e.type === "fist.drag.update");
+    if (start?.type !== "fist.drag.start" || firstUpdate?.type !== "fist.drag.update")
+      throw new Error("no drag");
+    expect(firstUpdate.position[0] - start.position[0]).toBeCloseTo(firstUpdate.delta[0], 9);
+    expect(firstUpdate.delta[0]).toBeGreaterThanOrEqual(0.03 - 1e-9);
+  });
+
+  it("a fist that stays closed and still is a clutch and no drag", () => {
+    const events = play([...engageSteps, ...still(fistRight, 40), ...still(neutralRight, 6)]);
+    expect(types(events)).toContain("clutch.start");
+    expect(fistDrags(events)).toEqual([]);
+  });
+
+  it("a wobble of 1% is not a drag", () => {
+    const events = play([
+      ...engageSteps,
+      ...still(fistRight, 8),
+      ...repeat(20, (i) => ({ hands: [neutralLeft, shift(fistRight, i % 2 ? -0.01 : 0)] })),
+    ]);
+    expect(fistDrags(events)).toEqual([]);
+  });
+
+  it("opening the hand ends the drag at the first frame that is no longer a fist, and the opening adds no update", () => {
+    const events = play([
+      ...engageSteps,
+      ...still(fistRight, 8),
+      ...toTheRight(10, 0.01),
+      // The hand opens while it moves on: these frames must not move the view.
+      ...repeat(6, (i) => ({ hands: [neutralLeft, shift(neutralRight, -0.1 - 0.02 * (i + 1))] })),
+    ]);
+    const stream = types(events);
+    const end = stream.indexOf("fist.drag.end");
+    expect(stream.filter((t) => t === "fist.drag.end")).toHaveLength(1);
+    expect(stream.slice(end)).not.toContain("fist.drag.update");
+    expect(stream.indexOf("clutch.end")).toBeGreaterThan(end); // the clutch ends after its own debounce
+    expect(sumX(events)).toBeCloseTo(0.1, 2);
+  });
+
+  it("a fist closed while the hand was dragging is only a clutch, however far it moves", () => {
+    const events = play([
+      ...engageSteps,
+      ...repeat(4, { hands: [neutralLeft, neutralRight] }),
+      ...repeat(15, (i) => ({ hands: [neutralLeft, shift(pinchRight, -0.006 * i)] })), // a pinch drag
+      ...repeat(5, { hands: [neutralLeft, shift(fistRight, -0.09)] }), // closes into a fist
+      ...repeat(20, (i) => ({ hands: [neutralLeft, shift(fistRight, -0.09 - 0.01 * (i + 1))] })), // moves 20%
+    ]);
+    expect(types(events)).toContain("pinch.drag.start");
+    expect(fistDrags(events)).toEqual([]);
+  });
+
+  it("tracking lost for 200 ms keeps the drag, lost for 400 ms ends it", () => {
+    const lost = (n: number): Step[] => repeat(n, { hands: [neutralLeft] });
+    const keep = play([
+      ...engageSteps,
+      ...still(fistRight, 8),
+      ...toTheRight(10, 0.01),
+      ...lost(6),
+      ...toTheRight(3, 0.01),
+    ]);
+    expect(types(keep)).not.toContain("fist.drag.end");
+    const end = play([...engageSteps, ...still(fistRight, 8), ...toTheRight(10, 0.01), ...lost(12)]);
+    expect(types(end).filter((t) => t === "fist.drag.end")).toHaveLength(1);
+  });
+
+  it("the other hand closing into a fist ends the drag, and the stop still fires", () => {
+    const events = play([
+      ...engageSteps,
+      ...still(fistRight, 8),
+      ...toTheRight(10, 0.01),
+      ...repeat(10, { hands: [fistLeft, shift(fistRight, -0.1)] }),
+      ...repeat(10, (i) => ({ hands: [fistLeft, shift(fistRight, -0.1 - 0.01 * (i + 1))] })), // keeps moving
+      ...repeat(20, { hands: [openLeft, openRight] }),
+    ]);
+    const stream = types(events);
+    expect(stream.filter((t) => t === "fist.drag.end")).toHaveLength(1);
+    // Only the first 10% moved the view: the fist kept moving another 10% while both hands were fists.
+    expect(sumX(events)).toBeCloseTo(0.1, 2);
+    expect(stream).toContain("hands.stop");
+  });
+
+  it("a fist closed before engaging is only a clutch, even after the other hand engages", () => {
+    const events = play([
+      ...repeat(12, { hands: [openLeft, fistRight] }), // the left palm engages while the right fist is already closed
+      ...toTheRight(10, 0.01).map((step) => ({ hands: [openLeft, ...(step.hands ?? []).slice(1)] })),
+    ]);
+    expect(types(events)).toContain("engaged");
+    expect(fistDrags(events)).toEqual([]);
+  });
+
+  it("does nothing while not engaged", () => {
+    const events = play([...still(fistRight, 8), ...toTheRight(10, 0.01)]);
+    expect(events).toEqual([]);
+  });
+});
+
 describe("recorded footage", () => {
   it("the pinch in the one-hand-pinch clip is a tap, so it selects what it points at", () => {
     const events = new GestureRecognizer();

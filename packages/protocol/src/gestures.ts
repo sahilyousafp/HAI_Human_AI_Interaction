@@ -34,6 +34,10 @@ export const GestureEvent = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("pinch.drag.end"), ...handed, position: Point2 }),
   z.strictObject({ type: z.literal("clutch.start"), ...handed }),
   z.strictObject({ type: z.literal("clutch.end"), ...handed }),
+  /** A fist closed at rest, then moved: it carries the view like a grabbed map (see `clutch.moveMin`). */
+  z.strictObject({ type: z.literal("fist.drag.start"), ...handed, position: Point2 }),
+  z.strictObject({ type: z.literal("fist.drag.update"), ...handed, position: Point2, delta: Point2 }),
+  z.strictObject({ type: z.literal("fist.drag.end"), ...handed, position: Point2 }),
   z.strictObject({ type: z.literal("twohand.start"), ...twoHand }),
   z.strictObject({ type: z.literal("twohand.update"), ...twoHand }),
   z.strictObject({ type: z.literal("twohand.end"), ...twoHand }),

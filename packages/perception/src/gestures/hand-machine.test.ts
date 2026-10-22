@@ -1,6 +1,6 @@
 import type { GestureEvent, Point2 } from "@aex/protocol";
 import { describe, expect, it } from "vitest";
-import { HandMachine, type HandObservation } from "./hand-machine.ts";
+import { type HandContext, HandMachine, type HandObservation } from "./hand-machine.ts";
 
 const STEP = 1000 / 30;
 const engaged = { engaged: true };
@@ -8,7 +8,7 @@ const engaged = { engaged: true };
 /** Drives a machine through observations at 30 fps; returns every event in order. */
 function run(
   steps: Array<Partial<HandObservation> | null>,
-  ctx = engaged,
+  ctx: HandContext = engaged,
   machine = new HandMachine("Right"),
 ): GestureEvent[] {
   const events: GestureEvent[] = [];
@@ -193,6 +193,117 @@ describe("clutch (spec: closed fist acts as a clutch)", () => {
       ...repeat(3, () => ({ ratio: 0.8 })),
     ]);
     expect(types(events)).toEqual(["clutch.start", "clutch.end"]);
+  });
+});
+
+describe("fist drag (spec: a moving fist is a fist drag)", () => {
+  const fist = (x: number) => ({ ratio: 0.1, posture: "fist" as const, palm: at(x), position: at(0.9) });
+
+  it("starts at the clutch position once the palm has moved 3%, and carries the movement since", () => {
+    const events = run([
+      ...repeat(5, () => fist(0.3)), // closes and holds at rest (the clutch starts after 100 ms)
+      ...repeat(8, (i) => fist(0.3 + 0.01 * (i + 1))),
+    ]);
+    const start = events.find((e) => e.type === "fist.drag.start");
+    expect(start).toMatchObject({ hand: "Right", position: [0.3, 0.5] });
+    const updates = events.filter((e) => e.type === "fist.drag.update");
+    expect(updates[0]?.type === "fist.drag.update" && updates[0].delta[0]).toBeGreaterThanOrEqual(
+      0.03 - 1e-9,
+    );
+    expect(updates.reduce((sum, e) => sum + (e.type === "fist.drag.update" ? e.delta[0] : 0), 0)).toBeCloseTo(
+      0.08,
+      9,
+    );
+  });
+
+  it("follows the palm, not the pinch point, which moves as the fingers curl", () => {
+    const events = run([
+      ...repeat(5, () => fist(0.3)),
+      ...repeat(10, (i) => ({ ...fist(0.3), position: at(0.9 - 0.05 * i) })), // fingertips travel, palm stays
+    ]);
+    expect(types(events).filter((t) => t.startsWith("fist.drag."))).toEqual([]);
+  });
+
+  it("a fist closed while not engaged is a clutch for good: no fist drag even once engaged", () => {
+    const m = new HandMachine("Right");
+    const events = [
+      ...run(
+        repeat(5, () => fist(0.3)),
+        { engaged: false },
+        m,
+      ),
+      ...run(
+        repeat(10, (i) => fist(0.3 + 0.01 * (i + 1))),
+        engaged,
+        m,
+      ),
+    ];
+    expect(types(events)).toEqual([]);
+  });
+
+  it("a one-frame flicker mid-drag ends it and the fist carries on from where it is, without a jump", () => {
+    const events = run([
+      ...repeat(5, () => fist(0.3)),
+      ...repeat(10, (i) => fist(0.3 + 0.01 * (i + 1))), // dragged to 0.4
+      { ratio: 0.5, palm: at(0.41), position: at(0.9) }, // one frame not read as a fist
+      ...repeat(10, (i) => fist(0.42 + 0.01 * (i + 1))), // the fist carries on
+    ]);
+    const stream = types(events);
+    expect(stream.filter((t) => t === "fist.drag.end")).toHaveLength(1); // at the flicker
+    const starts = events.filter((e) => e.type === "fist.drag.start");
+    expect(starts).toHaveLength(2);
+    // The second drag starts where the fist resumed, not back at the clutch position.
+    expect(starts[1]).toMatchObject({ position: [expect.closeTo(0.43, 9), 0.5] });
+    expect(stream).not.toContain("clutch.end");
+  });
+
+  it("the other hand being a fist too keeps it a pure clutch until it opens", () => {
+    const m = new HandMachine("Right");
+    const events = [
+      ...run(
+        repeat(5, () => fist(0.3)),
+        engaged,
+        m,
+      ),
+      ...run(
+        repeat(5, (i) => fist(0.3 + 0.01 * (i + 1))),
+        engaged,
+        m,
+      ), // starts dragging
+      ...run(
+        repeat(10, (i) => fist(0.35 + 0.01 * (i + 1))),
+        { engaged: true, bothFists: true },
+        m,
+      ),
+      ...run(
+        repeat(10, (i) => fist(0.45 + 0.01 * (i + 1))),
+        engaged,
+        m,
+      ), // the partner opened; still a fist
+    ];
+    const stream = types(events);
+    expect(stream.filter((t) => t === "fist.drag.end")).toHaveLength(1);
+    expect(stream.lastIndexOf("fist.drag.update")).toBeLessThan(stream.indexOf("fist.drag.end"));
+  });
+
+  it("disengaging ends a running fist drag", () => {
+    const m = new HandMachine("Right");
+    const events = run(
+      [...repeat(5, () => fist(0.3)), ...repeat(8, (i) => fist(0.3 + 0.01 * (i + 1)))],
+      engaged,
+      m,
+    );
+    expect(types(events)).toContain("fist.drag.start");
+    expect(types(m.cancel(2000))).toEqual(["fist.drag.end"]);
+    expect(
+      types(
+        run(
+          repeat(10, (i) => fist(0.4 + 0.01 * (i + 1))),
+          engaged,
+          m,
+        ),
+      ),
+    ).toEqual([]);
   });
 });
 

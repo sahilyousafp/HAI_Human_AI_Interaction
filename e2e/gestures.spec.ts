@@ -30,7 +30,7 @@ test.describe("gesture settings", () => {
     bridge = await startTestBridge(page);
     await openViewer(page);
     const settings = await card(page);
-    await expect(settings.locator(".gesture-row")).toHaveCount(9); // open palm (fixed) and eight settable gestures
+    await expect(settings.locator(".gesture-row")).toHaveCount(10); // open palm (fixed) and nine settable gestures
     await expect(settings.locator('[data-slot="engage"]')).toContainText("Engage (always)");
     await expect(settings.getByTestId("gesture-tap-right")).toHaveValue("use-tool");
     await expect(settings.getByTestId("gesture-tap-left")).toHaveValue("use-tool");
@@ -38,9 +38,21 @@ test.describe("gesture settings", () => {
     // A long pinch opens a different ring per hand.
     await expect(settings.getByTestId("gesture-hold-right")).toHaveValue("tools-ring");
     await expect(settings.getByTestId("gesture-hold-left")).toHaveValue("create-ring");
+    // A fist pans on either hand; holding it still is the cancel.
+    await expect(settings.getByTestId("gesture-fistdrag-left")).toHaveValue("pan");
+    await expect(settings.getByTestId("gesture-fistdrag-right")).toHaveValue("pan");
+    await expect(settings.locator('[data-slot="fistdrag"]')).toContainText("Fist drag");
+    await expect(settings.locator('[data-slot="fist"]')).toContainText("Fist hold");
+    await expect(settings.locator('[data-slot="fist"]')).toContainText("second and a half");
+    await expect(settings.getByTestId("gesture-fist-right")).toHaveValue("cancel");
     await expect(settings.getByTestId("gesture-stop")).toHaveValue("stop-agent");
     await expect(settings.locator('[data-slot="stop"]')).toContainText("Two fists, then open hands");
     // A drag offers only what a drag can do.
+    const fistChoices = await settings
+      .getByTestId("gesture-fistdrag-left")
+      .locator("option")
+      .allTextContents();
+    expect(fistChoices).toEqual(["Pan the view (default)", "Orbit the view", "Nothing"]);
     const dragChoices = await settings.getByTestId("gesture-drag-right").locator("option").allTextContents();
     expect(dragChoices).toEqual([
       "Active tool, else orbit (default)",
@@ -60,6 +72,38 @@ test.describe("gesture settings", () => {
     await expect(settings.locator('[data-slot="tap"]')).toHaveAttribute("data-lit", "false", {
       timeout: 3000,
     });
+  });
+
+  test("a fist drag lights its row", async ({ page }) => {
+    bridge = await startTestBridge(page);
+    await openViewer(page);
+    const settings = await card(page);
+    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(
+      (ts) =>
+        window.__AEX_INPUT__?.gestures([
+          { type: "fist.drag.start", ts, confidence: 1, hand: "Left", position: [0.4, 0.5] },
+        ]),
+      await now(page),
+    );
+    await expect(settings.locator('[data-slot="fistdrag"]')).toHaveAttribute("data-lit", "true");
+    await expect(settings.locator('[data-slot="fistdrag"]')).toHaveAttribute("data-lit", "false", {
+      timeout: 3000,
+    });
+  });
+
+  test("the fist drag choice survives a reload and Reset to defaults restores it", async ({ page }) => {
+    bridge = await startTestBridge(page);
+    await openViewer(page);
+    await (await card(page)).getByTestId("gesture-fistdrag-right").selectOption("orbit");
+    await (await card(page)).getByTestId("gesture-fistdrag-left").selectOption("none");
+    await page.reload();
+    await openViewer(page);
+    await expect((await card(page)).getByTestId("gesture-fistdrag-right")).toHaveValue("orbit");
+    await expect((await card(page)).getByTestId("gesture-fistdrag-left")).toHaveValue("none");
+    await (await card(page)).getByRole("button", { name: "Reset to defaults" }).click();
+    await expect((await card(page)).getByTestId("gesture-fistdrag-right")).toHaveValue("pan");
+    await expect((await card(page)).getByTestId("gesture-fistdrag-left")).toHaveValue("pan");
   });
 
   test("tap set to select picks a block whatever the tool, and the choice survives a reload", async ({

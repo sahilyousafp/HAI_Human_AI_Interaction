@@ -1,6 +1,6 @@
 import type { GestureEvent } from "@aex/protocol";
 import { describe, expect, it } from "vitest";
-import { coast, initialInput, navigate } from "./navigation.ts";
+import { coast, initialInput, movesCamera, navigate } from "./navigation.ts";
 import { cameraPosition, ELEVATION_MAX, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 
 const start: Turntable = { target: [10, 5, 3], azimuth: 30, elevation: 30, distance: 50 };
@@ -176,5 +176,67 @@ describe("flick and coast", () => {
     } as GestureEvent);
     expect(input.momentum?.zoom).toBeLessThan(0);
     expect(coastFor(t, input, 5000).distance).toBeLessThan(t.distance);
+  });
+});
+
+describe("fist drag (spec: a fist drag pans the view)", () => {
+  const fist = (type: "start" | "update" | "end", dx = 0, dy = 0, ts = 1): GestureEvent =>
+    type === "update"
+      ? { type: "fist.drag.update", ts, confidence: 1, hand: "Left", position: [0.5, 0.5], delta: [dx, dy] }
+      : ({
+          type: `fist.drag.${type}`,
+          ts,
+          confidence: 1,
+          hand: "Left",
+          position: [0.5, 0.5],
+        } as GestureEvent);
+
+  it("set to pan, moves the view exactly as the two-hand pan does and leaves distance and angles alone", () => {
+    const input = initialInput();
+    input.dragMode = "pan";
+    let t = navigate(start, input, fist("start"));
+    t = navigate(t, input, fist("update", 0.1, 0.05));
+    const expected = pan(start, -0.1 * 1.2, 0.05 * 1.2);
+    for (const [i, v] of t.target.entries()) expect(v).toBeCloseTo(expected.target[i] ?? 0, 9);
+    expect(t.distance).toBe(start.distance);
+    expect(t.azimuth).toBe(start.azimuth);
+    expect(t.elevation).toBe(start.elevation);
+  });
+
+  it("set to orbit, orbits like a pinch drag", () => {
+    const input = initialInput();
+    input.dragMode = "orbit";
+    const viaFist = navigate(start, input, fist("update", 0.2, 0));
+    expect(viaFist).toEqual(navigate(start, initialInput(), drag(0.2, 0)));
+  });
+
+  it("moves the camera only on updates, for the latency stamp", () => {
+    expect(movesCamera(fist("update", 0.1))).toBe(true);
+    expect(movesCamera(fist("start"))).toBe(false);
+    expect(movesCamera(fist("end"))).toBe(false);
+  });
+
+  it("a fast fist drag released while moving coasts on, and grabbing again stops it", () => {
+    const input = initialInput();
+    input.dragMode = "pan";
+    let t = navigate(start, input, fist("start", 0, 0, 1000));
+    for (let i = 1; i <= 6; i++) t = navigate(t, input, fist("update", 0.01, 0, 1000 + i * 33));
+    t = navigate(t, input, fist("end", 0, 0, 1000 + 7 * 33));
+    expect(input.momentum?.panX).toBeLessThan(0); // moving right pans the target left
+    const before = t.target;
+    for (let i = 0; i < 20; i++) t = coast(t, input, 16);
+    expect(t.target).not.toEqual(before);
+    navigate(t, input, fist("start", 0, 0, 5000));
+    expect(input.momentum).toBeNull();
+  });
+
+  it("a fist held still before release does not coast", () => {
+    const input = initialInput();
+    input.dragMode = "pan";
+    let t = navigate(start, input, fist("start", 0, 0, 1000));
+    for (let i = 1; i <= 6; i++) t = navigate(t, input, fist("update", 0.01, 0, 1000 + i * 33));
+    for (let i = 7; i <= 12; i++) t = navigate(t, input, fist("update", 0, 0, 1000 + i * 33));
+    navigate(t, input, fist("end", 0, 0, 1000 + 13 * 33));
+    expect(input.momentum).toBeNull();
   });
 });
