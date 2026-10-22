@@ -1,4 +1,4 @@
-import type { SceneDocument } from "@aex/protocol";
+import type { SceneDocument } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { UtteranceContext } from "./utterance-context.ts";
 

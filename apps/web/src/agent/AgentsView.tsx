@@ -1,8 +1,8 @@
-import { AEX_TOOLS, type AgentDefinition, type AgentDefinitionInput } from "@aex/protocol";
+import { type AgentDefinition, type AgentDefinitionInput, HAI_TOOLS } from "@hai/protocol";
 import { type CSSProperties, type FormEvent, useState, useSyncExternalStore } from "react";
 import { type AgentClient, displayName } from "./agent-client.ts";
 
-const aex = (names: readonly string[]) => names.map((n) => `mcp__aex__${n}`);
+const hai = (names: readonly string[]) => names.map((n) => `mcp__hai__${n}`);
 
 /** What an agent may do with the app's tools, as the form offers it. */
 const CAPABILITIES = [
@@ -10,23 +10,23 @@ const CAPABILITIES = [
     key: "read",
     label: "Read the model",
     hint: "summary, elements, what you point at, the view",
-    tools: aex(AEX_TOOLS.read),
+    tools: hai(HAI_TOOLS.read),
   },
   {
     key: "write",
     label: "Change the model",
     hint: "one such agent works at a time",
-    tools: aex(AEX_TOOLS.write),
+    tools: hai(HAI_TOOLS.write),
   },
   {
     key: "climate",
     label: "Sun studies",
     hint: "sets the sun for a date, time and place",
-    tools: aex(AEX_TOOLS.climate),
+    tools: hai(HAI_TOOLS.climate),
   },
 ] as const;
-const TEAM_TOOLS = aex(AEX_TOOLS.team);
-const AEX_TOOL_NAMES: ReadonlySet<string> = new Set([...CAPABILITIES.flatMap((c) => c.tools), ...TEAM_TOOLS]);
+const TEAM_TOOLS = hai(HAI_TOOLS.team);
+const HAI_TOOL_NAMES: ReadonlySet<string> = new Set([...CAPABILITIES.flatMap((c) => c.tools), ...TEAM_TOOLS]);
 const MODELS = ["sonnet", "opus", "haiku", "inherit"] as const;
 const NEW_COLORS = ["#f0786d", "#c9a0f0", "#7fb3e6", "#d4c06a", "#6cc4a4"];
 
@@ -58,11 +58,11 @@ function draftOf(agent: AgentDefinition | null, index: number): Draft {
     color: agent?.color ?? (NEW_COLORS[index % NEW_COLORS.length] as string),
     aliases: agent?.aliases.join(", ") ?? "",
     capabilities: {
-      read: agent ? has(aex(AEX_TOOLS.read)) : true,
-      write: agent ? has(aex(AEX_TOOLS.write)) : false,
-      climate: agent ? has(aex(AEX_TOOLS.climate)) : false,
+      read: agent ? has(hai(HAI_TOOLS.read)) : true,
+      write: agent ? has(hai(HAI_TOOLS.write)) : false,
+      climate: agent ? has(hai(HAI_TOOLS.climate)) : false,
     },
-    otherTools: agent?.tools.filter((t) => !AEX_TOOL_NAMES.has(t)).join(", ") ?? "",
+    otherTools: agent?.tools.filter((t) => !HAI_TOOL_NAMES.has(t)).join(", ") ?? "",
     prompt: agent?.prompt ?? "",
   };
 }

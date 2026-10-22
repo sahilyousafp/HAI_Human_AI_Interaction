@@ -22,7 +22,7 @@ const SKIPPED_DIRS = new Set([
   "tests",
   "fixtures",
   "test-assets",
-  ".aex",
+  ".hai",
 ]);
 const SKIPPED_FILES = /\.test\.|[\\/]credential-boundary\.mjs$/;
 

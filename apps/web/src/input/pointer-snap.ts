@@ -1,4 +1,4 @@
-import type { Point2 } from "@aex/protocol";
+import type { Point2 } from "@hai/protocol";
 
 /** A hand pointer within this distance (px) of a control's edge snaps to it. */
 export const SNAP_CAPTURE_PX = 28;

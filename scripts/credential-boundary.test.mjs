@@ -10,7 +10,7 @@ describe("credential boundary", () => {
   });
 
   it("catches a reference in shipped code, and ignores tests", () => {
-    const root = mkdtempSync(join(tmpdir(), "aex-boundary-"));
+    const root = mkdtempSync(join(tmpdir(), "hai-boundary-"));
     mkdirSync(join(root, "apps", "bridge", "src"), { recursive: true });
     mkdirSync(join(root, "apps", "bridge", "test"), { recursive: true });
     writeFileSync(

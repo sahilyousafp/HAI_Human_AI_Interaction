@@ -93,7 +93,7 @@ Move and Copy carry one point of the element (a column's centre, a wall's start,
 
 ## Choosing the layout
 
-**Settings > Tool rings** has a switch between the two rings, listing its eight slots clockwise from the top. Pick any registered tool for each slot, or leave it empty. The layouts are saved by the bridge in `.aex/settings.json` in the workspace, so they are the same in every browser and after a restart.
+**Settings > Tool rings** has a switch between the two rings, listing its eight slots clockwise from the top. Pick any registered tool for each slot, or leave it empty. The layouts are saved by the bridge in `.hai/settings.json` in the workspace, so they are the same in every browser and after a restart.
 
 ## Adding a tool
 

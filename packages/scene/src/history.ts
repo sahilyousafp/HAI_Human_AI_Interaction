@@ -1,4 +1,4 @@
-import type { SceneDocument, SceneOp } from "@aex/protocol";
+import type { SceneDocument, SceneOp } from "@hai/protocol";
 import { applyTransaction } from "./ops.ts";
 
 export interface Transaction {

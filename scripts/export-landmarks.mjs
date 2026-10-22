@@ -67,14 +67,14 @@ try {
   process.exit(2);
 }
 
-const clipDir = join(root, ".aex", "clips");
+const clipDir = join(root, ".hai", "clips");
 const wanted = process.argv.slice(2);
 const clips = buildClips(clipDir).filter((c) => wanted.length === 0 || wanted.includes(c));
 mkdirSync(out, { recursive: true });
 
 for (const clip of clips) {
   const browser = await chromium.launch({
-    channel: process.env.AEX_E2E_CHANNEL ?? "msedge",
+    channel: process.env.HAI_E2E_CHANNEL ?? "msedge",
     args: [
       "--use-fake-ui-for-media-stream",
       "--use-fake-device-for-media-stream",
@@ -84,14 +84,14 @@ for (const clip of clips) {
   const page = await browser.newPage();
   await page.goto(APP);
   await page.getByTestId("camera-toggle").click();
-  await page.waitForFunction(() => (window.__AEX_TRACKING__?.frames.length ?? 0) > 5, null, {
+  await page.waitForFunction(() => (window.__HAI_TRACKING__?.frames.length ?? 0) > 5, null, {
     timeout: 60_000,
   });
   // One full loop of the clip, so every pose in it appears in the fixture.
   const ms = Math.ceil(durationOf(clip) * 1000) + 300;
-  await page.evaluate(() => window.__AEX_RECORDER__?.start());
+  await page.evaluate(() => window.__HAI_RECORDER__?.start());
   await page.waitForTimeout(ms);
-  const frames = await page.evaluate(() => window.__AEX_RECORDER__?.stop() ?? []);
+  const frames = await page.evaluate(() => window.__HAI_RECORDER__?.stop() ?? []);
   await browser.close();
   const target = join(out, `${clip}.json.gz`);
   writeFileSync(target, gzipSync(JSON.stringify(frames.map(compact))));

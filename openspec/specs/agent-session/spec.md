@@ -40,7 +40,7 @@ The system SHALL keep one long-lived process per agent in the open project, star
 - **THEN** both are answered by the same agent process and the second can refer to the first
 
 ### Requirement: Session survives reloads and crashes
-The conversation SHALL survive a browser reload: the panel SHALL show the last 50 turns again. Each agent's conversation id SHALL be kept in the project (`.aex/agent/<name>/session.json`), so that after the agent process exits unexpectedly, is closed after 20 idle minutes, or the bridge restarts, the next turn starts a new process that resumes the same conversation. After an unexpected exit, that turn SHALL tell the user the session recovered.
+The conversation SHALL survive a browser reload: the panel SHALL show the last 50 turns again. Each agent's conversation id SHALL be kept in the project (`.hai/agent/<name>/session.json`), so that after the agent process exits unexpectedly, is closed after 20 idle minutes, or the bridge restarts, the next turn starts a new process that resumes the same conversation. After an unexpected exit, that turn SHALL tell the user the session recovered.
 
 #### Scenario: Browser reload
 - **GIVEN** a conversation with two turns

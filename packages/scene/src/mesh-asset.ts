@@ -1,16 +1,18 @@
-import type { Point3Mm } from "@aex/protocol";
+import type { Point3Mm } from "@hai/protocol";
 
 /**
- * The binary container for imported geometry (`assets/<id>.aexmesh` in the project folder): a header that says what
+ * The binary container for imported geometry (`assets/<id>.haimesh` in the project folder): a header that says what
  * the parts are, then their numbers. Positions are millimetres, little-endian Float32, three per vertex; indices are
  * Uint32, three per triangle.
  *
- *   bytes 0-7    "AEXMESH1"
+ *   bytes 0-7    "HAIMESH1"
  *   bytes 8-11   header length H (uint32), a multiple of 4
  *   next H       header, JSON padded with spaces: { "parts": [{ vertices, indices, position, index, bounds }] }
  *   then         data; `position` and `index` are byte offsets into it
  */
-const MAGIC = "AEXMESH1";
+const MAGIC = "HAIMESH1";
+/** What assets written while the project was still called AEX start with: same layout, still read. */
+const LEGACY_MAGIC = "AEXMESH1";
 
 export interface MeshPart {
   /** Three numbers per vertex, millimetres. */
@@ -89,11 +91,9 @@ export type DecodeResult = { ok: true; header: MeshHeader; dataStart: number } |
  * `bytes` holds only its beginning (the header), so a big file can be checked without reading it all.
  */
 export function readMeshHeader(bytes: Uint8Array, totalLength: number = bytes.length): DecodeResult {
-  if (
-    bytes.length < MAGIC.length + 4 ||
-    new TextDecoder().decode(bytes.subarray(0, MAGIC.length)) !== MAGIC
-  ) {
-    return { ok: false, error: "Not an AEX mesh asset" };
+  const magic = new TextDecoder().decode(bytes.subarray(0, MAGIC.length));
+  if (bytes.length < MAGIC.length + 4 || (magic !== MAGIC && magic !== LEGACY_MAGIC)) {
+    return { ok: false, error: "Not a HAI mesh asset" };
   }
   const length = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(MAGIC.length, true);
   const dataStart = MAGIC.length + 4 + length;

@@ -1,5 +1,5 @@
-import type { Element, SceneOp } from "@aex/protocol";
-import { encodeMeshAsset, partBounds } from "@aex/scene";
+import type { Element, SceneOp } from "@hai/protocol";
+import { encodeMeshAsset, partBounds } from "@hai/scene";
 import {
   type ConvertResult,
   describeSkips,

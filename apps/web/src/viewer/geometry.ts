@@ -1,5 +1,5 @@
-import type { Element, Level } from "@aex/protocol";
-import { elementBase, type MeshPart } from "@aex/scene";
+import type { Element, Level } from "@hai/protocol";
+import { elementBase, type MeshPart } from "@hai/scene";
 import * as THREE from "three";
 
 /** Scene units are millimetres; the viewer works in metres. */

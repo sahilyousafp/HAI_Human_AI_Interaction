@@ -1,6 +1,7 @@
 import { join } from "node:path";
-import { ClaudeCliProvider } from "@aex/agent-core";
+import { ClaudeCliProvider } from "@hai/agent-core";
 import { loadConfig } from "./config.ts";
+import { migrateLegacyFolder } from "./legacy.ts";
 import { defaultProjectDir, readLastProject, writeLastProject } from "./project.ts";
 import { createBridge } from "./server.ts";
 import { removeSessionFile, writeSessionFile } from "./session-file.ts";
@@ -8,12 +9,13 @@ import { removeSessionFile, writeSessionFile } from "./session-file.ts";
 const VERSION = "0.0.0";
 
 const config = loadConfig();
+migrateLegacyFolder(config.workspaceRoot); // what an older version, named AEX, kept in `.aex`
 const bridge = createBridge({
   host: config.host,
   port: config.port,
   allowedOrigins: config.allowedOrigins,
   version: VERSION,
-  settingsFile: join(config.workspaceRoot, ".aex", "settings.json"),
+  settingsFile: join(config.workspaceRoot, ".hai", "settings.json"),
   // The user's own Claude Code: the installed, self-logged-in CLI, started unmodified.
   agent: { provider: new ClaudeCliProvider() },
   log: (line) => console.log(line),

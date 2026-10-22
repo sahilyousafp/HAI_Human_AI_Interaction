@@ -1,4 +1,4 @@
-import type { Point2, TrackedHand, Vec3 } from "@aex/protocol";
+import type { Point2, TrackedHand, Vec3 } from "@hai/protocol";
 import { DEFAULT_GESTURES, type GestureConfig } from "./config.ts";
 
 export const DEFAULT_ASPECT = 4 / 3;

@@ -33,12 +33,12 @@ async function start(page: Page) {
 
 const elements = (page: Page) =>
   page.evaluate(
-    () => Object.values(window.__AEX_SCENE__?.getSnapshot().doc?.elements ?? {}) as unknown as El[],
+    () => Object.values(window.__HAI_SCENE__?.getSnapshot().doc?.elements ?? {}) as unknown as El[],
   );
 
 /** Starts a new project in a fresh folder and waits for it to open empty. */
 async function newProject(page: Page, name = "fresh") {
-  const dir = join(mkdtempSync(join(tmpdir(), "aex-new-")), name);
+  const dir = join(mkdtempSync(join(tmpdir(), "hai-new-")), name);
   await page.getByTestId("new-project").click();
   await page.getByTestId("project-path").fill(dir);
   await page.getByTestId("project-submit").click();
@@ -53,7 +53,7 @@ async function clientOf(page: Page, [x, y, z]: Point3): Promise<[number, number]
     ([x, y, z]) => {
       const canvas = document.querySelector("[data-testid=viewer] canvas");
       const rect = canvas?.getBoundingClientRect();
-      const at = window.__AEX_VIEWER__?.project([x, y, z]);
+      const at = window.__HAI_VIEWER__?.project([x, y, z]);
       if (!rect || !at) return null;
       const px = rect.left + at[0] * rect.width;
       const py = rect.top + at[1] * rect.height;
@@ -76,7 +76,7 @@ test("a new project opens with a clean space: nothing in it, then a model import
   await start(page);
   expect((await elements(page)).length).toBeGreaterThan(10); // the sample building, to begin with
   const dir = await newProject(page);
-  expect(readFileSync(join(dir, "scene.aex.json"), "utf8")).toContain('"elements": {}');
+  expect(readFileSync(join(dir, "scene.hai.json"), "utf8")).toContain('"elements": {}');
 
   // Draw in it: a wall on the ground level, the only element.
   await page.keyboard.press("w");
@@ -118,7 +118,7 @@ test("Save as 3dm downloads a Rhino file of the project, which imports again", a
   await expect.poll(async () => (await elements(page)).length, { timeout: 30_000 }).toBe(5);
   // And a drawn column, on the ground level.
   await page.evaluate(() => {
-    window.__AEX_SCENE__?.apply("Add column", [
+    window.__HAI_SCENE__?.apply("Add column", [
       {
         op: "create",
         element: {
@@ -141,7 +141,7 @@ test("Save as 3dm downloads a Rhino file of the project, which imports again", a
   const file = await download;
   expect(file.suggestedFilename()).toBe("tower.3dm");
   await expect(page.getByTestId("export-summary")).toContainText("Saved 6 objects", { timeout: 30_000 });
-  const saved = join(mkdtempSync(join(tmpdir(), "aex-save-")), "tower.3dm");
+  const saved = join(mkdtempSync(join(tmpdir(), "hai-save-")), "tower.3dm");
   await file.saveAs(saved);
 
   // Read back with the Rhino reader itself: millimetres, a column extrusion on Columns, five meshes on Imported.

@@ -4,8 +4,8 @@ type E2EGesture = { type: string; ts: number; confidence: number; [key: string]:
 
 interface Window {
   /** The camera session: the overlay draws `latestFrame` (landmarks only). */
-  __AEX_CAMERA__?: { latestFrame: unknown };
-  __AEX_VIEWER__?: {
+  __HAI_CAMERA__?: { latestFrame: unknown };
+  __HAI_VIEWER__?: {
     camera(): { target: [number, number, number]; azimuth: number; elevation: number; distance: number };
     meshCount(): number;
     pick(x: number, y: number): string | null;
@@ -17,7 +17,7 @@ interface Window {
     sun(): { altitude: number; azimuth: number; label: string } | null;
     handAt(x: number, y: number): [number, number];
   };
-  __AEX_INPUT__?: {
+  __HAI_INPUT__?: {
     // biome-ignore lint/suspicious/noExplicitAny: tests build events loosely; the app validates their shape.
     gestures(events: any[]): void;
     /** The right hand's pinch point, and the left hand's. */
@@ -28,12 +28,12 @@ interface Window {
     ): void;
     engaged(engaged: boolean): void;
   };
-  __AEX_SCENE__?: {
+  __HAI_SCENE__?: {
     apply(label: string, ops: unknown[]): boolean;
     select(ids: string[]): void;
     getSnapshot(): { doc: { elements: Record<string, Record<string, unknown>> } | null; selection: string[] };
   };
-  __AEX_TOOLS__?: {
+  __HAI_TOOLS__?: {
     getSnapshot(): {
       activeId: string;
       layout: Array<string | null>;
@@ -50,8 +50,8 @@ interface Window {
       register(tool: { id: string; label: string; icon: string; shortcut: string }): void;
     };
   };
-  __AEX_TRACKING__?: { frames: unknown[] };
-  __AEX_VOICE__?: {
+  __HAI_TRACKING__?: { frames: unknown[] };
+  __HAI_VOICE__?: {
     context: {
       begin(now: number, hoveredId: string | null): void;
       hover(id: string | null, now: number): void;
@@ -59,8 +59,8 @@ interface Window {
       clear(): void;
     };
   };
-  __AEX_GESTURES__?: { events: E2EGesture[] };
-  __AEX_SPEECH__?: {
+  __HAI_GESTURES__?: { events: E2EGesture[] };
+  __HAI_SPEECH__?: {
     speaker: { getSnapshot(): { engine: string | null; firstAudio: number[] } };
     roundTrip(text: string): Promise<string | null>;
   };

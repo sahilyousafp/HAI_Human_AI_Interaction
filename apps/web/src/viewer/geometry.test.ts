@@ -1,4 +1,4 @@
-import type { Element, Level } from "@aex/protocol";
+import type { Element, Level } from "@hai/protocol";
 import type * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { elementGeometry } from "./geometry.ts";

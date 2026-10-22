@@ -1,4 +1,4 @@
-import { pinchPoint } from "@aex/perception";
+import { pinchPoint } from "@hai/perception";
 import { useEffect, useRef } from "react";
 import { handClient, POINTER_GAIN, pointerSpace } from "../input/hand-mapping.ts";
 import { type Capsule, handPieces, type Palm } from "./hand-geometry.ts";

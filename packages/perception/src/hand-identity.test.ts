@@ -1,4 +1,4 @@
-import type { Hand, TrackedHand, TrackingFrame } from "@aex/protocol";
+import type { Hand, TrackedHand, TrackingFrame } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { HandIdentity, IDENTITY_LOST_MS } from "./hand-identity.ts";
 import { loadFixture } from "./testing/fixtures.ts";

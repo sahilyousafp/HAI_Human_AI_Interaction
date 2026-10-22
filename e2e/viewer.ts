@@ -26,11 +26,11 @@ export async function startTestBridge(
 ): Promise<Bridge & { port: number }> {
   const port = nextPort++;
   const token = `viewer-e2e-${port}-0123456789`;
-  const root = mkdtempSync(join(tmpdir(), "aex-e2e-"));
+  const root = mkdtempSync(join(tmpdir(), "hai-e2e-"));
   const projectDir = join(root, "project");
-  mkdirSync(join(root, ".aex"), { recursive: true });
+  mkdirSync(join(root, ".hai"), { recursive: true });
   writeFileSync(
-    join(root, ".aex", "settings.json"),
+    join(root, ".hai", "settings.json"),
     JSON.stringify({ speakReplies: options.speak ?? false }),
   );
   const bridge = createBridge({
@@ -40,13 +40,13 @@ export async function startTestBridge(
     version: "e2e",
     token,
     scene: { projectDir, saveDelayMs: 200 },
-    settingsFile: join(root, ".aex", "settings.json"),
+    settingsFile: join(root, ".hai", "settings.json"),
     ...(options.agent ? { agent: { provider: options.agent } } : {}),
   });
   await bridge.start();
   await page.addInitScript(
     ({ port, token }) => {
-      Object.defineProperty(window, "__AEX_SESSION__", { value: { port, token }, writable: false });
+      Object.defineProperty(window, "__HAI_SESSION__", { value: { port, token }, writable: false });
     },
     { port, token },
   );
@@ -56,13 +56,13 @@ export async function startTestBridge(
 export async function openViewer(page: Page): Promise<void> {
   await page.goto("/");
   await expect
-    .poll(() => page.evaluate(() => window.__AEX_VIEWER__?.meshCount() ?? 0), { timeout: 30_000 })
+    .poll(() => page.evaluate(() => window.__HAI_VIEWER__?.meshCount() ?? 0), { timeout: 30_000 })
     .toBeGreaterThan(0);
   // Let the camera settle on its initial framing.
   await page.waitForTimeout(400);
 }
 
-export const camera = (page: Page) => page.evaluate(() => window.__AEX_VIEWER__?.camera() as Camera);
+export const camera = (page: Page) => page.evaluate(() => window.__HAI_VIEWER__?.camera() as Camera);
 
 /** Finds a viewer position (0..1) where the given element is hit and not covered by a HUD panel, by scanning a grid. */
 export async function findElementOnScreen(page: Page, elementId: string): Promise<[number, number]> {
@@ -85,7 +85,7 @@ export async function findElementOnScreen(page: Page, elementId: string): Promis
     const hits: [number, number][] = [];
     for (let y = 0.05; y < 1; y += 0.025) {
       for (let x = 0.05; x < 1; x += 0.025) {
-        if (window.__AEX_VIEWER__?.pick(x, y) === id && visible(x, y)) hits.push([x, y]);
+        if (window.__HAI_VIEWER__?.pick(x, y) === id && visible(x, y)) hits.push([x, y]);
       }
     }
     if (hits.length === 0) return null;
@@ -106,7 +106,7 @@ export async function findElementOnScreen(page: Page, elementId: string): Promis
 export const handAt = (page: Page, [x, y]: [number, number]): Promise<[number, number]> =>
   page.evaluate(
     ([vx, vy]) => {
-      const at = window.__AEX_VIEWER__?.handAt(vx, vy);
+      const at = window.__HAI_VIEWER__?.handAt(vx, vy);
       if (!at) throw new Error("the viewer is not ready");
       return at;
     },

@@ -56,11 +56,11 @@ test("switching Create tools off removes them everywhere, and the choice survive
   await page.keyboard.press("w"); // Wall's shortcut
   await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "select");
   // The left hand's long pinch opens no ring without the create tools.
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
   const centre = await handAt(page, [0.6, 0.5]);
   const send = (type: string) =>
     page.evaluate(
-      (e) => window.__AEX_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], hand: "Left", ...e } as never]),
+      (e) => window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], hand: "Left", ...e } as never]),
       { type, position: centre, ts: Date.now() },
     );
   await send("pinch.drag.start");
@@ -68,7 +68,7 @@ test("switching Create tools off removes them everywhere, and the choice survive
   await expect(page.getByTestId("tool-palette")).toHaveCount(0);
   await send("pinch.drag.end");
 
-  await page.waitForTimeout(300); // the bridge writes .aex/settings.json
+  await page.waitForTimeout(300); // the bridge writes .hai/settings.json
   await page.reload();
   await openViewer(page);
   await page.keyboard.press("w");
@@ -107,7 +107,7 @@ test("Show my hands draws a white hand at its pointer, and input still goes thro
     });
     image[4] = [0.5, 0.5, 0];
     image[8] = [0.5, 0.5, 0];
-    const camera = window.__AEX_CAMERA__;
+    const camera = window.__HAI_CAMERA__;
     if (camera) {
       camera.latestFrame = {
         seq: 1,

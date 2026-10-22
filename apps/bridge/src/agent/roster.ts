@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AEX_TOOLS, type AgentDefinitionInput, type TeamMemberInfo } from "@aex/protocol";
-import { AEX_SERVER } from "./agent-config.ts";
+import { type AgentDefinitionInput, HAI_TOOLS, type TeamMemberInfo } from "@hai/protocol";
+import { HAI_SERVER } from "./agent-config.ts";
 import { listField, parseFrontmatter } from "./frontmatter.ts";
 
-const aex = (names: readonly string[]) => names.map((n) => `mcp__${AEX_SERVER}__${n}`);
+const hai = (names: readonly string[]) => names.map((n) => `mcp__${HAI_SERVER}__${n}`);
 
-/** What AEX needs beyond Claude Code's definition: how the agent is named aloud, shown, and scheduled. */
+/** What HAI needs beyond Claude Code's definition: how the agent is named aloud, shown, and scheduled. */
 export interface AgentMeta {
   /** Other ways the name is heard or typed (speech recognition mishears names). */
   aliases: string[];
@@ -18,11 +18,11 @@ export interface AgentMeta {
   lead: boolean;
 }
 
-/** An agent of the team: its Claude Code definition (`.claude/agents/<name>.md`) and AEX's metadata. */
+/** An agent of the team: its Claude Code definition (`.claude/agents/<name>.md`) and HAI's metadata. */
 export interface TeamMember extends AgentMeta {
   name: string;
   description: string;
-  /** Allowed tools as Claude Code names them (`mcp__aex__create_elements`, `Read`, ...). */
+  /** Allowed tools as Claude Code names them (`mcp__hai__create_elements`, `Read`, ...). */
   tools: string[];
   model?: string;
   /** The definition's instructions (its Markdown body). */
@@ -37,7 +37,7 @@ interface DefaultAgent {
   meta: AgentMeta;
 }
 
-const SPECIALIST_CLOSE = `You receive tasks from Mochi, the team lead. Do the task with the aex tools, then end with a short summary of
+const SPECIALIST_CLOSE = `You receive tasks from Mochi, the team lead. Do the task with the hai tools, then end with a short summary of
 what you did and anything left open: it goes back to Mochi, who reports to the user. Lengths are millimetres, Z is up.`;
 
 /** The team a project starts with. Files are written only where missing, so the user's edits always win. */
@@ -45,9 +45,9 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
   mochi: {
     description:
       "The team lead. Takes every request, hands work to the specialists and reports what everyone is doing.",
-    tools: [...aex(AEX_TOOLS.team), ...aex(AEX_TOOLS.read)],
+    tools: [...hai(HAI_TOOLS.team), ...hai(HAI_TOOLS.read)],
     model: "sonnet",
-    prompt: `You are Mochi, the lead of a small design team working on a shared 3D model in AEX.
+    prompt: `You are Mochi, the lead of a small design team working on a shared 3D model in HAI.
 
 - Hand work to the specialists with the delegate tool: one task per specialist, with a short title and a clear
   instruction that includes what the user pointed at or selected (get_user_context) and any sizes in millimetres.
@@ -66,7 +66,7 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
   architect: {
     description:
       "Architecture: massing, levels, walls, slabs, columns and cores. Creates and edits building elements.",
-    tools: [...aex(AEX_TOOLS.read), ...aex(AEX_TOOLS.write)],
+    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.write)],
     model: "sonnet",
     prompt: `You are Architect, the team's architectural designer. You plan and model massing, levels, walls, slabs,
 columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIALIST_CLOSE}`,
@@ -74,7 +74,7 @@ columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIAL
   },
   product: {
     description: "Product design: furniture, fixtures and components at product scale.",
-    tools: [...aex(AEX_TOOLS.read), ...aex(AEX_TOOLS.write)],
+    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.write)],
     model: "sonnet",
     prompt: `You are Product, the team's product designer. You design furniture, fixtures and components at product
 scale, with attention to ergonomics, materials and how they are made. Model them with the scene elements you have
@@ -83,7 +83,7 @@ scale, with attention to ergonomics, materials and how they are made. Model them
   },
   climate: {
     description: "Environmental simulation: sun path, shadows, orientation and daylight studies.",
-    tools: [...aex(AEX_TOOLS.read), ...aex(AEX_TOOLS.climate)],
+    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.climate)],
     model: "sonnet",
     prompt: `You are Climate, the team's environmental analyst. You study sun path, shadows, orientation and
 daylight. Use sun_study for a date, time and location (ask Mochi if the location is unknown; London is 51.5, -0.1)
@@ -93,7 +93,7 @@ and describe what the shadows mean for the design. You do not change the model.\
   reviewer: {
     description:
       "Checks the model against the brief and rules (heights, counts, clearances) and reports issues. Never edits.",
-    tools: aex(AEX_TOOLS.read),
+    tools: hai(HAI_TOOLS.read),
     model: "sonnet",
     prompt: `You are Reviewer. You check the model against the brief and common rules (heights, counts, clearances,
 overlaps) and report issues clearly with element names. You never change the model.\n\n${SPECIALIST_CLOSE}`,
@@ -102,7 +102,7 @@ overlaps) and report issues clearly with element names. You never change the mod
 };
 
 export const agentsDir = (projectDir: string) => join(projectDir, ".claude", "agents");
-const metaFile = (projectDir: string) => join(projectDir, ".aex", "agents.json");
+const metaFile = (projectDir: string) => join(projectDir, ".hai", "agents.json");
 
 /** The team's order everywhere: the lead first, then the others by name. */
 const byLeadThenName = (a: TeamMember, b: TeamMember) =>
@@ -163,13 +163,13 @@ function readMeta(projectDir: string): Record<string, Partial<AgentMeta>> {
 }
 
 /**
- * Adds or changes an agent from the Agents tab: its Claude Code definition and its AEX metadata. Whether it changes
+ * Adds or changes an agent from the Agents tab: its Claude Code definition and its HAI metadata. Whether it changes
  * the model follows from its tools; the lead stays the lead.
  */
 export function saveDefinition(projectDir: string, agent: AgentDefinitionInput): void {
   mkdirSync(agentsDir(projectDir), { recursive: true });
   writeFileSync(join(agentsDir(projectDir), `${agent.name}.md`), definitionFile(agent));
-  const writeTools = new Set(aex(AEX_TOOLS.write));
+  const writeTools = new Set(hai(HAI_TOOLS.write));
   const meta = readMeta(projectDir);
   meta[agent.name] = {
     ...meta[agent.name],
@@ -177,15 +177,15 @@ export function saveDefinition(projectDir: string, agent: AgentDefinitionInput):
     color: agent.color,
     writes: agent.tools.some((t) => writeTools.has(t)),
   };
-  mkdirSync(join(projectDir, ".aex"), { recursive: true });
+  mkdirSync(join(projectDir, ".hai"), { recursive: true });
   writeFileSync(metaFile(projectDir), `${JSON.stringify(meta, null, 2)}\n`);
 }
 
 const FALLBACK_COLORS = ["#f0786d", "#c9a0f0", "#7fb3e6", "#d4c06a"];
 
 /**
- * The project's team: every `.claude/agents/*.md` with a name and description, merged with AEX's metadata
- * (`.aex/agents.json` over the defaults). The lead comes first, then the others by name.
+ * The project's team: every `.claude/agents/*.md` with a name and description, merged with HAI's metadata
+ * (`.hai/agents.json` over the defaults). The lead comes first, then the others by name.
  */
 export function readRoster(projectDir: string): TeamMember[] {
   const dir = agentsDir(projectDir);
@@ -217,13 +217,13 @@ export function readRoster(projectDir: string): TeamMember[] {
 }
 
 /**
- * The `aex` tools an agent may call, by their short names: those its definition lists, without the model-changing
+ * The `hai` tools an agent may call, by their short names: those its definition lists, without the model-changing
  * ones unless it is marked as writing (the scheduler lets only one writing agent run at a time, so an agent it treats
  * as read-only must not write).
  */
-export function allowedAexTools(member: TeamMember): Set<string> {
-  const prefix = `mcp__${AEX_SERVER}__`;
-  const writeTools: readonly string[] = AEX_TOOLS.write;
+export function allowedHaiTools(member: TeamMember): Set<string> {
+  const prefix = `mcp__${HAI_SERVER}__`;
+  const writeTools: readonly string[] = HAI_TOOLS.write;
   return new Set(
     member.tools
       .filter((t) => t.startsWith(prefix))

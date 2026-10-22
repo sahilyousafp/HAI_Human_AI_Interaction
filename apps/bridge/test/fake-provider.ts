@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { type AgentProvider, ClaudeCliProvider, type Detection, run } from "@aex/agent-core";
+import { type AgentProvider, ClaudeCliProvider, type Detection, run } from "@hai/agent-core";
 
 const FAKE = join(import.meta.dirname, "fake-claude.mjs");
 export const DETECTED: Detection = { ok: true, version: "2.1.303-fake", executable: "fake" };

@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, Message } from "@aex/protocol";
+import type { AgentEvent, Message } from "@hai/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebSocket } from "ws";
 import { fakeProvider } from "../../test/fake-provider.ts";
@@ -30,7 +30,7 @@ describe("approval cards describe the call", () => {
 
 describe("ApprovalBroker", () => {
   function setup(timeoutMs = 60_000) {
-    const projectDir = temp("aex-approvals-");
+    const projectDir = temp("hai-approvals-");
     const sent: Message[] = [];
     const broker = new ApprovalBroker({ projectDir: () => projectDir, timeoutMs }, (m) => sent.push(m));
     const card = () => sent.find((m) => m.type === "approval.pending");
@@ -43,7 +43,7 @@ describe("ApprovalBroker", () => {
   it("the app's scene tools are allowed at once, with no card", async () => {
     const { broker, sent } = setup();
     const input = { elements: [] };
-    expect(await broker.decide("mcp__aex__create_elements", input)).toEqual({
+    expect(await broker.decide("mcp__hai__create_elements", input)).toEqual({
       behavior: "allow",
       updatedInput: input,
     });
@@ -136,8 +136,8 @@ describe("approvals with the fake Claude Code CLI", () => {
       allowedOrigins: [ORIGIN],
       version: "t",
       token: TOKEN,
-      scene: { projectDir: join(temp("aex-approval-it-"), "project"), saveDelayMs: 50 },
-      agent: { provider: fakeProvider(temp("aex-fake-state-")) },
+      scene: { projectDir: join(temp("hai-approval-it-"), "project"), saveDelayMs: 50 },
+      agent: { provider: fakeProvider(temp("hai-fake-state-")) },
     });
     const address: AddressInfo = await bridge.start();
     await bridge.agent?.ready;

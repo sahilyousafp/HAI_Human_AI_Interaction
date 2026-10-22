@@ -1,4 +1,4 @@
-import type { GestureEvent, Hand, Point2 } from "@aex/protocol";
+import type { GestureEvent, Hand, Point2 } from "@hai/protocol";
 import { DEFAULT_GESTURES, type GestureConfig } from "./config.ts";
 import { DEFAULT_ASPECT, type Posture, screenDistance } from "./features.ts";
 

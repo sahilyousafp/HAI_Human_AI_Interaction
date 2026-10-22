@@ -1,4 +1,4 @@
-import type { Element, Point3Mm, PointMm, SceneDocument } from "@aex/protocol";
+import type { Element, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
 import { movedOffset } from "./placement.ts";
 import type { Tool, ToolContext } from "./types.ts";
 

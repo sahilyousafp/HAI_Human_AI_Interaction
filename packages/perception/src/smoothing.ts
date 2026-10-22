@@ -1,4 +1,4 @@
-import type { TrackedFace, TrackedHand, TrackingFrame, Vec3 } from "@aex/protocol";
+import type { TrackedFace, TrackedHand, TrackingFrame, Vec3 } from "@hai/protocol";
 import { DEFAULT_ONE_EURO, type OneEuroParams, OneEuroVector } from "./one-euro.ts";
 
 /** A hand that disappears for longer than this re-enters fresh instead of sliding in from its old position. */

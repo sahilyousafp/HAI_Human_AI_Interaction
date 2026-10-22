@@ -1,4 +1,4 @@
-import type { AgentStatus, TeamMemberInfo, TeamTask } from "@aex/protocol";
+import type { AgentStatus, TeamMemberInfo, TeamTask } from "@hai/protocol";
 import {
   type CSSProperties,
   type FormEvent,
@@ -57,7 +57,7 @@ const TASK_STATUS_LABEL: Record<TeamTask["status"], string> = {
   stopped: "stopped",
 };
 const VIEW_LABEL = { chat: "Chat", agents: "Agents", extensions: "Extensions" } as const;
-const COLLAPSED_KEY = "aex.agentCollapsed";
+const COLLAPSED_KEY = "hai.agentCollapsed";
 const CHEVRON_UP = "M6 15l6-6 6 6";
 const CHEVRON_DOWN = "M6 9l6 6 6-6";
 const CHEVRON_LEFT = "M15 6l-6 6 6 6";

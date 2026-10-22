@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
-import type { Element, SceneDocument } from "@aex/protocol";
-import { type MeshPart, partBounds } from "@aex/scene";
+import type { Element, SceneDocument } from "@hai/protocol";
+import { type MeshPart, partBounds } from "@hai/scene";
 import type { RhinoModule } from "rhino3dm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { convert3dm } from "../import/convert.ts";
@@ -139,9 +139,9 @@ describe("buildFile3dm", () => {
     if (!result.ok) throw new Error(result.error);
     const [c] = readBack(result.bytes).objects;
     expect(c?.strings).toEqual({
-      "aex.id": "c-1",
-      "aex.level": "Ground",
-      "aex.property.material": "steel",
+      "hai.id": "c-1",
+      "hai.level": "Ground",
+      "hai.property.material": "steel",
     });
   });
 

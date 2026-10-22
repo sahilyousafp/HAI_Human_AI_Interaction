@@ -9,7 +9,7 @@ export interface BridgeConfig {
   host: string;
   port: number;
   allowedOrigins: string[];
-  /** The folder whose `.aex/` holds the settings, the session file and the default project. */
+  /** The folder whose `.hai/` holds the settings, the session file and the default project. */
   workspaceRoot: string;
 }
 
@@ -34,16 +34,16 @@ export function findWorkspaceRoot(start: string): string {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd()): BridgeConfig {
-  const host = env.AEX_HOST ?? LOOPBACK_HOST;
+  const host = env.HAI_HOST ?? LOOPBACK_HOST;
   assertLoopback(host);
-  const port = env.AEX_PORT ? Number(env.AEX_PORT) : DEFAULT_PORT;
+  const port = env.HAI_PORT ? Number(env.HAI_PORT) : DEFAULT_PORT;
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    throw new Error(`AEX_PORT must be a port number, got "${env.AEX_PORT}".`);
+    throw new Error(`HAI_PORT must be a port number, got "${env.HAI_PORT}".`);
   }
-  const allowedOrigins = env.AEX_ALLOWED_ORIGINS
-    ? env.AEX_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  const allowedOrigins = env.HAI_ALLOWED_ORIGINS
+    ? env.HAI_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
     : DEFAULT_ALLOWED_ORIGINS;
-  // AEX_WORKSPACE keeps a second bridge (the end-to-end tests') apart from the one you work with.
-  const workspaceRoot = env.AEX_WORKSPACE ? resolve(env.AEX_WORKSPACE) : findWorkspaceRoot(cwd);
+  // HAI_WORKSPACE keeps a second bridge (the end-to-end tests') apart from the one you work with.
+  const workspaceRoot = env.HAI_WORKSPACE ? resolve(env.HAI_WORKSPACE) : findWorkspaceRoot(cwd);
   return { host, port, allowedOrigins, workspaceRoot };
 }

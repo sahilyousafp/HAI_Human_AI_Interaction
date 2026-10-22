@@ -34,7 +34,7 @@ async function screenOf(page: Page, [x, y]: Point, z = 0): Promise<Point | null>
     ([x, y, z]) => {
       const canvas = document.querySelector("[data-testid=viewer] canvas");
       const rect = canvas?.getBoundingClientRect();
-      const at = window.__AEX_VIEWER__?.project([x, y, z]);
+      const at = window.__HAI_VIEWER__?.project([x, y, z]);
       if (!rect || !at) return null;
       const px = rect.left + at[0] * rect.width;
       const py = rect.top + at[1] * rect.height;

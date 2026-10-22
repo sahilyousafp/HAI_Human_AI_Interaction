@@ -48,7 +48,7 @@ test("listening from the palette: Ask agent starts the microphone and the indica
 }) => {
   await countMicrophoneRequests(page);
   // Ask agent needs an agent (without one it says why), so this bridge runs the fake agent CLI.
-  bridge = await startTestBridge(page, { agent: fakeProvider(mkdtempSync(join(tmpdir(), "aex-ask-"))) });
+  bridge = await startTestBridge(page, { agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-ask-"))) });
   await openViewer(page);
   await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
   await page.keyboard.press("a"); // Ask agent
@@ -70,7 +70,7 @@ test("microphone denied: says how to re-enable it, and typing still works", asyn
       return original(constraints);
     };
   });
-  bridge = await startTestBridge(page, { agent: fakeProvider(mkdtempSync(join(tmpdir(), "aex-denied-"))) });
+  bridge = await startTestBridge(page, { agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-denied-"))) });
   await openViewer(page);
   await page.getByTestId("mic-button").click();
   const error = page.getByTestId("voice-error");

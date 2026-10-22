@@ -1,4 +1,4 @@
-import type { HeadPose } from "@aex/protocol";
+import type { HeadPose } from "@hai/protocol";
 
 /** MediaPipe's Matrix: rows, columns and data flattened in column-major order (MediaPipe's default layout). */
 export interface FlatMatrix {

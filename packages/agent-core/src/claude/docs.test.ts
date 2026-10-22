@@ -14,11 +14,11 @@ describe("docs/agent.md", () => {
       cwd: "D:/project",
       mcpConfigPath: "mcp.json",
       systemPromptPath: "system.md",
-      permissionPromptTool: "mcp__aex__approve_tool",
+      permissionPromptTool: "mcp__hai__approve_tool",
       agent: "mochi",
       resumeSessionId: "session",
     }).filter((arg) => arg.startsWith("-"));
     expect(documented).toEqual(actual);
-    expect(command).toContain("mcp__aex__approve_tool");
+    expect(command).toContain("mcp__hai__approve_tool");
   });
 });

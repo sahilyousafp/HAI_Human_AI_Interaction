@@ -15,15 +15,15 @@ function findWorkspaceRoot(start: string): string {
 /**
  * Injects the bridge port and session token into index.html in dev.
  * Read on every page load, so a restarted bridge (new token) is picked up by a reload.
- * AEX_WORKSPACE points at another bridge's workspace, as the end-to-end tests' own bridge and dev server use.
+ * HAI_WORKSPACE points at another bridge's workspace, as the end-to-end tests' own bridge and dev server use.
  */
-export function aexSession(): Plugin {
-  const workspace = process.env.AEX_WORKSPACE
-    ? resolve(process.env.AEX_WORKSPACE)
+export function haiSession(): Plugin {
+  const workspace = process.env.HAI_WORKSPACE
+    ? resolve(process.env.HAI_WORKSPACE)
     : findWorkspaceRoot(process.cwd());
-  const sessionFile = join(workspace, ".aex", "session.json");
+  const sessionFile = join(workspace, ".hai", "session.json");
   return {
-    name: "aex-session",
+    name: "hai-session",
     apply: "serve",
     transformIndexHtml() {
       let session: { port: number; token: string } | null = null;
@@ -38,7 +38,7 @@ export function aexSession(): Plugin {
       return [
         {
           tag: "script",
-          children: `window.__AEX_SESSION__ = ${JSON.stringify(session)};`,
+          children: `window.__HAI_SESSION__ = ${JSON.stringify(session)};`,
           injectTo: "head-prepend",
         },
       ];

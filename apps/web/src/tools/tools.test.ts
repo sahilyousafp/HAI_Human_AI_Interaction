@@ -1,4 +1,4 @@
-import type { GestureEvent, Point2, SceneDocument, SceneOp } from "@aex/protocol";
+import type { GestureEvent, Point2, SceneDocument, SceneOp } from "@hai/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_LAYOUT, MASSING_SIZE, registerBuiltinTools } from "./builtin.ts";
 import {

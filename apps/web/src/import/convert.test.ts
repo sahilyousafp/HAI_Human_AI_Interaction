@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { partBounds } from "@aex/scene";
+import { partBounds } from "@hai/scene";
 import type { RhinoModule } from "rhino3dm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { convert3dm, describeSkips, IMPORT_LIMITS, totalSkipped } from "./convert.ts";

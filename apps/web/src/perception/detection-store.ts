@@ -1,5 +1,5 @@
-import type { PinchReading, RecognizerState } from "@aex/perception";
-import type { GestureEvent, Hand, TrackingFrame } from "@aex/protocol";
+import type { PinchReading, RecognizerState } from "@hai/perception";
+import type { GestureEvent, Hand, TrackingFrame } from "@hai/protocol";
 import { LatencyTracker } from "../viewer/latency.ts";
 
 /** How far back detection rates and the frame strips look. */

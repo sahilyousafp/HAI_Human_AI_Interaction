@@ -1,8 +1,8 @@
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Detection } from "@aex/agent-core";
-import type { AgentEvent, AgentTurn, Message } from "@aex/protocol";
+import type { Detection } from "@hai/agent-core";
+import type { AgentEvent, AgentTurn, Message } from "@hai/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { fakeProvider, DETECTED as OK } from "../../test/fake-provider.ts";
 import { agentDir, migrateSessionToLead, readSessionId, writeSessionId } from "./agent-config.ts";
@@ -11,8 +11,8 @@ import { AgentHub } from "./agent-hub.ts";
 const temp = (prefix: string) => mkdtempSync(join(tmpdir(), prefix));
 
 function setup(detection: Detection = OK, agent?: string) {
-  const stateDir = temp("aex-fake-state-");
-  let projectDir = temp("aex-agent-project-");
+  const stateDir = temp("hai-fake-state-");
+  let projectDir = temp("hai-agent-project-");
   const messages: Message[] = [];
   const hub = new AgentHub(
     {
@@ -42,7 +42,7 @@ function setup(detection: Detection = OK, agent?: string) {
     received,
     projectDir: () => projectDir,
     switchProject: () => {
-      projectDir = temp("aex-agent-project-");
+      projectDir = temp("hai-agent-project-");
     },
   };
 }
@@ -159,9 +159,9 @@ describe.each([{ agent: undefined }, { agent: "architect" }])(
         const i = start?.args.indexOf(name) ?? -1;
         return i >= 0 ? start?.args[i + 1] : undefined;
       };
-      expect(flag("--permission-prompt-tool")).toBe("mcp__aex__approve_tool");
+      expect(flag("--permission-prompt-tool")).toBe("mcp__hai__approve_tool");
       const mcp = JSON.parse(readFileSync(flag("--mcp-config") ?? "", "utf8"));
-      expect(mcp.mcpServers.aex).toEqual({
+      expect(mcp.mcpServers.hai).toEqual({
         type: "http",
         url: "http://127.0.0.1:4870/mcp",
         headers: { Authorization: "Bearer test-token-0123456789" },
@@ -169,7 +169,7 @@ describe.each([{ agent: undefined }, { agent: "architect" }])(
       const prompt = readFileSync(flag("--append-system-prompt-file") ?? "", "utf8");
       expect(prompt).toMatch(/millimetres/);
       expect(prompt).toMatch(/Z is up/);
-      expect(readFileSync(join(projectDir(), ".aex", ".gitignore"), "utf8")).toBe("*\n");
+      expect(readFileSync(join(projectDir(), ".hai", ".gitignore"), "utf8")).toBe("*\n");
       expect(start?.args).not.toContain("--bare");
       expect(start?.args).not.toContain("--strict-mcp-config");
       expect(flag("--agent")).toBe(agent);
@@ -218,8 +218,8 @@ describe.each([{ agent: undefined }, { agent: "architect" }])(
         message: "Claude Code is not installed.",
         fix: "x",
       };
-      const provider = fakeProvider(temp("aex-fake-state-"));
-      const projectDir = temp("aex-agent-project-");
+      const provider = fakeProvider(temp("hai-fake-state-"));
+      const projectDir = temp("hai-agent-project-");
       const hub = new AgentHub(
         {
           provider: {
@@ -286,8 +286,8 @@ describe.each([{ agent: undefined }, { agent: "architect" }])(
 
 describe("a team in one project", () => {
   it("each agent keeps its own conversation, session file and name on what it broadcasts", async () => {
-    const stateDir = temp("aex-fake-state-");
-    const projectDir = temp("aex-agent-project-");
+    const stateDir = temp("hai-fake-state-");
+    const projectDir = temp("hai-agent-project-");
     const messages: Message[] = [];
     const hub = (agent: string, extraPrompt?: string) =>
       new AgentHub(
@@ -332,7 +332,7 @@ describe("a team in one project", () => {
   });
 
   it("an earlier conversation continues with the lead", async () => {
-    const projectDir = temp("aex-agent-project-");
+    const projectDir = temp("hai-agent-project-");
     writeSessionId(projectDir, "earlier-session");
     migrateSessionToLead(projectDir, "mochi");
     expect(readSessionId(projectDir, "mochi")).toBe("earlier-session");
@@ -344,8 +344,8 @@ describe("a team in one project", () => {
   });
 
   it("a resumed lead picks up the migrated conversation", async () => {
-    const stateDir = temp("aex-fake-state-");
-    const projectDir = temp("aex-agent-project-");
+    const stateDir = temp("hai-fake-state-");
+    const projectDir = temp("hai-agent-project-");
     const options = {
       provider: fakeProvider(stateDir),
       projectDir: () => projectDir,

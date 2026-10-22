@@ -4,7 +4,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 export interface Caller {
   /** The team agent (`claude --agent <name>`); null for the single unnamed session. */
   agent: string | null;
-  /** The `aex` tools it may call, by short name; null for all of them. */
+  /** The `hai` tools it may call, by short name; null for all of them. */
   tools: ReadonlySet<string> | null;
 }
 

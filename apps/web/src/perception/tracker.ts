@@ -1,5 +1,5 @@
-import type { RecognizerState } from "@aex/perception";
-import type { GestureEvent, TrackedHand, TrackingFrame } from "@aex/protocol";
+import type { RecognizerState } from "@hai/perception";
+import type { GestureEvent, TrackedHand, TrackingFrame } from "@hai/protocol";
 import { type CameraEffectsState, disableEffects, EFFECTS_OFF, readEffects } from "./camera-effects.ts";
 import type { FromWorker, ToWorker } from "./messages.ts";
 
@@ -173,7 +173,7 @@ export class Tracker {
 
   /** Stops the camera and worker after a failure, leaving the error state visible. */
   private fail(detail: string): void {
-    console.error("[aex] tracking failed:", detail);
+    console.error("[hai] tracking failed:", detail);
     this.release();
     this.callbacks.onState({ camera: "error", error: "unknown", detail });
   }

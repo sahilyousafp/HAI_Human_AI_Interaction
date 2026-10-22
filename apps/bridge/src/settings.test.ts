@@ -1,15 +1,15 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Message } from "@aex/protocol";
-import { parseMessage } from "@aex/protocol";
+import type { Message } from "@hai/protocol";
+import { parseMessage } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { readLastProject, writeLastProject } from "./project.ts";
 import { SettingsHub } from "./settings.ts";
 
 const LAYOUT = ["section", "select", "measure", null, "move", "massing", "delete", "undo"];
-const tempRoot = () => mkdtempSync(join(tmpdir(), "aex-settings-"));
-const settingsFile = (root: string) => join(root, ".aex", "settings.json");
+const tempRoot = () => mkdtempSync(join(tmpdir(), "hai-settings-"));
+const settingsFile = (root: string) => join(root, ".hai", "settings.json");
 const setSettings = (payload: unknown): Message => {
   const parsed = parseMessage(JSON.stringify({ type: "settings.set", id: "m1", payload }));
   if (!parsed.ok) throw new Error(parsed.error);

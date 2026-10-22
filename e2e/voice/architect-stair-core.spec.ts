@@ -11,7 +11,7 @@ test("spoken specialist name: Mochi receives the request without the name and ha
   page,
 }) => {
   const bridge = await startTestBridge(page, {
-    agent: fakeProvider(mkdtempSync(join(tmpdir(), "aex-voice-"))),
+    agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-voice-"))),
   });
   try {
     await openViewer(page);

@@ -1,4 +1,4 @@
-import type { TrackedHand } from "@aex/protocol";
+import type { TrackedHand } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { type Capsule, handPieces } from "./hand-geometry.ts";
 

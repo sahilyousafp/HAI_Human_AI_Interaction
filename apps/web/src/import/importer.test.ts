@@ -1,5 +1,5 @@
-import type { SceneOp } from "@aex/protocol";
-import { decodeMeshAsset } from "@aex/scene";
+import type { SceneOp } from "@hai/protocol";
+import { decodeMeshAsset } from "@hai/scene";
 import { describe, expect, it, vi } from "vitest";
 import type { ConvertResult } from "./convert.ts";
 import { type ImporterDeps, type ImportFile, ModelImporter, summarise } from "./importer.ts";

@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { Element, SceneDocument, SceneOp, SunSetting, ViewCamera } from "@aex/protocol";
-import { elementBounds, sunPosition, unionBounds } from "@aex/scene";
+import type { Element, SceneDocument, SceneOp, SunSetting, ViewCamera } from "@hai/protocol";
+import { elementBounds, sunPosition, unionBounds } from "@hai/scene";
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { AEX_SERVER } from "../agent/agent-config.ts";
+import { HAI_SERVER } from "../agent/agent-config.ts";
 import type { PermissionDecision } from "../agent/approvals.ts";
 import type { Caller } from "./agent-tokens.ts";
 
@@ -87,13 +87,13 @@ Walls, slabs and columns may also have base: the height of their base in millime
 All may have properties: { key: string | number | boolean }.`;
 
 /**
- * The app's own MCP server ("aex"): how the agent reads and changes the shared scene and sees the view. Every
+ * The app's own MCP server ("hai"): how the agent reads and changes the shared scene and sees the view. Every
  * write is validated as a whole and applied into the running turn's transaction, so one undo reverts the turn.
  * The server offers only the calling agent's tools (and the permission prompt tool, which Claude Code itself calls),
  * so an agent without write tools cannot change the model whatever it asks for.
  */
 export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpServer {
-  const server = new McpServer({ name: AEX_SERVER, version: "0.1.0" });
+  const server = new McpServer({ name: HAI_SERVER, version: "0.1.0" });
   const registered = new Map<string, { remove(): void }>();
   // registerTool, remembering each tool so the ones this agent may not call can be removed at the end.
   const register = ((name: string, config: never, callback: never) => {

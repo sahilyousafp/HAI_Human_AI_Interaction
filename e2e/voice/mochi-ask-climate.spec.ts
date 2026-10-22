@@ -12,7 +12,7 @@ test("Mochi asked to delegate by voice: Mochi gets the request and hands the stu
   page,
 }) => {
   const bridge = await startTestBridge(page, {
-    agent: fakeProvider(mkdtempSync(join(tmpdir(), "aex-voice-"))),
+    agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-voice-"))),
   });
   try {
     await openViewer(page);

@@ -124,7 +124,7 @@ describe("selection", () => {
 });
 
 describe("project persistence", () => {
-  const tempProject = () => join(mkdtempSync(join(tmpdir(), "aex-project-")), "my-project");
+  const tempProject = () => join(mkdtempSync(join(tmpdir(), "hai-project-")), "my-project");
 
   it("autosave: the project file contains a change within 2 seconds of the last edit", async () => {
     const dir = tempProject();
@@ -179,11 +179,11 @@ describe("project persistence", () => {
   });
 
   it("remembers the last opened project", () => {
-    const root = mkdtempSync(join(tmpdir(), "aex-root-"));
+    const root = mkdtempSync(join(tmpdir(), "hai-root-"));
     expect(readLastProject(root)).toBeNull();
     writeLastProject(root, "D:/Projects/House");
     expect(readLastProject(root)).toBe("D:/Projects/House");
-    expect(defaultProjectDir(root)).toContain(join(".aex", "projects", "sample"));
+    expect(defaultProjectDir(root)).toContain(join(".hai", "projects", "sample"));
   });
 
   it("opening another project folder sends everyone the new scene", async () => {

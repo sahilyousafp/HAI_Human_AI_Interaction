@@ -5,7 +5,7 @@ import {
   type Point2,
   type SceneDocument,
   type SceneOp,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LAYOUT, registerBuiltinTools } from "./builtin.ts";
 import { ToolController, type ToolEnvironment } from "./controller.ts";

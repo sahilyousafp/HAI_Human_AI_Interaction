@@ -1,4 +1,4 @@
-import type { McpServerSpec } from "@aex/protocol";
+import type { McpServerSpec } from "@hai/protocol";
 
 /**
  * `claude mcp add` arguments for a project-scoped server. The name comes before the variadic `--env` and `--header`

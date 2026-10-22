@@ -1,4 +1,4 @@
-import type { Element, Level, Point3Mm } from "@aex/protocol";
+import type { Element, Level, Point3Mm } from "@hai/protocol";
 
 export interface BoundsMm {
   min: Point3Mm;

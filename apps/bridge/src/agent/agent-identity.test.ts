@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentTurn, Message } from "@aex/protocol";
+import type { AgentEvent, AgentTurn, Message } from "@hai/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WebSocket } from "ws";
 import { fakeProvider } from "../../test/fake-provider.ts";
@@ -10,7 +10,7 @@ import { connectClient } from "../../test/ws-client.ts";
 import { MCP_PATH } from "../mcp/mcp-endpoint.ts";
 import { type Bridge, createBridge } from "../server.ts";
 import { AgentHub } from "./agent-hub.ts";
-import { allowedAexTools, ensureDefaultAgents, readRoster } from "./roster.ts";
+import { allowedHaiTools, ensureDefaultAgents, readRoster } from "./roster.ts";
 
 const ORIGIN = "http://localhost:5173";
 const TOKEN = "identity-test-token-0123456789";
@@ -28,7 +28,7 @@ afterEach(async () => {
 
 /** A bridge, and a hub running the named agent of the project's default team with its own MCP token. */
 async function start(agent: string) {
-  const projectDir = join(temp("aex-identity-"), "project");
+  const projectDir = join(temp("hai-identity-"), "project");
   bridge = createBridge({
     host: "127.0.0.1",
     port: 0,
@@ -46,11 +46,11 @@ async function start(agent: string) {
   const broadcast: Message[] = [];
   const hub = new AgentHub(
     {
-      provider: fakeProvider(temp("aex-fake-state-")),
+      provider: fakeProvider(temp("hai-fake-state-")),
       projectDir: () => projectDir,
       mcp: () => ({
         url: `http://127.0.0.1:${address.port}${MCP_PATH}`,
-        token: tokens.issue({ agent, tools: allowedAexTools(member) }),
+        token: tokens.issue({ agent, tools: allowedHaiTools(member) }),
       }),
       agent,
     },

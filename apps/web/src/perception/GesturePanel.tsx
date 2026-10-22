@@ -1,5 +1,5 @@
-import type { HandDisplay } from "@aex/perception";
-import type { GestureEvent } from "@aex/protocol";
+import type { HandDisplay } from "@hai/perception";
+import type { GestureEvent } from "@hai/protocol";
 import { useSyncExternalStore } from "react";
 import { type GestureStore, LAST_GESTURE_HOLD_MS } from "./gesture-store.ts";
 

@@ -64,7 +64,7 @@ The converted geometry SHALL be saved as one binary asset in the project folder 
 #### Scenario: The scene file stays small
 - **GIVEN** a file with 200 000 triangles was imported
 - **WHEN** the project is saved
-- **THEN** `scene.aex.json` is under 100 KB larger than before and the geometry is in the asset file
+- **THEN** `scene.hai.json` is under 100 KB larger than before and the geometry is in the asset file
 
 #### Scenario: Token required
 - **WHEN** a request for an asset has no session token

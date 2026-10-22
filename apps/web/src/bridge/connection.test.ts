@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION } from "@aex/protocol";
+import { PROTOCOL_VERSION } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { type ConnectionDeps, type ConnectionState, connectToBridge, type SocketLike } from "./connection.ts";
 
@@ -60,7 +60,7 @@ describe("connectToBridge", () => {
     connectToBridge({ port: 4870, token: "abc" }, h.deps, h.onState);
     const socket = h.sockets[0];
     expect(socket?.url).toBe("ws://127.0.0.1:4870/ws");
-    expect(socket?.protocols).toEqual(["aex.v1", "aex.token.abc"]);
+    expect(socket?.protocols).toEqual(["hai.v1", "hai.token.abc"]);
     socket?.onopen?.();
     expect(JSON.parse(socket?.sent[0] ?? "{}")).toMatchObject({ type: "hello", payload: { client: "web" } });
     socket?.onmessage?.({ data: status(1) });

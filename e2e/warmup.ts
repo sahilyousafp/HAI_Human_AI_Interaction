@@ -22,7 +22,7 @@ export default async function warmup(config: FullConfig): Promise<void> {
     const page = await browser.newPage();
     await page.goto(baseURL);
     await page.waitForFunction(
-      () => (window as { __AEX_VIEWER__?: unknown }).__AEX_VIEWER__ !== undefined,
+      () => (window as { __HAI_VIEWER__?: unknown }).__HAI_VIEWER__ !== undefined,
       null,
       { timeout: 180_000 },
     );
@@ -46,7 +46,7 @@ export default async function warmup(config: FullConfig): Promise<void> {
     await page.getByTestId("camera-toggle").click();
     const frameCount = () =>
       page.evaluate(
-        () => (window as { __AEX_TRACKING__?: { frames: unknown[] } }).__AEX_TRACKING__?.frames.length ?? 0,
+        () => (window as { __HAI_TRACKING__?: { frames: unknown[] } }).__HAI_TRACKING__?.frames.length ?? 0,
       );
     while ((await frameCount()) < 10 && Date.now() - started < 180_000) await page.waitForTimeout(500);
     const firstFrames = Date.now() - started;

@@ -1,6 +1,6 @@
 ## Why
 
-AEX behaves like a computer with one mouse. The right hand is the pointer: hover, button highlights and "this" for voice follow it, while the left hand only gets a grey ring. Under the surface the recognizer already treats both hands alike, but the tools have room for one palette, one drag and one hover, gesture settings have no hand dimension, and the hands cannot reach the sidebar or scroll anything. The agent stop (two open palms) also fires by accident: just showing both hands to the camera triggers it, as the maintainer's own demo clip shows. Nothing lets the user make geometry by hand beyond a fixed massing block.
+HAI behaves like a computer with one mouse. The right hand is the pointer: hover, button highlights and "this" for voice follow it, while the left hand only gets a grey ring. Under the surface the recognizer already treats both hands alike, but the tools have room for one palette, one drag and one hover, gesture settings have no hand dimension, and the hands cannot reach the sidebar or scroll anything. The agent stop (two open palms) also fires by accident: just showing both hands to the camera triggers it, as the maintainer's own demo clip shows. Nothing lets the user make geometry by hand beyond a fixed massing block.
 
 ## What Changes
 
@@ -80,7 +80,7 @@ None: everything extends existing capabilities.
 - **apps/bridge**: `settings.ts` stores `createPalette`.
 - **Docs**: `docs/gestures.md`, `docs/tools.md`, `docs/navigation.md`, `docs/agent.md`, `docs/agents.md`, `docs/voice.md`, and the new demo `demos/09-two-hands.md`.
 - **E2E**:
-  - Tests now ask the page for the inverse pointer mapping (`__AEX_VIEWER__.handAt`), because pointers span the workspace.
+  - Tests now ask the page for the inverse pointer mapping (`__HAI_VIEWER__.handAt`), because pointers span the workspace.
   - The pointer test ids are `hand-pointer-left` and `hand-pointer-right`.
   - The Gestures card's per-hand selects are `gesture-<slot>-left` and `gesture-<slot>-right`.
 

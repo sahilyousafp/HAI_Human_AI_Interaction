@@ -3,7 +3,7 @@
 import { homedir, userInfo } from "node:os";
 
 /** Our own test servers keep their names; everything the user has configured is renamed. */
-const KEEP_SERVERS = new Set(["aex", "broken-server"]);
+const KEEP_SERVERS = new Set(["hai", "broken-server"]);
 
 function scrubText(text, project) {
   let out = text;

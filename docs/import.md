@@ -38,7 +38,7 @@ Imported models are **reference geometry**: you can select, measure, section, mo
 
 ## Where it is kept
 
-The converted geometry is stored in the project folder as `assets/<id>.aexmesh` (millimetres, Float32 positions and Uint32 indices behind a small JSON header), and the scene file only refers to it. The bridge serves it at `/assets/<id>` to the page that holds the session token and to nobody else. Assets that no element refers to are removed when the project opens. If a file is missing, its elements show as boxes and the project status names the file.
+The converted geometry is stored in the project folder as `assets/<id>.haimesh` (millimetres, Float32 positions and Uint32 indices behind a small JSON header), and the scene file only refers to it. The bridge serves it at `/assets/<id>` to the page that holds the session token and to nobody else. Assets that no element refers to are removed when the project opens. If a file is missing, its elements show as boxes and the project status names the file.
 
 The WebAssembly file is 2.7 MB and is loaded only by the import worker, on the first import.
 
@@ -54,6 +54,6 @@ The WebAssembly file is 2.7 MB and is loaded only by the import worker, on the f
 |---|---|
 | Wall, slab, column, massing | A native Rhino extrusion of its footprint at its real base height (a wall is the rectangle around its baseline; a slab hangs down from its level), on the layer Walls, Slabs, Columns or Massings; its prism is stored as the render mesh too, so mesh-only readers (this app's import) can draw it |
 | Imported model | A mesh moved by its translation, on its source layer (else Imported), in its colour |
-| Name, id, level, properties | The object name, and user strings `aex.id`, `aex.level` and `aex.property.<name>` |
+| Name, id, level, properties | The object name, and user strings `hai.id`, `hai.level` and `hai.property.<name>` |
 
 The file is in millimetres, Z up. Levels are not exported as objects (the level's name is kept on each element). An imported model whose file is missing from the project is left out and named in the report. An empty project says there is nothing to save. A saved file imports again here, and the report counts every object.

@@ -1,4 +1,4 @@
-import type { McpServerSpec } from "@aex/protocol";
+import type { McpServerSpec } from "@hai/protocol";
 import { type FormEvent, useState, useSyncExternalStore } from "react";
 import type { AgentClient } from "./agent-client.ts";
 

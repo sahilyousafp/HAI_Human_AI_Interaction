@@ -1,5 +1,5 @@
-import type { RecognizerState } from "@aex/perception";
-import type { GestureEvent, Hand, TrackedHand, TrackingFrame } from "@aex/protocol";
+import type { RecognizerState } from "@hai/perception";
+import type { GestureEvent, Hand, TrackedHand, TrackingFrame } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { type DetectionSample, DetectionStore, stripSegments } from "./detection-store.ts";
 

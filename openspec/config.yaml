@@ -13,8 +13,12 @@ context: |
   The user keeps full use of their own Claude Code setup: their MCP servers and skills load in the agent session,
   and they can install more from the app. Tool calls that are not pre-approved go to an in-app approval prompt
   (gesture, voice or click) instead of being silently allowed or silently denied.
-  Rhino agent tools come from McNeel's RhinoAI ("Rhino-MCP-Platform" Yak package, stdio router). Our own Rhino
-  plugin only adds what RhinoAI lacks: high-rate camera sync, selection sync, and ghost previews.
+  HAI is an interface for an agent and a human working together; Rhino is its modelling and drafting host. The
+  agent's capabilities come from Python, not from a fixed tool list: `python_run` runs in a managed environment in
+  the project (rhino3dm, ladybug-core, numpy to start, any other library on demand) and works with Rhino closed;
+  `rhino_run_python` runs Python 3 inside the open Rhino 8 document through our plugin. Both show the code and the
+  packages for approval and are not sandboxed. McNeel's RhinoAI MCP server is not required, wrapped or detected. Our
+  own Rhino plugin adds camera sync, selection sync, the Python runner, and ghost previews.
   Everything runs on localhost: servers bind to 127.0.0.1 only and require a random per-session token.
   Privacy: camera frames never leave the perception Web Worker; only landmarks, gestures and intents cross it.
   No emotion inference; face blendshapes are only explicit control switches.

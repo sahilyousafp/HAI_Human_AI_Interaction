@@ -6,7 +6,7 @@ Lets one lead agent, Mochi, turn the user's requests into work for specialist ag
 ## Requirements
 
 ### Requirement: The team is defined in the project
-The system SHALL read the open project's agents from its Claude Code agent definitions (`.claude/agents/*.md`: name, description, tools, model) and AEX's extra details from `.aex/agents.json`, again before every request and task. On the first request in a project it SHALL create the missing default definitions (Mochi, the lead, Architect, Product, Climate, Reviewer, all on Claude Sonnet) without overwriting existing ones. A project's earlier single conversation SHALL become Mochi's.
+The system SHALL read the open project's agents from its Claude Code agent definitions (`.claude/agents/*.md`: name, description, tools, model) and HAI's extra details from `.hai/agents.json`, again before every request and task. On the first request in a project it SHALL create the missing default definitions (Mochi, the lead, Architect, Product, Climate, Reviewer, all on Claude Sonnet) without overwriting existing ones. A project's earlier single conversation SHALL become Mochi's.
 
 #### Scenario: Defaults created once
 - **GIVEN** a project without agent definitions

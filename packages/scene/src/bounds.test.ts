@@ -1,4 +1,4 @@
-import type { Element, Level } from "@aex/protocol";
+import type { Element, Level } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { elementBase, elementBounds, unionBounds } from "./bounds.ts";
 

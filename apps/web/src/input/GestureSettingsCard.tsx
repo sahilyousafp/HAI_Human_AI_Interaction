@@ -11,7 +11,7 @@ import {
   type GestureSlot,
   type GestureType,
   type Hand,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { GestureSettings } from "./gesture-settings.ts";
 import type { InputBus } from "./input-bus.ts";

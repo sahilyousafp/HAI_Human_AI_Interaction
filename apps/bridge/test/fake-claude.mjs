@@ -87,7 +87,7 @@ const emit = (event) => process.stdout.write(`${JSON.stringify({ ...event, sessi
 
 /** Calls a tool on the app's MCP server from --mcp-config, as Claude Code would (JSON-RPC over HTTP). */
 async function callAppTool(name, args) {
-  const config = JSON.parse(readFileSync(flag("--mcp-config"), "utf8")).mcpServers.aex;
+  const config = JSON.parse(readFileSync(flag("--mcp-config"), "utf8")).mcpServers.hai;
   const res = await fetch(config.url, {
     method: "POST",
     headers: {
@@ -107,7 +107,7 @@ async function callAppTool(name, args) {
 
 /** Claude Code's permission check: asks --permission-prompt-tool and returns its allow / deny decision. */
 async function askPermission(tool, input, toolUseId) {
-  const prompt = flag("--permission-prompt-tool").replace(/^mcp__aex__/, "");
+  const prompt = flag("--permission-prompt-tool").replace(/^mcp__hai__/, "");
   const result = await callAppTool(prompt, { tool_name: tool, input, tool_use_id: toolUseId });
   return JSON.parse(result.content[0].text);
 }
@@ -144,9 +144,9 @@ function init() {
     type: "system",
     subtype: "init",
     cwd: process.cwd(),
-    tools: ["Read", "Bash", "mcp__aex__get_scene_summary"],
+    tools: ["Read", "Bash", "mcp__hai__get_scene_summary"],
     mcp_servers: [
-      { name: "aex", status: "connected", source: "dynamic" },
+      { name: "hai", status: "connected", source: "dynamic" },
       ...Object.keys(readMcp().mcpServers).map((name) => ({
         name,
         status: name.startsWith("broken") ? "failed" : "connected",
@@ -175,7 +175,7 @@ const result = (subtype = "success") =>
 
 /** Calls one of the app's tools as a tool call the user sees, and returns its parsed JSON output or { error }. */
 async function appTool(name, input) {
-  const { output } = await toolCall(`mcp__aex__${name}`, input, async (allowed) => {
+  const { output } = await toolCall(`mcp__hai__${name}`, input, async (allowed) => {
     const called = await callAppTool(name, allowed);
     return called.isError ? { error: called.content[0].text } : called.content[0].text;
   });
@@ -268,7 +268,7 @@ function onRequest(raw) {
     return;
   }
   if (text === "column" || text === "bad column") {
-    const tool = "mcp__aex__create_elements";
+    const tool = "mcp__hai__create_elements";
     const element = {
       type: "column",
       name: "Fake column",

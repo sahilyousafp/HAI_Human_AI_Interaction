@@ -31,4 +31,4 @@ Week 1 clip. Target length 45-60 s, 4:5 or 16:9, captions burned in.
 ## Check after recording
 
 - Captions readable on a phone.
-- No session token visible on screen (do not open `.aex/session.json` or DevTools in this clip).
+- No session token visible on screen (do not open `.hai/session.json` or DevTools in this clip).

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { TrackedHand, TrackingFrame } from "@aex/protocol";
+import { TrackedHand, TrackingFrame } from "@hai/protocol";
 import { z } from "zod";
 
 export const FIXTURE_CLIPS = ["no-hands", "one-hand-pinch", "two-hands", "head-turn", "open-palm"] as const;

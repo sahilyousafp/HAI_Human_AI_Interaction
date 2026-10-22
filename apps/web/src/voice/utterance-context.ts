@@ -1,4 +1,4 @@
-import type { Point3Mm, SceneDocument } from "@aex/protocol";
+import type { Point3Mm, SceneDocument } from "@hai/protocol";
 import { VOICE } from "./voice-config.ts";
 
 /** An element the user meant while speaking, as the agent receives it. */

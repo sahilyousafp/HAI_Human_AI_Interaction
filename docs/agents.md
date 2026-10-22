@@ -1,6 +1,6 @@
 # The agent team
 
-AEX gives you a small design team made of your own Claude. **Mochi** leads it: every request goes to Mochi, which answers questions itself and hands design work to **specialists**. Each specialist works on its own task while Mochi stays free, so you can ask Mochi what everyone is doing at any time. Mochi tells you when the work is done, and says it out loud.
+HAI gives you a small design team made of your own Claude. **Mochi** leads it: every request goes to Mochi, which answers questions itself and hands design work to **specialists**. Each specialist works on its own task while Mochi stays free, so you can ask Mochi what everyone is doing at any time. Mochi tells you when the work is done, and says it out loud.
 
 ## The team
 
@@ -12,16 +12,16 @@ AEX gives you a small design team made of your own Claude. **Mochi** leads it: e
 | **Climate** | Sun path, shadows, orientation and daylight (sun studies) | No |
 | **Reviewer** | Checks the model against the brief and common rules, and reports issues. Never edits. | No |
 
-The team is written into the project the first time you send a request: one Claude Code agent file per agent in `.claude/agents/`. AEX never overwrites a file you have changed. Because they are Claude Code's own agent files, the same agents also work when you run `claude --agent architect` in a terminal.
+The team is written into the project the first time you send a request: one Claude Code agent file per agent in `.claude/agents/`. HAI never overwrites a file you have changed. Because they are Claude Code's own agent files, the same agents also work when you run `claude --agent architect` in a terminal.
 
 ## How it works
 
-- **Each agent is its own Claude Code session.** The bridge starts `claude -p --agent <name>` for each agent when it first has work, in the project folder, with your own Claude Code setup (see [agent.md](agent.md) for the exact command). Each keeps its own conversation (`.aex/agent/<name>/session.json`), so Architect remembers its earlier tasks, and each resumes after a crash, an idle close or a restart.
+- **Each agent is its own Claude Code session.** The bridge starts `claude -p --agent <name>` for each agent when it first has work, in the project folder, with your own Claude Code setup (see [agent.md](agent.md) for the exact command). Each keeps its own conversation (`.hai/agent/<name>/session.json`), so Architect remembers its earlier tasks, and each resumes after a crash, an idle close or a restart.
 - **Mochi hands out tasks.** It calls `delegate` with a specialist's name, a short title and a complete instruction. That returns at once, so Mochi's turn ends and Mochi is free for your next question while the specialist works.
-- **Each agent only has its own tools.** Every session gets its own random token for the app's tool server. From the token the bridge knows which agent is calling and offers it only the `aex` tools its definition lists. Reviewer has no tool that changes the model at all, and an agent marked as not changing the model never gets those tools, whatever its file lists.
+- **Each agent only has its own tools.** Every session gets its own random token for the app's tool server. From the token the bridge knows which agent is calling and offers it only the `hai` tools its definition lists. Reviewer has no tool that changes the model at all, and an agent marked as not changing the model never gets those tools, whatever its file lists.
 - **Mochi reports.** When every task Mochi handed out in one turn has finished, the bridge sends Mochi a short report (each task's agent, outcome and the specialist's summary) and Mochi tells you what was done. A report waits while you are talking to Mochi.
 
-The first time you used AEX in a project before the team existed, that one conversation becomes Mochi's, so nothing is lost.
+The first time you used HAI in a project before the team existed, that one conversation becomes Mochi's, so nothing is lost.
 
 ## Asking the team
 
@@ -81,12 +81,12 @@ The **Agents** tab lists the team from the project's files, with each agent's mo
 | Name | The file name and Claude Code's `name` (lower-case letters, digits and -) |
 | What it does | Claude Code's `description`; Mochi reads it to choose the agent |
 | Model | Claude Code's `model` (`sonnet`, `opus`, `haiku`, or the same as Claude Code) |
-| What it may do | Its `aex` tools: read the model, change the model, sun studies |
+| What it may do | Its `hai` tools: read the model, change the model, sun studies |
 | Other Claude Code tools | Any other tools it may use, for example `Read` or `WebSearch` |
 | Instructions | The file's body |
-| Other names it is heard as, colour | `.aex/agents.json` |
+| Other names it is heard as, colour | `.hai/agents.json` |
 
-A change applies from that agent's next task: its session restarts with the new definition and resumes its conversation. A new agent is in Mochi's team list from Mochi's next request. You can also edit the files directly; AEX reads them again before every request and task.
+A change applies from that agent's next task: its session restarts with the new definition and resumes its conversation. A new agent is in Mochi's team list from Mochi's next request. You can also edit the files directly; HAI reads them again before every request and task.
 
 ## Climate's sun studies
 

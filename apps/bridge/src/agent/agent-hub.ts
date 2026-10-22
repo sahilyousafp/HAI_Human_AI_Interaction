@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AgentProvider, AgentSession } from "@aex/agent-core";
+import type { AgentProvider, AgentSession } from "@hai/agent-core";
 import type {
   AgentEvent,
   AgentStatus,
@@ -7,7 +7,7 @@ import type {
   ApprovalRequest,
   Message,
   RequestContext,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import { type Logger, silentLogger } from "../log.ts";
 import { PERMISSION_TOOL, readSessionId, writeAgentConfig, writeSessionId } from "./agent-config.ts";
 

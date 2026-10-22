@@ -1,4 +1,4 @@
-import { Element, elementIssue, type SceneDocument, type SceneOp } from "@aex/protocol";
+import { Element, elementIssue, type SceneDocument, type SceneOp } from "@hai/protocol";
 
 export type OpResult = { ok: true; doc: SceneDocument; inverse: SceneOp } | { ok: false; error: string };
 export type TransactionResult =

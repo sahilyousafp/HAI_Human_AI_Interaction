@@ -1,4 +1,4 @@
-import { decodeMeshAsset, type MeshPart } from "@aex/scene";
+import { decodeMeshAsset, type MeshPart } from "@hai/scene";
 
 export type AssetState =
   | { status: "loading" }

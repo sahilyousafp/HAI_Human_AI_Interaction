@@ -40,6 +40,16 @@ describe("mesh asset", () => {
     expect(readMeshHeader(bytes.subarray(0, 14)).ok).toBe(false);
   });
 
+  it("still reads assets written while the project was called AEX (same layout, the old magic)", () => {
+    const bytes = encodeMeshAsset([triangle()]);
+    const legacy = bytes.slice();
+    legacy.set(new TextEncoder().encode("AEXMESH1"), 0);
+    expect(readMeshHeader(legacy).ok).toBe(true);
+    expect(decodeMeshAsset(legacy)).toEqual(decodeMeshAsset(bytes));
+    legacy.set(new TextEncoder().encode("XXXMESH1"), 0);
+    expect(readMeshHeader(legacy).ok).toBe(false);
+  });
+
   it("an empty asset has no parts", () => {
     const decoded = decodeMeshAsset(encodeMeshAsset([]));
     expect(decoded).toEqual({ ok: true, parts: [] });

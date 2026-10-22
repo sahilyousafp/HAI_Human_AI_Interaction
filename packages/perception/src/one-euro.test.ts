@@ -1,4 +1,4 @@
-import { HAND_LANDMARK_COUNT, type TrackedHand, type TrackingFrame, type Vec3 } from "@aex/protocol";
+import { HAND_LANDMARK_COUNT, type TrackedHand, type TrackingFrame, type Vec3 } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { OneEuroVector } from "./one-euro.ts";
 import { FrameSmoother, HAND_RESET_MS } from "./smoothing.ts";

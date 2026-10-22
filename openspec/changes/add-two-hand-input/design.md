@@ -29,7 +29,7 @@ The recognizer runs one hand machine per hand and tags every event with its hand
 - It is then expressed in viewer coordinates, which go beyond 0..1 over the sidebar, so tools and picking keep their coordinate system.
 - Picking returns nothing outside 0..1.
 - Pointers are drawn in a portal on `document.body` at client pixels, so they show over the sidebar.
-- E2E tests get the inverse mapping from the page (`__AEX_VIEWER__.handAt`), because it depends on layout.
+- E2E tests get the inverse mapping from the page (`__HAI_VIEWER__.handAt`), because it depends on layout.
 
 **Pressable means clickable.**
 - `button, a[href], summary, label, input[type=checkbox|radio], [data-hand-press]` are pressable, unless disabled.

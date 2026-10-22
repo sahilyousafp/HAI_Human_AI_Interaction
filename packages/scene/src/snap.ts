@@ -1,4 +1,4 @@
-import type { DrawingAids, Element, Point2, Point3Mm, PointMm, SceneDocument } from "@aex/protocol";
+import type { DrawingAids, Element, Point2, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
 import { elementBase, elementBounds } from "./bounds.ts";
 
 /** What a point snapped to; `ortho` is a point only held on an axis, with nothing else near. */

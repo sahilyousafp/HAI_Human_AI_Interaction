@@ -1,4 +1,4 @@
-import type { GestureEvent, Hand, Point2, TrackingFrame } from "@aex/protocol";
+import type { GestureEvent, Hand, Point2, TrackingFrame } from "@hai/protocol";
 import { DEFAULT_GESTURES, type GestureConfig } from "./config.ts";
 import { DEFAULT_ASPECT, othersExtension, palmPoint, pinchPoint, pinchRatio, posture } from "./features.ts";
 import { type HandDisplay, HandMachine, type HandObservation } from "./hand-machine.ts";

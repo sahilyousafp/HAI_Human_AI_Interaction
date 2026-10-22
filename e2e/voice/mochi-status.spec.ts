@@ -14,7 +14,7 @@ test("listening for names: a named utterance becomes a request with its countdow
   page,
 }) => {
   const bridge = await startTestBridge(page, {
-    agent: fakeProvider(mkdtempSync(join(tmpdir(), "aex-voice-"))),
+    agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-voice-"))),
   });
   try {
     await openViewer(page);

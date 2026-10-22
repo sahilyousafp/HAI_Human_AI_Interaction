@@ -1,5 +1,5 @@
-import type { RecognizerState } from "@aex/perception";
-import type { GestureEvent } from "@aex/protocol";
+import type { RecognizerState } from "@hai/perception";
+import type { GestureEvent } from "@hai/protocol";
 
 /** How long the last gesture stays on the HUD, so short gestures like a tap are readable. */
 export const LAST_GESTURE_HOLD_MS = 1500;

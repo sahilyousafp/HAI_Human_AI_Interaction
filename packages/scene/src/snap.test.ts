@@ -4,7 +4,7 @@ import {
   type Element,
   type Point3Mm,
   type SceneDocument,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { buildSnapIndex, GRID_MM, type Projector, resolvePoint, SNAP_TOLERANCE_PX } from "./snap.ts";
 

@@ -1,6 +1,6 @@
 # The agent
 
-AEX drives **your own Claude**: the Claude Code command-line tool you installed and signed in to yourself. It runs the unmodified `claude` program on your machine and talks to it over standard input and output, the way a terminal would. Your MCP servers, skills and settings load as usual; AEX adds its scene tools on top and shows everything in the agent panel over the model.
+HAI drives **your own Claude**: the Claude Code command-line tool you installed and signed in to yourself. It runs the unmodified `claude` program on your machine and talks to it over standard input and output, the way a terminal would. Your MCP servers, skills and settings load as usual; HAI adds its scene tools on top and shows everything in the agent panel over the model.
 
 ## Before you start
 
@@ -8,20 +8,20 @@ Install Claude Code and sign in once in a terminal by running `claude`. The brid
 
 ## How the session runs
 
-AEX runs a small team of agents, each its own Claude Code session (see [agents.md](agents.md)). When an agent first has work in a project, the bridge starts one long-lived process for it in the project folder:
+HAI runs a small team of agents, each its own Claude Code session (see [agents.md](agents.md)). When an agent first has work in a project, the bridge starts one long-lived process for it in the project folder:
 
 ```text
-claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --mcp-config <project>/.aex/agent/<name>/mcp.json --permission-prompt-tool mcp__aex__approve_tool --append-system-prompt-file <project>/.aex/agent/<name>/system.md --agent <name> --resume <session id>
+claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --mcp-config <project>/.hai/agent/<name>/mcp.json --permission-prompt-tool mcp__hai__approve_tool --append-system-prompt-file <project>/.hai/agent/<name>/system.md --agent <name> --resume <session id>
 ```
 
 `--agent` names the team member the process runs as (see [agents.md](agents.md)); `--resume` is only added when that agent already has a conversation. A unit test checks that this command matches the code (`buildClaudeArgs` in `packages/agent-core/src/claude/provider.ts`).
 
 - **One process per agent.** Every request to Mochi, and every task for a specialist, is a new turn for that agent's process, so each agent remembers its conversation. Opening another project starts that project's own conversations.
-- **Files it writes**, all in the project's `.aex` folder, which is kept out of git:
-  - `agent/<name>/mcp.json` adds only the app's own MCP server, `aex`, at `http://127.0.0.1:<port>/mcp`. It carries a random token issued to this process as a bearer header, and a new one each time the process starts. From the token the bridge knows which agent is calling and offers it only the `aex` tools its definition lists, so Reviewer has no write tools at all. The browsers' session token is not accepted there. These tokens protect the app's local endpoint; they are not Claude credentials.
-  - `agent/<name>/system.md` is added to the system prompt. It says that lengths are millimetres, Z is up, scene work goes through the `aex` tools, and "this" or "that" means what you point at or select. Mochi's also lists the specialists it can hand work to, from their definitions.
+- **Files it writes**, all in the project's `.hai` folder, which is kept out of git:
+  - `agent/<name>/mcp.json` adds only the app's own MCP server, `hai`, at `http://127.0.0.1:<port>/mcp`. It carries a random token issued to this process as a bearer header, and a new one each time the process starts. From the token the bridge knows which agent is calling and offers it only the `hai` tools its definition lists, so Reviewer has no write tools at all. The browsers' session token is not accepted there. These tokens protect the app's local endpoint; they are not Claude credentials.
+  - `agent/<name>/system.md` is added to the system prompt. It says that lengths are millimetres, Z is up, scene work goes through the `hai` tools, and "this" or "that" means what you point at or select. Mochi's also lists the specialists it can hand work to, from their definitions.
   - `agent/<name>/session.json` holds the agent's conversation id, so its conversation survives restarts.
-  - The team's definitions are Claude Code agent files in `.claude/agents/`, with AEX's extra details in `.aex/agents.json` ([agents.md](agents.md)).
+  - The team's definitions are Claude Code agent files in `.claude/agents/`, with HAI's extra details in `.hai/agents.json` ([agents.md](agents.md)).
 - **Reloading the page** shows every agent's conversation again. The bridge keeps the last 50 turns of each.
 - **If the process ends unexpectedly**, the next request starts a new one with `--resume`, and the turn shows "Session recovered".
 - **After 20 idle minutes** an agent's process is closed. Its next turn resumes the conversation.
@@ -29,7 +29,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose --inc
 
 ## What the agent can do in the scene
 
-The `aex` MCP server gives each agent the tools its definition lists, from these:
+The `hai` MCP server gives each agent the tools its definition lists, from these:
 
 | Tool | What it does |
 |---|---|
@@ -56,7 +56,7 @@ Some tool calls need your say-so.
   - Head gestures only decide a card while it is the only one waiting.
   - A shake that answers a card does not also cancel the active tool.
 - **Unanswered cards are denied after 60 seconds**, and the card says it timed out.
-- **Always allow** pre-approves that tool in this project, kept in `.aex/approvals.json`. Remove it under **Settings > Agent permissions**, and the next call asks again.
+- **Always allow** pre-approves that tool in this project, kept in `.hai/approvals.json`. Remove it under **Settings > Agent permissions**, and the next call asks again.
 
 ## Extensions
 
@@ -64,7 +64,7 @@ The **Extensions** tab in the agent panel shows:
 
 - **What the session loaded**: every MCP server with its scope (user, project, plugin, claude.ai, or this app) and status (connected, failed, pending, needs-auth), and the skills. This comes from the session itself, so it shows what really loaded, not what config files claim. It appears after the first request.
 - **MCP servers in this project.** You can add a server that runs a command (stdio) or one at an HTTP URL, and remove servers.
-  - AEX runs `claude mcp add --scope project` and `claude mcp remove --scope project` in the project folder. The server goes in the project's `.mcp.json`, so it also works when you run Claude Code there yourself.
+  - HAI runs `claude mcp add --scope project` and `claude mcp remove --scope project` in the project folder. The server goes in the project's `.mcp.json`, so it also works when you run Claude Code there yourself.
   - Environment variable and header values are typed into hidden fields. They are passed straight to `claude mcp add`, never shown again (only their names, masked), never sent back to the browser, and never logged.
 - **Skills in this project.** You can install a skill from a folder, or from an https git repository (cloned shallowly), and remove skills.
   - The folder must contain a `SKILL.md` with a `name` and a `description` in its front matter, or installation stops with the reason and nothing is copied.

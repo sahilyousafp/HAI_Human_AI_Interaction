@@ -1,5 +1,5 @@
-import type { Element } from "@aex/protocol";
-import { elementBounds } from "@aex/scene";
+import type { Element } from "@hai/protocol";
+import { elementBounds } from "@hai/scene";
 import { describe, expect, it } from "vitest";
 import { moveOp } from "./builtin.ts";
 import { shifted } from "./create.ts";

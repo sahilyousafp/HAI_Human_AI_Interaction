@@ -13,7 +13,7 @@ test("listening for names: 'Hey Mochi' counts as the name, and the greeting is t
   page,
 }) => {
   const bridge = await startTestBridge(page, {
-    agent: fakeProvider(mkdtempSync(join(tmpdir(), "aex-voice-"))),
+    agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-voice-"))),
   });
   try {
     await openViewer(page);

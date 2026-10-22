@@ -1,4 +1,4 @@
-import type { TrackingFrame } from "@aex/protocol";
+import type { TrackingFrame } from "@hai/protocol";
 
 /**
  * Dev-only recorder of smoothed tracking frames (exactly what the gesture recognisers consume).
@@ -33,7 +33,7 @@ export function downloadFrames(frames: TrackingFrame[]): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `aex-landmarks-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  link.download = `hai-landmarks-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -41,6 +41,6 @@ export function downloadFrames(frames: TrackingFrame[]): void {
 declare global {
   interface Window {
     /** Dev builds only: lets scripts record fixtures (see scripts/export-landmarks.mjs). */
-    __AEX_RECORDER__?: LandmarkRecorder;
+    __HAI_RECORDER__?: LandmarkRecorder;
   }
 }

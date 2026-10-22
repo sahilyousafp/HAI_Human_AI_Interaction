@@ -1,7 +1,7 @@
 // Small Rhino files for the import tests, written with rhino3dm (no Rhino install needed).
 //
 //   node scripts/make-3dm-fixtures.mjs            writes test-assets/models/*.3dm (committed, a few KB each)
-//   node scripts/make-3dm-fixtures.mjs --big      also writes .aex/models/grid-1000.3dm (1000 boxes, the most objects an
+//   node scripts/make-3dm-fixtures.mjs --big      also writes .hai/models/grid-1000.3dm (1000 boxes, the most objects an
 //                                                 import keeps as separate elements; git-ignored)
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -252,5 +252,5 @@ if (process.argv.includes("--big")) {
       attributes(`Box ${i}`),
     );
   }
-  save(join(root, ".aex", "models"), "grid-1000.3dm", f);
+  save(join(root, ".hai", "models"), "grid-1000.3dm", f);
 }

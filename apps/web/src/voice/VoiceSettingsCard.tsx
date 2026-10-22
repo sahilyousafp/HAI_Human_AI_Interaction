@@ -1,4 +1,4 @@
-import type { ReplyVoice, SpeechMode } from "@aex/protocol";
+import type { ReplyVoice, SpeechMode } from "@hai/protocol";
 import { useSyncExternalStore } from "react";
 import { ListGroup, ListRow, Switch } from "../ui/controls.tsx";
 import { cloudSpeechAvailable } from "./listeners.ts";

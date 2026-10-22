@@ -1,4 +1,4 @@
-import type { MeshPart } from "@aex/scene";
+import type { MeshPart } from "@hai/scene";
 import type { File3dm, File3dmObject, GeometryBase, RhinoModule } from "rhino3dm";
 
 /** The most an import may bring in; beyond this nothing is imported. */

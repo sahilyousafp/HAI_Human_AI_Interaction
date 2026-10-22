@@ -19,13 +19,13 @@ const CLIP_MS = 14_400;
 /** Records smoothed frames (what the recogniser sees) for one full loop of the clip, however slow the machine. */
 async function recordLoop(page: Page): Promise<TrackingFrame[]> {
   await page.evaluate(() => {
-    const w = window as unknown as { __AEX_RECORDER__: { start(): void }; __AEX_GESTURES__?: unknown };
-    w.__AEX_GESTURES__ = { events: [] };
-    w.__AEX_RECORDER__.start();
+    const w = window as unknown as { __HAI_RECORDER__: { start(): void }; __HAI_GESTURES__?: unknown };
+    w.__HAI_GESTURES__ = { events: [] };
+    w.__HAI_RECORDER__.start();
   });
   await page.waitForTimeout(CLIP_MS + 500);
   return page.evaluate(() =>
-    (window as unknown as { __AEX_RECORDER__: { stop(): TrackingFrame[] } }).__AEX_RECORDER__.stop(),
+    (window as unknown as { __HAI_RECORDER__: { stop(): TrackingFrame[] } }).__HAI_RECORDER__.stop(),
   );
 }
 

@@ -16,7 +16,7 @@ test.afterEach(async () => {
 async function withTeam(page: Page, scheme: "light" | "dark") {
   await page.emulateMedia({ colorScheme: scheme });
   bridge = await startTestBridge(page, {
-    agent: fakeProvider(mkdtempSync(join(tmpdir(), "aex-visual-team-"))),
+    agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-visual-team-"))),
   });
   await openViewer(page);
   await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");

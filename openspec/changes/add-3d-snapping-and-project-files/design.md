@@ -33,7 +33,7 @@
 - First and second points call `ctx.resolve` with the aids; with no snap in reach the surface hit point is kept. The overlay already carries 3D measure points.
 
 **New project is a bridge message.**
-- `project.create { path }` on the WebSocket: the bridge creates the folder, writes an empty scene (`levels: [ground]`, no elements) and opens it, refusing when `scene.aex.json` already exists. `openProject` keeps seeding the sample for the first launch only (no stored project), so existing behaviour and tests stay.
+- `project.create { path }` on the WebSocket: the bridge creates the folder, writes an empty scene (`levels: [ground]`, no elements) and opens it, refusing when `scene.hai.json` already exists. `openProject` keeps seeding the sample for the first launch only (no stored project), so existing behaviour and tests stay.
 - The button reuses the folder-path form of Open project.
 - *Rejected:* an "empty" flag on `project.open` (a typo in a path would silently create a project).
 

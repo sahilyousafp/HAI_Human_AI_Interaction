@@ -17,7 +17,7 @@ const GEAR = '[data-testid="settings-button"]';
 async function start(page: Page) {
   bridge = await startTestBridge(page);
   await openViewer(page);
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
 }
 
 /** The pinch point (camera frame) whose pointer is `px` pixels to the left of a control's edge, level with it. */
@@ -31,7 +31,7 @@ async function pinchNear(page: Page, selector: string, px: number): Promise<Poin
 }
 
 const pointer = (page: Page, right: Point | null, left: Point | null, closing?: { Left?: boolean }) =>
-  page.evaluate(([r, l, c]) => window.__AEX_INPUT__?.pointer(r, l, c ?? undefined), [
+  page.evaluate(([r, l, c]) => window.__HAI_INPUT__?.pointer(r, l, c ?? undefined), [
     right,
     left,
     closing ?? null,
@@ -40,7 +40,7 @@ const pointer = (page: Page, right: Point | null, left: Point | null, closing?: 
 async function tap(page: Page, hand: "Left" | "Right", position: Point) {
   const ts = await now(page);
   await page.evaluate(
-    (e) => window.__AEX_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], ...e } as never]),
+    (e) => window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], ...e } as never]),
     { type: "pinch.tap", hand, position, ts },
   );
 }
@@ -159,8 +159,8 @@ test("snapping adds no gesture-to-render time: the orbit p90 is within a few mil
         ([i, right]) => {
           const ts = performance.timeOrigin + performance.now();
           const at: [number, number] = [right[0] + i * 0.002, right[1]];
-          window.__AEX_INPUT__?.pointer(at, null);
-          window.__AEX_INPUT__?.gestures([
+          window.__HAI_INPUT__?.pointer(at, null);
+          window.__HAI_INPUT__?.gestures([
             {
               type: i === 0 ? "pinch.drag.start" : "pinch.drag.update",
               ts,
@@ -176,7 +176,7 @@ test("snapping adds no gesture-to-render time: the orbit p90 is within a few mil
       await page.waitForTimeout(33);
     }
     await page.evaluate(() =>
-      window.__AEX_INPUT__?.gestures([
+      window.__HAI_INPUT__?.gestures([
         {
           type: "pinch.drag.end",
           ts: performance.timeOrigin + performance.now(),
@@ -186,7 +186,7 @@ test("snapping adds no gesture-to-render time: the orbit p90 is within a few mil
         } as never,
       ]),
     );
-    return page.evaluate(() => window.__AEX_VIEWER__?.latencyP90() ?? 0);
+    return page.evaluate(() => window.__HAI_VIEWER__?.latencyP90() ?? 0);
   };
   const on = await orbitP90();
   await openSettings(page, "features");

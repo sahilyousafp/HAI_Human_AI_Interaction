@@ -1,4 +1,4 @@
-import { DRAWING_AIDS } from "@aex/protocol";
+import { DRAWING_AIDS } from "@hai/protocol";
 import { useSyncExternalStore } from "react";
 import { ListGroup, ListRow, Switch } from "../ui/controls.tsx";
 import type { DrawingAidsStore } from "./drawing-aids.ts";

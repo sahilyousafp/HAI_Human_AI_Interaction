@@ -1,5 +1,5 @@
-import type { RecognizerState } from "@aex/perception";
-import type { GestureEvent, TrackedHand, TrackingFrame } from "@aex/protocol";
+import type { RecognizerState } from "@hai/perception";
+import type { GestureEvent, TrackedHand, TrackingFrame } from "@hai/protocol";
 
 /** Messages between the main thread and the perception worker. Camera images only ever travel inward. */
 export type ToWorker =

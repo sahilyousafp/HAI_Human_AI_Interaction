@@ -7,7 +7,7 @@ import {
   GestureRecognizer,
   HandIdentity,
   toTrackingFrame,
-} from "@aex/perception";
+} from "@hai/perception";
 import { FaceLandmarker, FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { isSoftwareRenderer } from "../gpu.ts";
 import type { FromWorker, ToWorker } from "./messages.ts";

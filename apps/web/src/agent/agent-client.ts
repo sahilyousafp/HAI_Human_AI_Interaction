@@ -12,7 +12,7 @@ import type {
   RequestContext,
   TeamMemberInfo,
   TeamTask,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import { addressOf } from "./addressing.ts";
 
 export type ToolOutcome = "running" | "done" | "failed" | "denied";

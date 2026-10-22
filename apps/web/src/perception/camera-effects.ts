@@ -51,7 +51,7 @@ export async function disableEffects(track: MediaStreamTrack): Promise<CameraEff
     try {
       await track.applyConstraints({ ...track.getConstraints(), ...off } as MediaTrackConstraints);
     } catch (error) {
-      console.warn("[aex] could not turn off camera effects:", error);
+      console.warn("[hai] could not turn off camera effects:", error);
     }
   }
   return readEffects(track);

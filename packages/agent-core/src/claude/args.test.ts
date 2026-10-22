@@ -5,7 +5,7 @@ const base = {
   cwd: "D:/project",
   mcpConfigPath: "mcp.json",
   systemPromptPath: "system.md",
-  permissionPromptTool: "mcp__aex__approve_tool",
+  permissionPromptTool: "mcp__hai__approve_tool",
 };
 
 describe("buildClaudeArgs", () => {

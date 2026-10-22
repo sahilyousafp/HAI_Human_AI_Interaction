@@ -3,8 +3,8 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import type { Element, Message } from "@aex/protocol";
-import { encodeMeshAsset } from "@aex/scene";
+import type { Element, Message } from "@hai/protocol";
+import { encodeMeshAsset } from "@hai/scene";
 import { afterEach, describe, expect, it } from "vitest";
 import { AssetStore } from "./assets.ts";
 import { type Bridge, createBridge } from "./server.ts";
@@ -21,7 +21,7 @@ const asset = (): Uint8Array =>
 
 const folders: string[] = [];
 const tempProject = () => {
-  const dir = mkdtempSync(join(tmpdir(), "aex-assets-"));
+  const dir = mkdtempSync(join(tmpdir(), "hai-assets-"));
   folders.push(dir);
   return dir;
 };
@@ -104,7 +104,7 @@ describe("asset routes", () => {
     const dir = tempProject();
     const { base } = await start(dir);
     expect((await put(base, "not-an-id", asset())).status).toBe(400);
-    expect((await put(base, "..%2F..%2Fscene.aex.json", asset())).status).toBe(400);
+    expect((await put(base, "..%2F..%2Fscene.hai.json", asset())).status).toBe(400);
     expect(existsSync(join(dir, "assets"))).toBe(false);
   });
 
@@ -182,13 +182,13 @@ describe("assets and projects", () => {
     apply(first.bridge, imported("i-1", ID));
     await first.bridge.stop();
     bridges.pop();
-    rmSync(join(dir, "assets", `${ID}.aexmesh`));
+    rmSync(join(dir, "assets", `${ID}.haimesh`));
 
     const second = await start(dir);
     const sent: Message[] = [];
     second.bridge.scene.greet((m) => sent.push(m));
     const status = sent.find((m) => m.type === "project.status");
-    expect(status).toMatchObject({ payload: { error: expect.stringContaining(`${ID}.aexmesh`) } });
+    expect(status).toMatchObject({ payload: { error: expect.stringContaining(`${ID}.haimesh`) } });
     expect(second.bridge.scene.scene.doc.elements["i-1"]).toBeDefined();
   });
 });

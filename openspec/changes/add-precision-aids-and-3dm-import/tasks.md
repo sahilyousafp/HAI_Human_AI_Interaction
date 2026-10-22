@@ -40,7 +40,7 @@
 ## 5. 3DM import
 
 - [x] 5.1 `import/rhino-worker.ts` and `import/convert.ts`: read the file, convert meshes, Brep and Extrusion render meshes, units to millimetres, layer and colour; count skipped objects by reason; enforce the 500 MB and 5 million triangle limits before anything is sent. Worker messages typed in `import/messages.ts`. Unit tests on the fixtures in Node.
-- [x] 5.2 `packages/protocol` or `apps/bridge`: the `.aexmesh` container (header plus Float32 and Uint32 data), writer and reader with round-trip tests.
+- [x] 5.2 `packages/protocol` or `apps/bridge`: the `.haimesh` container (header plus Float32 and Uint32 data), writer and reader with round-trip tests.
 - [x] 5.3 `apps/bridge/src/assets.ts` and the HTTP routes in `server.ts`: `PUT` and `GET /assets/<id>`, bearer token in constant time, CORS for the allowed origins only, id validation, streamed write to a temporary file then rename, size limit, unused assets removed when a project opens. Tests: refused without a token, refused for a bad id, oversize refused, survives a restart, cleanup.
 - [x] 5.4 Viewer rendering of imported elements: fetch each asset once, one mesh per part, colour, selection outline, picking, section clipping, framing the view; the bounding-box fallback for a missing asset with the status message. Measure a 2000-part model; merge per layer for display only if the frame time is over budget.
 - [x] 5.5 `import/importFile.ts`: the one path used by the picker and the drop. Convert, upload, then one `scene.apply` of creates (one undo step), frame the view. A failed upload changes nothing.

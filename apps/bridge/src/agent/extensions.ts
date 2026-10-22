@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentProvider, run as defaultRun, type Run } from "@aex/agent-core";
+import { type AgentProvider, run as defaultRun, type Run } from "@hai/agent-core";
 import {
   type AgentEvent,
   type AgentSkill,
@@ -10,7 +10,7 @@ import {
   type ExtensionsState,
   type Message,
   type ProjectMcpServer,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import type { Logger } from "../log.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
 
@@ -189,7 +189,7 @@ export class ExtensionHub {
     let clone: string | null = null;
     try {
       if (/^https:\/\//i.test(source)) {
-        clone = mkdtempSync(join(tmpdir(), "aex-skill-"));
+        clone = mkdtempSync(join(tmpdir(), "hai-skill-"));
         const result = await (this.options.run ?? defaultRun)(
           "git",
           ["clone", "--depth", "1", "--", source, clone],

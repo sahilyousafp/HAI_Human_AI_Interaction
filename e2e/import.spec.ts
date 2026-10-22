@@ -32,12 +32,12 @@ type Imported = {
 const importedElements = (page: Page) =>
   page.evaluate(
     () =>
-      Object.values(window.__AEX_SCENE__?.getSnapshot().doc?.elements ?? {}).filter(
+      Object.values(window.__HAI_SCENE__?.getSnapshot().doc?.elements ?? {}).filter(
         (e) => e.type === "imported",
       ) as unknown as Imported[],
   );
 
-const meshCount = (page: Page) => page.evaluate(() => window.__AEX_VIEWER__?.meshCount() ?? 0);
+const meshCount = (page: Page) => page.evaluate(() => window.__HAI_VIEWER__?.meshCount() ?? 0);
 
 /** Hands a file to the page the way the browser does when it is dropped from Explorer. */
 async function dragFile(page: Page, name: string, bytes: Buffer, phase: "over" | "drop") {
@@ -82,7 +82,7 @@ test("the Import button imports a .3dm: objects appear, the report counts them, 
         page.evaluate(() => {
           for (let y = 0.05; y < 1; y += 0.025) {
             for (let x = 0.05; x < 1; x += 0.025) {
-              if (window.__AEX_VIEWER__?.pick(x, y)?.startsWith("imp-")) return true;
+              if (window.__HAI_VIEWER__?.pick(x, y)?.startsWith("imp-")) return true;
             }
           }
           return false;
@@ -173,7 +173,7 @@ test("the imported model survives a restart of the bridge without the original f
         page.evaluate(() => {
           for (let y = 0.05; y < 1; y += 0.025) {
             for (let x = 0.05; x < 1; x += 0.025) {
-              if (window.__AEX_VIEWER__?.pick(x, y)?.startsWith("imp-")) return true;
+              if (window.__HAI_VIEWER__?.pick(x, y)?.startsWith("imp-")) return true;
             }
           }
           return false;
@@ -199,7 +199,7 @@ test("a section cuts imported geometry like any other", async ({ page }) => {
   await start(page);
   // Only the imported model in view: nothing else to hide it.
   await page.evaluate(() => {
-    const scene = window.__AEX_SCENE__;
+    const scene = window.__HAI_SCENE__;
     const ids = Object.keys(scene?.getSnapshot().doc?.elements ?? {});
     scene?.apply(
       "Clear",
@@ -209,12 +209,12 @@ test("a section cuts imported geometry like any other", async ({ page }) => {
   await page.getByTestId("import-input").setInputFiles(model("meshes-and-breps.3dm"));
   await expect.poll(() => importedElements(page).then((e) => e.length), { timeout: 30_000 }).toBe(5);
   // Mesh 3 is a box 2000 x 2000 x 3000 mm at x = 6000 (clear of the panels on the left): aim at its roof.
-  const roof = async () => page.evaluate(() => window.__AEX_VIEWER__?.project([7000, 1000, 3000]));
+  const roof = async () => page.evaluate(() => window.__HAI_VIEWER__?.project([7000, 1000, 3000]));
   await expect
     .poll(
       async () => {
         const at = await roof();
-        return at ? page.evaluate(([x, y]) => window.__AEX_VIEWER__?.pick(x, y), at) : null;
+        return at ? page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x, y), at) : null;
       },
       { timeout: 15_000 },
     )
@@ -225,7 +225,7 @@ test("a section cuts imported geometry like any other", async ({ page }) => {
   const box = await page.getByTestId("viewer").boundingBox();
   if (!box) throw new Error("no viewer");
   // Grab the plane at the middle of its outline, wherever the camera has it, and drag down.
-  const outline = (await page.evaluate(() => window.__AEX_VIEWER__?.sectionOutline())) ?? [];
+  const outline = (await page.evaluate(() => window.__HAI_VIEWER__?.sectionOutline())) ?? [];
   expect(outline.length).toBeGreaterThan(2);
   const cx = outline.reduce((sum, p) => sum + p[0], 0) / outline.length;
   const cy = outline.reduce((sum, p) => sum + p[1], 0) / outline.length;
@@ -234,10 +234,10 @@ test("a section cuts imported geometry like any other", async ({ page }) => {
   await page.mouse.move(box.x + box.width * cx, box.y + box.height * (cy + 0.15), { steps: 8 });
   await page.mouse.move(box.x + box.width * cx, box.y + box.height * (cy + 0.3), { steps: 8 });
   await page.mouse.up();
-  const height = await page.evaluate(() => window.__AEX_TOOLS__?.getSnapshot().overlay.sectionMm ?? 0);
+  const height = await page.evaluate(() => window.__HAI_TOOLS__?.getSnapshot().overlay.sectionMm ?? 0);
   expect(height).toBeLessThan(3000);
   const at = await roof();
-  const hit = at ? await page.evaluate(([x, y]) => window.__AEX_VIEWER__?.pick(x, y), at) : null;
+  const hit = at ? await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x, y), at) : null;
   expect(hit ?? "").not.toMatch(/^imp-/);
 });
 
@@ -267,7 +267,7 @@ test("a model whose file is gone opens as boxes, and the status names the file",
   await page.reload();
   // The five elements are still there, drawn as boxes, and the project status says what is missing.
   await expect.poll(() => importedElements(page).then((e) => e.length), { timeout: 30_000 }).toBe(5);
-  await expect(page.getByTestId("project-status")).toContainText(".aexmesh", { timeout: 15_000 });
+  await expect(page.getByTestId("project-status")).toContainText(".haimesh", { timeout: 15_000 });
 });
 
 test("a detailed model is drawn in its colours, not black, and its selection shows", async ({ page }) => {
@@ -289,7 +289,7 @@ test("a detailed model is drawn in its colours, not black, and its selection sho
       let model = 0;
       for (let y = 0.05; y < 1; y += 0.01) {
         for (let x = 0.05; x < 1; x += 0.01) {
-          if (!window.__AEX_VIEWER__?.pick(x, y)?.startsWith("imp-")) continue;
+          if (!window.__HAI_VIEWER__?.pick(x, y)?.startsWith("imp-")) continue;
           const [r = 0, g = 0, b = 0] = ctx.getImageData(
             Math.floor(x * canvas.width),
             Math.floor(y * canvas.height),
@@ -308,7 +308,7 @@ test("a detailed model is drawn in its colours, not black, and its selection sho
 
   // Selecting one lights it up in the selection colour.
   const ids = (await importedElements(page)).map((e) => e.id);
-  await page.evaluate((id) => window.__AEX_SCENE__?.select([id]), ids[0] as string);
+  await page.evaluate((id) => window.__HAI_SCENE__?.select([id]), ids[0] as string);
   await page.waitForTimeout(500);
   await expect(page.getByTestId("selection-status")).toContainText("Facade");
 });

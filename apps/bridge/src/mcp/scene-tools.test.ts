@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Element } from "@aex/protocol";
+import type { Element } from "@hai/protocol";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WebSocket } from "ws";
@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 async function start(): Promise<AddressInfo> {
-  const projectDir = join(mkdtempSync(join(tmpdir(), "aex-mcp-")), "project");
+  const projectDir = join(mkdtempSync(join(tmpdir(), "hai-mcp-")), "project");
   bridge = createBridge({
     host: "127.0.0.1",
     port: 0,

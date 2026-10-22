@@ -1,4 +1,4 @@
-import type { Element, SceneDocument, SceneOp } from "@aex/protocol";
+import type { Element, SceneDocument, SceneOp } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { History } from "./history.ts";
 import { applyOp, applyTransaction } from "./ops.ts";

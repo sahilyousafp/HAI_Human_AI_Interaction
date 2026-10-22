@@ -1,4 +1,4 @@
-import type { TrackedHand } from "@aex/protocol";
+import type { TrackedHand } from "@hai/protocol";
 
 type Px = [number, number];
 

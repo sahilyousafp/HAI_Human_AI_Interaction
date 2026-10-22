@@ -6,8 +6,8 @@ import type {
   Point3Mm,
   SceneDocument,
   SceneOp,
-} from "@aex/protocol";
-import type { Resolved, SnapKind } from "@aex/scene";
+} from "@hai/protocol";
+import type { Resolved, SnapKind } from "@hai/scene";
 
 /** What is under a viewer position: an element and the surface point that was hit, millimetres. */
 export interface Hit {

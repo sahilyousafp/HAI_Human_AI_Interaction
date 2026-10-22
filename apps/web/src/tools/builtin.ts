@@ -1,4 +1,4 @@
-import type { Element, Point3Mm, SceneOp } from "@aex/protocol";
+import type { Element, Point3Mm, SceneOp } from "@hai/protocol";
 import { columnTool, copyTool, slabTool, wallTool } from "./create.ts";
 import { snap } from "./grid.ts";
 import { movedOffset } from "./placement.ts";

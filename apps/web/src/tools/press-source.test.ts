@@ -1,4 +1,4 @@
-import type { Point2 } from "@aex/protocol";
+import type { Point2 } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LAYOUT, registerBuiltinTools } from "./builtin.ts";
 import { type PointerSource, ToolController, type ToolEnvironment } from "./controller.ts";

@@ -1,4 +1,4 @@
-import type { GestureEvent, HeadPose, TrackedHand, TrackingFrame } from "@aex/protocol";
+import type { GestureEvent, HeadPose, TrackedHand, TrackingFrame } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { loadFixture } from "../testing/fixtures.ts";
 import { DEFAULT_GESTURES } from "./config.ts";
@@ -406,7 +406,7 @@ describe("recorded footage", () => {
 
 describe("event stream", () => {
   it("every event validates and timestamps never go backwards", async () => {
-    const { GestureEvent } = await import("@aex/protocol");
+    const { GestureEvent } = await import("@hai/protocol");
     const recognizer = new GestureRecognizer();
     const events = [...play(engageSteps, recognizer)];
     // Rebase each recorded clip so it starts right after the previous one.

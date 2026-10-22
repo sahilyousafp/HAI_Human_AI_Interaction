@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentMcpServer } from "@aex/protocol";
+import type { AgentEvent, AgentMcpServer } from "@hai/protocol";
 
 /** How long a tool result summary may be in an event (the full result stays with the agent). */
 export const SUMMARY_MAX = 400;

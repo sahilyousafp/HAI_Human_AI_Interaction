@@ -17,7 +17,7 @@ type Point = [number, number];
 async function gesture(page: Page, type: string, hand: Hand, position: Point, ts?: number) {
   const at = ts ?? (await now(page));
   await page.evaluate(
-    (e) => window.__AEX_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], ...e } as never]),
+    (e) => window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], ...e } as never]),
     { type, hand, position, ts: at },
   );
 }
@@ -38,7 +38,7 @@ async function viewerPointOf(page: Page, selector: string): Promise<Point> {
 /** Two viewer points on open ground (nothing to pick), clear of the panels on the model's left. */
 async function openGround(page: Page): Promise<[Point, Point]> {
   return page.evaluate(() => {
-    const v = window.__AEX_VIEWER__;
+    const v = window.__HAI_VIEWER__;
     if (!v) throw new Error("viewer not ready");
     const clear = (x: number, y: number) => v.pick(x, y) === null;
     for (let y = 0.95; y >= 0.3; y -= 0.05) {
@@ -59,12 +59,12 @@ test("the left hand opens the settings and switches a feature off, each control 
 }) => {
   bridge = await startTestBridge(page);
   await openViewer(page);
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
   const right = await handAt(page, [0.4, 0.5]);
   /** Points the left hand at a control, checks it lights up, and taps it. */
   const pressByHand = async (testId: string) => {
     const hand = await handAt(page, await viewerPointOf(page, `[data-testid="${testId}"]`));
-    await page.evaluate(([r, l]) => window.__AEX_INPUT__?.pointer(r, l), [right, hand] as const);
+    await page.evaluate(([r, l]) => window.__HAI_INPUT__?.pointer(r, l), [right, hand] as const);
     await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-mode", "press");
     await expect(page.getByTestId(testId)).toHaveAttribute("data-hand-hover", "left");
     await gesture(page, "pinch.tap", "Left", hand);
@@ -87,7 +87,7 @@ test("the left hand's long pinch opens the create ring; Wall draws a wall by han
 }) => {
   bridge = await startTestBridge(page);
   await openViewer(page);
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
   const existing = new Set(Object.keys(bridge.scene.scene.doc.elements));
   const before = existing.size;
 
@@ -111,7 +111,7 @@ test("the left hand's long pinch opens the create ring; Wall draws a wall by han
   for (let i = 1; i <= 5; i++) {
     await gesture(page, "pinch.drag.update", "Left", [ha[0] + ((hb[0] - ha[0]) * i) / 5, ha[1]]);
   }
-  const draft = await page.evaluate(() => window.__AEX_TOOLS__?.getSnapshot().overlay.draft?.type);
+  const draft = await page.evaluate(() => window.__HAI_TOOLS__?.getSnapshot().overlay.draft?.type);
   expect(draft).toBe("wall");
   await expect(page.getByTestId("tool-notice")).toContainText(/^Wall \d+ mm/);
   await gesture(page, "pinch.drag.end", "Left", hb);
@@ -128,7 +128,7 @@ test("a pinch-drag scrolls the settings with the hand, and a quick release coast
   await openViewer(page);
   await openSettings(page, "gestures");
   await page.waitForTimeout(500); // the sheet slides in
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
   const body = page.locator(".settings-body");
   const scrollTop = () => body.evaluate((el) => el.scrollTop);
   expect(await body.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);

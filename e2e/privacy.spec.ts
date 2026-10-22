@@ -4,7 +4,7 @@ import { watchOutgoingData } from "./privacy.ts";
 const frameCount = (page: Page) =>
   page.evaluate(
     () =>
-      (window as unknown as { __AEX_TRACKING__?: { frames: unknown[] } }).__AEX_TRACKING__?.frames.length ??
+      (window as unknown as { __HAI_TRACKING__?: { frames: unknown[] } }).__HAI_TRACKING__?.frames.length ??
       0,
   );
 

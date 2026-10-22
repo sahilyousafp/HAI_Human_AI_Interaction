@@ -1,5 +1,5 @@
-import type { SceneDocument, SceneOp } from "@aex/protocol";
-import { applyTransaction, History } from "@aex/scene";
+import type { SceneDocument, SceneOp } from "@hai/protocol";
+import { applyTransaction, History } from "@hai/scene";
 
 export interface ScenePatch {
   seq: number;

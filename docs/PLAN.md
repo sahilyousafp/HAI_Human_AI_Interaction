@@ -4,12 +4,12 @@ Decided 2026-10-19, updated the same day with the gesture tool palette, and on 2
 
 ## Decision
 
-**Hybrid.** Build our own interaction-layer app (camera, gestures, tool palette, HUD, agent loop), not our own modeler. Browser-first, Electron wrapper later. Rhino is the first external host: the agent reaches it through McNeel's RhinoAI MCP, and a thin C# plugin adds camera sync, pointing, selection and turn review. Blender/Bonsai comes later.
+**Hybrid.** Build our own interaction-layer app (camera, gestures, tool palette, HUD, agent loop), not our own modeler. Browser-first, Electron wrapper later. Rhino is the first external host, for modelling and drafting: the agent works through Python (a managed environment with any library, and Python inside the open Rhino), and a thin C# plugin adds camera sync, pointing, selection, the Python runner and turn review. Blender/Bonsai comes later.
 
 Why:
 - The novel part is the interaction layer. No maintained webcam-gesture + LLM-agent CAD/BIM tool exists.
 - MediaPipe runs best in the browser on Windows (GPU delegate); Python GPU is Linux-only.
-- A Rhino-only plugin limits reach to Rhino owners and competes with McNeel's own RhinoAI panel.
+- A Rhino-only plugin limits reach to Rhino owners and competes with McNeel's own RhinoAI panel (the original reason for a separate app; the agent's Python capability layer does not need Rhino at all).
 - A from-scratch modeler means months rebuilding NURBS, booleans and IFC.
 
 ## Architecture
@@ -22,7 +22,7 @@ packages/protocol                   shared zod schemas for every cross-process m
 packages/perception                 MediaPipe worker, One Euro filter, gesture state machines
 packages/scene                      architectural scene model, transactions, undo
 packages/agent-core                 AgentProvider: ClaudeCli now; Codex, ACP, local models later
-plugins/rhino (C#)                  camera, pointer, selection, turn grouping; agent tools come from RhinoAI
+plugins/rhino (C#)                  camera, pointer, selection, Python runner, turn grouping
 ```
 
 Three speeds of control:
@@ -54,7 +54,7 @@ The user's own Claude Code setup (MCP servers, skills) loads in the agent sessio
 | 10 | `add-studio-ui` | A studio you can film: settings in a sheet, my hands drawn over the screen | Feature switches for every release |
 | 11 | `add-precision-aids-and-3dm-import` | Drop in my Rhino model, then draw a wall that snaps to its corner | Snap, ortho and why a 48 000-object model becomes 14 elements |
 | 12 | `add-3d-snapping-and-project-files` | From a blank project to a Rhino file | Snapping in 3D: matching on screen, not on the ground |
-| 13 | `add-rhino-connector` | Same gestures drive Rhino 8 | What I reused from RhinoAI vs wrote |
+| 13 | `add-rhino-connector` | Same gestures drive Rhino 8, and the agent writes Python | Why Python instead of a tool list: Ladybug, rhino3dm and anything else |
 | 14 | `add-modelling-tools` (to specify) | Openings, roofs and arrays by hand | Snapping inside Rhino |
 | 15 | `add-agent-turn-review` | The agent proposes, I nod | One undo per agent turn, in Rhino too |
 | 16 | providers (to specify) | Same task, three models | The AgentProvider interface |

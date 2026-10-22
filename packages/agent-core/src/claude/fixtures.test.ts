@@ -39,7 +39,7 @@ describe("recorded Claude Code fixtures", () => {
       for (const e of events(name)) {
         if (e.type !== "system" || e.subtype !== "init") continue;
         for (const server of e.mcp_servers as Array<{ name: string }>) {
-          expect(server.name).toMatch(/^(aex|broken-server|user-server-\d+)$/);
+          expect(server.name).toMatch(/^(hai|broken-server|user-server-\d+)$/);
         }
       }
     });

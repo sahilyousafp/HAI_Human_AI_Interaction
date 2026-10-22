@@ -15,7 +15,7 @@ The first page lists the sections; each opens its own page with a back button, a
 | **Voice** | Speech to text, listening for names and Mochi's spoken replies ([voice.md](voice.md)) |
 | **Agent permissions** | The tools you always allow, to revoke ([agent.md](agent.md)) |
 
-The bridge keeps every setting in `.aex/settings.json` in the workspace, so they follow you across browsers and restarts. A few view choices that only matter on this screen (the camera view expanded or hidden, the last settings page) are kept in this browser.
+The bridge keeps every setting in `.hai/settings.json` in the workspace, so they follow you across browsers and restarts. A few view choices that only matter on this screen (the camera view expanded or hidden, the last settings page) are kept in this browser.
 
 ## Features
 

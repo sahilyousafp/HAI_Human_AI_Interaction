@@ -1,5 +1,5 @@
-import type { Point3Mm, SceneDocument } from "@aex/protocol";
-import { elementBounds } from "@aex/scene";
+import type { Point3Mm, SceneDocument } from "@hai/protocol";
+import { elementBounds } from "@hai/scene";
 import { Html, Line } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";

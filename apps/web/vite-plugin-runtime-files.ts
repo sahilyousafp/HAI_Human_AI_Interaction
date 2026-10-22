@@ -17,7 +17,7 @@ const TYPES: Record<string, string> = {
  */
 export function runtimeFiles(): Plugin {
   return {
-    name: "aex-runtime-files",
+    name: "hai-runtime-files",
     apply: "serve",
     configureServer(server) {
       // Normalised, so the containment check below compares like with like (Vite reports it with forward slashes).

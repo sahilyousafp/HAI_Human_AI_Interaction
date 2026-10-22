@@ -4,10 +4,10 @@ import { z } from "zod";
 export const PROTOCOL_VERSION = 1;
 
 /** WebSocket path and subprotocol the bridge speaks. Browsers cannot set headers on a WebSocket, so the
- *  session token travels as a second subprotocol entry: `aex.token.<token>`. */
+ *  session token travels as a second subprotocol entry: `hai.token.<token>`. */
 export const WS_PATH = "/ws";
-export const WS_PROTOCOL = "aex.v1";
-export const TOKEN_PROTOCOL_PREFIX = "aex.token.";
+export const WS_PROTOCOL = "hai.v1";
+export const TOKEN_PROTOCOL_PREFIX = "hai.token.";
 
 export const MessageId = z.string().min(1).max(64);
 

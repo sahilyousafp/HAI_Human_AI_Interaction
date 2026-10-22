@@ -12,18 +12,18 @@ import { join } from "node:path";
 import { createAnonymiser } from "./claude-fixture-redaction.mjs";
 
 const root = join(import.meta.dirname, "..");
-// The same Windows-safe spawning the provider uses (a dependency of @aex/agent-core).
+// The same Windows-safe spawning the provider uses (a dependency of @hai/agent-core).
 const spawn = createRequire(join(root, "packages", "agent-core", "package.json"))("cross-spawn");
 const out = join(root, "packages", "agent-core", "fixtures");
 mkdirSync(out, { recursive: true });
 
-const project = mkdtempSync(join(tmpdir(), "aex-fixture-"));
+const project = mkdtempSync(join(tmpdir(), "hai-fixture-"));
 writeFileSync(join(project, "notes.txt"), "plan\n");
 writeFileSync(join(project, "brief.txt"), "brief\n");
 const mcpConfig = join(project, "mcp.json");
 writeFileSync(
   mcpConfig,
-  JSON.stringify({ mcpServers: { "broken-server": { command: "aex-no-such-command", args: [] } } }),
+  JSON.stringify({ mcpServers: { "broken-server": { command: "hai-no-such-command", args: [] } } }),
 );
 
 const turns = [

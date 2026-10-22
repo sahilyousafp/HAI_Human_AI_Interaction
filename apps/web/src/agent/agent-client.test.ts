@@ -1,4 +1,4 @@
-import type { AgentEvent, ApprovalRequest, Message } from "@aex/protocol";
+import type { AgentEvent, ApprovalRequest, Message } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { AgentClient, foldEvents, type TurnItem } from "./agent-client.ts";
 
@@ -27,7 +27,7 @@ describe("foldEvents", () => {
     const events: AgentEvent[] = [
       { type: "text.delta", text: "Adding " },
       { type: "text.delta", text: "floors." },
-      { type: "tool.start", id: "t1", name: "mcp__aex__create_elements", server: "aex", input: {} },
+      { type: "tool.start", id: "t1", name: "mcp__hai__create_elements", server: "hai", input: {} },
       { type: "tool.end", id: "t1", outcome: "failed", summary: "height must be positive" },
       { type: "text.delta", text: "Fixed." },
     ];
@@ -37,8 +37,8 @@ describe("foldEvents", () => {
       {
         kind: "tool",
         id: "t1",
-        name: "mcp__aex__create_elements",
-        server: "aex",
+        name: "mcp__hai__create_elements",
+        server: "hai",
         input: {},
         outcome: "failed",
         summary: "height must be positive",

@@ -1,5 +1,5 @@
 {
-  "name": "@aex/agent-core",
+  "name": "@hai/agent-core",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
@@ -11,7 +11,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@aex/protocol": "workspace:*",
+    "@hai/protocol": "workspace:*",
     "cross-spawn": "7.0.6"
   },
   "devDependencies": {

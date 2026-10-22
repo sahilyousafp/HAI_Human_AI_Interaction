@@ -1,4 +1,4 @@
-import type { Point2 } from "@aex/protocol";
+import type { Point2 } from "@hai/protocol";
 
 /** A flat ring of 8 slots keeps every direction memorable (marking menu); slot 0 is up, then clockwise. */
 export const SLOT_COUNT = 8;

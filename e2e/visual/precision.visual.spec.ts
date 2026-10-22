@@ -31,7 +31,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     bridge = await startTestBridge(page);
     await openViewer(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const gear = await page.getByTestId("settings-button").boundingBox();
     const viewer = await page.getByTestId("viewer").boundingBox();
     if (!gear || !viewer) throw new Error("not laid out");
@@ -40,7 +40,7 @@ for (const scheme of ["light", "dark"] as const) {
       (gear.x - 22 - viewer.x) / viewer.width,
       (gear.y + gear.height / 2 - viewer.y) / viewer.height,
     ]);
-    await page.evaluate((h) => window.__AEX_INPUT__?.pointer(null, h), hand);
+    await page.evaluate((h) => window.__HAI_INPUT__?.pointer(null, h), hand);
     await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-mode", "press");
     await page.waitForTimeout(300);
     await expect(page).toHaveScreenshot(`snapped-pointer-${scheme}.png`, {
@@ -58,7 +58,7 @@ async function clearWallEnd(page: Page): Promise<[number, number]> {
         ([x, y]) => {
           const canvas = document.querySelector("[data-testid=viewer] canvas");
           const rect = canvas?.getBoundingClientRect();
-          const p = window.__AEX_VIEWER__?.project([x, y, 0]);
+          const p = window.__HAI_VIEWER__?.project([x, y, 0]);
           if (!rect || !p) return null;
           const px = rect.left + p[0] * rect.width;
           const py = rect.top + p[1] * rect.height;
@@ -125,7 +125,7 @@ test("the Endpoint marker on the top corner of an imported building", async ({ p
   await page.emulateMedia({ colorScheme: "light" });
   bridge = await startTestBridge(page);
   await openViewer(page);
-  const dir = join(mkdtempSync(join(tmpdir(), "aex-visual-")), "fresh");
+  const dir = join(mkdtempSync(join(tmpdir(), "hai-visual-")), "fresh");
   await page.getByTestId("new-project").click();
   await page.getByTestId("project-path").fill(dir);
   await page.getByTestId("project-submit").click();
@@ -141,7 +141,7 @@ test("the Endpoint marker on the top corner of an imported building", async ({ p
   // The top corner (8000, 2000, 3000) of the third box, where it appears on screen.
   const top = await page.evaluate(() => {
     const rect = document.querySelector("[data-testid=viewer] canvas")?.getBoundingClientRect();
-    const at = window.__AEX_VIEWER__?.project([8000, 2000, 3000]);
+    const at = window.__HAI_VIEWER__?.project([8000, 2000, 3000]);
     return rect && at ? [rect.left + at[0] * rect.width, rect.top + at[1] * rect.height] : null;
   });
   if (!top) throw new Error("the corner is not in view");

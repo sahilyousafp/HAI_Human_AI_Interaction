@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Message, SunSetting, ViewCamera } from "@aex/protocol";
+import type { Message, SunSetting, ViewCamera } from "@hai/protocol";
 
 type Send = (message: Message) => void;
 

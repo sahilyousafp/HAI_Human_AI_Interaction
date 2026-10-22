@@ -1,4 +1,4 @@
-import type { PointMm, SceneDocument } from "@aex/protocol";
+import type { PointMm, SceneDocument } from "@hai/protocol";
 import { elementBase } from "./bounds.ts";
 
 /** The layer an element's type is saved on. */

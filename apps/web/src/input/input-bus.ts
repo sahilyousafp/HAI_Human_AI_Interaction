@@ -1,4 +1,4 @@
-import type { GestureEvent, Hand, Point2 } from "@aex/protocol";
+import type { GestureEvent, Hand, Point2 } from "@hai/protocol";
 
 /** Where the hand pointers are (mirrored, normalised preview coordinates) and when they were captured. */
 export interface PointerSample {

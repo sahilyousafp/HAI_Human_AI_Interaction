@@ -5,7 +5,7 @@ import {
   TOKEN_PROTOCOL_PREFIX,
   WS_PATH,
   WS_PROTOCOL,
-} from "@aex/protocol";
+} from "@hai/protocol";
 
 export type ConnectionState =
   | { status: "no-session" }

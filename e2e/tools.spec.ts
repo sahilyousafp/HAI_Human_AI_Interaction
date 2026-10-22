@@ -13,12 +13,12 @@ test.afterEach(async () => {
 type Mm = [number, number, number];
 const tools = (page: Page) =>
   page.evaluate(() => {
-    const s = window.__AEX_TOOLS__?.getSnapshot();
+    const s = window.__HAI_TOOLS__?.getSnapshot();
     if (!s) throw new Error("tools not ready");
     return s;
   });
 const element = (page: Page, id: string) =>
-  page.evaluate((id) => window.__AEX_SCENE__?.getSnapshot().doc?.elements[id] ?? null, id);
+  page.evaluate((id) => window.__HAI_SCENE__?.getSnapshot().doc?.elements[id] ?? null, id);
 const activeTool = (page: Page) => page.getByTestId("active-tool");
 
 async function viewerBox(page: Page) {
@@ -29,7 +29,7 @@ async function viewerBox(page: Page) {
 
 /** Page position of a scene point in millimetres. */
 async function screenOf(page: Page, point: Mm): Promise<{ x: number; y: number; inView: boolean }> {
-  const [vx, vy] = (await page.evaluate((p) => window.__AEX_VIEWER__?.project(p), point)) ?? [0, 0];
+  const [vx, vy] = (await page.evaluate((p) => window.__HAI_VIEWER__?.project(p), point)) ?? [0, 0];
   const box = await viewerBox(page);
   return {
     x: box.x + vx * box.width,
@@ -114,7 +114,7 @@ test.describe("palette", () => {
     page,
   }) => {
     await start(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const ts = await now(page);
     const p = await handAt(page, [0.4, 0.5]);
     const right: [number, number] = [p[0] + 0.12, p[1]];
@@ -127,17 +127,17 @@ test.describe("palette", () => {
       ...extra,
     });
     await page.evaluate(
-      (events) => window.__AEX_INPUT__?.gestures(events),
+      (events) => window.__HAI_INPUT__?.gestures(events),
       [ev("pinch.drag.start", 0, p), ev("pinch.hold", 600, p)],
     );
     await expect(page.getByTestId("tool-palette")).toBeVisible();
     await page.evaluate(
-      (events) => window.__AEX_INPUT__?.gestures(events),
+      (events) => window.__HAI_INPUT__?.gestures(events),
       [ev("pinch.drag.update", 650, right, { delta: [0.12, 0] })],
     );
     await expect(page.getByTestId("palette-slot-2")).toHaveAttribute("data-highlighted", "true");
     await page.evaluate(
-      (events) => window.__AEX_INPUT__?.gestures(events),
+      (events) => window.__HAI_INPUT__?.gestures(events),
       [ev("pinch.drag.end", 700, right)],
     );
     await expect(activeTool(page)).toHaveAttribute("data-tool", "measure");
@@ -148,7 +148,7 @@ test.describe("palette", () => {
     await page.keyboard.press("m");
     const clutch = (type: string) =>
       page.evaluate(
-        ({ type, ts }) => window.__AEX_INPUT__?.gestures([{ type, ts, confidence: 1, hand: "Right" }]),
+        ({ type, ts }) => window.__HAI_INPUT__?.gestures([{ type, ts, confidence: 1, hand: "Right" }]),
         { type, ts: Date.now() },
       );
     await clutch("clutch.start");
@@ -180,7 +180,7 @@ test.describe("palette", () => {
   test("a tool registered at runtime appears in palette settings", async ({ page }) => {
     await start(page);
     await page.evaluate(() =>
-      window.__AEX_TOOLS__?.registry.register({
+      window.__HAI_TOOLS__?.registry.register({
         id: "test-bake",
         label: "Bake to Rhino",
         icon: "M4 4h16v16H4z",
@@ -197,7 +197,7 @@ test.describe("palette", () => {
     await start(page);
     await openSettings(page, "rings");
     await page.getByTestId("palette-setting-0").selectOption("section");
-    await page.waitForTimeout(300); // the bridge writes .aex/settings.json
+    await page.waitForTimeout(300); // the bridge writes .hai/settings.json
     await page.reload();
     await openSettings(page, "rings");
     await expect(page.getByTestId("palette-setting-0")).toHaveValue("section");
@@ -217,8 +217,8 @@ test.describe("built-in tools", () => {
     // Drag between two points on Block C's roof (3500 mm), 1230 mm apart along X, both in plain view.
     const pickAt = (p: Mm) =>
       page.evaluate((p) => {
-        const v = window.__AEX_VIEWER__?.project(p);
-        return v ? window.__AEX_VIEWER__?.pick(v[0], v[1]) : null;
+        const v = window.__HAI_VIEWER__?.project(p);
+        return v ? window.__HAI_VIEWER__?.pick(v[0], v[1]) : null;
       }, p);
     let roof: Mm | null = null;
     for (let x = 5_000; x <= 33_000 && !roof; x += 1_000) {
@@ -255,7 +255,7 @@ test.describe("built-in tools", () => {
     const box = await viewerBox(page);
     // Top right: empty sky, clear of the project bar and agent panel on the left.
     const empty = { x: box.x + box.width * 0.92, y: box.y + box.height * 0.2 };
-    expect(await page.evaluate(() => window.__AEX_VIEWER__?.pick(0.92, 0.2))).toBeNull();
+    expect(await page.evaluate(() => window.__HAI_VIEWER__?.pick(0.92, 0.2))).toBeNull();
     const before = await camera(page);
     const origin = (await element(page, "block-c"))?.origin;
     await mouseDrag(page, empty, { x: empty.x + 150, y: empty.y });
@@ -282,9 +282,9 @@ test.describe("built-in tools", () => {
 
   test("lower the section: a downward drag lowers the cut and hides what is above it", async ({ page }) => {
     await start(page);
-    const high = await page.evaluate(() => window.__AEX_VIEWER__?.project([30_000, 4_000, 19_000]));
+    const high = await page.evaluate(() => window.__HAI_VIEWER__?.project([30_000, 4_000, 19_000]));
     if (!high) throw new Error("no projection");
-    expect(await page.evaluate(([x, y]) => window.__AEX_VIEWER__?.pick(x, y), high)).toBe("block-b");
+    expect(await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x, y), high)).toBe("block-b");
     await page.keyboard.press("s");
     await expect(page.getByTestId("section-status")).toContainText("21000 mm");
     const box = await viewerBox(page);
@@ -296,7 +296,7 @@ test.describe("built-in tools", () => {
     const height = (await tools(page)).overlay.sectionMm ?? 0;
     expect(height).toBeLessThan(19_000);
     await expect(page.getByTestId("section-status")).toContainText(`${height} mm`);
-    expect(await page.evaluate(([x, y]) => window.__AEX_VIEWER__?.pick(x, y), high)).not.toBe("block-b");
+    expect(await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x, y), high)).not.toBe("block-b");
     await page.keyboard.press("v");
     await expect(page.getByTestId("section-status")).toBeVisible(); // stays after leaving the tool
     await page.getByTestId("section-clear").click();
@@ -309,7 +309,7 @@ test.describe("built-in tools", () => {
     await start(page);
     await page.keyboard.press("b");
     const before = Object.keys(
-      (await page.evaluate(() => window.__AEX_SCENE__?.getSnapshot().doc?.elements)) ?? {},
+      (await page.evaluate(() => window.__HAI_SCENE__?.getSnapshot().doc?.elements)) ?? {},
     );
     let target: Mm | null = null;
     for (const candidate of [
@@ -328,11 +328,11 @@ test.describe("built-in tools", () => {
     await expect
       .poll(
         async () =>
-          Object.keys((await page.evaluate(() => window.__AEX_SCENE__?.getSnapshot().doc?.elements)) ?? {})
+          Object.keys((await page.evaluate(() => window.__HAI_SCENE__?.getSnapshot().doc?.elements)) ?? {})
             .length,
       )
       .toBe(before.length + 1);
-    const elements = (await page.evaluate(() => window.__AEX_SCENE__?.getSnapshot().doc?.elements)) ?? {};
+    const elements = (await page.evaluate(() => window.__HAI_SCENE__?.getSnapshot().doc?.elements)) ?? {};
     const added = Object.values(elements).find((e) => !before.includes(e.id as string));
     expect(added?.type).toBe("massing");
     expect(added?.size).toEqual([6_000, 6_000, 3_500]);
@@ -353,7 +353,7 @@ test.describe("built-in tools", () => {
     };
     const head = (type: string) =>
       page.evaluate(
-        (type) => window.__AEX_INPUT__?.gestures([{ type, ts: Date.now(), confidence: 1 }]),
+        (type) => window.__HAI_INPUT__?.gestures([{ type, ts: Date.now(), confidence: 1 }]),
         type,
       );
 
@@ -401,11 +401,11 @@ test.describe("hand UX regressions", () => {
     ...extra,
   });
   const inject = (page: Page, events: unknown[]) =>
-    page.evaluate((events) => window.__AEX_INPUT__?.gestures(events as never[]), events);
+    page.evaluate((events) => window.__HAI_INPUT__?.gestures(events as never[]), events);
 
   test("the hand pointer comes back after a long pinch opened the palette", async ({ page }) => {
     await start(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const ts = await now(page);
     const p = await handAt(page, [0.4, 0.5]);
     await inject(page, [
@@ -413,7 +413,7 @@ test.describe("hand UX regressions", () => {
       ev("pinch.hold", ts + 600, p),
       ev("pinch.drag.end", ts + 700, p),
     ]);
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), p);
+    await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), p);
     await expect(page.getByTestId("hand-pointer-right")).toBeVisible();
   });
 
@@ -422,7 +422,7 @@ test.describe("hand UX regressions", () => {
   }) => {
     await start(page);
     await page.keyboard.press("s");
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const ts = await now(page);
     const p = await handAt(page, [0.5, 0.45]);
     await inject(page, [ev("pinch.drag.start", ts, p), ev("pinch.hold", ts + 600, p)]);
@@ -438,7 +438,7 @@ test.describe("hand UX regressions", () => {
 
   test("a hand can press the HUD's buttons: cancel the tool, and undo again", async ({ page }) => {
     await start(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const box = await viewerBox(page);
     const tapOnButton = async (testId: string) => {
       const b = await page.getByTestId(testId).boundingBox();
@@ -456,11 +456,11 @@ test.describe("hand UX regressions", () => {
 
     // Two changes, then undo twice without reopening the palette.
     await page.evaluate(() => {
-      window.__AEX_SCENE__?.apply("Rename", [{ op: "update", id: "block-c", patch: { name: "C1" } }]);
+      window.__HAI_SCENE__?.apply("Rename", [{ op: "update", id: "block-c", patch: { name: "C1" } }]);
     });
     await expect.poll(async () => (await element(page, "block-c"))?.name).toBe("C1");
     await page.evaluate(() => {
-      window.__AEX_SCENE__?.apply("Rename", [{ op: "update", id: "block-c", patch: { name: "C2" } }]);
+      window.__HAI_SCENE__?.apply("Rename", [{ op: "update", id: "block-c", patch: { name: "C2" } }]);
     });
     await expect.poll(async () => (await element(page, "block-c"))?.name).toBe("C2");
     await page.keyboard.press("u");
@@ -473,10 +473,10 @@ test.describe("hand UX regressions", () => {
     page,
   }) => {
     await start(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const pointer = page.getByTestId("hand-pointer-right");
     const pointAt = async (at: [number, number]) =>
-      page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, at));
+      page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), await handAt(page, at));
     await pointAt([0.3, 0.6]);
     await expect(pointer).toHaveAttribute("data-mode", "select");
     await expect(pointer.locator("svg")).toHaveCount(0);
@@ -503,17 +503,17 @@ test.describe("hand UX regressions", () => {
     page,
   }) => {
     await start(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const pointer = page.getByTestId("hand-pointer-right");
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, [0.4, 0.5]));
+    await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), await handAt(page, [0.4, 0.5]));
     await expect(pointer).toBeVisible();
-    await page.evaluate(() => window.__AEX_INPUT__?.pointer(null)); // one frame without the hand
+    await page.evaluate(() => window.__HAI_INPUT__?.pointer(null)); // one frame without the hand
     await page.waitForTimeout(100);
     await expect(pointer).toBeVisible();
     await page.waitForTimeout(300); // gone for longer: the pointer goes
     await expect(pointer).toHaveCount(0);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(false));
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, [0.4, 0.5]));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(false));
+    await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), await handAt(page, [0.4, 0.5]));
     await expect(pointer).toHaveAttribute("data-engaged", "false");
   });
 
@@ -521,7 +521,7 @@ test.describe("hand UX regressions", () => {
     await start(page);
     await page.keyboard.press("m");
     await page.evaluate(() =>
-      window.__AEX_INPUT__?.gestures([{ type: "head.shake", ts: Date.now(), confidence: 1 }]),
+      window.__HAI_INPUT__?.gestures([{ type: "head.shake", ts: Date.now(), confidence: 1 }]),
     );
     await expect(activeTool(page)).toHaveAttribute("data-tool", "select");
     await page.keyboard.press("d");
@@ -532,7 +532,7 @@ test.describe("hand UX regressions", () => {
   test("an ordinary pinch on Remove (not just a quick tap) removes the section", async ({ page }) => {
     await start(page);
     await page.keyboard.press("s");
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const box = await viewerBox(page);
     const b = await page.getByTestId("section-clear").boundingBox();
     if (!b) throw new Error("no remove button");
@@ -565,8 +565,8 @@ test.describe("hand UX regressions", () => {
       for (let y = 0.15; y < 0.9; y += 0.02) {
         for (let x = 0.05; x < 0.95; x += 0.02) {
           if (
-            window.__AEX_VIEWER__?.pick(x, y) === null &&
-            window.__AEX_VIEWER__?.overSection(x, y) &&
+            window.__HAI_VIEWER__?.pick(x, y) === null &&
+            window.__HAI_VIEWER__?.overSection(x, y) &&
             onCanvas(x, y)
           )
             return [x, y];
@@ -585,7 +585,7 @@ test.describe("hand UX regressions", () => {
     await start(page);
     await page.keyboard.press("s");
     await page.keyboard.press("v"); // back to Select; the section stays
-    const outline = await page.evaluate(() => window.__AEX_VIEWER__?.sectionOutline() ?? []);
+    const outline = await page.evaluate(() => window.__HAI_VIEWER__?.sectionOutline() ?? []);
     expect(outline.length).toBeGreaterThanOrEqual(4);
     // The middle of the outline's lowest edge on screen (the front edge), in page pixels.
     const box = await viewerBox(page);
@@ -608,7 +608,7 @@ test.describe("hand UX regressions", () => {
     await start(page);
     await page.keyboard.press("s");
     await page.keyboard.press("m");
-    const outline = await page.evaluate(() => window.__AEX_VIEWER__?.sectionOutline() ?? []);
+    const outline = await page.evaluate(() => window.__HAI_VIEWER__?.sectionOutline() ?? []);
     const box = await viewerBox(page);
     const [p, q] = [outline[0], outline[1]];
     if (!p || !q) throw new Error("no outline");

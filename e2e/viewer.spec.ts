@@ -16,7 +16,7 @@ test.describe("viewer", () => {
     bridge = await startTestBridge(page);
     await openViewer(page);
     const elements = Object.keys(bridge.scene.scene.doc.elements).length;
-    expect(await page.evaluate(() => window.__AEX_VIEWER__?.meshCount())).toBe(elements);
+    expect(await page.evaluate(() => window.__HAI_VIEWER__?.meshCount())).toBe(elements);
     // Something solid is under the middle of the view, and the camera looks down from above (Z up).
     await findElementOnScreen(page, "block-b");
     expect((await camera(page)).elevation).toBeGreaterThan(0);
@@ -45,9 +45,9 @@ test.describe("viewer", () => {
   test("keyboard undo and redo revert and reapply an edit", async ({ page }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
-    const count = () => page.evaluate(() => window.__AEX_VIEWER__?.meshCount());
+    const count = () => page.evaluate(() => window.__HAI_VIEWER__?.meshCount());
     const initial = await count();
-    await page.evaluate(() => window.__AEX_SCENE__?.apply("Delete tower", [{ op: "delete", id: "block-b" }]));
+    await page.evaluate(() => window.__HAI_SCENE__?.apply("Delete tower", [{ op: "delete", id: "block-b" }]));
     await expect.poll(count).toBe((initial ?? 0) - 1);
     await page.locator("[data-testid=viewer] canvas").click({ position: { x: 5, y: 5 } });
     await page.keyboard.press("Control+z");
@@ -60,7 +60,7 @@ test.describe("viewer", () => {
   }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
-    const renders = () => page.evaluate(() => window.__AEX_VIEWER__?.renders() ?? 0);
+    const renders = () => page.evaluate(() => window.__HAI_VIEWER__?.renders() ?? 0);
     // Let the first framing settle, then nothing should draw for a second.
     await page.waitForTimeout(1500);
     const idleStart = await renders();
@@ -87,13 +87,13 @@ test.describe("hand pointer and selection", () => {
     bridge = await startTestBridge(page);
     await openViewer(page);
     const at = await findElementOnScreen(page, "block-b");
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, at));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+    await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), await handAt(page, at));
     await expect(page.getByTestId("hand-pointer-right")).toBeVisible();
     const ts = await now(page);
     await page.evaluate(
       ({ position, ts }) =>
-        window.__AEX_INPUT__?.gestures([{ type: "pinch.tap", ts, confidence: 1, hand: "Right", position }]),
+        window.__HAI_INPUT__?.gestures([{ type: "pinch.tap", ts, confidence: 1, hand: "Right", position }]),
       { position: await handAt(page, at), ts },
     );
     await expect(page.getByTestId("selection-status")).toHaveText("Block B tower (massing)");
@@ -103,19 +103,19 @@ test.describe("hand pointer and selection", () => {
   test("tap on empty space clears the selection", async ({ page }) => {
     bridge = await startTestBridge(page);
     await openViewer(page);
-    await page.evaluate(() => window.__AEX_SCENE__?.select(["wall-n"]));
+    await page.evaluate(() => window.__HAI_SCENE__?.select(["wall-n"]));
     await expect(page.getByTestId("selection-status")).toContainText("North wall");
     const empty = await page.evaluate(() => {
       for (let y = 0.05; y < 0.5; y += 0.05)
-        for (let x = 0.05; x < 1; x += 0.05) if (!window.__AEX_VIEWER__?.pick(x, y)) return [x, y];
+        for (let x = 0.05; x < 1; x += 0.05) if (!window.__HAI_VIEWER__?.pick(x, y)) return [x, y];
       return null;
     });
     if (!empty) throw new Error("no empty sky found");
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const ts = await now(page);
     await page.evaluate(
       ({ position, ts }) =>
-        window.__AEX_INPUT__?.gestures([{ type: "pinch.tap", ts, confidence: 1, hand: "Right", position }]),
+        window.__HAI_INPUT__?.gestures([{ type: "pinch.tap", ts, confidence: 1, hand: "Right", position }]),
       { position: await handAt(page, empty as [number, number]), ts },
     );
     await expect(page.getByTestId("selection-status")).toHaveText("Nothing selected");
@@ -126,13 +126,13 @@ test.describe("hand pointer and selection", () => {
     bridge = await startTestBridge(page);
     await openViewer(page);
     const at = await findElementOnScreen(page, "block-b");
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     // One hand: one pointer.
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, at));
+    await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), await handAt(page, at));
     await expect(page.getByTestId("hand-pointer-right")).toBeVisible();
     await expect(page.getByTestId("hand-pointer-left")).toHaveCount(0);
     // Both hands: two full pointers, in the colours the camera overlay draws each hand in.
-    await page.evaluate(([p, q]) => window.__AEX_INPUT__?.pointer(p, q), [
+    await page.evaluate(([p, q]) => window.__HAI_INPUT__?.pointer(p, q), [
       await handAt(page, at),
       await handAt(page, [0.55, 0.45]), // clear of every button: a pointer near one would lock onto it
     ] as const);
@@ -157,8 +157,8 @@ test.describe("hand pointer and selection", () => {
     // Hover in the model follows the right hand until the left one pinches.
     await expect(page.getByTestId("hand-pointer-right")).toHaveAttribute("data-focus", "true");
     // Not engaged: the pointers still show where the hands are, dimmed.
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(false));
-    await page.evaluate(([p, q]) => window.__AEX_INPUT__?.pointer(p, q), [
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(false));
+    await page.evaluate(([p, q]) => window.__HAI_INPUT__?.pointer(p, q), [
       await handAt(page, at),
       await handAt(page, [0.55, 0.45]), // clear of every button: a pointer near one would lock onto it
     ] as const);
@@ -185,7 +185,7 @@ test.describe("navigation", () => {
         position: [0.5, 0.5],
         ...extra,
       });
-      window.__AEX_INPUT__?.gestures([
+      window.__HAI_INPUT__?.gestures([
         e("pinch.drag.start") as never,
         e("pinch.drag.update", { delta: [0.1, 0] }) as never,
         e("pinch.drag.end") as never,
@@ -211,7 +211,7 @@ test.describe("navigation", () => {
       const events = [e("pinch.drag.start", ts)];
       for (let i = 1; i <= 6; i++) events.push(e("pinch.drag.update", ts + i * 33, { delta: [0.03, 0] }));
       events.push(e("pinch.drag.end", ts + 7 * 33));
-      window.__AEX_INPUT__?.gestures(events as never[]);
+      window.__HAI_INPUT__?.gestures(events as never[]);
     }, ts);
     const released = (await camera(page)).azimuth;
     await page.waitForTimeout(300);
@@ -238,7 +238,7 @@ test.describe("navigation", () => {
         midpoint: [0.5, 0.5],
         angle,
       });
-      window.__AEX_INPUT__?.gestures([
+      window.__HAI_INPUT__?.gestures([
         e("twohand.start", ts, 0),
         e("twohand.update", ts + 33, 10),
         e("twohand.update", ts + 66, 20),
@@ -256,7 +256,7 @@ test.describe("navigation", () => {
     for (let i = 0; i < 5; i++) {
       const ts = await now(page);
       await page.evaluate((ts) => {
-        window.__AEX_INPUT__?.gestures([
+        window.__HAI_INPUT__?.gestures([
           {
             type: "pinch.drag.update",
             ts,
@@ -270,6 +270,6 @@ test.describe("navigation", () => {
       await page.waitForTimeout(50);
     }
     await expect(page.getByTestId("hud-latency")).toHaveText(/Gesture to render p90: \d+ ms/);
-    expect(await page.evaluate(() => window.__AEX_VIEWER__?.latencyP90())).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.__HAI_VIEWER__?.latencyP90())).toBeGreaterThan(0);
   });
 });

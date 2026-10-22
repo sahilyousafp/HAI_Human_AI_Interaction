@@ -1,4 +1,4 @@
-import type { GestureEvent, Point2 } from "@aex/protocol";
+import type { GestureEvent, Point2 } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { type HandContext, HandMachine, type HandObservation } from "./hand-machine.ts";
 

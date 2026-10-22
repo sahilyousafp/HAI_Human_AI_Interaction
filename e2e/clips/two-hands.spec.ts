@@ -37,10 +37,10 @@ test("full pipeline: camera -> gestures -> camera motion (two-hand pinches chang
 }) => {
   await page.goto("/");
   await expect
-    .poll(() => page.evaluate(() => window.__AEX_VIEWER__?.meshCount() ?? 0), { timeout: 30_000 })
+    .poll(() => page.evaluate(() => window.__HAI_VIEWER__?.meshCount() ?? 0), { timeout: 30_000 })
     .toBeGreaterThan(0);
   await page.waitForTimeout(400);
-  const before = await page.evaluate(() => window.__AEX_VIEWER__?.camera().distance ?? 0);
+  const before = await page.evaluate(() => window.__HAI_VIEWER__?.camera().distance ?? 0);
   await startCamera(page);
   await expect
     .poll(async () => (await gestureEvents(page)).some((e) => e.type === "twohand.update"), {
@@ -48,6 +48,6 @@ test("full pipeline: camera -> gestures -> camera motion (two-hand pinches chang
     })
     .toBe(true);
   await expect
-    .poll(() => page.evaluate(() => window.__AEX_VIEWER__?.camera().distance ?? 0), { timeout: 30_000 })
+    .poll(() => page.evaluate(() => window.__HAI_VIEWER__?.camera().distance ?? 0), { timeout: 30_000 })
     .not.toBeCloseTo(before, 2);
 });

@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseFrontmatter } from "./frontmatter.ts";
-import { agentsDir, allowedAexTools, ensureDefaultAgents, readRoster, rosterText } from "./roster.ts";
+import { agentsDir, allowedHaiTools, ensureDefaultAgents, readRoster, rosterText } from "./roster.ts";
 
-const project = () => mkdtempSync(join(tmpdir(), "aex-roster-"));
+const project = () => mkdtempSync(join(tmpdir(), "hai-roster-"));
 
 describe("the team", () => {
   it("defaults created once: mochi on Sonnet and four specialists, as Claude Code agent files", () => {
@@ -42,7 +42,7 @@ describe("the team", () => {
     ensureDefaultAgents(dir);
     writeFileSync(
       join(agentsDir(dir), "structure.md"),
-      "---\nname: structure\ndescription: Structural sizing.\ntools: mcp__aex__get_elements\n---\n\nYou are Structure.\n",
+      "---\nname: structure\ndescription: Structural sizing.\ntools: mcp__hai__get_elements\n---\n\nYou are Structure.\n",
     );
     const team = readRoster(dir);
     const structure = team.find((m) => m.name === "structure");
@@ -51,14 +51,14 @@ describe("the team", () => {
     expect(rosterText(team)).not.toContain("mochi");
   });
 
-  it("each agent's aex tools come from its definition; Reviewer only reads", () => {
+  it("each agent's hai tools come from its definition; Reviewer only reads", () => {
     const dir = project();
     ensureDefaultAgents(dir);
     const team = readRoster(dir);
     const tools = (name: string) => {
       const member = team.find((m) => m.name === name);
       if (!member) throw new Error(`no ${name}`);
-      return allowedAexTools(member);
+      return allowedHaiTools(member);
     };
     expect([...tools("reviewer")].sort()).toEqual([
       "capture_view",
@@ -77,23 +77,23 @@ describe("the team", () => {
     ensureDefaultAgents(dir);
     writeFileSync(
       join(agentsDir(dir), "climate.md"),
-      "---\nname: climate\ndescription: Sun.\ntools: mcp__aex__get_elements, mcp__aex__create_elements\n---\n\nSun.\n",
+      "---\nname: climate\ndescription: Sun.\ntools: mcp__hai__get_elements, mcp__hai__create_elements\n---\n\nSun.\n",
     );
     const climate = readRoster(dir).find((m) => m.name === "climate");
     if (!climate) throw new Error("no climate");
-    expect([...allowedAexTools(climate)]).toEqual(["get_elements"]);
-    expect([...allowedAexTools({ ...climate, writes: true })].sort()).toEqual([
+    expect([...allowedHaiTools(climate)]).toEqual(["get_elements"]);
+    expect([...allowedHaiTools({ ...climate, writes: true })].sort()).toEqual([
       "create_elements",
       "get_elements",
     ]);
   });
 
-  it("AEX metadata in .aex/agents.json overrides the defaults", () => {
+  it("HAI metadata in .hai/agents.json overrides the defaults", () => {
     const dir = project();
     ensureDefaultAgents(dir);
-    mkdirSync(join(dir, ".aex"), { recursive: true });
+    mkdirSync(join(dir, ".hai"), { recursive: true });
     writeFileSync(
-      join(dir, ".aex", "agents.json"),
+      join(dir, ".hai", "agents.json"),
       JSON.stringify({ climate: { aliases: ["sunny"], writes: true } }),
     );
     expect(readRoster(dir).find((m) => m.name === "climate")).toMatchObject({

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { type Message, type MessageOf, parseScene, type SceneDocument, type SceneOp } from "@aex/protocol";
+import { type Message, type MessageOf, parseScene, type SceneDocument, type SceneOp } from "@hai/protocol";
 import { AssetStore } from "./assets.ts";
 import { Autosaver, createProject, openProject, type ProjectInfo, SAMPLE_SCENE } from "./project.ts";
 import { SceneStore, type StoreResult } from "./scene-store.ts";
@@ -146,7 +146,7 @@ export class SceneHub {
     const missing = this.assets.missing(result.doc);
     this.projectError =
       missing.length > 0
-        ? `${missing.length === 1 ? "An imported model file is" : `${missing.length} imported model files are`} missing from the project's assets folder (${missing.map((m) => `${m}.aexmesh`).join(", ")}). Its elements are drawn as boxes.`
+        ? `${missing.length === 1 ? "An imported model file is" : `${missing.length} imported model files are`} missing from the project's assets folder (${missing.map((m) => `${m}.haimesh`).join(", ")}). Its elements are drawn as boxes.`
         : null;
     const autosaver = new Autosaver(
       result.project.path,

@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import type { AgentEvent, McpServerSpec } from "@aex/protocol";
+import type { AgentEvent, McpServerSpec } from "@hai/protocol";
 import spawn from "cross-spawn";
 import type {
   AgentProvider,

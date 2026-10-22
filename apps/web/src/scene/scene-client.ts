@@ -1,5 +1,5 @@
-import type { Message, SceneDocument, SceneOp } from "@aex/protocol";
-import { applyTransaction } from "@aex/scene";
+import type { Message, SceneDocument, SceneOp } from "@hai/protocol";
+import { applyTransaction } from "@hai/scene";
 
 export interface SceneState {
   doc: SceneDocument | null;

@@ -1,4 +1,4 @@
-import type { Point2, TrackedHand } from "@aex/protocol";
+import type { Point2, TrackedHand } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { loadFixture, loadPinchLabels } from "../testing/fixtures.ts";
 import { DEFAULT_GESTURES } from "./config.ts";

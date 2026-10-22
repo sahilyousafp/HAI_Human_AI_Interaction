@@ -1,5 +1,5 @@
-import type { Element, Point2, Point3Mm, PointMm, SceneDocument } from "@aex/protocol";
-import { elementBounds } from "@aex/scene";
+import type { Element, Point2, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
+import { elementBounds } from "@hai/scene";
 import { snap } from "./grid.ts";
 import type { ToolContext } from "./types.ts";
 

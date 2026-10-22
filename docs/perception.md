@@ -1,6 +1,6 @@
 # Perception: hand and face tracking
 
-AEX turns your webcam into hand and face measurements, entirely inside your browser.
+HAI turns your webcam into hand and face measurements, entirely inside your browser.
 
 ## Privacy guarantee
 
@@ -43,11 +43,11 @@ Readouts refresh once per second; the overlay redraws every animation frame. How
 5. Results are converted to a tracking frame, smoothed with a One Euro filter (min cutoff 1 Hz, beta 6, derivative cutoff 2 Hz in normalised image units), and posted back. The bitmap is closed immediately.
 6. When the frame rate stays below 24 fps for 2 seconds, face tracking runs on alternate frames. It returns to every frame above 28 fps. Hands always run on every frame.
 
-AEX feeds unmirrored camera frames to MediaPipe, which labels them correctly, so "Right" is your right hand. This was checked against recorded footage: a raised right hand is reported as "Right", and turning your head to your right gives negative yaw.
+HAI feeds unmirrored camera frames to MediaPipe, which labels them correctly, so "Right" is your right hand. This was checked against recorded footage: a raised right hand is reported as "Right", and turning your head to your right gives negative yaw.
 
 **Stable hand labels.** MediaPipe guesses handedness on every frame from the hand's appearance, and the guess fails when a hand crosses your face or comes near the other hand: the label flips, or both hands get the same one. Smoothing and pinch state are kept per label, so a flip would end a drag, fire a stray tap or merge two hands into one. `HandIdentity` (`packages/perception/src/hand-identity.ts`) therefore follows each hand by position: a hand keeps the label it entered with while it stays in view, two hands never share a label, and only a hand entering the view (or returning after 300 ms away) takes MediaPipe's label, or the free one if the other hand already holds it. It also drops a hand reported twice: on motion-blurred frames MediaPipe sometimes fits a lower-scoring "ghost" hand inside the real one, which could otherwise start a two-hand gesture nobody made.
 
-**Camera effects.** Windows Studio Effects (on laptops with an NPU), and similar effects on macOS and ChromeOS, change the image before the browser sees it. Background blur smears fingertips that leave your outline and can fill the gap between thumb and index; automatic framing crops and pans, so a still hand appears to move; eye contact warps the face. AEX asks the browser to turn all three off when the camera starts. Where the browser cannot (Edge and Chrome only expose these controls with experimental web platform features enabled), turn them off yourself: Quick settings (Windows+A) > Studio effects, or Settings > Bluetooth & devices > Cameras > your camera.
+**Camera effects.** Windows Studio Effects (on laptops with an NPU), and similar effects on macOS and ChromeOS, change the image before the browser sees it. Background blur smears fingertips that leave your outline and can fill the gap between thumb and index; automatic framing crops and pans, so a still hand appears to move; eye contact warps the face. HAI asks the browser to turn all three off when the camera starts. Where the browser cannot (Edge and Chrome only expose these controls with experimental web platform features enabled), turn them off yourself: Quick settings (Windows+A) > Studio effects, or Settings > Bluetooth & devices > Cameras > your camera.
 
 ## Using a phone as the camera
 
@@ -56,7 +56,7 @@ A phone's camera is usually sharper than a laptop's, copes better with low light
 - **Windows 11, Android**: Settings > Bluetooth & devices > Mobile devices, turn on using the phone as a connected camera (Phone Link).
 - **Any phone**: a webcam app such as Camo, DroidCam or Iriun. Prefer a USB connection; Wi-Fi adds delay, visible as a higher camera-to-gesture time in the Detection card.
 
-Then choose it under **Camera**. Turn off the phone app's own effects (portrait or background blur, beauty filters, auto-framing) for the same reasons as Windows Studio Effects. Some apps send a mirrored image: raise your right hand, and if the Gestures card calls it the left hand, tick **Camera image is mirrored**. AEX then flips each frame back before tracking, so handedness, the pointer and head direction all stay correct.
+Then choose it under **Camera**. Turn off the phone app's own effects (portrait or background blur, beauty filters, auto-framing) for the same reasons as Windows Studio Effects. Some apps send a mirrored image: raise your right hand, and if the Gestures card calls it the left hand, tick **Camera image is mirrored**. HAI then flips each frame back before tracking, so handedness, the pointer and head direction all stay correct.
 
 ## Troubleshooting
 

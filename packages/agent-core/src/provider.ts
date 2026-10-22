@@ -1,4 +1,4 @@
-import type { AgentEvent, McpServerSpec } from "@aex/protocol";
+import type { AgentEvent, McpServerSpec } from "@hai/protocol";
 
 /** Whether the provider can run here, and if not, what the user should do. */
 export type Detection =
@@ -19,7 +19,7 @@ export interface StartOptions {
   mcpConfigPath: string;
   /** Text appended to the agent's system prompt (units, axes, which tools act on the scene). */
   systemPromptPath: string;
-  /** Tool the provider calls to ask whether a tool call may run, e.g. "mcp__aex__approve_tool". */
+  /** Tool the provider calls to ask whether a tool call may run, e.g. "mcp__hai__approve_tool". */
   permissionPromptTool: string;
   /** Continue this earlier conversation instead of starting a new one. */
   resumeSessionId?: string;

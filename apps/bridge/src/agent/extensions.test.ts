@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, Message } from "@aex/protocol";
+import type { AgentEvent, Message } from "@hai/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WebSocket } from "ws";
 import { fakeProvider } from "../../test/fake-provider.ts";
@@ -13,7 +13,7 @@ import { ExtensionHub, parseSkill, readProjectServers, skillsDir } from "./exten
 const temp = (prefix: string) => mkdtempSync(join(tmpdir(), prefix));
 
 function skillFolder(name: string, manifest?: string): string {
-  const dir = join(temp("aex-skill-src-"), name);
+  const dir = join(temp("hai-skill-src-"), name);
   mkdirSync(dir, { recursive: true });
   if (manifest !== undefined) writeFileSync(join(dir, "SKILL.md"), manifest);
   writeFileSync(join(dir, "notes.md"), "Extra file that comes along.\n");
@@ -46,7 +46,7 @@ describe("parseSkill", () => {
 
 describe("readProjectServers", () => {
   it("lists servers with env and header names but never their values", () => {
-    const dir = temp("aex-mcpjson-");
+    const dir = temp("hai-mcpjson-");
     writeFileSync(
       join(dir, ".mcp.json"),
       JSON.stringify({
@@ -77,7 +77,7 @@ describe("readProjectServers", () => {
 
 describe("install from a git URL", () => {
   it("clones shallowly, validates and copies without the .git folder", async () => {
-    const projectDir = temp("aex-git-project-");
+    const projectDir = temp("hai-git-project-");
     const sent: Message[] = [];
     const hub = new ExtensionHub(
       {
@@ -122,7 +122,7 @@ describe("extensions with the fake Claude Code CLI", () => {
   });
 
   async function start(prepare?: (projectDir: string) => void) {
-    const projectDir = join(temp("aex-ext-it-"), "project");
+    const projectDir = join(temp("hai-ext-it-"), "project");
     mkdirSync(projectDir, { recursive: true });
     prepare?.(projectDir);
     bridge = createBridge({
@@ -132,7 +132,7 @@ describe("extensions with the fake Claude Code CLI", () => {
       version: "t",
       token: TOKEN,
       scene: { projectDir, saveDelayMs: 50 },
-      agent: { provider: fakeProvider(temp("aex-fake-state-")) },
+      agent: { provider: fakeProvider(temp("hai-fake-state-")) },
     });
     const address: AddressInfo = await bridge.start();
     await bridge.agent?.ready;

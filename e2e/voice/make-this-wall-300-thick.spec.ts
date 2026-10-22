@@ -12,7 +12,7 @@ import { findElementOnScreen, handAt, openViewer, startTestBridge } from "../vie
 
 /** A private bridge with the fake agent CLI, the viewer, and what the fake agent received. */
 async function start(page: Page) {
-  const state = mkdtempSync(join(tmpdir(), "aex-voice-"));
+  const state = mkdtempSync(join(tmpdir(), "hai-voice-"));
   const bridge = await startTestBridge(page, { agent: fakeProvider(state) });
   await openViewer(page);
   await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
@@ -26,7 +26,7 @@ async function start(page: Page) {
 
 const transcript = (page: Page) => page.getByTestId("voice-transcript");
 const inject = (page: Page, type: string) =>
-  page.evaluate((t) => window.__AEX_INPUT__?.gestures([{ type: t, ts: Date.now(), confidence: 1 }]), type);
+  page.evaluate((t) => window.__HAI_INPUT__?.gestures([{ type: t, ts: Date.now(), confidence: 1 }]), type);
 
 test("transcript of a known sample: heard, transcribed on this laptop, and the microphone stops on silence", async ({
   page,
@@ -86,11 +86,11 @@ test('"make this 300 thick" while pointing: the wall gets marker 1 and is the fi
   const { bridge, received } = await start(page);
   try {
     const wall = await findElementOnScreen(page, "wall-s");
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     await page.getByTestId("mic-button").click();
     // Point at the wall while speaking (the phrase starts a second after the microphone opens).
     await expect(page.getByTestId("voice-bar")).toContainText("Listening", { timeout: 30_000 });
-    await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, wall));
+    await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), await handAt(page, wall));
     const marker = page.getByTestId("reference-marker");
     await expect(marker).toHaveText("1");
     await expect(marker).toHaveAttribute("data-element", "wall-s");

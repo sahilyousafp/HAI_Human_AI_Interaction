@@ -1,5 +1,5 @@
-import { matrixFromHeadPose } from "@aex/perception";
-import type { TrackedHand, TrackingFrame, Vec3 } from "@aex/protocol";
+import { matrixFromHeadPose } from "@hai/perception";
+import type { TrackedHand, TrackingFrame, Vec3 } from "@hai/protocol";
 
 /** Bone pairs of MediaPipe's 21-point hand model. */
 export const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [

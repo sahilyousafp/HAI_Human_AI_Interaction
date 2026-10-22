@@ -71,7 +71,7 @@ test("show my hands: a white hand over the interface", async ({ page }) => {
     }
     image[4] = [0.55, 0.5, -0.05];
     image[8] = [0.55, 0.5, -0.05];
-    const camera = window.__AEX_CAMERA__;
+    const camera = window.__HAI_CAMERA__;
     if (camera) {
       camera.latestFrame = {
         seq: 1,

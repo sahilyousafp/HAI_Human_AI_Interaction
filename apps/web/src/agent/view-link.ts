@@ -1,4 +1,4 @@
-import type { Message, Point3Mm, SunSetting, ViewCamera } from "@aex/protocol";
+import type { Message, Point3Mm, SunSetting, ViewCamera } from "@hai/protocol";
 
 /** Captured views are scaled down so their longest side is at most this many pixels. */
 export const CAPTURE_MAX_SIDE = 1280;

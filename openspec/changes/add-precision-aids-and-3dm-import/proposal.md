@@ -2,7 +2,7 @@
 
 ## Why
 
-Hand pointing is imprecise: a hand pointer drifts a few pixels while pinching, so small buttons are missed and drawn lines land wherever the hand happened to be. Drawing needs the aids every CAD user expects (snap, ortho, projection), and the user needs to bring an existing Rhino model into the viewer. Today there is no way to do that at all: the app opens only its own `scene.aex.json` project file, and nothing in the code reads a `.3dm`. So "fix the import" means building 3DM import for the first time.
+Hand pointing is imprecise: a hand pointer drifts a few pixels while pinching, so small buttons are missed and drawn lines land wherever the hand happened to be. Drawing needs the aids every CAD user expects (snap, ortho, projection), and the user needs to bring an existing Rhino model into the viewer. Today there is no way to do that at all: the app opens only its own `scene.hai.json` project file, and nothing in the code reads a `.3dm`. So "fix the import" means building 3DM import for the first time.
 
 ## What Changes
 

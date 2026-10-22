@@ -44,7 +44,7 @@ A pending approval SHALL be denied automatically after 60 seconds, and the card 
 - **THEN** the call is denied and the card shows "Timed out"
 
 ### Requirement: Always allow per project
-The user SHALL be able to choose "Always allow" for a tool, which pre-approves that tool for the current project, kept in the project's `.aex/approvals.json`, until removed under Agent permissions in the settings.
+The user SHALL be able to choose "Always allow" for a tool, which pre-approves that tool for the current project, kept in the project's `.hai/approvals.json`, until removed under Agent permissions in the settings.
 
 #### Scenario: Remembered approval
 - **GIVEN** the user chose "Always allow" for a web search tool

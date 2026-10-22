@@ -1,4 +1,4 @@
-import { FEATURES } from "@aex/protocol";
+import { FEATURES } from "@hai/protocol";
 import { useSyncExternalStore } from "react";
 import { ListGroup, ListRow, Switch } from "../ui/controls.tsx";
 import type { FeatureFlags } from "./feature-flags.ts";

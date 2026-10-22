@@ -16,7 +16,7 @@ export interface SettingsSection {
 }
 
 const CLOSE_ICON = "M6 6l12 12M18 6 6 18";
-const PAGE_KEY = "aex.settingsPage";
+const PAGE_KEY = "hai.settingsPage";
 
 function readPage(): string | null {
   try {

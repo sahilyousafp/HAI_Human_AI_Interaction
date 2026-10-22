@@ -11,7 +11,7 @@ import {
   ReplyVoice,
   type Settings,
   SpeechMode,
-} from "@aex/protocol";
+} from "@hai/protocol";
 
 type Send = (message: Message) => void;
 
@@ -34,7 +34,7 @@ export function updateSettingsFile(file: string, patch: Record<string, unknown>)
 /**
  * User settings shared by every client: the two palette rings' layouts, what each gesture does, which features
  * are on, which drawing aids are on, whether the user's hands are drawn over the screen, the speech mode, whether the microphone listens for
- * team names and how Mochi's replies are spoken. Kept in .aex/settings.json, so they survive reloads, browser
+ * team names and how Mochi's replies are spoken. Kept in .hai/settings.json, so they survive reloads, browser
  * changes and restarts. Without a file (tests), settings live in memory.
  */
 export class SettingsHub {

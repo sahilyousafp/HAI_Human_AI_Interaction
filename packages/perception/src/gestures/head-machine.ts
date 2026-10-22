@@ -1,4 +1,4 @@
-import type { GestureEvent, HeadPose } from "@aex/protocol";
+import type { GestureEvent, HeadPose } from "@hai/protocol";
 import { DEFAULT_GESTURES, type GestureConfig } from "./config.ts";
 
 interface Sample {

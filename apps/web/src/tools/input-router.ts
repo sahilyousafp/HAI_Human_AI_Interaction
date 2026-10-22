@@ -7,7 +7,7 @@ import {
   type GestureEvent,
   type Hand,
   type Point2,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import type { Ring } from "./controller.ts";
 
 export type DragMode = "orbit" | "pan";

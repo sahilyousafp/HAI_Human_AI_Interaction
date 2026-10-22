@@ -1,6 +1,6 @@
 ## Why
 
-AEX is filmed every week, and the interface did not look or behave like a studio:
+HAI is filmed every week, and the interface did not look or behave like a studio:
 - A permanent right sidebar held every setting and readout, and squeezed the model.
 - The camera preview sat in that sidebar.
 - There was no way to switch features off for a demo or a release.

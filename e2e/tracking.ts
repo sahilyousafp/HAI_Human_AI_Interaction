@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
-/** Per-frame summary the app exposes in dev builds (window.__AEX_TRACKING__). Never contains pixels. */
+/** Per-frame summary the app exposes in dev builds (window.__HAI_TRACKING__). Never contains pixels. */
 export type Summary = {
   seq: number;
   hands: string[];
@@ -14,7 +14,7 @@ export type Summary = {
 
 export const frames = (page: Page) =>
   page.evaluate(
-    () => (window as unknown as { __AEX_TRACKING__?: { frames: Summary[] } }).__AEX_TRACKING__?.frames ?? [],
+    () => (window as unknown as { __HAI_TRACKING__?: { frames: Summary[] } }).__HAI_TRACKING__?.frames ?? [],
   );
 
 /** Clicks Start camera and waits until tracking frames flow (model loading takes a few seconds on CPU-only CI). */
@@ -38,13 +38,13 @@ export async function framesDuring(page: Page, minMs: number, minFrames = 20): P
   return since();
 }
 
-/** Gesture events the app logged in dev builds (window.__AEX_GESTURES__). */
+/** Gesture events the app logged in dev builds (window.__HAI_GESTURES__). */
 export const gestureEvents = (page: Page) =>
   page.evaluate(
     () =>
       (
         window as unknown as {
-          __AEX_GESTURES__?: { events: Array<{ type: string; ts: number; hand?: string }> };
+          __HAI_GESTURES__?: { events: Array<{ type: string; ts: number; hand?: string }> };
         }
-      ).__AEX_GESTURES__?.events ?? [],
+      ).__HAI_GESTURES__?.events ?? [],
   );

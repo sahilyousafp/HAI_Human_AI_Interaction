@@ -1,4 +1,4 @@
-import type { Hand, TrackedHand, TrackingFrame, Vec3 } from "@aex/protocol";
+import type { Hand, TrackedHand, TrackingFrame, Vec3 } from "@hai/protocol";
 
 /** A hand not seen for longer than this has left; when it returns it is labelled afresh. */
 export const IDENTITY_LOST_MS = 300;

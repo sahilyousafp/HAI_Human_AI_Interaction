@@ -4,10 +4,10 @@ import {
   type GestureAction,
   type GestureBindings,
   resolveBindings,
-} from "@aex/protocol";
+} from "@hai/protocol";
 
 /**
- * What each gesture does, as the user set it (one-hand gestures for each hand on its own). The bridge keeps the choice (in .aex/settings.json), so it follows the
+ * What each gesture does, as the user set it (one-hand gestures for each hand on its own). The bridge keeps the choice (in .hai/settings.json), so it follows the
  * workspace across browsers and restarts; the input router reads it on every gesture.
  */
 export class GestureSettings {

@@ -64,8 +64,8 @@ describe("bridge logs", () => {
       allowedOrigins: [ORIGIN],
       version: "t",
       token: TOKEN,
-      scene: { projectDir: join(mkdtempSync(join(tmpdir(), "aex-log-")), "project"), saveDelayMs: 50 },
-      agent: { provider: fakeProvider(mkdtempSync(join(tmpdir(), "aex-fake-state-"))) },
+      scene: { projectDir: join(mkdtempSync(join(tmpdir(), "hai-log-")), "project"), saveDelayMs: 50 },
+      agent: { provider: fakeProvider(mkdtempSync(join(tmpdir(), "hai-fake-state-"))) },
       log: (line) => lines.push(line),
     });
     const address: AddressInfo = await bridge.start();

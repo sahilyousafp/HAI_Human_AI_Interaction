@@ -1,5 +1,5 @@
-import { DEFAULT_GESTURES, type PinchReading } from "@aex/perception";
-import type { Hand } from "@aex/protocol";
+import { DEFAULT_GESTURES, type PinchReading } from "@hai/perception";
+import type { Hand } from "@hai/protocol";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { LatencyTracker } from "../viewer/latency.ts";
 import {

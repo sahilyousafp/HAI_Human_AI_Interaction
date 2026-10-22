@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. AEX is built in public, in small weekly steps.
+Thanks for helping. HAI is built in public, in small weekly steps.
 
 ## Setup
 
@@ -23,7 +23,7 @@ pnpm test:e2e      # end-to-end tests (Playwright, uses a fake camera)
 pnpm licenses:check
 ```
 
-The end-to-end tests start their own bridge and dev server (ports 4880 and 5183, state in `.aex/e2e`), so they never touch the `pnpm dev` you work with: your agents, settings and project are left alone while they run.
+The end-to-end tests start their own bridge and dev server (ports 4880 and 5183, state in `.hai/e2e`), so they never touch the `pnpm dev` you work with: your agents, settings and project are left alone while they run.
 
 CI runs the same commands on Windows and Ubuntu. Please keep them green: no new lint warnings, no skipped or flaky tests.
 

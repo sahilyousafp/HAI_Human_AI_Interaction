@@ -7,7 +7,7 @@ import { openViewer, startTestBridge } from "./viewer.ts";
 // A model of 1000 objects (the most an import keeps as separate elements) must not stall the page while it comes in,
 // and the view must keep up with the hands afterwards.
 const ROOT = join(import.meta.dirname, "..");
-const BIG = join(ROOT, ".aex", "models", "grid-1000.3dm");
+const BIG = join(ROOT, ".hai", "models", "grid-1000.3dm");
 
 let bridge: (Bridge & { port: number }) | null = null;
 test.afterEach(async () => {
@@ -24,7 +24,7 @@ test.beforeAll(() => {
 const importedCount = (page: Page) =>
   page.evaluate(
     () =>
-      Object.values(window.__AEX_SCENE__?.getSnapshot().doc?.elements ?? {}).filter(
+      Object.values(window.__HAI_SCENE__?.getSnapshot().doc?.elements ?? {}).filter(
         (e) => e.type === "imported",
       ).length,
   );
@@ -57,7 +57,7 @@ test("1000 imported objects: the page never stalls long, and orbiting stays with
         page.evaluate(() => {
           for (let y = 0.05; y < 1; y += 0.025) {
             for (let x = 0.05; x < 1; x += 0.025) {
-              if (window.__AEX_VIEWER__?.pick(x, y)?.startsWith("imp-")) return true;
+              if (window.__HAI_VIEWER__?.pick(x, y)?.startsWith("imp-")) return true;
             }
           }
           return false;
@@ -73,20 +73,20 @@ test("1000 imported objects: the page never stalls long, and orbiting stays with
   expect(Math.max(0, ...longTasks)).toBeLessThan(1000);
 
   // Orbit by hand and read the gesture-to-render time the status bar shows.
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
   for (let i = 0; i < 40; i++) {
     await page.evaluate((i) => {
       const x = 0.4 + i * 0.004;
       const type = i === 0 ? "pinch.drag.start" : "pinch.drag.update";
       // Stamped as the camera would: when the frame was captured, which is now.
       const ts = performance.timeOrigin + performance.now();
-      window.__AEX_INPUT__?.gestures([
+      window.__HAI_INPUT__?.gestures([
         { type, ts, confidence: 1, hand: "Right", position: [x, 0.5], delta: [0.004, 0] },
       ]);
     }, i);
     await page.waitForTimeout(33);
   }
-  const p90 = await page.evaluate(() => window.__AEX_VIEWER__?.latencyP90() ?? null);
+  const p90 = await page.evaluate(() => window.__HAI_VIEWER__?.latencyP90() ?? null);
   console.log(`gesture to render p90 with 1000 imported objects: ${p90} ms`);
   expect(p90).not.toBeNull();
   expect(p90 as number).toBeLessThan(100);

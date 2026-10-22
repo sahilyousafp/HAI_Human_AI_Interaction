@@ -51,8 +51,8 @@ const EXPAND_ICON = "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5";
 const SHRINK_ICON = "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5";
 const MINIMISE_ICON = "M5 12h14";
 const CAMERA_ICON = "M3 7h4l2-3h6l2 3h4v12H3zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z";
-const EXPANDED_KEY = "aex.previewExpanded";
-const MINIMISED_KEY = "aex.cameraMinimised";
+const EXPANDED_KEY = "hai.previewExpanded";
+const MINIMISED_KEY = "hai.cameraMinimised";
 
 /** A remembered view choice in this browser (a convenience; it defaults to off). */
 function readFlag(key: string): boolean {

@@ -1,4 +1,4 @@
-import type { Message } from "@aex/protocol";
+import type { Message } from "@hai/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureSize, ViewLink } from "./view-link.ts";
 

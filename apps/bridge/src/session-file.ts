@@ -9,13 +9,13 @@ export interface SessionInfo {
 }
 
 export function sessionFilePath(workspaceRoot: string): string {
-  return join(workspaceRoot, ".aex", "session.json");
+  return join(workspaceRoot, ".hai", "session.json");
 }
 
-/** Hands the port and token to the local dev server. `.aex/` is git-ignored. */
+/** Hands the port and token to the local dev server. `.hai/` is git-ignored. */
 export function writeSessionFile(workspaceRoot: string, info: SessionInfo): string {
   const path = sessionFilePath(workspaceRoot);
-  mkdirSync(join(workspaceRoot, ".aex"), { recursive: true });
+  mkdirSync(join(workspaceRoot, ".hai"), { recursive: true });
   writeFileSync(path, `${JSON.stringify(info, null, 2)}\n`, { mode: 0o600 });
   return path;
 }

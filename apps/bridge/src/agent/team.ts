@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AgentProvider, Detection } from "@aex/agent-core";
+import type { AgentProvider, Detection } from "@hai/agent-core";
 import type {
   AgentDefinitionInput,
   AgentEvent,
@@ -9,14 +9,14 @@ import type {
   Message,
   RequestContext,
   TeamTask,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import { type Logger, silentLogger } from "../log.ts";
 import type { AgentTokens } from "../mcp/agent-tokens.ts";
 import type { TeamTools } from "../mcp/scene-tools.ts";
-import { AEX_SERVER, migrateSessionToLead } from "./agent-config.ts";
+import { HAI_SERVER, migrateSessionToLead } from "./agent-config.ts";
 import { AgentHub, type TurnHooks } from "./agent-hub.ts";
 import {
-  allowedAexTools,
+  allowedHaiTools,
   defaultRoster,
   ensureDefaultAgents,
   memberInfo,
@@ -164,7 +164,7 @@ export class Team {
             url: this.options.mcpUrl(),
             token: this.options.tokens.issue({
               agent: name,
-              tools: member ? allowedAexTools(member) : new Set<string>(),
+              tools: member ? allowedHaiTools(member) : new Set<string>(),
             }),
           };
         },
@@ -612,7 +612,7 @@ export class Team {
     this.ensureProject();
     const projectDir = this.project as string;
     const existing = this.member(agent.name);
-    if (existing?.lead && !agent.tools.includes(`mcp__${AEX_SERVER}__delegate`))
+    if (existing?.lead && !agent.tools.includes(`mcp__${HAI_SERVER}__delegate`))
       throw new Error(`${displayName(agent.name)} leads the team: keep its delegate tool.`);
     saveDefinition(projectDir, agent);
     this.refreshRoster();

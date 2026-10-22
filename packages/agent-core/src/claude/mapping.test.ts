@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentEvent } from "@aex/protocol";
-import { AgentEvent as AgentEventSchema } from "@aex/protocol";
+import type { AgentEvent } from "@hai/protocol";
+import { AgentEvent as AgentEventSchema } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { createClaudeMapper, createLineSplitter, mcpServerOf, SUMMARY_MAX } from "./mapping.ts";
 
@@ -105,7 +105,7 @@ describe("mapping edge cases", () => {
   });
 
   it("names the MCP server of an MCP tool", () => {
-    expect(mcpServerOf("mcp__aex__create_elements")).toBe("aex");
+    expect(mcpServerOf("mcp__hai__create_elements")).toBe("hai");
     expect(mcpServerOf("Bash")).toBeUndefined();
   });
 

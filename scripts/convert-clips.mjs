@@ -1,6 +1,6 @@
 // Test clips for Chromium's fake camera.
 // The repository stores small H.264 MP4s; Chromium needs uncompressed .y4m (about 14 MB per second at 640x480),
-// so .y4m files are generated on demand into .aex/clips (git-ignored) and cached.
+// so .y4m files are generated on demand into .hai/clips (git-ignored) and cached.
 //
 //   node scripts/convert-clips.mjs import <folder> [clip ...]   normalise recordings into test-assets/clips/*.mp4
 //   node scripts/convert-clips.mjs build [--out <folder>]           (re)generate .y4m files for every MP4 present
@@ -84,7 +84,7 @@ function importRecordings(source, only) {
 }
 
 /** Generates .y4m files for the MP4s present; returns the clip names available. */
-export function buildClips(out = join(root, ".aex", "clips")) {
+export function buildClips(out = join(root, ".hai", "clips")) {
   if (!existsSync(clipDir)) return [];
   const sources = readdirSync(clipDir).filter((f) => f.endsWith(".mp4"));
   if (sources.length === 0) return [];

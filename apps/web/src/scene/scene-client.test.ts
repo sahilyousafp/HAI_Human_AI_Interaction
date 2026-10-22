@@ -1,4 +1,4 @@
-import type { Message, SceneDocument } from "@aex/protocol";
+import type { Message, SceneDocument } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { SceneClient } from "./scene-client.ts";
 

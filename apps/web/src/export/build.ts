@@ -1,5 +1,5 @@
-import type { SceneDocument } from "@aex/protocol";
-import { exportExtrusions, type MeshPart, prismMesh } from "@aex/scene";
+import type { SceneDocument } from "@hai/protocol";
+import { exportExtrusions, type MeshPart, prismMesh } from "@hai/scene";
 import type { RhinoModule } from "rhino3dm";
 
 /** What goes into a Rhino file: the scene, and the triangles of each imported model it uses (millimetres). */
@@ -86,10 +86,10 @@ export function buildFile3dm(rhino: RhinoModule, { doc, assets }: ExportInput): 
       const attributes = new rhino.ObjectAttributes();
       attributes.name = name;
       attributes.layerIndex = layerIndex(layer);
-      attributes.setUserString("aex.id", id);
-      if (level) attributes.setUserString("aex.level", level);
+      attributes.setUserString("hai.id", id);
+      if (level) attributes.setUserString("hai.level", level);
       for (const [key, value] of Object.entries(properties))
-        attributes.setUserString(`aex.property.${key}`, String(value));
+        attributes.setUserString(`hai.property.${key}`, String(value));
       return attributes;
     };
 

@@ -1,4 +1,4 @@
-import { FACE_LANDMARK_COUNT, HAND_LANDMARK_COUNT, TrackingFrame } from "@aex/protocol";
+import { FACE_LANDMARK_COUNT, HAND_LANDMARK_COUNT, TrackingFrame } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { matrixFromHeadPose } from "./head-pose.ts";
 import { type MpHandResult, type MpLandmark, toTrackingFrame } from "./mediapipe-adapter.ts";

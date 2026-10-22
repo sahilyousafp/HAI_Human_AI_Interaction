@@ -1,16 +1,16 @@
 // Runs against the real, signed-in Claude Code CLI, so it is manual: CI skips it. Run it with
-//   AEX_LIVE_CLAUDE=1 pnpm vitest run apps/bridge/src/agent/live.test.ts
+//   HAI_LIVE_CLAUDE=1 pnpm vitest run apps/bridge/src/agent/live.test.ts
 // It uses a few short requests on the maintainer's own plan.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClaudeCliProvider } from "@aex/agent-core";
-import type { AgentEvent, AgentTurn, Message } from "@aex/protocol";
+import { ClaudeCliProvider } from "@hai/agent-core";
+import type { AgentEvent, AgentTurn, Message } from "@hai/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { type Bridge, createBridge } from "../server.ts";
 import type { Team } from "./team.ts";
 
-const live = process.env.AEX_LIVE_CLAUDE === "1";
+const live = process.env.HAI_LIVE_CLAUDE === "1";
 
 const replyOf = (turn?: AgentTurn) =>
   (turn?.events ?? [])
@@ -38,7 +38,7 @@ describe.skipIf(!live)("with the real Claude Code CLI (manual)", () => {
       port: 0,
       allowedOrigins: ["http://localhost:5173"],
       version: "live",
-      scene: { projectDir: join(mkdtempSync(join(tmpdir(), "aex-live-")), "project"), saveDelayMs: 50 },
+      scene: { projectDir: join(mkdtempSync(join(tmpdir(), "hai-live-")), "project"), saveDelayMs: 50 },
       agent: { provider: new ClaudeCliProvider() },
     });
     await bridge.start();

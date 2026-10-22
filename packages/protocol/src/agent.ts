@@ -135,8 +135,8 @@ export const TeamMemberInfo = z.strictObject({
 });
 export type TeamMemberInfo = z.infer<typeof TeamMemberInfo>;
 
-/** The app's own MCP server's tools (`mcp__aex__<name>`), grouped by what they let an agent do. */
-export const AEX_TOOLS = {
+/** The app's own MCP server's tools (`mcp__hai__<name>`), grouped by what they let an agent do. */
+export const HAI_TOOLS = {
   read: ["get_scene_summary", "get_elements", "get_user_context", "capture_view"],
   write: ["create_elements", "update_elements", "delete_elements", "set_selection"],
   team: ["delegate", "team_status", "cancel_task"],
@@ -149,7 +149,7 @@ export type AgentDefinition = z.infer<typeof AgentDefinition>;
 
 /**
  * An agent the user adds or edits in the Agents tab. It becomes `.claude/agents/<name>.md` (name, description,
- * tools, model and the instructions) and its entry in `.aex/agents.json` (aliases, colour).
+ * tools, model and the instructions) and its entry in `.hai/agents.json` (aliases, colour).
  */
 export const AgentDefinitionInput = z.strictObject({
   name: z
@@ -160,7 +160,7 @@ export const AgentDefinitionInput = z.strictObject({
     ),
   description: z.string().trim().min(1, "Say what the agent does").max(300),
   model: z.string().trim().max(64).optional(),
-  /** Tools as Claude Code names them (`mcp__aex__create_elements`, `Read`, `Bash(git:*)`). */
+  /** Tools as Claude Code names them (`mcp__hai__create_elements`, `Read`, `Bash(git:*)`). */
   tools: z.array(z.string().regex(/^[^,\n]{1,200}$/)).max(64),
   aliases: z.array(z.string().trim().min(1).max(40)).max(10),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),

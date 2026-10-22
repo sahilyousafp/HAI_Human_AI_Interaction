@@ -5,7 +5,7 @@ export interface CameraPrefs {
   mirrored: boolean;
 }
 
-const KEY = "aex.camera";
+const KEY = "hai.camera";
 
 interface Stored {
   deviceId: string;

@@ -24,7 +24,7 @@ describe("camera preferences", () => {
   });
 
   it("ignores corrupt stored data", () => {
-    expect(loadCameraPrefs(memoryStorage({ "aex.camera": "{not json" }))).toEqual({
+    expect(loadCameraPrefs(memoryStorage({ "hai.camera": "{not json" }))).toEqual({
       deviceId: "",
       mirrored: false,
     });

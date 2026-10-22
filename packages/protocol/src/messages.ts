@@ -36,7 +36,7 @@ export type SpeechMode = z.infer<typeof SpeechMode>;
 export const ReplyVoice = z.enum(["af_heart", "am_michael"]);
 export type ReplyVoice = z.infer<typeof ReplyVoice>;
 
-/** User settings kept by the bridge in .aex/settings.json. */
+/** User settings kept by the bridge in .hai/settings.json. */
 export const Settings = z.strictObject({
   /** The tools ring (the right hand's long pinch); null until the user changes it: the app's default applies. */
   palette: PaletteLayout.nullable(),

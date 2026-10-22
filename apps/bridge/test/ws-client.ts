@@ -6,7 +6,7 @@ import {
   TOKEN_PROTOCOL_PREFIX,
   WS_PATH,
   WS_PROTOCOL,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import { WebSocket } from "ws";
 
 /** A connected, greeted bridge client that records every message it receives. For tests. */

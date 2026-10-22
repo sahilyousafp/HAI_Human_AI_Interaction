@@ -5,7 +5,7 @@ import {
   type GestureEvent,
   type Hand,
   type Point2,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { InputRouter, type RouterAgent, type RouterTargets } from "./input-router.ts";
 

@@ -1,18 +1,18 @@
-# AEX
+# HAI - Human AI Interface
 
-**Hands, face and voice for AEC agents.** An open-source interaction layer that lets an architect work with their own AI agent and their design software using a normal laptop webcam: point at a wall, say "make it 300 thick", nod to accept.
+**Hands, face and voice for AEC agents.** HAI (Human AI Interface) is an open-source interaction layer that lets an architect work with their own AI agent and their design software using a normal laptop webcam: point at a wall, say "make it 300 thick", nod to accept.
 
 > Status: week 12 of a 19-week build in public. Hand and face tracking, both hands as equal pointers, gestures, hand navigation, tool rings with hand-drawn walls, slabs and columns, your own Claude as a small design team (Mochi and its specialists), on-device voice in and out, an Apple-style studio layout with feature switches and a "show my hands" overlay for recordings, pointers that snap to buttons, drawing aids (snap, ortho, projection) import of Rhino .3dm models, snapping and measuring at every height, new empty projects and saving as a Rhino file all work in the built-in viewer. Next: the Rhino 8 connector.
 
 ## Why
 
-AI agents can already drive design tools (McNeel ships an official Rhino MCP server), but talking to them still means typing into a chat box. AEX keeps the precise modelling in tools like Rhino and rethinks how you direct the agent: with your hands, your head and your voice.
+AI agents can already drive design tools, but talking to them still means typing into a chat box. HAI keeps the precise modelling in tools like Rhino and rethinks how you direct the agent: with your hands, your head and your voice.
 
 ## Privacy
 
 - Camera video is processed on your machine, inside the browser. It is never recorded or uploaded.
 - Everything runs on `127.0.0.1`. See [SECURITY.md](SECURITY.md).
-- AEX uses your own installed and signed-in Claude Code and never touches your credentials. See [PROVIDERS.md](PROVIDERS.md).
+- HAI uses your own installed and signed-in Claude Code and never touches your credentials. See [PROVIDERS.md](PROVIDERS.md).
 
 ## Requirements
 
@@ -21,7 +21,8 @@ AI agents can already drive design tools (McNeel ships an official Rhino MCP ser
 - Microsoft Edge or Chrome
 - A webcam
 - [Claude Code](https://claude.com/claude-code), installed and signed in, for the agent team
-- Rhino 8 with the Rhino MCP Platform plugin (optional, from week 13)
+- Rhino 8 (optional, from week 13: HAI's own plugin connects it and runs the agent's Python in it)
+- Python 3.10 or newer (optional, from week 13: the agent's Python workbench, with libraries such as Ladybug)
 
 ## Run it
 
@@ -31,6 +32,10 @@ pnpm dev
 ```
 
 Open http://127.0.0.1:5173. The header shows **Connected** when the web app has reached the local bridge.
+
+### Coming from AEX
+
+HAI was called AEX until week 12. Nothing is lost: when the bridge starts, an old `.aex` folder becomes `.hai` (settings, sessions, the always-allowed tools, the team), and a project folder's `scene.aex.json` and `assets/*.aexmesh` take their new names the first time the project opens. Saved tool names follow the app's tool server from `mcp__aex__` to `mcp__hai__`. What does not carry over: environment variables are now `HAI_*` (`AEX_WORKSPACE` is `HAI_WORKSPACE`, and so on), and a few view choices kept in the browser (camera view minimised, last settings page) start from their defaults.
 
 ## Roadmap
 

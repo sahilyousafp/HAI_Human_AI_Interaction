@@ -24,7 +24,7 @@ The scene SHALL support element types massing, slab, wall and column, each with 
 - **THEN** loading fails with an error naming the element id and the invalid field, and the current scene is unchanged
 
 ### Requirement: Scene persists to a project file
-The system SHALL load the scene from and save it to `scene.aex.json` in a project folder chosen by the user, and SHALL save automatically within 2 seconds of the last change. A folder without a scene file SHALL start from the sample scene. The last project opened SHALL be reopened on the next start; with none remembered, a copy of the sample scene in the workspace SHALL be opened. The viewer SHALL show the open project's name and save state.
+The system SHALL load the scene from and save it to `scene.hai.json` in a project folder chosen by the user, and SHALL save automatically within 2 seconds of the last change. A folder without a scene file SHALL start from the sample scene. The last project opened SHALL be reopened on the next start; with none remembered, a copy of the sample scene in the workspace SHALL be opened. The viewer SHALL show the open project's name and save state.
 
 #### Scenario: Autosave
 - **GIVEN** a project folder is open

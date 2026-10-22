@@ -1,6 +1,6 @@
 # Gestures
 
-AEX turns smoothed hand and head tracking into a small gesture vocabulary. Everything is recognised in the perception worker, right after smoothing, and published as one ordered event stream that navigation, the tool palette and agent approvals subscribe to.
+HAI turns smoothed hand and head tracking into a small gesture vocabulary. Everything is recognised in the perception worker, right after smoothing, and published as one ordered event stream that navigation, the tool palette and agent approvals subscribe to.
 
 ## Vocabulary
 
@@ -27,7 +27,7 @@ Nothing but engagement produces a command until you are engaged. Lowering both h
 
 ## Changing what gestures do
 
-**Settings > Gestures** lists every gesture with how to make it and what it does, each in a dropdown of the actions that gesture can take. One-hand gestures (tap, long pinch, drag, fist) have a dropdown for each hand. The bridge keeps your choices in `.aex/settings.json`, so they follow the workspace across browsers and restarts. **Reset to defaults** puts everything back. While you try a gesture, its row lights up when the camera sees it, which shows which gestures work well for you.
+**Settings > Gestures** lists every gesture with how to make it and what it does, each in a dropdown of the actions that gesture can take. One-hand gestures (tap, long pinch, drag, fist) have a dropdown for each hand. The bridge keeps your choices in `.hai/settings.json`, so they follow the workspace across browsers and restarts. **Reset to defaults** puts everything back. While you try a gesture, its row lights up when the camera sees it, which shows which gestures work well for you.
 
 | Gesture | Default | Can also |
 |---|---|---|

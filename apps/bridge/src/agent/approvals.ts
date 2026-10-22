@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ApprovalOutcome, ApprovalRequest, Message } from "@aex/protocol";
+import type { ApprovalOutcome, ApprovalRequest, Message } from "@hai/protocol";
 import type { Logger } from "../log.ts";
-import { AEX_SERVER } from "./agent-config.ts";
+import { HAI_SERVER } from "./agent-config.ts";
 
 type Send = (message: Message) => void;
 
@@ -33,9 +33,9 @@ export function summarizeInput(tool: string, input: Record<string, unknown>): st
   return text.length > SUMMARY_MAX ? `${text.slice(0, SUMMARY_MAX - 1)}…` : text;
 }
 
-/** The project's "always allow" list, kept in the project's git-ignored `.aex` folder. */
+/** The project's "always allow" list, kept in the project's git-ignored `.hai` folder. */
 export function approvalsFile(projectDir: string): string {
-  return join(projectDir, ".aex", "approvals.json");
+  return join(projectDir, ".hai", "approvals.json");
 }
 
 export function readAlwaysAllowed(projectDir: string): string[] {
@@ -48,7 +48,7 @@ export function readAlwaysAllowed(projectDir: string): string[] {
 }
 
 function writeAlwaysAllowed(projectDir: string, tools: string[]): void {
-  mkdirSync(join(projectDir, ".aex"), { recursive: true });
+  mkdirSync(join(projectDir, ".hai"), { recursive: true });
   writeFileSync(approvalsFile(projectDir), `${JSON.stringify({ alwaysAllow: tools }, null, 2)}\n`);
 }
 
@@ -88,7 +88,7 @@ export class ApprovalBroker {
   }
 
   isPreApproved(tool: string): boolean {
-    return tool.startsWith(`mcp__${AEX_SERVER}__`) || this.alwaysAllowed.includes(tool);
+    return tool.startsWith(`mcp__${HAI_SERVER}__`) || this.alwaysAllowed.includes(tool);
   }
 
   /** Tells clients the open project's "Always allow" list (on connect, project change and every change). */

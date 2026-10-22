@@ -12,11 +12,11 @@ import { open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { AssetId, type SceneDocument } from "@aex/protocol";
-import { readMeshHeader } from "@aex/scene";
+import { AssetId, type SceneDocument } from "@hai/protocol";
+import { readMeshHeader } from "@hai/scene";
 
 export const ASSETS_DIR = "assets";
-export const ASSET_EXTENSION = ".aexmesh";
+export const ASSET_EXTENSION = ".haimesh";
 /** The most one asset may be; larger uploads are refused while they stream in. */
 export const MAX_ASSET_BYTES = 500_000_000;
 /** The header of an asset is a few hundred bytes per part; anything beyond this is not an asset. */

@@ -21,7 +21,7 @@ Week 6 clip. Target length 50-60 s, 16:9, captions burned in. The agent is your 
 | 4 | 15-30 s | The reply streams; tool chips appear (`get_user_context`, `get_elements`, `create_elements`); the block grows three floors as the chips turn green. | "It reads what I pointed at, then edits the model live." |
 | 5 | 30-35 s | Click a chip to expand it: the input shows heights of 3500. | "Every call is visible. Millimetres, as asked." |
 | 6 | 35-42 s | Press **Undo** once: all three floors disappear together. | "And the whole turn is one undo." |
-| 7 | 42-52 s | Open the **Extensions** tab: the `aex` server (this app) and your own user-level server, both connected; your skills below. | "And it is still my Claude Code: my servers, my skills." |
+| 7 | 42-52 s | Open the **Extensions** tab: the `hai` server (this app) and your own user-level server, both connected; your skills below. | "And it is still my Claude Code: my servers, my skills." |
 | 8 | 52-58 s | Back to **Chat**. Lower your hands. | "Next: talk to it." |
 
 ## Check on the real CLI (fill in before posting)

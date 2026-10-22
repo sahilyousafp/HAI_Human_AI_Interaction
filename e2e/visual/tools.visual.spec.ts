@@ -10,7 +10,7 @@ test.afterEach(async () => {
 
 /** Waits until the view has stopped drawing (the camera eased into place), so screenshots are stable. */
 async function settled(page: Page) {
-  const renders = () => page.evaluate(() => window.__AEX_VIEWER__?.renders() ?? 0);
+  const renders = () => page.evaluate(() => window.__HAI_VIEWER__?.renders() ?? 0);
   let last = -1;
   await expect
     .poll(
@@ -49,12 +49,12 @@ for (const scheme of ["light", "dark"] as const) {
     bridge = await startTestBridge(page);
     await openViewer(page);
     await settled(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const centre = await handAt(page, [0.6, 0.5]);
     const send = (type: string, position: [number, number]) =>
       page.evaluate(
         (e) =>
-          window.__AEX_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], hand: "Left", ...e } as never]),
+          window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], hand: "Left", ...e } as never]),
         { type, position, ts: Date.now() },
       );
     await send("pinch.drag.start", centre);
@@ -74,7 +74,7 @@ test("both hands' pointers: the left amber over a control, the right with the Wa
   await openViewer(page);
   await settled(page);
   await page.keyboard.press("w");
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
   const control = page.getByRole("button", { name: "Open project" });
   const box = await control.boundingBox();
   const viewer = await page.getByTestId("viewer").boundingBox();
@@ -85,7 +85,7 @@ test("both hands' pointers: the left amber over a control, the right with the Wa
   ];
   const right = await handAt(page, [0.55, 0.45]);
   const left = await handAt(page, overControl);
-  await page.evaluate(([r, l]) => window.__AEX_INPUT__?.pointer(r, l), [right, left] as const);
+  await page.evaluate(([r, l]) => window.__HAI_INPUT__?.pointer(r, l), [right, left] as const);
   await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-mode", "press");
   await expect(page.getByTestId("hand-pointer-right")).toHaveAttribute("data-mode", "wall");
   await page.mouse.move(viewer.x + 4, viewer.y + viewer.height - 4); // out of the way
@@ -118,7 +118,7 @@ test("reference markers: two elements captured while speaking show markers 1 and
   await settled(page);
   // What point-and-speak records: the pointer rests on a column, then on a wall, each for 400 ms.
   await page.evaluate(() => {
-    const context = window.__AEX_VOICE__?.context;
+    const context = window.__HAI_VOICE__?.context;
     context?.begin(0, null);
     context?.hover("col-b2", 0);
     context?.hover("wall-s", 400);

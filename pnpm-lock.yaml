@@ -29,13 +29,13 @@ importers:
 
   apps/bridge:
     dependencies:
-      '@aex/agent-core':
+      '@hai/agent-core':
         specifier: workspace:*
         version: link:../../packages/agent-core
-      '@aex/protocol':
+      '@hai/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@aex/scene':
+      '@hai/scene':
         specifier: workspace:*
         version: link:../../packages/scene
       '@modelcontextprotocol/node':
@@ -63,13 +63,13 @@ importers:
 
   apps/web:
     dependencies:
-      '@aex/perception':
+      '@hai/perception':
         specifier: workspace:*
         version: link:../../packages/perception
-      '@aex/protocol':
+      '@hai/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@aex/scene':
+      '@hai/scene':
         specifier: workspace:*
         version: link:../../packages/scene
       '@huggingface/transformers':
@@ -124,7 +124,7 @@ importers:
 
   packages/agent-core:
     dependencies:
-      '@aex/protocol':
+      '@hai/protocol':
         specifier: workspace:*
         version: link:../protocol
       cross-spawn:
@@ -140,7 +140,7 @@ importers:
 
   packages/perception:
     dependencies:
-      '@aex/protocol':
+      '@hai/protocol':
         specifier: workspace:*
         version: link:../protocol
       zod:
@@ -155,7 +155,7 @@ importers:
 
   packages/scene:
     dependencies:
-      '@aex/protocol':
+      '@hai/protocol':
         specifier: workspace:*
         version: link:../protocol
       zod:

@@ -13,7 +13,7 @@ import { openViewer, startTestBridge } from "../viewer.ts";
 test("listening for names: speech without a name is ignored, shown nowhere and sent nowhere", async ({
   page,
 }) => {
-  const state = mkdtempSync(join(tmpdir(), "aex-voice-"));
+  const state = mkdtempSync(join(tmpdir(), "hai-voice-"));
   const bridge = await startTestBridge(page, { agent: fakeProvider(state) });
   try {
     await openViewer(page);

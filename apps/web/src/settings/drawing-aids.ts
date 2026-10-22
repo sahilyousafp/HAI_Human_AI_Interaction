@@ -4,7 +4,7 @@ import {
   type DrawingAidId,
   type DrawingAids,
   resolveDrawingAids,
-} from "@aex/protocol";
+} from "@hai/protocol";
 
 /**
  * Which drawing aids are on (Settings > Drawing aids). The bridge keeps the choices in the workspace settings, so

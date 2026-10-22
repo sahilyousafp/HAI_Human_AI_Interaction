@@ -8,11 +8,11 @@ const isCI = Boolean(process.env.CI);
 
 // Chromium's fake camera lets tracking tests run without a person or a webcam.
 const fakeCamera = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"];
-const channel = process.env.AEX_E2E_CHANNEL ?? (isCI ? undefined : "msedge"); // locally, drive installed Edge
+const channel = process.env.HAI_E2E_CHANNEL ?? (isCI ? undefined : "msedge"); // locally, drive installed Edge
 
-// One project per recorded clip in test-assets/clips (MP4 in git, .y4m generated into .aex/clips).
+// One project per recorded clip in test-assets/clips (MP4 in git, .y4m generated into .hai/clips).
 // A clip project exists only when its recording does, so missing clips never show up as skipped tests.
-const clipDir = join(import.meta.dirname, ".aex", "clips");
+const clipDir = join(import.meta.dirname, ".hai", "clips");
 const clipProjects: Project[] = buildClips(clipDir)
   .filter((clip: string) => existsSync(join(import.meta.dirname, "e2e", "clips", `${clip}.spec.ts`)))
   .map((clip: string) => ({
@@ -105,20 +105,20 @@ export default defineConfig({
   // The tests' own bridge and dev server, never the ones you work with (see e2e/stack.ts).
   webServer: [
     {
-      command: "pnpm --filter @aex/bridge start",
+      command: "pnpm --filter @hai/bridge start",
       url: `http://127.0.0.1:${E2E_BRIDGE_PORT}/health`,
       env: {
-        AEX_PORT: String(E2E_BRIDGE_PORT),
-        AEX_ALLOWED_ORIGINS: E2E_ORIGINS.join(","),
-        AEX_WORKSPACE: E2E_WORKSPACE,
+        HAI_PORT: String(E2E_BRIDGE_PORT),
+        HAI_ALLOWED_ORIGINS: E2E_ORIGINS.join(","),
+        HAI_WORKSPACE: E2E_WORKSPACE,
       },
       reuseExistingServer: !isCI,
       timeout: 30_000,
     },
     {
-      command: "pnpm --filter @aex/web dev",
+      command: "pnpm --filter @hai/web dev",
       url: E2E_BASE_URL,
-      env: { AEX_WEB_PORT: String(E2E_WEB_PORT), AEX_WORKSPACE: E2E_WORKSPACE },
+      env: { HAI_WEB_PORT: String(E2E_WEB_PORT), HAI_WORKSPACE: E2E_WORKSPACE },
       reuseExistingServer: !isCI,
       timeout: 60_000,
     },

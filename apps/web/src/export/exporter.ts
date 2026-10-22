@@ -1,5 +1,5 @@
-import type { SceneDocument } from "@aex/protocol";
-import type { MeshPart } from "@aex/scene";
+import type { SceneDocument } from "@hai/protocol";
+import type { MeshPart } from "@hai/scene";
 import type { ExportReport, ExportResult } from "./build.ts";
 
 /** What saving is doing, or did last. */

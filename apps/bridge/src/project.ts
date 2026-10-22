@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { parseScene, type SceneDocument } from "@aex/protocol";
+import { parseScene, type SceneDocument } from "@hai/protocol";
+import { migrateLegacyProject } from "./legacy.ts";
 import { readSettingsFile, updateSettingsFile } from "./settings.ts";
 
-export const SCENE_FILE = "scene.aex.json";
-export const SAMPLE_SCENE = join(import.meta.dirname, "..", "samples", "mixed-use-block.aex.json");
+export const SCENE_FILE = "scene.hai.json";
+export const SAMPLE_SCENE = join(import.meta.dirname, "..", "samples", "mixed-use-block.hai.json");
 
 export interface ProjectInfo {
   name: string;
@@ -16,6 +17,7 @@ export function openProject(
   dir: string,
 ): { ok: true; project: ProjectInfo; doc: SceneDocument } | { ok: false; error: string } {
   const path = resolve(dir);
+  migrateLegacyProject(path);
   const file = join(path, SCENE_FILE);
   let raw: unknown;
   try {
@@ -50,6 +52,7 @@ export function emptyScene(name: string): SceneDocument {
  */
 export function createProject(dir: string): { ok: true } | { ok: false; error: string } {
   const path = resolve(dir);
+  migrateLegacyProject(path);
   const file = join(path, SCENE_FILE);
   if (existsSync(file))
     return {
@@ -130,9 +133,9 @@ export class Autosaver {
   }
 }
 
-const settingsFile = (workspaceRoot: string) => join(workspaceRoot, ".aex", "settings.json");
+const settingsFile = (workspaceRoot: string) => join(workspaceRoot, ".hai", "settings.json");
 
-/** Remembers the last opened project in .aex/settings.json. */
+/** Remembers the last opened project in .hai/settings.json. */
 export function readLastProject(workspaceRoot: string): string | null {
   const last = readSettingsFile(settingsFile(workspaceRoot)).lastProject;
   return typeof last === "string" ? last : null;
@@ -142,5 +145,5 @@ export function writeLastProject(workspaceRoot: string, path: string): void {
   updateSettingsFile(settingsFile(workspaceRoot), { lastProject: path });
 }
 
-/** The project opened when none was remembered: a copy of the sample scene inside .aex. */
-export const defaultProjectDir = (workspaceRoot: string) => join(workspaceRoot, ".aex", "projects", "sample");
+/** The project opened when none was remembered: a copy of the sample scene inside .hai. */
+export const defaultProjectDir = (workspaceRoot: string) => join(workspaceRoot, ".hai", "projects", "sample");

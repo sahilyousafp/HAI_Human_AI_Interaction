@@ -1,4 +1,4 @@
-import type { Element, SceneDocument } from "@aex/protocol";
+import type { Element, SceneDocument } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { exportExtrusions, prismMesh } from "./extrusions.ts";
 

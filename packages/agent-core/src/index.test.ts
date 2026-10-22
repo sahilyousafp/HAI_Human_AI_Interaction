@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentProvider, Detection } from "./index.ts";
 
-describe("@aex/agent-core", () => {
+describe("@hai/agent-core", () => {
   it("describes a provider: detection either succeeds with a version or explains what to do", () => {
     const missing: Detection = {
       ok: false,

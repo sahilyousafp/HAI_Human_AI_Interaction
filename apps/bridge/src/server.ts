@@ -2,7 +2,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import type { AgentProvider } from "@aex/agent-core";
+import type { AgentProvider } from "@hai/agent-core";
 import {
   type BridgeStatusMessage,
   type Message,
@@ -11,7 +11,7 @@ import {
   TOKEN_PROTOCOL_PREFIX,
   WS_PATH,
   WS_PROTOCOL,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import { type WebSocket, WebSocketServer } from "ws";
 import { ApprovalBroker } from "./agent/approvals.ts";
 import { ExtensionHub } from "./agent/extensions.ts";
@@ -33,7 +33,7 @@ export interface BridgeOptions {
   version: string;
   token?: string;
   scene?: SceneHubOptions;
-  /** Where user settings are kept (.aex/settings.json); without one they live in memory. */
+  /** Where user settings are kept (.hai/settings.json); without one they live in memory. */
   settingsFile?: string;
   /** The user's agents (their own Claude Code); without one, the agent panel says it is not set up. */
   agent?: { provider: AgentProvider; idleMs?: number; maxRunning?: number };

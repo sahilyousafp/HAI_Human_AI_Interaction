@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentEvent, AgentTurn, Message, TeamTask } from "@aex/protocol";
+import type { AgentEvent, AgentTurn, Message, TeamTask } from "@hai/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WebSocket } from "ws";
 import { fakeProvider } from "../../test/fake-provider.ts";
@@ -25,8 +25,8 @@ afterEach(async () => {
 });
 
 async function start(options: { maxRunning?: number; before?: (projectDir: string) => void } = {}) {
-  const stateDir = temp("aex-fake-state-");
-  const projectDir = join(temp("aex-team-"), "project");
+  const stateDir = temp("hai-fake-state-");
+  const projectDir = join(temp("hai-team-"), "project");
   bridge = createBridge({
     host: "127.0.0.1",
     port: 0,
@@ -272,7 +272,7 @@ describe("the team with the fake Claude Code CLI", () => {
     await team.request("hello");
     writeFileSync(
       join(agentsDir(projectDir), "structure.md"),
-      "---\nname: structure\ndescription: Structural sizing of beams and columns.\ntools: mcp__aex__get_elements\n---\n\nYou are Structure.\n",
+      "---\nname: structure\ndescription: Structural sizing of beams and columns.\ntools: mcp__hai__get_elements\n---\n\nYou are Structure.\n",
     );
     await team.request("delegate structure: work 100");
     await team.settled();
@@ -294,7 +294,7 @@ describe("the team with the fake Claude Code CLI", () => {
       name: "structure",
       description: "Sizes beams and columns.",
       model: "sonnet",
-      tools: ["mcp__aex__get_elements", "mcp__aex__update_elements"],
+      tools: ["mcp__hai__get_elements", "mcp__hai__update_elements"],
       aliases: ["struct"],
       color: "#aa5500",
       prompt: "You are Structure.",
@@ -307,9 +307,9 @@ describe("the team with the fake Claude Code CLI", () => {
       lead: false,
     });
     expect(readFileSync(join(agentsDir(projectDir), "structure.md"), "utf8")).toBe(
-      "---\nname: structure\ndescription: Sizes beams and columns.\ntools: mcp__aex__get_elements, mcp__aex__update_elements\nmodel: sonnet\n---\n\nYou are Structure.\n",
+      "---\nname: structure\ndescription: Sizes beams and columns.\ntools: mcp__hai__get_elements, mcp__hai__update_elements\nmodel: sonnet\n---\n\nYou are Structure.\n",
     );
-    expect(JSON.parse(readFileSync(join(projectDir, ".aex", "agents.json"), "utf8")).structure).toEqual({
+    expect(JSON.parse(readFileSync(join(projectDir, ".hai", "agents.json"), "utf8")).structure).toEqual({
       aliases: ["struct"],
       color: "#aa5500",
       writes: true,
@@ -320,7 +320,7 @@ describe("the team with the fake Claude Code CLI", () => {
         ...structure,
         name: "architect",
         description: "Only cores.",
-        tools: ["mcp__aex__get_elements"],
+        tools: ["mcp__hai__get_elements"],
       },
     });
     await viewer.waitFor("agents.snapshot", (m) => m.payload.saved === "architect");

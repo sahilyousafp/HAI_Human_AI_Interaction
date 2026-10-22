@@ -30,7 +30,7 @@ function watchRemoteHosts(page: Page): () => string[] {
 
 async function start(page: Page) {
   bridge = await startTestBridge(page, {
-    agent: fakeProvider(mkdtempSync(join(tmpdir(), "aex-speech-"))),
+    agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-speech-"))),
     speak: true,
   });
   await openViewer(page);
@@ -53,7 +53,7 @@ test("round trip: what the voice says is heard back by the recogniser", async ({
   await start(page);
   const remote = watchRemoteHosts(page);
   const heard = await page.evaluate(() =>
-    window.__AEX_SPEECH__?.roundTrip("Architect is working on the stair core."),
+    window.__HAI_SPEECH__?.roundTrip("Architect is working on the stair core."),
   );
   const words = (heard ?? "").toLowerCase();
   // Heard as "architect is working on the staircor." on the reference laptop: the recogniser joins the last words.
@@ -65,7 +65,7 @@ test("round trip: what the voice says is heard back by the recogniser", async ({
 
 test("first sentence starts early, and no speech service is called", async ({ page }) => {
   await start(page);
-  await page.evaluate(() => window.__AEX_SPEECH__?.roundTrip("Ready.")); // the voice is loaded
+  await page.evaluate(() => window.__HAI_SPEECH__?.roundTrip("Ready.")); // the voice is loaded
   const remote = watchRemoteHosts(page);
   const outgoing = watchOutgoingData(page);
   await ask(page, "two sentences");
@@ -84,7 +84,7 @@ test("talking interrupts: pressing the microphone stops the voice before listeni
   page,
 }) => {
   await start(page);
-  await page.evaluate(() => window.__AEX_SPEECH__?.roundTrip("Ready."));
+  await page.evaluate(() => window.__HAI_SPEECH__?.roundTrip("Ready."));
   await ask(page, "two sentences");
   await expect(speaking(page)).toHaveAttribute("data-speaking", "true");
   await page.getByTestId("mic-button").click();
@@ -105,7 +105,7 @@ test("muted: the reply appears in the panel and nothing is spoken; muting is rem
   await expect(page.getByTestId("agent-turn").last()).toHaveAttribute("data-ended", "done");
   await expect(page.getByTestId("agent-turn").last()).toContainText("Climate is running the winter study.");
   await expect(speaking(page)).toHaveAttribute("data-speaking", "false");
-  expect(await page.evaluate(() => window.__AEX_SPEECH__?.speaker.getSnapshot().firstAudio.length)).toBe(0);
+  expect(await page.evaluate(() => window.__HAI_SPEECH__?.speaker.getSnapshot().firstAudio.length)).toBe(0);
   await page.reload();
   await openViewer(page);
   await expect(speaking(page)).toHaveAttribute("aria-pressed", "true");

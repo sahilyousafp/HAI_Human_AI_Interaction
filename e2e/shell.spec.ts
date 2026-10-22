@@ -37,7 +37,7 @@ test.describe("connection state follows the bridge", () => {
     // Pin the page to this test's bridge; the dev plugin's later assignment cannot overwrite it.
     await page.addInitScript(
       ({ port, token }) => {
-        Object.defineProperty(window, "__AEX_SESSION__", { value: { port, token }, writable: false });
+        Object.defineProperty(window, "__HAI_SESSION__", { value: { port, token }, writable: false });
       },
       { port: PORT, token: "e2e-token-a" },
     );

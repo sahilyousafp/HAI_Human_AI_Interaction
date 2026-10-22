@@ -2,11 +2,19 @@
 
 Small technical decisions confirmed by experiment, with what was measured. Newest first.
 
+## The name: HAI, Human AI Interface (2026-10-22)
+
+The working name AEX (AEC Agentic eXperience) became **HAI, Human AI Interface**. The new name says what the project is (the interface between a person and their AI) without tying it to AEC, which is where it starts. The rename goes all the way down so the name and the identifiers never disagree: the `@hai/*` package scope, the `.hai` workspace folder, `HAI_*` environment variables, the `mcp__hai__*` tool names, `scene.hai.json` and `.haimesh` files.
+
+- **Migration, not a break.** `apps/bridge/src/legacy.ts` carries an existing workspace and project over: `.aex` becomes `.hai` (entry by entry if `.hai` was already created), saved tool names follow the tool server's new name, and a project's scene file and assets are renamed on open. Assets keep their old binary magic (`AEXMESH1`), which the reader still accepts; new ones are written as `HAIMESH1`.
+- **Not carried over:** `AEX_*` environment variables and a few browser-side view preferences (their keys changed). Rhino files exported earlier keep their `aex.*` user strings; nothing reads them.
+- **Left alone:** archived OpenSpec changes keep the name they were written under, and the GitHub repository keeps its address.
+
 ## Mochi's team: agents as `claude -p --agent <name>` processes (2026-10-20)
 
 **Question.** Can each agent of the team (Mochi and the specialists) be a separate Claude Code process that takes its prompt, tools and model from the project's `.claude/agents/<name>.md`?
 
-**Experiment.** Claude Code 2.1.303 in an empty folder with `.claude/agents/mochi.md` (`model: sonnet`, `tools: Read, mcp__aex__get_scene_summary`) and `architect.md`. One stream-json turn ran with `claude -p --agent mochi`.
+**Experiment.** Claude Code 2.1.303 in an empty folder with `.claude/agents/mochi.md` (`model: sonnet`, `tools: Read, mcp__hai__get_scene_summary`) and `architect.md`. One stream-json turn ran with `claude -p --agent mochi`.
 
 **Result.**
 
@@ -14,7 +22,7 @@ Small technical decisions confirmed by experiment, with what was measured. Newes
 - The init event also lists every available agent by name, including the project's own, under `agents`.
 - The reply came from the Mochi prompt.
 
-**Decision.** Each agent runs as `claude -p --agent <name>` with the app's MCP config. AEX starts, tracks and identifies these processes itself, so Mochi can answer status questions while specialists work, as RhinoCopilot does. It does not use Claude Code's in-process subagents, which would keep Mochi busy during delegations. Whether a listed `mcp__aex__*` tool appears once the bridge's MCP server is configured is checked against the real bridge when building.
+**Decision.** Each agent runs as `claude -p --agent <name>` with the app's MCP config. HAI starts, tracks and identifies these processes itself, so Mochi can answer status questions while specialists work, as RhinoCopilot does. It does not use Claude Code's in-process subagents, which would keep Mochi busy during delegations. Whether a listed `mcp__hai__*` tool appears once the bridge's MCP server is configured is checked against the real bridge when building.
 
 ## Mochi's voice: Kokoro on WebGPU in full precision, with phonemize (2026-10-20)
 
@@ -49,7 +57,7 @@ Small technical decisions confirmed by experiment, with what was measured. Newes
 
 The same "Mochi" clip with a second of silence before it and three after came back empty every time. Live requests reach Moonshine trimmed by voice activity detection (300 ms of pre-speech padding), so this affects only untrimmed test input.
 
-**Decision.** Names are matched on the first one or two words, against each agent's name and aliases, allowing one edit. The default aliases include these mishearings ("machi", "maci" for Mochi, "review or" for Reviewer). Users can add their own in `.aex/agents.json`. Voice-routing tests feed trimmed audio.
+**Decision.** Names are matched on the first one or two words, against each agent's name and aliases, allowing one edit. The default aliases include these mishearings ("machi", "maci" for Mochi, "review or" for Reviewer). Users can add their own in `.hai/agents.json`. Voice-routing tests feed trimmed audio.
 
 ## On-device speech: Moonshine base int8 on WebAssembly, not WebGPU (2026-10-20)
 
@@ -87,11 +95,11 @@ Both produced the same text, "Make this wall 300 thick". WebGPU has to unpack in
 
 **Question.** What does Claude Code send to the tool named by `--permission-prompt-tool`, and what must it answer?
 
-**Experiment.** Claude Code 2.1.303 run by the bridge with `--permission-prompt-tool mcp__aex__approve_tool`, in a throwaway project. Three requests: read the scene with an `aex` tool, run `echo`, and run a command that writes a file. The last one was denied first, then allowed.
+**Experiment.** Claude Code 2.1.303 run by the bridge with `--permission-prompt-tool mcp__hai__approve_tool`, in a throwaway project. Three requests: read the scene with an `hai` tool, run `echo`, and run a command that writes a file. The last one was denied first, then allowed.
 
 **Result.**
 
-- The CLI calls the tool only when its own rules would ask the user. The `aex` scene tool and the read-only `echo` ran without a call. The file-writing command produced a call.
+- The CLI calls the tool only when its own rules would ask the user. The `hai` scene tool and the read-only `echo` ran without a call. The file-writing command produced a call.
 - The input is `{ tool_name, input, tool_use_id }`. For Bash, `input.command` is the command text.
 - An answer of `{"behavior":"deny","message":"The user declined this tool call."}` reached Claude as that message. It did not run the command or retry.
 - An answer of `{"behavior":"allow","updatedInput":<input>}` ran the command.

@@ -18,7 +18,7 @@ const tapAt = async (page: Page, at: [number, number]) => {
   const ts = await now(page);
   await page.evaluate(
     ({ position, ts }) =>
-      window.__AEX_INPUT__?.gestures([{ type: "pinch.tap", ts, confidence: 1, hand: "Right", position }]),
+      window.__HAI_INPUT__?.gestures([{ type: "pinch.tap", ts, confidence: 1, hand: "Right", position }]),
     { position: await handAt(page, at), ts },
   );
 };
@@ -66,7 +66,7 @@ test.describe("gesture settings", () => {
     bridge = await startTestBridge(page);
     await openViewer(page);
     const settings = await card(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     await tapAt(page, [0.4, 0.85]); // on the model, beside the settings sheet
     await expect(settings.locator('[data-slot="tap"]')).toHaveAttribute("data-lit", "true");
     await expect(settings.locator('[data-slot="tap"]')).toHaveAttribute("data-lit", "false", {
@@ -78,10 +78,10 @@ test.describe("gesture settings", () => {
     bridge = await startTestBridge(page);
     await openViewer(page);
     const settings = await card(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     await page.evaluate(
       (ts) =>
-        window.__AEX_INPUT__?.gestures([
+        window.__HAI_INPUT__?.gestures([
           { type: "fist.drag.start", ts, confidence: 1, hand: "Left", position: [0.4, 0.5] },
         ]),
       await now(page),
@@ -120,7 +120,7 @@ test.describe("gesture settings", () => {
 
     await page.keyboard.press("d"); // Measure: a tap would normally place a measuring point
     const at = await findElementOnScreen(page, "block-b");
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     await tapAt(page, at);
     await expect(page.getByTestId("selection-status")).toHaveText("Block B tower (massing)");
     await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "measure");
@@ -134,14 +134,14 @@ test.describe("gesture settings", () => {
     await openViewer(page);
     await (await card(page)).getByTestId("gesture-fist-right").selectOption("undo");
     await page.evaluate(() =>
-      window.__AEX_SCENE__?.apply("Move Block B", [
+      window.__HAI_SCENE__?.apply("Move Block B", [
         { op: "update", id: "block-b", patch: { origin: [0, 0, 0] } },
       ]),
     );
     await expect.poll(() => bridge?.scene.scene.doc.elements["block-b"]).toMatchObject({ origin: [0, 0, 0] });
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     await page.evaluate(() =>
-      window.__AEX_INPUT__?.gestures([
+      window.__HAI_INPUT__?.gestures([
         { type: "clutch.start", ts: Date.now(), confidence: 1, hand: "Right" },
       ]),
     );
@@ -155,8 +155,8 @@ test("select a block by hand with the default settings", async ({ page }) => {
   bridge = await startTestBridge(page);
   await openViewer(page);
   const at = await findElementOnScreen(page, "block-c");
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
-  await page.evaluate((p) => window.__AEX_INPUT__?.pointer(p), await handAt(page, at));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+  await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), await handAt(page, at));
   await tapAt(page, at);
   await expect(page.getByTestId("selection-status")).toContainText("(massing)");
   await expect.poll(() => bridge?.scene.scene.selection).toEqual(["block-c"]);

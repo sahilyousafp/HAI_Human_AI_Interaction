@@ -1,4 +1,4 @@
-import type { FeatureId, Message, MessageOf, ReplyVoice, SpeechMode } from "@aex/protocol";
+import type { FeatureId, Message, MessageOf, ReplyVoice, SpeechMode } from "@hai/protocol";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
 import { addressOf } from "./agent/addressing.ts";
@@ -44,10 +44,10 @@ import { VoiceInput } from "./voice/voice-input.ts";
 
 declare global {
   interface Window {
-    __AEX_SCENE__?: SceneClient;
-    __AEX_CAMERA__?: TrackingSession;
-    __AEX_VOICE__?: VoiceInput;
-    __AEX_SPEECH__?: { speaker: Speaker; roundTrip(text: string): Promise<string | null> };
+    __HAI_SCENE__?: SceneClient;
+    __HAI_CAMERA__?: TrackingSession;
+    __HAI_VOICE__?: VoiceInput;
+    __HAI_SPEECH__?: { speaker: Speaker; roundTrip(text: string): Promise<string | null> };
   }
 }
 
@@ -118,7 +118,7 @@ export function App() {
   );
   const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
   // The imported models the viewer draws and the project saves, fetched from the bridge as they are first needed.
-  const modelAssets = useMemo(() => new ModelAssets(() => window.__AEX_SESSION__ ?? null), []);
+  const modelAssets = useMemo(() => new ModelAssets(() => window.__HAI_SESSION__ ?? null), []);
   // Saving the project as a Rhino file: the models it uses are fetched, the file is written in a worker, and offered.
   const exporter = useMemo(
     () =>
@@ -149,7 +149,7 @@ export function App() {
       new ModelImporter({
         convert: (bytes, onStage) => convertInWorker(bytes, onStage),
         upload: async (id, bytes) => {
-          const session = window.__AEX_SESSION__;
+          const session = window.__HAI_SESSION__;
           if (!session) throw new Error("The bridge is not connected.");
           const response = await fetch(assetUrl(session.port, id), {
             method: "PUT",
@@ -336,21 +336,21 @@ export function App() {
   // The camera session goes on the page once mounted; dev builds hand it to end-to-end tests too.
   useEffect(() => {
     const disconnect = session.connect();
-    if (import.meta.env.DEV) window.__AEX_CAMERA__ = session;
+    if (import.meta.env.DEV) window.__HAI_CAMERA__ = session;
     return disconnect;
   }, [session]);
   // Dev builds only: lets end-to-end tests edit the scene through the same client the UI uses.
   useEffect(() => {
-    if (import.meta.env.DEV) window.__AEX_SCENE__ = sceneClient;
+    if (import.meta.env.DEV) window.__HAI_SCENE__ = sceneClient;
   }, [sceneClient]);
   // Dev builds only: lets end-to-end tests drive what a spoken request captured.
   useEffect(() => {
-    if (import.meta.env.DEV) window.__AEX_VOICE__ = voice;
+    if (import.meta.env.DEV) window.__HAI_VOICE__ = voice;
   }, [voice]);
   // Dev builds only: what the voice says, heard back by the recogniser (end-to-end round trip).
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    window.__AEX_SPEECH__ = {
+    window.__HAI_SPEECH__ = {
       speaker,
       roundTrip: async (text) => {
         const spoken = await speaker.synthesize(text);
@@ -360,7 +360,7 @@ export function App() {
   }, [speaker, transcriber]);
 
   useEffect(() => {
-    const conn = connectToBridge(window.__AEX_SESSION__ ?? null, browserDeps, setBridge, (message) => {
+    const conn = connectToBridge(window.__HAI_SESSION__ ?? null, browserDeps, setBridge, (message) => {
       if (viewLink.handle(message) || agent.handle(message) || sceneClient.handle(message)) return;
       if (message.type === "settings.snapshot") {
         tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT, "tools");
@@ -491,7 +491,7 @@ export function App() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <span className="wordmark">AEX</span>
+          <span className="wordmark">HAI</span>
           <span className="tagline">hands, face and voice for AEC agents</span>
         </div>
         <div className="pills">

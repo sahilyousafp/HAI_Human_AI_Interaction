@@ -1,4 +1,4 @@
-import type { TrackingFrame } from "@aex/protocol";
+import type { TrackingFrame } from "@hai/protocol";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ListGroup, ListRow, Switch } from "../ui/controls.tsx";
 import type { LatencyTracker } from "../viewer/latency.ts";

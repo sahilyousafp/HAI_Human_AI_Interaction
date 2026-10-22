@@ -44,7 +44,7 @@ function pngSize(base64: string): [number, number] {
 /** A private bridge whose agent is the fake Claude Code CLI (apps/bridge/test/fake-claude.mjs), and the viewer. */
 async function startWithFakeAgent(page: Page, detection?: Parameters<typeof fakeProvider>[1]) {
   const bridge = await startTestBridge(page, {
-    agent: fakeProvider(mkdtempSync(join(tmpdir(), "aex-e2e-fake-")), detection),
+    agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-e2e-fake-")), detection),
   });
   await openViewer(page);
   return bridge;
@@ -61,7 +61,7 @@ async function ask(page: Page, text: string) {
 }
 
 const inject = (page: Page, type: string) =>
-  page.evaluate((t) => window.__AEX_INPUT__?.gestures([{ type: t, ts: Date.now(), confidence: 1 }]), type);
+  page.evaluate((t) => window.__HAI_INPUT__?.gestures([{ type: t, ts: Date.now(), confidence: 1 }]), type);
 
 test.describe("agent sees the view", () => {
   test("capture view: the agent receives a PNG of the current view, at most 1280 px", async ({ page }) => {
@@ -204,7 +204,7 @@ test.describe("agent panel", () => {
     try {
       await ask(page, "slow");
       await expect(status(page)).toHaveAttribute("data-state", "working");
-      await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+      await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
       await inject(page, "hands.stop");
       await expect(lastTurn(page)).toHaveAttribute("data-ended", "stopped", { timeout: 3000 });
     } finally {
@@ -339,7 +339,7 @@ test.describe("the team", () => {
       await expect(card).toBeVisible();
       await expect(card.getByTestId("approval-agent")).toHaveText("Architect");
       await expect(chip(page, "architect")).toHaveAttribute("data-state", "waiting");
-      await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+      await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
       await inject(page, "head.nod");
       await expect(page.getByTestId("handoff-chip")).toHaveAttribute("data-status", "done");
       await expect(lastTurn(page)).toContainText("Done: ran: echo team");
@@ -359,7 +359,7 @@ test.describe("climate's sun study", () => {
       const badge = page.getByTestId("sun-study");
       await expect(badge).toContainText("Sun study 2026-12-21 12:00, 51.5 N 0 E");
       await expect(badge).toContainText(/15° up, 180° from north/);
-      const sun = await page.evaluate(() => window.__AEX_VIEWER__?.sun());
+      const sun = await page.evaluate(() => window.__HAI_VIEWER__?.sun());
       expect(sun?.altitude).toBeCloseTo(15.2, 0);
       expect(sun?.azimuth).toBeCloseTo(180, 0);
       await expect(page.getByTestId("handoff-chip")).toHaveAttribute("data-status", "done");
@@ -367,7 +367,7 @@ test.describe("climate's sun study", () => {
       await expect(page.getByTestId("task-transcript")).toContainText(/Sun at 15\.\d degrees from the S\./);
       await page.keyboard.press("Escape");
       await expect(badge).toHaveCount(0);
-      expect(await page.evaluate(() => window.__AEX_VIEWER__?.sun())).toBeNull();
+      expect(await page.evaluate(() => window.__HAI_VIEWER__?.sun())).toBeNull();
     } finally {
       await bridge.stop();
     }
@@ -469,7 +469,7 @@ test.describe("tool approval", () => {
       await expect(card).toHaveAttribute("data-outcome", "pending");
       await expect(card.getByTestId("approval-summary")).toHaveText("echo hi");
       await expect(card).toContainText("Nod to allow, shake to deny");
-      await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+      await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
       await inject(page, "head.nod");
       await expect(card.getByTestId("approval-outcome")).toHaveText("Allowed");
       await expect(lastTurn(page).getByTestId("agent-text")).toHaveText("Done: ran: echo hi");
@@ -583,7 +583,7 @@ test.describe("extensions", () => {
       expect(await page.content()).not.toContain("sk-live-e2e-secret");
 
       // Skills: a folder without SKILL.md is refused; a valid one is installed.
-      const empty = mkdtempSync(join(tmpdir(), "aex-e2e-skill-"));
+      const empty = mkdtempSync(join(tmpdir(), "hai-e2e-skill-"));
       await view.getByTestId("skill-source").fill(empty);
       await view.getByTestId("install-skill").click();
       await expect(view.getByTestId("extensions-result")).toContainText("SKILL.md is missing");

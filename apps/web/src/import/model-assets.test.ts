@@ -1,4 +1,4 @@
-import { encodeMeshAsset } from "@aex/scene";
+import { encodeMeshAsset } from "@hai/scene";
 import { describe, expect, it, vi } from "vitest";
 import { ModelAssets } from "./model-assets.ts";
 

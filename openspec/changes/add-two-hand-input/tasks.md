@@ -45,7 +45,7 @@
   - the focus hand drives hover and the spoken "here";
   - both pointers drawn in a portal with per-hand modes and colours;
   - the "Open both hands to stop" prompt.
-- [x] 3.3 Dev hooks: `__AEX_INPUT__.pointer(right, left)` and `__AEX_VIEWER__.handAt(x, y)`
+- [x] 3.3 Dev hooks: `__HAI_INPUT__.pointer(right, left)` and `__HAI_VIEWER__.handAt(x, y)`
 
 ## 4. Per-hand interaction and rings
 

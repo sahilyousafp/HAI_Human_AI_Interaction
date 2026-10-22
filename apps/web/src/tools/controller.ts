@@ -1,4 +1,4 @@
-import { DEFAULT_GESTURES } from "@aex/perception";
+import { DEFAULT_GESTURES } from "@hai/perception";
 import {
   DEFAULT_DRAWING_AIDS,
   type DrawingAids,
@@ -8,7 +8,7 @@ import {
   type Point3Mm,
   type SceneDocument,
   type SceneOp,
-} from "@aex/protocol";
+} from "@hai/protocol";
 import {
   buildSnapIndex,
   emptySnapIndex,
@@ -17,7 +17,7 @@ import {
   resolvePoint,
   type SnapIndex,
   type SnapKind,
-} from "@aex/scene";
+} from "@hai/scene";
 import type { DragMode, RouterTargets } from "./input-router.ts";
 import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from "./palette.ts";
 import type { ToolRegistry } from "./registry.ts";

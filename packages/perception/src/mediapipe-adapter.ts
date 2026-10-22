@@ -1,4 +1,4 @@
-import type { TrackedFace, TrackedHand, TrackingFrame, Vec3 } from "@aex/protocol";
+import type { TrackedFace, TrackedHand, TrackingFrame, Vec3 } from "@hai/protocol";
 import { type FlatMatrix, headPoseFromMatrix } from "./head-pose.ts";
 
 // Structural copies of the MediaPipe result shapes we read, so this package stays free of the MediaPipe runtime.

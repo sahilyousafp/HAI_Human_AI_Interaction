@@ -1,5 +1,5 @@
-import { DEFAULT_GESTURES, pinchPoint, pinchRatio } from "@aex/perception";
-import type { GestureEvent, Hand, Point2, TrackedHand, TrackingFrame } from "@aex/protocol";
+import { DEFAULT_GESTURES, pinchPoint, pinchRatio } from "@hai/perception";
+import type { GestureEvent, Hand, Point2, TrackedHand, TrackingFrame } from "@hai/protocol";
 import type { InputBus } from "../input/input-bus.ts";
 import type { CameraEffectsState } from "./camera-effects.ts";
 import { type CameraPrefs, loadCameraPrefs, saveCameraPrefs } from "./camera-prefs.ts";
@@ -22,9 +22,9 @@ interface Summary {
 declare global {
   interface Window {
     /** Dev builds only: recent frame summaries for end-to-end tests. Never contains pixels. */
-    __AEX_TRACKING__?: { frames: Summary[]; faceCadence: 1 | 2 };
+    __HAI_TRACKING__?: { frames: Summary[]; faceCadence: 1 | 2 };
     /** Dev builds only: recent gesture events for end-to-end tests. */
-    __AEX_GESTURES__?: { events: GestureEvent[] };
+    __HAI_GESTURES__?: { events: GestureEvent[] };
   }
 }
 
@@ -109,7 +109,7 @@ export class TrackingSession {
     document.body.append(parking);
     this.parking = parking;
     if (!this.video.isConnected) this.park();
-    if (import.meta.env.DEV) window.__AEX_RECORDER__ = this.recorder;
+    if (import.meta.env.DEV) window.__HAI_RECORDER__ = this.recorder;
     return () => {
       this.stop();
       parking.remove();
@@ -191,8 +191,8 @@ export class TrackingSession {
     this.bus.setStopArmed(gestureState.stopArmed);
     this.bus.emitGestures(events);
     if (import.meta.env.DEV && events.length > 0) {
-      if (!window.__AEX_GESTURES__) window.__AEX_GESTURES__ = { events: [] };
-      const log = window.__AEX_GESTURES__.events;
+      if (!window.__HAI_GESTURES__) window.__HAI_GESTURES__ = { events: [] };
+      const log = window.__HAI_GESTURES__.events;
       log.push(...events);
       if (log.length > 500) log.splice(0, log.length - 500);
     }
@@ -223,8 +223,8 @@ export class TrackingSession {
     });
     if (!import.meta.env.DEV) return;
     this.recorder.push(frame);
-    if (!window.__AEX_TRACKING__) window.__AEX_TRACKING__ = { frames: [], faceCadence: 1 };
-    const store = window.__AEX_TRACKING__;
+    if (!window.__HAI_TRACKING__) window.__HAI_TRACKING__ = { frames: [], faceCadence: 1 };
+    const store = window.__HAI_TRACKING__;
     store.faceCadence = stats.faceCadence;
     store.frames.push({
       seq: frame.seq,

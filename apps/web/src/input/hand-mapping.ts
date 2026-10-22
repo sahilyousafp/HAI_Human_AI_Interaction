@@ -1,4 +1,4 @@
-import type { Point2 } from "@aex/protocol";
+import type { Point2 } from "@hai/protocol";
 
 /** Hands rarely reach the frame edges comfortably, so the pointer amplifies motion around the centre. */
 export const POINTER_GAIN = 1.3;

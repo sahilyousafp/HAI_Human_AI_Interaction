@@ -4,7 +4,7 @@ import {
   type FeatureId,
   type Features,
   resolveFeatures,
-} from "@aex/protocol";
+} from "@hai/protocol";
 
 /**
  * Which features are on (Settings > Features). The bridge keeps the choices in the workspace settings, so every

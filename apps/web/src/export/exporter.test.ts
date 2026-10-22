@@ -1,5 +1,5 @@
-import type { Element, SceneDocument } from "@aex/protocol";
-import type { MeshPart } from "@aex/scene";
+import type { Element, SceneDocument } from "@hai/protocol";
+import type { MeshPart } from "@hai/scene";
 import { describe, expect, it, vi } from "vitest";
 import type { ExportResult } from "./build.ts";
 import { type ExporterDeps, fileNameFor, ProjectExporter } from "./exporter.ts";
