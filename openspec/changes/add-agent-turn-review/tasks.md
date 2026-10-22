@@ -14,9 +14,9 @@
 
 ## 3. Rhino
 
-- [ ] 3.1 Spike: in Rhino 8 with RhinoAI, confirm whether `BeginUndoRecord`/`EndUndoRecord` around a turn groups RhinoAI's changes into one undo; record the result in `docs/decisions.md`
+- [ ] 3.1 Spike: in Rhino 8, confirm whether `BeginUndoRecord`/`EndUndoRecord` around a turn groups the changes of several `rhino_run_python` runs (each with its own undo record) into one undo; record the result in `docs/decisions.md`
 - [ ] 3.2 Implement turn begin and end in the plugin with change tracking and conduit highlighting; verify highlight colours match the web review in the manual script
-- [ ] 3.3 Implement reject via `doc.Undo()` with the exact manual revert fallback; verify "reject in Rhino" and "one undo in Rhino" by the manual script, and unit-test the fallback bookkeeping in `AEX.Rhino.Core`
+- [ ] 3.3 Implement reject via `doc.Undo()` with the exact manual revert fallback; verify "reject in Rhino" and "one undo in Rhino" by the manual script, and unit-test the fallback bookkeeping in `HAI.Rhino.Core`
 
 ## 4. Docs
 

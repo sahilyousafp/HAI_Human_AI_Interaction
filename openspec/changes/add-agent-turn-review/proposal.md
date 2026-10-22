@@ -9,7 +9,7 @@ When an agent edits a model, the user needs to see exactly what changed and deci
 - After every agent turn that changed the model, a review starts: added elements are highlighted in teal, modified ones in amber, and deleted ones remain as red ghosts. A summary card shows the counts ("4 added, 1 changed, 0 deleted").
 - Accept (nod, click or Enter) keeps the changes. Reject (shake, click or Escape) reverts the whole turn in one step.
 - Starting a new request, or editing the model directly, accepts the pending review, and the HUD says so. The turn can still be undone later.
-- In Rhino, all document changes made during an agent turn, including those made by RhinoAI's tools, are grouped so one reject or one undo reverts the whole turn. They are highlighted with a display conduit during review.
+- In Rhino, all document changes made during an agent turn, including those made by its Python runs (`rhino_run_python`, one undo record each), are grouped so one reject or one undo reverts the whole turn. They are highlighted with a display conduit during review.
 - A review policy setting: review every turn (default), review only turns that delete something, or never review.
 
 Out of scope: partial accept (keeping some changes of a turn and not others), side-by-side before and after views, reviewing non-model actions such as files written by the agent (those already go through tool approval).

@@ -2,24 +2,24 @@
 
 ## Purpose
 
-Connects the user's hands, head and agent to Rhino 8, so the same gestures that drive the built-in viewer drive Rhino's viewport, selection and agent tools.
+Connects the user's hands, head and agent to Rhino 8, so the same gestures that drive the built-in viewer drive Rhino's viewport and selection, and the agent can model and draft in Rhino. Rhino is the modelling and drafting host; what the agent can compute comes from Python (`python-tools`, `rhino-python`).
 
 ## ADDED Requirements
 
 ### Requirement: One command connects Rhino to the bridge
-Running `AexConnect` in Rhino SHALL connect the plugin to the running bridge without the user copying any token. If the bridge is not running, the command SHALL say so and how to start it.
+Running `HaiConnect` in Rhino SHALL connect the plugin to the running bridge without the user copying any token. If the bridge is not running, the command SHALL say so and how to start it.
 
 #### Scenario: Connect
 - **GIVEN** the bridge is running
-- **WHEN** the user runs `AexConnect` in Rhino
-- **THEN** Rhino's command line reports "Connected to AEX" and the HUD shows Rhino as connected
+- **WHEN** the user runs `HaiConnect` in Rhino
+- **THEN** Rhino's command line reports "Connected to HAI" and the HUD shows Rhino as connected
 
 #### Scenario: Bridge not running
-- **WHEN** the user runs `AexConnect` and no bridge is running
+- **WHEN** the user runs `HaiConnect` and no bridge is running
 - **THEN** the command line says the bridge is not running and to start `pnpm dev`
 
 ### Requirement: The link survives bridge restarts
-While connected, the plugin SHALL reconnect automatically within 5 seconds after the bridge restarts, until the user runs `AexDisconnect`.
+While connected, the plugin SHALL reconnect automatically within 5 seconds after the bridge restarts, until the user runs `HaiDisconnect`.
 
 #### Scenario: Bridge restart
 - **GIVEN** Rhino is connected
@@ -64,10 +64,15 @@ Whenever Rhino's selection changes, by hand, mouse or agent, the bridge SHALL ho
 - **WHEN** the user selects two curves with the mouse in Rhino
 - **THEN** the bridge reports those two object ids as the Rhino selection
 
-### Requirement: Rhino agent tools status is shown
-The HUD SHALL show whether a Rhino MCP server is loaded in the agent session. When none is loaded, it SHALL explain how to install the Rhino MCP Platform package and connect it to Claude Code.
+### Requirement: Rhino Python status is shown
+The plugin SHALL report to the bridge whether Python 3 can run in Rhino (`ready` or `unavailable`, with a reason), when it connects and whenever that changes. The HUD SHALL show it beside the Rhino connection, and when it is unavailable SHALL say why and how to fix it.
 
-#### Scenario: RhinoAI missing
-- **GIVEN** Rhino is connected and no Rhino MCP server is loaded in the session
+#### Scenario: Python ready
+- **GIVEN** Rhino is connected and its Python 3 engine works
 - **WHEN** the user opens the Rhino status
-- **THEN** it shows "Rhino tools not available" with the install steps
+- **THEN** it shows "Python ready"
+
+#### Scenario: Python unavailable
+- **GIVEN** Rhino is connected and reports that Python 3 cannot run, with a reason
+- **WHEN** the user opens the Rhino status
+- **THEN** it shows "Python not available in Rhino" with that reason and how to fix it, and the agent is not offered the Rhino Python tool
