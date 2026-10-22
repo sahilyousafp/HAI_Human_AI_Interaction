@@ -18,7 +18,7 @@ Week 10 clip. Target length 40-50 s, 16:9, captions burned in. Shows the new stu
 | 3 | 12-20 s | Tap **Create tools** off: long pinch with the left hand, no ring. Tap it on again. | "Every feature has a switch, for each release." |
 | 4 | 20-26 s | Back, tap **Show my hands** on, close with the close button. White hands appear over the screen. | "And for you watching: my hands, drawn over the screen." |
 | 5 | 26-40 s | Left hand: create ring, Wall; draw a wall while the right hand orbits. | "Now you can see what each hand does." |
-| 6 | 40-45 s | Hide the camera view into the Camera pill; lower your hands. | "Next: the same gestures in Rhino 8." |
+| 6 | 40-45 s | Hide the camera view into the Camera pill; lower your hands. | "Next: snapping, ortho, and importing my Rhino model." |
 
 ## Check on the real camera (fill in before posting)
 

@@ -1,6 +1,7 @@
 import type { Element, Point3Mm, SceneOp } from "@aex/protocol";
 import { columnTool, copyTool, slabTool, wallTool } from "./create.ts";
 import { snap } from "./grid.ts";
+import { movedOffset } from "./placement.ts";
 import type { ToolRegistry } from "./registry.ts";
 import type { Tool, ToolContext } from "./types.ts";
 
@@ -49,6 +50,10 @@ export function moveOp(element: Element, dx: number, dy: number): SceneOp {
       };
     case "slab":
       return { op: "update", id: element.id, patch: { outline: element.outline.map(shift) } };
+    case "imported": {
+      const [x, y, z] = element.translation;
+      return { op: "update", id: element.id, patch: { translation: [x + dx, y + dy, z] } };
+    }
   }
 }
 
@@ -62,7 +67,7 @@ export const selectTool: Tool = {
   },
 };
 
-/** Move: drag an element on the ground plane, snapped to 100 mm, one "Move" transaction on release. */
+/** Move: drag an element on the ground plane, snapped to 100 mm or to the drawing aids, one "Move" transaction on release. */
 export function moveTool(): Tool {
   let drag: { element: Element; heightMm: number; start: Point3Mm; offset: [number, number] } | null = null;
   return {
@@ -89,7 +94,7 @@ export function moveTool(): Tool {
       if (!drag) return;
       const p = ctx.ground(at, drag.heightMm);
       if (!p) return;
-      drag.offset = [snap(p[0] - drag.start[0]), snap(p[1] - drag.start[1])];
+      drag.offset = movedOffset(ctx, drag.element, drag.start, p, at);
       ctx.setOverlay({
         movePreview: { id: drag.element.id, offsetMm: drag.offset, from: JSON.stringify(drag.element) },
       });
@@ -122,19 +127,30 @@ export const measureTool: Tool = {
   deactivate(ctx) {
     ctx.setOverlay({ notice: null, measure: [] });
   },
-  onTap(ctx, _at, hit) {
-    if (!hit) {
+  onHover(ctx, at) {
+    ctx.resolve(at);
+  },
+  onTap(ctx, at, hit) {
+    // A point of the model the drawing aids found (an end, a middle, a centre, an edge), at its real height; else the
+    // surface point under the pointer.
+    const found = ctx.resolve(at);
+    const geometric = found && found.kind !== null && found.kind !== "grid" && found.kind !== "ortho";
+    const point = geometric ? found.point : (hit?.point ?? null);
+    if (!point) {
       ctx.setOverlay({ notice: "Tap on the model to measure." });
       return;
     }
     const points = ctx.overlay().measure;
     if (points.length === 1 && points[0]) {
+      const [a, b] = [points[0], point];
+      const across = Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]));
+      const up = Math.round(Math.abs(b[2] - a[2]));
       ctx.setOverlay({
-        measure: [points[0], hit.point],
-        notice: `${Math.round(distanceMm(points[0], hit.point))} mm. Tap again to start a new measurement.`,
+        measure: [a, b],
+        notice: `${Math.round(distanceMm(a, b))} mm (${across} across, ${up} up). Tap again to start a new measurement.`,
       });
     } else {
-      ctx.setOverlay({ measure: [hit.point], notice: "Tap the second point." });
+      ctx.setOverlay({ measure: [point], notice: "Tap the second point." });
     }
   },
 };

@@ -1,4 +1,13 @@
-import type { Element, FeatureId, Point2, Point3Mm, SceneDocument, SceneOp } from "@aex/protocol";
+import type {
+  DrawingAids,
+  Element,
+  FeatureId,
+  Point2,
+  Point3Mm,
+  SceneDocument,
+  SceneOp,
+} from "@aex/protocol";
+import type { Resolved, SnapKind } from "@aex/scene";
 
 /** What is under a viewer position: an element and the surface point that was hit, millimetres. */
 export interface Hit {
@@ -27,6 +36,8 @@ export interface ToolOverlay {
   sectionHover: boolean;
   /** Create tools and Copy: the element being drawn or placed, shown before it is created. */
   draft: Element | null;
+  /** Create tools and Move: the point a drawing aid snapped to, with the aid's name; shown as a marker. */
+  snap: { point: Point3Mm; kind: SnapKind; label: string; ortho: boolean } | null;
 }
 
 export const EMPTY_OVERLAY: ToolOverlay = {
@@ -37,6 +48,7 @@ export const EMPTY_OVERLAY: ToolOverlay = {
   marked: null,
   sectionHover: false,
   draft: null,
+  snap: null,
 };
 
 /** What a tool can do. Positions are viewer coordinates: 0..1 across and down the 3D view. */
@@ -49,6 +61,22 @@ export interface ToolContext {
   pick(at: Point2): Hit | null;
   /** Where the view ray at `at` meets the horizontal plane at `heightMm`, or null if it points away. */
   ground(at: Point2, heightMm?: number): Point3Mm | null;
+  /** Which drawing aids are on (Settings > Drawing aids). */
+  aids(): DrawingAids;
+  /**
+   * Where the point under a viewer position lands once the drawing aids that are on have had their say (see
+   * `resolvePoint`): a point in 3D, at the height it snapped to, or on the horizontal plane at the anchor's height.
+   * `anchor` is where the line or the move began, for Ortho and Perpendicular; `exclude` lists elements that must not
+   * be snapped to (the ones being moved); `probe` stands in for the pointer (a moved element's reference point), its
+   * place on screen matching candidates and its plan position being the free point. Null when the view points away
+   * from the ground and nothing snapped. The snapped point is shown as a marker until `clearSnap` or the next call.
+   */
+  resolve(
+    at: Point2,
+    options?: { anchor?: Point3Mm | null; exclude?: string[]; probe?: Point3Mm },
+  ): Resolved | null;
+  /** Removes the snap marker. */
+  clearSnap(): void;
   /** Bounding box of the scene, millimetres. */
   bounds(): { min: Point3Mm; max: Point3Mm };
   /** Whether a viewer position is on the section's outline on screen (within a finger's width). */

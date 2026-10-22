@@ -198,4 +198,32 @@ describe("project persistence", () => {
     );
     expect(status.payload.error).toBeNull();
   });
+
+  it("a new project opens empty for everyone: one ground level, no elements, nothing selected", async () => {
+    const address = await start({ projectDir: tempProject() });
+    const a = await client(address);
+    const b = await client(address);
+    const dir = join(tempProject(), "fresh");
+    a.send("project.create", { path: dir });
+    const snap = await b.waitFor("scene.snapshot", (m) => m.payload.project?.path === dir);
+    expect(snap.payload.doc.elements).toEqual({});
+    expect(snap.payload.doc.levels).toEqual([{ id: "L0", name: "Ground", elevation: 0 }]);
+    expect(snap.payload.doc.name).toBe("fresh");
+    expect(snap.payload.selection).toEqual([]);
+    expect(snap.payload.canUndo).toBe(false);
+    expect(JSON.parse(readFileSync(join(dir, SCENE_FILE), "utf8")).elements).toEqual({});
+  });
+
+  it("a folder that already holds a project is not touched, and the sender is told", async () => {
+    const existing = tempProject();
+    const address = await start({ projectDir: existing });
+    const a = await client(address);
+    const before = readFileSync(join(existing, SCENE_FILE), "utf8");
+    a.send("project.create", { path: existing });
+    const error = await a.waitFor("request.error");
+    expect(error.payload.message).toMatch(/already holds a project/);
+    expect(readFileSync(join(existing, SCENE_FILE), "utf8")).toBe(before);
+    // The open project and its scene are unchanged.
+    expect(Object.keys(bridge?.scene.scene.doc.elements ?? {}).length).toBeGreaterThan(10);
+  });
 });

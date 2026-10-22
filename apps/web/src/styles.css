@@ -339,6 +339,46 @@ button {
   flex: none;
   max-width: 100%;
 }
+.import-report {
+  display: grid;
+  gap: 6px;
+  max-width: min(420px, 100%);
+  padding: 10px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--material);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: var(--blur);
+  font-size: 13px;
+}
+.import-report p {
+  margin: 0;
+}
+.import-report .import-error {
+  color: var(--risk);
+}
+.import-report button {
+  justify-self: start;
+}
+.import-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--r-m);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  pointer-events: none;
+}
+.import-drop p {
+  margin: 0;
+  padding: 12px 20px;
+  border-radius: var(--r-m);
+  background: var(--material-strong);
+  box-shadow: var(--shadow-2);
+  font: 600 16px / 1.3 var(--f-body);
+}
 .viewer-status {
   left: 12px;
   bottom: 12px;
@@ -364,6 +404,17 @@ button {
 .toolbar-buttons {
   display: flex;
   gap: 6px;
+}
+.project-message {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  max-width: 420px;
+  margin: 0;
+  color: var(--risk);
+  font-size: 13px;
 }
 .open-project {
   display: flex;
@@ -679,6 +730,37 @@ kbd {
   color: var(--bg);
   font: 600 12.5px / 1.3 var(--f-body);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.snap-marker {
+  position: relative;
+  display: block;
+  width: 0;
+  height: 0;
+}
+.snap-dot {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid var(--accent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 1.5px var(--material-strong);
+}
+.snap-label {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  padding: 2px 7px;
+  border-radius: var(--r-s);
+  background: var(--material-strong);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+  font: 600 12px / 1.3 var(--f-body);
   white-space: nowrap;
   pointer-events: none;
 }

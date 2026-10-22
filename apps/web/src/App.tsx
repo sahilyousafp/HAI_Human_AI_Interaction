@@ -10,6 +10,11 @@ import {
   type ConnectionState,
   connectToBridge,
 } from "./bridge/connection.ts";
+import { ProjectExporter } from "./export/exporter.ts";
+import { buildInWorker } from "./export/rhino-client.ts";
+import { ModelImporter } from "./import/importer.ts";
+import { assetUrl, ModelAssets } from "./import/model-assets.ts";
+import { convertInWorker } from "./import/rhino-client.ts";
 import { GestureSettingsCard } from "./input/GestureSettingsCard.tsx";
 import { GestureSettings } from "./input/gesture-settings.ts";
 import { InputBus } from "./input/input-bus.ts";
@@ -18,6 +23,8 @@ import { CameraView } from "./perception/CameraView.tsx";
 import { HandOverlay } from "./perception/HandOverlay.tsx";
 import { TrackingSession } from "./perception/tracking-session.ts";
 import { SceneClient } from "./scene/scene-client.ts";
+import { DrawingAidsSettings } from "./settings/DrawingAidsSettings.tsx";
+import { DrawingAidsStore } from "./settings/drawing-aids.ts";
 import { FeatureSettings } from "./settings/FeatureSettings.tsx";
 import { FeatureFlags } from "./settings/feature-flags.ts";
 import { SettingsPanel, type SettingsSection } from "./settings/SettingsPanel.tsx";
@@ -96,6 +103,68 @@ export function App() {
     [],
   );
   const featureState = useSyncExternalStore(features.subscribe, features.getSnapshot);
+  // Which drawing aids are on (Settings > Drawing aids) is a user setting kept by the bridge too.
+  const aids = useMemo(
+    () =>
+      new DrawingAidsStore(
+        (choice) =>
+          connection.current?.send({
+            type: "settings.set",
+            id: crypto.randomUUID(),
+            payload: { drawingAids: choice },
+          }) ?? false,
+      ),
+    [],
+  );
+  const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
+  // The imported models the viewer draws and the project saves, fetched from the bridge as they are first needed.
+  const modelAssets = useMemo(() => new ModelAssets(() => window.__AEX_SESSION__ ?? null), []);
+  // Saving the project as a Rhino file: the models it uses are fetched, the file is written in a worker, and offered.
+  const exporter = useMemo(
+    () =>
+      new ProjectExporter({
+        doc: () => sceneClient.getSnapshot().doc,
+        projectName: () =>
+          sceneClient.getSnapshot().project?.name ?? sceneClient.getSnapshot().doc?.name ?? "project",
+        loadAsset: (id) => modelAssets.whenLoaded(id),
+        build: (input) => buildInWorker(input),
+        download: (fileName, bytes) => {
+          const url = URL.createObjectURL(
+            new Blob([bytes as BlobPart], { type: "application/octet-stream" }),
+          );
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          document.body.append(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        },
+      }),
+    [sceneClient, modelAssets],
+  );
+  // Importing a Rhino model: read in a worker, stored with the bridge, created in one scene transaction.
+  const importer = useMemo(
+    () =>
+      new ModelImporter({
+        convert: (bytes, onStage) => convertInWorker(bytes, onStage),
+        upload: async (id, bytes) => {
+          const session = window.__AEX_SESSION__;
+          if (!session) throw new Error("The bridge is not connected.");
+          const response = await fetch(assetUrl(session.port, id), {
+            method: "PUT",
+            headers: { authorization: `Bearer ${session.token}`, "content-type": "application/octet-stream" },
+            body: bytes as BodyInit,
+          });
+          if (!response.ok) {
+            const detail = (await response.json().catch(() => null)) as { error?: string } | null;
+            throw new Error(detail?.error ?? `The bridge answered ${response.status}.`);
+          }
+        },
+        apply: (label, ops) => sceneClient.apply(label, ops),
+      }),
+    [sceneClient],
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showHands, setShowHands] = useState(false);
   const renderLatency = useMemo(() => new LatencyTracker(), []);
@@ -300,6 +369,7 @@ export function App() {
         setSpeech(message.payload.speech);
         setListenForNames(message.payload.listenForNames);
         features.load(message.payload.features);
+        aids.load(message.payload.drawingAids);
         setShowHands(message.payload.showHands);
         setSpeakReplies(message.payload.speakReplies);
         speaker.setMuted(!message.payload.speakReplies);
@@ -311,7 +381,7 @@ export function App() {
       conn.close();
       viewLink.dispose();
     };
-  }, [sceneClient, tools, viewLink, agent, gestureSettings, speaker, features]);
+  }, [sceneClient, tools, viewLink, agent, gestureSettings, speaker, features, aids]);
 
   const askAgent = () => {
     if (!features.on("agent")) return "The agent is switched off in Settings > Features.";
@@ -366,6 +436,14 @@ export function App() {
       tint: "var(--tint-blue)",
       detail: changedFeatures > 0 ? `${changedFeatures} off` : "All on",
       render: () => <FeatureSettings flags={features} />,
+    },
+    {
+      id: "drawing-aids",
+      title: "Drawing aids",
+      icon: "M12 3v5M12 16v5M3 12h5M16 12h5M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+      tint: "var(--tint-green)",
+      detail: `${Object.values(aidState).filter(Boolean).length} on`,
+      render: () => <DrawingAidsSettings store={aids} />,
     },
     {
       id: "gestures",
@@ -476,6 +554,10 @@ export function App() {
             askAgent={askAgent}
             gestures={gestures}
             features={features}
+            aids={aids}
+            importer={importer}
+            exporter={exporter}
+            modelAssets={modelAssets}
             markers={markers}
           >
             {featureState.agent && (

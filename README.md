@@ -2,7 +2,7 @@
 
 **Hands, face and voice for AEC agents.** An open-source interaction layer that lets an architect work with their own AI agent and their design software using a normal laptop webcam: point at a wall, say "make it 300 thick", nod to accept.
 
-> Status: week 10 of a 17-week build in public. Hand and face tracking, both hands as equal pointers, gestures, hand navigation, tool rings with hand-drawn walls, slabs and columns, your own Claude as a small design team (Mochi and its specialists), on-device voice in and out, and an Apple-style studio layout with feature switches and a "show my hands" overlay for recordings all work in the built-in viewer. Next: the Rhino 8 connector.
+> Status: week 12 of a 19-week build in public. Hand and face tracking, both hands as equal pointers, gestures, hand navigation, tool rings with hand-drawn walls, slabs and columns, your own Claude as a small design team (Mochi and its specialists), on-device voice in and out, an Apple-style studio layout with feature switches and a "show my hands" overlay for recordings, pointers that snap to buttons, drawing aids (snap, ortho, projection) import of Rhino .3dm models, snapping and measuring at every height, new empty projects and saving as a Rhino file all work in the built-in viewer. Next: the Rhino 8 connector.
 
 ## Why
 
@@ -21,7 +21,7 @@ AI agents can already drive design tools (McNeel ships an official Rhino MCP ser
 - Microsoft Edge or Chrome
 - A webcam
 - [Claude Code](https://claude.com/claude-code), installed and signed in, for the agent team
-- Rhino 8 with the Rhino MCP Platform plugin (optional, from week 11)
+- Rhino 8 with the Rhino MCP Platform plugin (optional, from week 13)
 
 ## Run it
 
@@ -46,10 +46,12 @@ Open http://127.0.0.1:5173. The header shows **Connected** when the web app has 
 | 8 | Mochi and the agent team: named specialists, status, spoken replies |
 | 9 | Both hands as equal pointers; the left hand's create ring: walls, slabs, columns |
 | 10 | Studio UI: settings sheet, floating camera, feature switches, show my hands |
-| 11 | Rhino 8 connector |
-| 12 | More modelling by hand: openings, roofs, arrays, snapping |
-| 13 | Reviewable agent turns: nod to keep, shake to revert |
-| 14-17 | More providers, overlay over Rhino, custom gestures, v0.1 |
+| 11 | Precision and import: pointers snap to buttons, drawing aids (snap, ortho, projection), Rhino .3dm import |
+| 12 | Snapping at every height, Measure that snaps, new empty projects, save as 3dm |
+| 13 | Rhino 8 connector |
+| 14 | More modelling by hand: openings, roofs, arrays |
+| 15 | Reviewable agent turns: nod to keep, shake to revert |
+| 16-19 | More providers, overlay over Rhino, custom gestures, v0.1 |
 
 The full plan is in [docs/PLAN.md](docs/PLAN.md), with research notes in [docs/research](docs/research) and the reasoning behind the architecture in [docs/decision](docs/decision/index.html). Work is specified with OpenSpec: current behaviour in [openspec/specs](openspec/specs), planned changes in [openspec/changes](openspec/changes).
 

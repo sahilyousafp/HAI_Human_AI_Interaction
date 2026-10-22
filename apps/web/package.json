@@ -23,6 +23,7 @@
     "phonemize": "2.0.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "rhino3dm": "8.35.0",
     "three": "0.186.1"
   },
   "devDependencies": {

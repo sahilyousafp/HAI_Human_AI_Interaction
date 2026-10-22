@@ -13,3 +13,4 @@ apps/web/public/models/
 apps/web/public/mediapipe/
 apps/web/public/ort/
 apps/web/public/vad/
+apps/web/public/rhino3dm/

@@ -1,5 +1,6 @@
 export * from "./agent.ts";
 export * from "./bindings.ts";
+export * from "./drawing-aids.ts";
 export * from "./envelope.ts";
 export * from "./features.ts";
 export * from "./gestures.ts";

@@ -52,15 +52,17 @@ The user's own Claude Code setup (MCP servers, skills) loads in the agent sessio
 | 8 | `add-mochi-agent-team` | "Mochi, ask Architect": a team of my own Claude | One session per agent: delegation, status, spoken replies |
 | 9 | `add-two-hand-input` | Both hands: the left draws walls, the right navigates | Two pointers, two rings, and a stop that never fires by accident |
 | 10 | `add-studio-ui` | A studio you can film: settings in a sheet, my hands drawn over the screen | Feature switches for every release |
-| 11 | `add-rhino-connector` | Same gestures drive Rhino 8 | What I reused from RhinoAI vs wrote |
-| 12 | `add-modelling-tools` (to specify) | Openings, roofs and arrays by hand | Snapping to geometry, in the viewer and in Rhino |
-| 13 | `add-agent-turn-review` | The agent proposes, I nod | One undo per agent turn, in Rhino too |
-| 14 | providers (to specify) | Same task, three models | The AgentProvider interface |
-| 15 | overlay (to specify) | HUD floating over Rhino | Click-through windows on Windows |
-| 16 | custom gestures (to specify) | Training my own gestures | Landmarks to LiteRT.js |
-| 17 | release v0.1 (to specify) | Launch reel | Lessons + how to contribute |
+| 11 | `add-precision-aids-and-3dm-import` | Drop in my Rhino model, then draw a wall that snaps to its corner | Snap, ortho and why a 48 000-object model becomes 14 elements |
+| 12 | `add-3d-snapping-and-project-files` | From a blank project to a Rhino file | Snapping in 3D: matching on screen, not on the ground |
+| 13 | `add-rhino-connector` | Same gestures drive Rhino 8 | What I reused from RhinoAI vs wrote |
+| 14 | `add-modelling-tools` (to specify) | Openings, roofs and arrays by hand | Snapping inside Rhino |
+| 15 | `add-agent-turn-review` | The agent proposes, I nod | One undo per agent turn, in Rhino too |
+| 16 | providers (to specify) | Same task, three models | The AgentProvider interface |
+| 17 | overlay (to specify) | HUD floating over Rhino | Click-through windows on Windows |
+| 18 | custom gestures (to specify) | Training my own gestures | Landmarks to LiteRT.js |
+| 19 | release v0.1 (to specify) | Launch reel | Lessons + how to contribute |
 
-Weeks 1-8 are built and their changes archived (`openspec/specs/` holds the current specs); weeks 9 and 10 are built and wait for their clips. Weeks 12 and 14-17 get their OpenSpec changes once the weeks before them have taught us what they need. After v0.1: Blender/Bonsai IFC connector, coarse gaze (WebEyeTrack), dynamic gestures, a small user study.
+Weeks 1-8 are built and their changes archived (`openspec/specs/` holds the current specs); weeks 9, 10, 11 and 12 are built and wait for their clips. Weeks 14 and 16-19 get their OpenSpec changes once the weeks before them have taught us what they need. After v0.1: Blender/Bonsai IFC connector, coarse gaze (WebEyeTrack), dynamic gestures, a small user study.
 
 ### Clips to record
 
@@ -76,7 +78,9 @@ Each built week ends in a clip; its script is in `demos/`. Tick a week once its 
 - [ ] Week 8: `demos/08-mochi-team.md` (fill in its real-microphone checks before posting)
 - [ ] Week 9: `demos/09-two-hands.md`
 - [ ] Week 10: `demos/10-studio-ui.md`
+- [ ] Week 11: `demos/11-precision-and-import.md`
+- [ ] Week 12: `demos/12-3d-snapping-and-project-files.md`
 
 ## Change dependencies
 
-Archive in order: each change builds on the capabilities of the ones before it (weeks 1-8 are archived). `add-gesture-tool-palette` adds a requirement to `gesture-recognition`; `add-rhino-connector` adds requirements to `local-access-control` and `scene-tools`. Those base changes must be archived first. `add-two-hand-input` changes `gesture-recognition`, `viewport-navigation`, `tool-palette`, `direct-tools` and `agent-panel`; `add-studio-ui` builds on it and adds `app-settings` and `hand-overlay`.
+Archive in order: each change builds on the capabilities of the ones before it (weeks 1-8 are archived). `add-gesture-tool-palette` adds a requirement to `gesture-recognition`; `add-rhino-connector` adds requirements to `local-access-control` and `scene-tools`. Those base changes must be archived first. `add-two-hand-input` changes `gesture-recognition`, `viewport-navigation`, `tool-palette`, `direct-tools` and `agent-panel`; `add-studio-ui` builds on it and adds `app-settings` and `hand-overlay`. `add-3d-snapping-and-project-files` adds to `drawing-aids`, so `add-precision-aids-and-3dm-import` is archived first. `add-precision-aids-and-3dm-import` builds on `add-studio-ui` (the settings sheet and the feature switches) and adds `drawing-aids` and `model-import` and requirements to `tool-palette` and `scene-model`.

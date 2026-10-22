@@ -2,7 +2,16 @@
 // Models are downloaded once and verified by SHA-256; WASM and worklet files are copied from installed npm packages.
 // Usage: node scripts/fetch-assets.mjs [--check]   (--check verifies without downloading)
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -78,7 +87,8 @@ for (const entry of lock.packageFiles) {
   rmSync(target, { recursive: true, force: true });
   // `include` (a regex on file names) copies only the files the app loads, not a whole dist folder.
   const include = entry.include ? new RegExp(entry.include) : null;
-  const source = join(pkgDir, entry.from);
+  // pnpm links a package folder into node_modules; copy the real folder, not the link.
+  const source = realpathSync(join(pkgDir, entry.from));
   cpSync(source, target, {
     recursive: true,
     filter: (path) => !include || path === source || include.test(basename(path)),

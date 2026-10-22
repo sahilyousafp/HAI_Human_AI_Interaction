@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Element } from "@aex/protocol";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WebSocket } from "ws";
@@ -189,6 +190,53 @@ describe("read tools", () => {
     );
     expect(byId.elements[0].size).toEqual([12_000, 12_000, 21_000]);
     expect(byId.notFound).toEqual(["nope"]);
+  });
+
+  it("imported geometry: the agent sees layer, colour and box, never triangles, and can move it", async () => {
+    const address = await start();
+    const agent = await mcp(address);
+    const element: Element = {
+      id: "imp-1",
+      type: "imported",
+      name: "Facade panel",
+      properties: {},
+      asset: "0f8fad5b-d9cb-469f-a165-70867728950e",
+      part: 0,
+      bounds: { min: [0, 0, 0], max: [2000, 1000, 3000] },
+      translation: [0, 0, 0],
+      layer: "Facade",
+      color: "#ff0000",
+    };
+    bridge?.scene.handle(
+      { type: "scene.apply", id: "m1", payload: { label: "Import", ops: [{ op: "create", element }] } },
+      () => {},
+    );
+    const found = json(await agent.callTool({ name: "get_elements", arguments: { type: "imported" } }));
+    expect(found.elements).toEqual([element]);
+    expect(JSON.stringify(found)).not.toMatch(/positions|indices|vertices/);
+    const summary = json(await agent.callTool({ name: "get_scene_summary", arguments: {} }));
+    expect(summary.counts.imported).toBe(1);
+
+    const moved = await agent.callTool({
+      name: "update_elements",
+      arguments: { updates: [{ id: "imp-1", patch: { translation: [1000, 0, 0] } }] },
+    });
+    expect(moved.isError).toBeFalsy();
+    const after = json(await agent.callTool({ name: "get_elements", arguments: { ids: ["imp-1"] } }));
+    expect(after.elements[0].translation).toEqual([1000, 0, 0]);
+    expect(after.elements[0].asset).toBe(element.asset);
+
+    const copied = await agent.callTool({
+      name: "create_elements",
+      arguments: {
+        elements: [{ ...element, id: "imp-2", name: "Facade panel copy", translation: [5000, 0, 0] }],
+      },
+    });
+    expect(copied.isError).toBeFalsy();
+    const both = json(await agent.callTool({ name: "get_elements", arguments: { type: "imported" } }));
+    expect(both.elements.map((e: { id: string }) => e.id)).toEqual(["imp-1", "imp-2"]);
+    const deleted = await agent.callTool({ name: "delete_elements", arguments: { ids: ["imp-2"] } });
+    expect(deleted.isError).toBeFalsy();
   });
 
   it("pointed element reported: the column under the hand pointer, and the selection", async () => {

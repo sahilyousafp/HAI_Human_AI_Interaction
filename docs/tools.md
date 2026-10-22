@@ -33,6 +33,8 @@ Escape and a head shake first close an open palette, answer "keep" to a question
 
 Hands reach the whole window, the model, the toolbar, the camera view and the settings alike, and press what the mouse clicks: buttons, links, checkboxes and their labels (dropdowns and text fields stay mouse and keyboard). Point at a control so it gets an outline and the pointer shrinks to a dot, then pinch and let go. Any pinch that starts on a control presses it, however long you hold it; it never grabs or orbits. After an undo or redo, a strip says what was undone and offers **Undo again** and **Redo**, so stepping back several changes takes a few taps.
 
+**Pointers snap to buttons.** A hand pointer within about 28 pixels of a button locks onto it: the pointer is drawn on the button, the button is outlined, and a pinch presses it. It lets go when your hand is more than 44 pixels away, so it does not flicker between neighbours. A pinch that starts on a locked button keeps it however far your hand drifts while the fingers close, and a pinch that starts on the model (an orbit, a drag with a tool) never locks onto a button on the way past. Each hand snaps on its own, the mouse is never snapped, and **Settings > Features > Snap to buttons** turns it off.
+
 **Scrolling by hand.** Pinch over a list that scrolls (the agent conversation, the extensions, the settings) and move the hand up or down: the content follows the hand, as on a phone. Let go while moving and it coasts on and slows down; pinching it again catches it. A pinch that starts on a button inside the list presses the button, unless the hand moves up or down first (2% of the view's height), which scrolls instead.
 
 ## The pointers
@@ -55,9 +57,9 @@ The mouse cursor changes with the tool as well. The pointer stays put through br
 |---|---|---|---|
 | Select | V | Top (tools) | Tap selects the element under the pointer; tap on empty space clears. Drags orbit the view |
 | Ask agent | A | Top right (tools) | Opens the agent panel on the conversation and starts listening (see [agent.md](agent.md)). If the agent is not available, it says why |
-| Measure | D | Right (tools) | Tap two points on the model: the distance between them is shown in millimetres (rounded to 1 mm). Changes nothing |
+| Measure | D | Right (tools) | Tap two points: the distance between them is shown in millimetres (rounded to 1 mm) with its across and up parts, for example `4123 mm (2828 across, 3000 up)`. Each point snaps to the model through the drawing aids (an end, a middle, a centre, at any height) and shows its marker while you hover; with no snap in reach it is the surface point under the pointer. Changes nothing |
 | Section | S | Bottom right (tools) | The cut is a plane you can grab: pinch on it (it lights up under the pointer) and drag down to cut lower, up to cut higher; the height is shown in millimetres. A drag off the plane orbits. The section stays when you change tool, until you press Remove (or tap the plane with Delete). From any other tool, its outline can still be grabbed and dragged, and tapping the outline selects the section |
-| Move | M | Bottom (tools) | Pinch an element and drag it along the ground; it snaps to 100 mm and is moved in one "Move" transaction when you let go. A drag that starts on empty space orbits instead |
+| Move | M | Bottom (tools) | Pinch an element and drag it along the ground; it snaps to 100 mm (or to the drawing aids) and is moved in one "Move" transaction when you let go. A drag that starts on empty space orbits instead |
 | Add massing | B | Bottom left (tools), Bottom right (create) | Tap the ground: a 6000 x 6000 x 3500 mm block is placed there, centred on the tap and snapped to 100 mm |
 | Delete | X | Left (tools), Top left (create) | Tap an element: it turns red and asks you to confirm. Nod or press Enter to delete it; shake your head or press Escape to keep it. Tapping the section plane removes the section |
 | Undo | U | Top left (tools), Left (create) | Undoes the last change at once and keeps your current tool; Undo again on the strip that appears steps further back |
@@ -70,6 +72,24 @@ The mouse cursor changes with the tool as well. The pointer stays put through br
 Everything the create tools add sits on the ground level and is one undo step, named after the element ("Add Wall 3"). Exact sizes come afterwards: select the element and say "make this 300 thick", or ask the agent.
 
 Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y keep working as before.
+
+## Placing points exactly: drawing aids
+
+Wall, Slab, Column, Copy and Move put their points through the **drawing aids** in **Settings > Drawing aids**. Each is a switch; only Grid is on until you turn the others on, and a change applies to the very next point. The status bar lists the aids that are on.
+
+| Aid | What it does |
+|---|---|
+| Grid | Points land on a 100 mm grid (what the tools always did) |
+| Ortho | A line is held to the X axis, the Y axis or 45 degrees from where it starts, once your hand is within 7.5 degrees of one; otherwise it stays free. The notice shows the length and the angle |
+| Endpoint | Snaps to the ends of walls, the corners of slabs, the centres of columns, and the corners of massings and imported models |
+| Midpoint | Snaps to the middle of a wall or of an edge of a slab, a massing or an imported model |
+| Centre | Snaps to the centre of a slab, a massing, an imported model or a column |
+| Project | Carries the point onto the nearest edge of the model, so a new wall can start anywhere along an old one |
+| Perpendicular | Ends a line where it meets an edge at a right angle |
+
+Snaps work **at every height**: candidates are the real points of the model, at the base and the top of walls and columns, at the top of slabs, and at the bottom and the top of massings and imported models, and the pointer is matched to them where they appear on screen, within 24 pixels, whatever the zoom and however high they are. A wall end three floors up, or the top corner of an imported building, snaps when it is under the pointer on screen, even if it is hidden behind something. A line started on a snapped point is drawn in the plane at that height, and the new element is placed at it: on the level whose elevation matches (within 1 mm), else with no level and its own base height. When more than one could apply, the first of Endpoint, Midpoint, Centre, Perpendicular and Project that is within reach wins, and Grid takes what is left. With Ortho on, only a snap that lies on the held line counts (Project then means where the line meets the edge). The snapped point shows a ring and the aid's name, and the notice repeats it, for example "Wall 5000 mm at 0 deg (Endpoint)". The first point of a line and of a slab take the point snaps; Ortho and Perpendicular need a start, so they apply to the end of a wall, not to a slab's opposite corner.
+
+Move and Copy carry one point of the element (a column's centre, a wall's start, a massing's origin corner, a slab's first corner, an imported model's lowest corner) to the snap. With only Grid on they move by whole 100 mm steps, as before, so the element keeps its own alignment.
 
 ## Choosing the layout
 
@@ -94,7 +114,7 @@ const bakeTool: Tool = {
 registry.register(bakeTool);
 ```
 
-A tool can implement any of these; the `ctx` it receives reads and changes the scene (`doc`, `apply`, `undo`, `redo`, `select`), looks into the view (`pick`, `ground`, `bounds`), draws on it (`overlay`, `setOverlay`, `flash`) and asks for confirmation (`confirm`).
+A tool can implement any of these; the `ctx` it receives reads and changes the scene (`doc`, `apply`, `undo`, `redo`, `select`), looks into the view (`pick`, `ground`, `bounds`), draws on it (`overlay`, `setOverlay`, `flash`), places points with the drawing aids (`aids`, `mmPerPixel`, `resolve`, `clearSnap`) and asks for confirmation (`confirm`).
 
 | Member | When it is called |
 |---|---|

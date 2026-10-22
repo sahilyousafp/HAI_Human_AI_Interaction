@@ -21,7 +21,11 @@ interface Window {
     // biome-ignore lint/suspicious/noExplicitAny: tests build events loosely; the app validates their shape.
     gestures(events: any[]): void;
     /** The right hand's pinch point, and the left hand's. */
-    pointer(right: E2EPoint | null, left?: E2EPoint | null): void;
+    pointer(
+      right: E2EPoint | null,
+      left?: E2EPoint | null,
+      closing?: { Left?: boolean; Right?: boolean },
+    ): void;
     engaged(engaged: boolean): void;
   };
   __AEX_SCENE__?: {

@@ -1,7 +1,14 @@
 import { expect, type Page } from "@playwright/test";
 
 /** The settings sections, by the id their row and page carry. */
-export type SettingsSection = "camera" | "features" | "gestures" | "rings" | "voice" | "permissions";
+export type SettingsSection =
+  | "camera"
+  | "features"
+  | "drawing-aids"
+  | "gestures"
+  | "rings"
+  | "voice"
+  | "permissions";
 
 /** Opens the settings sheet, on its first page or on a section's page. */
 export async function openSettings(page: Page, section?: SettingsSection): Promise<void> {

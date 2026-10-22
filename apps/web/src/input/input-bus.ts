@@ -4,6 +4,8 @@ import type { GestureEvent, Hand, Point2 } from "@aex/protocol";
 export interface PointerSample {
   /** Each visible hand's pinch point: both hands point, hover and press alike. */
   hands: Partial<Record<Hand, Point2>>;
+  /** Each visible hand whose fingers are closing into a pinch or closed: its pointer holds what it snapped to. */
+  closing?: Partial<Record<Hand, boolean>>;
   /** Width / height of the camera frame the positions are in. */
   aspect?: number;
   ts: number;

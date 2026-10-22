@@ -53,6 +53,7 @@ const brief = (e: Element) => ({
   name: e.name,
   type: e.type,
   ...(e.level ? { level: e.level } : {}),
+  ...(e.type === "imported" && e.layer ? { layer: e.layer } : {}),
 });
 
 const COMPASS = [
@@ -81,6 +82,8 @@ const ELEMENT_SHAPES = `Lengths are millimetres, Z up. Element shapes (id is opt
 - wall: { type: "wall", name, level?, start: [x, y], end: [x, y], height, thickness } (centred on its baseline, rising from its level)
 - column: { type: "column", name, level?, position: [x, y], section: [width, depth], height }
 - slab: { type: "slab", name, level?, outline: [[x, y], ...] (counter-clockwise), thickness } (extruded down from its level)
+- imported: reference geometry from the user's Rhino file: { type: "imported", name, layer?, color?, bounds: { min: [x, y, z], max: [x, y, z] } (before translation), translation: [x, y, z] }. You see its box, never its triangles. Move it by changing translation; delete it as any element; copy it by creating another with the same asset, part and bounds. You cannot change its shape.
+Walls, slabs and columns may also have base: the height of their base in millimetres, which wins over their level's elevation (for elements placed off any level, such as on a roof).
 All may have properties: { key: string | number | boolean }.`;
 
 /**
@@ -128,7 +131,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       description: `Full details of elements: by ids, or filtered by type and level (at most ${MAX_ELEMENTS}). ${ELEMENT_SHAPES}`,
       inputSchema: z.object({
         ids: z.array(z.string()).optional().describe("Element ids"),
-        type: z.enum(["massing", "slab", "wall", "column"]).optional(),
+        type: z.enum(["massing", "slab", "wall", "column", "imported"]).optional(),
         level: z.string().optional().describe("Level id"),
       }),
     },

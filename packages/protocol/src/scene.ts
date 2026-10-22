@@ -41,6 +41,8 @@ export const MassingElement = z.strictObject({
 export const SlabElement = z.strictObject({
   ...common,
   type: z.literal("slab"),
+  /** Height of its base above the origin, mm; when set it wins over the level's elevation. */
+  base: mm.optional(),
   /** Closed outline in plan, counter-clockwise, mm. */
   outline: z.array(PointMm).min(3),
   thickness: positiveMm,
@@ -49,6 +51,8 @@ export const SlabElement = z.strictObject({
 export const WallElement = z.strictObject({
   ...common,
   type: z.literal("wall"),
+  /** Height of its base above the origin, mm; when set it wins over the level's elevation. */
+  base: mm.optional(),
   /** Baseline in plan, mm; the wall is centred on it. */
   start: PointMm,
   end: PointMm,
@@ -59,10 +63,41 @@ export const WallElement = z.strictObject({
 export const ColumnElement = z.strictObject({
   ...common,
   type: z.literal("column"),
+  /** Height of its base above the origin, mm; when set it wins over the level's elevation. */
+  base: mm.optional(),
   position: PointMm,
   /** Section width (x) and depth (y), mm. */
   section: z.tuple([positiveMm, positiveMm]),
   height: positiveMm,
+});
+
+/** An asset in the project folder: the id the bridge stored it under (a UUID). */
+export const AssetId = z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
+export type AssetId = z.infer<typeof AssetId>;
+
+/**
+ * Reference geometry read from another file (a Rhino model). Its triangles live in a binary asset beside the scene
+ * file, so the scene stays small; moving it changes `translation`, never the asset.
+ */
+export const ImportedElement = z.strictObject({
+  ...common,
+  type: z.literal("imported"),
+  /** The asset that holds the triangles, and which part of it is this element. */
+  asset: AssetId,
+  part: z.number().int().nonnegative(),
+  /** Bounding box of the geometry before `translation`, mm. */
+  bounds: z
+    .strictObject({ min: Point3Mm, max: Point3Mm })
+    .refine(({ min, max }) => min.every((v, i) => v <= (max[i] ?? v)), "min must not exceed max"),
+  /** How far the element has been moved from where the file put it, mm. */
+  translation: Point3Mm.default([0, 0, 0]),
+  /** The layer name in the source file. */
+  layer: z.string().min(1).optional(),
+  /** Display colour, #rrggbb. */
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
 });
 
 export const Element = z.discriminatedUnion("type", [
@@ -70,6 +105,7 @@ export const Element = z.discriminatedUnion("type", [
   SlabElement,
   WallElement,
   ColumnElement,
+  ImportedElement,
 ]);
 export type Element = z.infer<typeof Element>;
 export type ElementType = Element["type"];

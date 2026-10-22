@@ -9,12 +9,26 @@ const levelElevation = (levels: Level[], id: string | undefined) =>
   levels.find((l) => l.id === id)?.elevation ?? 0;
 
 /**
+ * The height of an element's base, millimetres: its own `base` when it has one (walls, slabs and columns placed off any
+ * level), else its level's elevation, else the ground.
+ */
+export function elementBase(element: Element, levels: Level[]): number {
+  if (
+    (element.type === "wall" || element.type === "slab" || element.type === "column") &&
+    element.base !== undefined
+  ) {
+    return element.base;
+  }
+  return levelElevation(levels, element.level);
+}
+
+/**
  * Axis-aligned bounds of an element in millimetres, matching how the viewer builds its geometry: massing from its
  * origin corner, slabs extruded down from their level, walls centred on their baseline and columns on their
- * position, both rising from their level.
+ * position, both rising from their level, and imported geometry from its stored box moved by its translation.
  */
 export function elementBounds(element: Element, levels: Level[]): BoundsMm {
-  const base = levelElevation(levels, element.level);
+  const base = elementBase(element, levels);
   switch (element.type) {
     case "massing": {
       const [x, y, z] = element.origin;
@@ -45,6 +59,11 @@ export function elementBounds(element: Element, levels: Level[]): BoundsMm {
       const [x, y] = element.position;
       const [w, d] = element.section;
       return { min: [x - w / 2, y - d / 2, base], max: [x + w / 2, y + d / 2, base + element.height] };
+    }
+    case "imported": {
+      const [tx, ty, tz] = element.translation;
+      const { min, max } = element.bounds;
+      return { min: [min[0] + tx, min[1] + ty, min[2] + tz], max: [max[0] + tx, max[1] + ty, max[2] + tz] };
     }
   }
 }

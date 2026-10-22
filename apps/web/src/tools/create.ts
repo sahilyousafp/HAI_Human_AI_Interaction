@@ -1,5 +1,5 @@
-import type { Element, PointMm, SceneDocument } from "@aex/protocol";
-import { snap } from "./grid.ts";
+import type { Element, Point3Mm, PointMm, SceneDocument } from "@aex/protocol";
+import { movedOffset } from "./placement.ts";
 import type { Tool, ToolContext } from "./types.ts";
 
 /** A new wall: thickness and height, millimetres; shorter drags than `minLength` place nothing. */
@@ -18,16 +18,34 @@ function newIdentity(doc: SceneDocument, type: Element["type"], label: string): 
   return { id: newId(type), name: `${label} ${count + 1}` };
 }
 
-/** The ground level's id, so new elements sit on it (the element's base is at that level). */
-function groundLevel(doc: SceneDocument): { level?: string } {
-  const ground = doc.levels.find((l) => l.elevation === 0);
-  return ground ? { level: ground.id } : {};
+/**
+ * Where a new element's base goes for a point at height `z`: on the level whose elevation is that height (within 1 mm),
+ * else at that height with no level. The ground, which is where points land unless a snap says otherwise, is a level
+ * when the project has one at 0.
+ */
+export function levelFor(doc: SceneDocument, z: number): { level?: string; base?: number } {
+  const level = doc.levels.find((l) => Math.abs(l.elevation - z) <= 1);
+  if (level) return { level: level.id };
+  return Math.abs(z) <= 1 ? {} : { base: Math.round(z) };
 }
 
-/** A point on the ground under a viewer position, snapped to the 100 mm grid, or null if the view points away. */
-function groundPoint(ctx: ToolContext, at: [number, number]): PointMm | null {
-  const p = ctx.ground(at, 0);
-  return p ? [snap(p[0]), snap(p[1])] : null;
+/**
+ * The point under a viewer position, placed by the drawing aids that are on (the 100 mm grid unless the user switched it
+ * off), in whole millimetres and at the height it snapped to; null if the view points away. `anchor` is where the line
+ * began: its height is the plane the line is drawn in.
+ */
+function drawPoint(ctx: ToolContext, at: [number, number], anchor: Point3Mm | null = null): Point3Mm | null {
+  const result = ctx.resolve(at, { anchor });
+  if (!result) return null;
+  const [x, y, z] = result.point;
+  return [Math.round(x), Math.round(y), Math.round(z)];
+}
+
+/** What snapped the point under the pointer, for the notice: " (Endpoint)", " (Ortho)", or nothing. */
+function snapNote(ctx: ToolContext): string {
+  const snap = ctx.overlay().snap;
+  if (!snap) return "";
+  return ` (${snap.label}${snap.ortho && snap.label !== "Ortho" ? ", Ortho" : ""})`;
 }
 
 /** The same element moved by (dx, dy) in plan, whatever its type. */
@@ -42,31 +60,36 @@ export function shifted(element: Element, dx: number, dy: number): Element {
       return { ...element, start: shift(element.start), end: shift(element.end) };
     case "slab":
       return { ...element, outline: element.outline.map(shift) };
+    case "imported":
+      return {
+        ...element,
+        translation: [element.translation[0] + dx, element.translation[1] + dy, element.translation[2]],
+      };
   }
 }
 
 /** The wall a drag from `start` to `end` draws (not yet created). */
-export function wallBetween(doc: SceneDocument, start: PointMm, end: PointMm): Element {
+export function wallBetween(doc: SceneDocument, start: Point3Mm, end: Point3Mm): Element {
   return {
     ...newIdentity(doc, "wall", "Wall"),
     type: "wall",
-    ...groundLevel(doc),
+    ...levelFor(doc, start[2]),
     properties: {},
-    start,
-    end,
+    start: [start[0], start[1]],
+    end: [end[0], end[1]],
     height: WALL.height,
     thickness: WALL.thickness,
   };
 }
 
 /** The slab a drag between two opposite corners draws: a rectangle, counter-clockwise. */
-export function slabBetween(doc: SceneDocument, a: PointMm, b: PointMm): Element {
+export function slabBetween(doc: SceneDocument, a: Point3Mm, b: Point3Mm): Element {
   const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
   const [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
   return {
     ...newIdentity(doc, "slab", "Slab"),
     type: "slab",
-    ...groundLevel(doc),
+    ...levelFor(doc, a[2]),
     properties: {},
     outline: [
       [x0, y0],
@@ -89,12 +112,14 @@ function dragToDraw(options: {
   icon: string;
   shortcut: string;
   hint: string;
-  draw(doc: SceneDocument, start: PointMm, end: PointMm): Element;
+  draw(doc: SceneDocument, start: Point3Mm, end: Point3Mm): Element;
+  /** The end of the drag may be held to an axis from its start (Ortho) or meet an edge at a right angle. */
+  anchored?: boolean;
   /** Why the drag is too small to place anything, or null if it is big enough. */
-  tooSmall(start: PointMm, end: PointMm): string | null;
-  size(start: PointMm, end: PointMm): string;
+  tooSmall(start: Point3Mm, end: Point3Mm): string | null;
+  size(start: Point3Mm, end: Point3Mm): string;
 }): Tool {
-  let drag: { start: PointMm; end: PointMm } | null = null;
+  let drag: { start: Point3Mm; end: Point3Mm } | null = null;
   const clear = (ctx: ToolContext) => ctx.setOverlay({ draft: null });
   return {
     id: options.id,
@@ -112,21 +137,26 @@ function dragToDraw(options: {
     onTap(ctx) {
       ctx.setOverlay({ notice: options.hint });
     },
+    onHover(ctx, at) {
+      if (!drag) ctx.resolve(at);
+    },
     onDragStart(ctx, at) {
-      const start = groundPoint(ctx, at);
+      const start = drawPoint(ctx, at);
       if (!start || !ctx.doc()) return false;
       drag = { start, end: start };
       return true;
     },
     onDrag(ctx, at) {
       const doc = ctx.doc();
-      const end = groundPoint(ctx, at);
+      const end = drawPoint(ctx, at, drag && options.anchored ? drag.start : null);
       if (!drag || !doc || !end) return;
       drag.end = end;
       const small = options.tooSmall(drag.start, end);
       ctx.setOverlay({
         draft: small ? null : options.draw(doc, drag.start, end),
-        notice: small ? options.hint : `${options.size(drag.start, end)}. Let go to place it.`,
+        notice: small
+          ? options.hint
+          : `${options.size(drag.start, end)}${snapNote(ctx)}. Let go to place it.`,
       });
     },
     onDragEnd(ctx) {
@@ -151,7 +181,12 @@ function dragToDraw(options: {
   };
 }
 
-const lengthMm = (a: PointMm, b: PointMm) => Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]));
+const lengthMm = (a: Point3Mm, b: Point3Mm) => Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]));
+/** The direction from a to b, degrees anticlockwise from the X axis, 0 to 360, to a tenth. */
+const angleDeg = (a: Point3Mm, b: Point3Mm) => {
+  const degrees = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+  return Math.round(((degrees + 360) % 360) * 10) / 10;
+};
 
 /** Wall: pinch on the ground and drag from one end to the other; 200 mm thick, 3000 mm high. */
 export function wallTool(): Tool {
@@ -163,9 +198,10 @@ export function wallTool(): Tool {
     shortcut: "w",
     hint: "Pinch on the ground and drag from one end of the wall to the other.",
     draw: wallBetween,
+    anchored: true,
     tooSmall: (a, b) =>
       lengthMm(a, b) < WALL.minLength ? `Drag farther: a wall is at least ${WALL.minLength} mm long.` : null,
-    size: (a, b) => `Wall ${lengthMm(a, b)} mm`,
+    size: (a, b) => `Wall ${lengthMm(a, b)} mm at ${angleDeg(a, b)} deg`,
   });
 }
 
@@ -200,16 +236,19 @@ export const columnTool: Tool = {
   deactivate(ctx) {
     ctx.setOverlay({ notice: null });
   },
+  onHover(ctx, at) {
+    ctx.resolve(at);
+  },
   onTap(ctx, at) {
     const doc = ctx.doc();
-    const p = groundPoint(ctx, at);
+    const p = drawPoint(ctx, at);
     if (!doc || !p) return;
     const element: Element = {
       ...newIdentity(doc, "column", "Column"),
       type: "column",
-      ...groundLevel(doc),
+      ...levelFor(doc, p[2]),
       properties: {},
-      position: p,
+      position: [p[0], p[1]],
       section: COLUMN.section,
       height: COLUMN.height,
     };
@@ -217,7 +256,7 @@ export const columnTool: Tool = {
   },
 };
 
-/** Copy: pinch an element and drag the copy into place; it snaps to 100 mm and the original stays. */
+/** Copy: pinch an element and drag the copy into place; it snaps to 100 mm or to the drawing aids and the original stays. */
 export function copyTool(): Tool {
   let drag: { element: Element; heightMm: number; start: [number, number, number]; offset: PointMm } | null =
     null;
@@ -250,7 +289,7 @@ export function copyTool(): Tool {
       const doc = ctx.doc();
       const p = drag ? ctx.ground(at, drag.heightMm) : null;
       if (!drag || !doc || !p) return;
-      drag.offset = [snap(p[0] - drag.start[0]), snap(p[1] - drag.start[1])];
+      drag.offset = movedOffset(ctx, drag.element, drag.start, p, at);
       const [dx, dy] = drag.offset;
       const moved = dx !== 0 || dy !== 0;
       ctx.setOverlay({

@@ -99,6 +99,9 @@ importers:
       react-dom:
         specifier: 19.3.1
         version: 19.3.1(react@19.3.1)
+      rhino3dm:
+        specifier: 8.35.0
+        version: 8.35.0
       three:
         specifier: 0.186.1
         version: 0.186.1
@@ -1344,6 +1347,9 @@ packages:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
     engines: {node: '>=0.10.0'}
 
+  rhino3dm@8.35.0:
+    resolution: {integrity: sha512-YcMDgOT7m132Zd/Nw1AAMFkrtpx2SD30V7Mq3P7jfab6ItURXCOdS8dHe+bMGiNQPRJuYEX+Nvos6c9T1xJ6tA==}
+
   rolldown@1.2.14:
     resolution: {integrity: sha512-eTBTTqMR6uHKLgcUqpJP8ntzDI6V4LYA8negAMBEI7gkgVvOdrx6VsvS2Ym+83KhOPdLCHWJu0w7UQFJZhHKNw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -2496,6 +2502,8 @@ snapshots:
   react@19.3.1: {}
 
   require-from-string@2.0.2: {}
+
+  rhino3dm@8.35.0: {}
 
   rolldown@1.2.14:
     dependencies:

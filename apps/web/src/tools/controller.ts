@@ -1,5 +1,23 @@
 import { DEFAULT_GESTURES } from "@aex/perception";
-import type { GestureEvent, Hand, Point2, Point3Mm, SceneDocument, SceneOp } from "@aex/protocol";
+import {
+  DEFAULT_DRAWING_AIDS,
+  type DrawingAids,
+  type GestureEvent,
+  type Hand,
+  type Point2,
+  type Point3Mm,
+  type SceneDocument,
+  type SceneOp,
+} from "@aex/protocol";
+import {
+  buildSnapIndex,
+  emptySnapIndex,
+  type Projector,
+  type Resolved,
+  resolvePoint,
+  type SnapIndex,
+  type SnapKind,
+} from "@aex/scene";
 import type { DragMode, RouterTargets } from "./input-router.ts";
 import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from "./palette.ts";
 import type { ToolRegistry } from "./registry.ts";
@@ -43,6 +61,11 @@ export interface ToolEnvironment {
   select(ids: string[]): void;
   pick(at: Point2): Hit | null;
   ground(at: Point2, heightMm?: number): Point3Mm | null;
+  /** The size of the view, px, and where a scene point is on it: the camera, for matching snaps on screen. */
+  screenSize?(): Point2;
+  projector?(): Projector | null;
+  /** Which drawing aids are on; without it only Grid is. */
+  aids?(): DrawingAids;
   bounds(): { min: Point3Mm; max: Point3Mm };
   onSectionLine(at: Point2): boolean;
   /** Camera-frame position (mirrored like the preview) to viewer position. */
@@ -51,10 +74,13 @@ export interface ToolEnvironment {
   handAspect(): number;
   /** View navigation for gestures no tool takes; a one-hand drag orbits or pans. */
   navigate(event: GestureEvent, dragMode?: DragMode): void;
-  /** Presses the on-screen button at a viewer position, if there is one (hands can press HUD buttons). */
-  press(at: Point2): boolean;
-  /** Whether there is an on-screen button at a viewer position. */
-  isButton(at: Point2): boolean;
+  /**
+   * Presses the on-screen button at a viewer position, if there is one (hands can press HUD buttons). A hand's
+   * pointer that is snapped to a button presses that button, wherever `at` is.
+   */
+  press(at: Point2, source?: PointerSource): boolean;
+  /** Whether there is an on-screen button at a viewer position (or the pointer of `source` is snapped to one). */
+  isButton(at: Point2, source?: PointerSource): boolean;
   /** Grabs the scrolled area at a viewer position (one with more to show), or null if there is none. */
   scrollAt(at: Point2): ScrollGrab | null;
   /** Opens the agent panel ready for a request; returns why it cannot, or null. */
@@ -145,6 +171,7 @@ export class ToolController {
     this.cancelToolDrag();
     this.closeQuestion(false);
     this.active?.deactivate?.(ctx);
+    this.clearSnap();
     this.update({ activeId: id, overlay: { ...this.snapshot.overlay, notice: null } });
     tool.activate?.(ctx);
   }
@@ -200,9 +227,9 @@ export class ToolController {
 
   // Pointer input, in viewer coordinates
 
-  tap(at: Point2): void {
+  tap(at: Point2, source: PointerSource = "mouse"): void {
     const ctx = this.ctx();
-    if (!ctx || this.env?.press(at)) return;
+    if (!ctx || this.env?.press(at, source)) return;
     // Tapping the section's outline selects the section, except with Delete, which removes it (its own tap).
     if (this.onSectionLine(at) && this.snapshot.activeId !== "delete") {
       this.choose("section");
@@ -256,7 +283,7 @@ export class ToolController {
     const ctx = this.ctx();
     if (!ctx) return false;
     this.cancelDrag(source);
-    if (this.env?.isButton(at)) {
+    if (this.env?.isButton(at, source)) {
       // Pinches longer than a quick tap arrive as drags; on a button they are presses, never grabs or orbits.
       this.grabs.set(source, { kind: "press", start: at });
       return true;
@@ -299,11 +326,12 @@ export class ToolController {
   dragEnd(at: Point2, source: PointerSource = "mouse"): void {
     const grab = this.grabs.get(source);
     this.grabs.delete(source);
-    if (grab?.kind === "press") this.env?.press(at);
+    if (grab?.kind === "press") this.env?.press(at, source);
     else if (grab?.kind === "scroll") grab.scroll.release();
     else if (grab?.kind === "tool") {
       const ctx = this.ctx();
       if (ctx) this.active?.onDragEnd?.(ctx, at);
+      this.clearSnap();
     }
   }
 
@@ -316,6 +344,7 @@ export class ToolController {
       if (grab.kind === "tool") {
         const ctx = this.ctx();
         if (ctx) this.active?.onDragCancel?.(ctx);
+        this.clearSnap();
       }
     }
   }
@@ -370,7 +399,7 @@ export class ToolController {
         cancel: () => this.cancelPalette(),
       },
       tool: {
-        tap: (p) => this.tap(toViewer(p)),
+        tap: (p, hand) => this.tap(toViewer(p), hand),
         dragStart: (p, hand) => this.dragStart(toViewer(p), hand),
         drag: (p, hand) => this.drag(toViewer(p), hand),
         dragEnd: (p, hand) => this.dragEnd(toViewer(p), hand),
@@ -398,6 +427,9 @@ export class ToolController {
       select: (ids) => env.select(ids),
       pick: (at) => env.pick(at),
       ground: (at, heightMm) => env.ground(at, heightMm),
+      aids: () => env.aids?.() ?? DEFAULT_DRAWING_AIDS,
+      resolve: (at, options) => this.resolveSnap(env, at, options),
+      clearSnap: () => this.clearSnap(),
       bounds: () => env.bounds(),
       onSectionLine: (at) => env.onSectionLine(at),
       overlay: () => this.snapshot.overlay,
@@ -410,6 +442,69 @@ export class ToolController {
       },
       askAgent: () => env.askAgent(),
     };
+  }
+
+  /** The snap index of the scene, rebuilt only when the scene or the excluded elements change. */
+  private snapCache: { doc: SceneDocument; exclude: string; index: SnapIndex } | null = null;
+
+  private snapIndex(doc: SceneDocument, exclude: string[]): SnapIndex {
+    const key = exclude.join(",");
+    if (this.snapCache?.doc !== doc || this.snapCache.exclude !== key) {
+      this.snapCache = { doc, exclude: key, index: buildSnapIndex(doc, new Set(exclude)) };
+    }
+    return this.snapCache.index;
+  }
+
+  private resolveSnap(
+    env: ToolEnvironment,
+    at: Point2,
+    options: { anchor?: Point3Mm | null; exclude?: string[]; probe?: Point3Mm } = {},
+  ): Resolved | null {
+    const doc = env.doc();
+    const aids = env.aids?.() ?? DEFAULT_DRAWING_AIDS;
+    const project = env.projector?.() ?? null;
+    const [width, height] = env.screenSize?.() ?? [1, 1];
+    let pointer: Point2 = [at[0] * width, at[1] * height];
+    const probe = options.probe;
+    if (probe && project) {
+      const out: [number, number] = [0, 0];
+      if (project(probe, out)) pointer = out;
+    }
+    const result = resolvePoint({
+      pointer,
+      ground: (heightMm) => (probe ? [probe[0], probe[1], heightMm] : env.ground(at, heightMm)),
+      anchor: options.anchor ?? null,
+      aids,
+      index: doc ? this.snapIndex(doc, options.exclude ?? []) : emptySnapIndex(),
+      project,
+    });
+    if (!result) {
+      this.clearSnap();
+      return null;
+    }
+    // Grid on its own is the old behaviour and needs no marker; anything else the user switched on is shown.
+    const shown = result.kind !== null && (result.kind !== "grid" || result.ortho);
+    const label = result.kind === "grid" ? "Ortho" : (result.label ?? "");
+    const current = this.snapshot.overlay.snap;
+    if (!shown) {
+      if (current) this.setOverlay({ snap: null });
+    } else if (
+      !current ||
+      current.point[0] !== result.point[0] ||
+      current.point[1] !== result.point[1] ||
+      current.point[2] !== result.point[2] ||
+      current.label !== label ||
+      current.ortho !== result.ortho
+    ) {
+      this.setOverlay({
+        snap: { point: result.point, kind: result.kind as SnapKind, label, ortho: result.ortho },
+      });
+    }
+    return result;
+  }
+
+  private clearSnap(): void {
+    if (this.snapshot.overlay.snap) this.setOverlay({ snap: null });
   }
 
   private setOverlay(partial: Partial<ToolOverlay>): void {

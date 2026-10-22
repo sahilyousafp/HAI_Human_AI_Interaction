@@ -42,6 +42,11 @@ export const FEATURES = [
     description: "Both fists, then open hands, stop the agents.",
   },
   {
+    id: "snapToButtons",
+    label: "Snap to buttons",
+    description: "A hand pointer near a button locks onto it, so a pinch presses it.",
+  },
+  {
     id: "voice",
     label: "Voice",
     description: "The microphone, the talk key and listening for names.",

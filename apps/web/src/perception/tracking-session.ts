@@ -1,4 +1,4 @@
-import { pinchPoint } from "@aex/perception";
+import { DEFAULT_GESTURES, pinchPoint, pinchRatio } from "@aex/perception";
 import type { GestureEvent, Hand, Point2, TrackedHand, TrackingFrame } from "@aex/protocol";
 import type { InputBus } from "../input/input-bus.ts";
 import type { CameraEffectsState } from "./camera-effects.ts";
@@ -210,8 +210,17 @@ export class TrackingSession {
     this.latestStats = stats;
     // Every visible hand is a pointer, at its pinch point.
     const hands: Partial<Record<Hand, Point2>> = {};
-    for (const h of frame.hands) hands[h.handedness] = pinchPoint(h);
-    this.bus.emitPointer({ hands, ...(frame.aspect ? { aspect: frame.aspect } : {}), ts: frame.captureTs });
+    const closing: Partial<Record<Hand, boolean>> = {};
+    for (const h of frame.hands) {
+      hands[h.handedness] = pinchPoint(h);
+      closing[h.handedness] = pinchRatio(h, frame.aspect) < DEFAULT_GESTURES.pinch.release;
+    }
+    this.bus.emitPointer({
+      hands,
+      closing,
+      ...(frame.aspect ? { aspect: frame.aspect } : {}),
+      ts: frame.captureTs,
+    });
     if (!import.meta.env.DEV) return;
     this.recorder.push(frame);
     if (!window.__AEX_TRACKING__) window.__AEX_TRACKING__ = { frames: [], faceCadence: 1 };

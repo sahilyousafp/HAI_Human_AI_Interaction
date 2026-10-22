@@ -114,6 +114,12 @@
       "from": "dist",
       "to": "vad",
       "include": "^(silero_vad_v5\\.onnx|vad\\.worklet\\.bundle\\.min\\.js)$"
+    },
+    {
+      "package": "rhino3dm",
+      "from": ".",
+      "to": "rhino3dm",
+      "include": "^rhino3dm\\.wasm$"
     }
   ]
 }

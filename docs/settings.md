@@ -9,6 +9,7 @@ The first page lists the sections; each opens its own page with a back button, a
 | **For recordings** (top of the first page) | **Show my hands**: see below |
 | **Camera and tracking** | Which camera, whether its image is mirrored, what is drawn over the preview, the live Gestures and Detection cards, and the frame rate, inference time and backend ([perception.md](perception.md)) |
 | **Features** | One switch per feature: see below |
+| **Drawing aids** | Grid, Ortho, Endpoint, Midpoint, Centre, Project and Perpendicular for the create tools and Move ([tools.md](tools.md)) |
 | **Gestures** | What each gesture does, for each hand where a gesture belongs to one ([gestures.md](gestures.md)) |
 | **Tool rings** | The eight slots of the tools ring and of the create ring ([tools.md](tools.md)) |
 | **Voice** | Speech to text, listening for names and Mochi's spoken replies ([voice.md](voice.md)) |
@@ -27,6 +28,7 @@ Every feature can be switched off on its own, so a demo or a release shows exact
 | Two-hand navigation | Pinching with both hands does not zoom, pan or turn the view |
 | Scroll by hand | A pinch-drag over a list does not scroll it |
 | Press controls by hand | A pinch on a button, switch or link does not press it |
+| Snap to buttons | A hand pointer no longer locks onto the nearest button; it must be on a button to press it |
 | Nod and shake | Head gestures answer nothing |
 | Stop gesture | Both fists then open hands do not stop the agents |
 | Voice | No microphone button or indicator, the talk key does nothing, listening for names is off |

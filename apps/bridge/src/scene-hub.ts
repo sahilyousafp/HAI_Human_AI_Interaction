@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { type Message, type MessageOf, parseScene, type SceneDocument, type SceneOp } from "@aex/protocol";
-import { Autosaver, openProject, type ProjectInfo, SAMPLE_SCENE } from "./project.ts";
+import { AssetStore } from "./assets.ts";
+import { Autosaver, createProject, openProject, type ProjectInfo, SAMPLE_SCENE } from "./project.ts";
 import { SceneStore, type StoreResult } from "./scene-store.ts";
 
 type Send = (message: Message) => void;
@@ -30,6 +31,8 @@ export class SceneHub {
   private autosaver: Autosaver | null = null;
   private detach: (() => void) | null = null;
   private projectError: string | null = null;
+  /** Imported geometry kept in the open project's folder. */
+  readonly assets = new AssetStore(() => this.projectDir);
 
   constructor(
     private readonly options: SceneHubOptions,
@@ -106,6 +109,18 @@ export class SceneHub {
         this.broadcast(this.projectStatus());
         return true;
       }
+      case "project.create": {
+        const created = createProject(message.payload.path);
+        const error = created.ok ? this.open(message.payload.path) : created.error;
+        if (error) {
+          send({ type: "request.error", id: id(), payload: { requestId: message.id, message: error } });
+          // The open project is unchanged, but the sender's status should show why nothing happened.
+          if (!created.ok) return true;
+        }
+        this.broadcast(this.snapshot());
+        this.broadcast(this.projectStatus());
+        return true;
+      }
       default:
         return false;
     }
@@ -125,8 +140,14 @@ export class SceneHub {
     void this.autosaver?.flush();
     this.detach?.();
     this.project = result.project;
-    this.projectError = null;
     this.store = new SceneStore(result.doc);
+    // Imported models nothing refers to any more go; models whose file is gone show as boxes, and the status says so.
+    this.assets.sweep(result.doc);
+    const missing = this.assets.missing(result.doc);
+    this.projectError =
+      missing.length > 0
+        ? `${missing.length === 1 ? "An imported model file is" : `${missing.length} imported model files are`} missing from the project's assets folder (${missing.map((m) => `${m}.aexmesh`).join(", ")}). Its elements are drawn as boxes.`
+        : null;
     const autosaver = new Autosaver(
       result.project.path,
       () => this.broadcast(this.projectStatus()),

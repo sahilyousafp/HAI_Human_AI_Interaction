@@ -134,7 +134,7 @@ test.describe("hand pointer and selection", () => {
     // Both hands: two full pointers, in the colours the camera overlay draws each hand in.
     await page.evaluate(([p, q]) => window.__AEX_INPUT__?.pointer(p, q), [
       await handAt(page, at),
-      await handAt(page, [0.15, 0.2]),
+      await handAt(page, [0.55, 0.45]), // clear of every button: a pointer near one would lock onto it
     ] as const);
     const left = page.getByTestId("hand-pointer-left");
     await expect(left).toBeVisible();
@@ -160,7 +160,7 @@ test.describe("hand pointer and selection", () => {
     await page.evaluate(() => window.__AEX_INPUT__?.engaged(false));
     await page.evaluate(([p, q]) => window.__AEX_INPUT__?.pointer(p, q), [
       await handAt(page, at),
-      await handAt(page, [0.15, 0.2]),
+      await handAt(page, [0.55, 0.45]), // clear of every button: a pointer near one would lock onto it
     ] as const);
     await expect(page.getByTestId("hand-pointer-right")).toHaveAttribute("data-engaged", "false");
     await expect(left).toHaveAttribute("data-engaged", "false");

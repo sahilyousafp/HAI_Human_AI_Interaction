@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  DrawingAidChoices,
   FeatureChoices,
   GestureBindingsSchema,
   type Message,
@@ -32,7 +33,7 @@ export function updateSettingsFile(file: string, patch: Record<string, unknown>)
 
 /**
  * User settings shared by every client: the two palette rings' layouts, what each gesture does, which features
- * are on, whether the user's hands are drawn over the screen, the speech mode, whether the microphone listens for
+ * are on, which drawing aids are on, whether the user's hands are drawn over the screen, the speech mode, whether the microphone listens for
  * team names and how Mochi's replies are spoken. Kept in .aex/settings.json, so they survive reloads, browser
  * changes and restarts. Without a file (tests), settings live in memory.
  */
@@ -50,6 +51,7 @@ export class SettingsHub {
     const speech = SpeechMode.safeParse(stored.speech);
     const replyVoice = ReplyVoice.safeParse(stored.replyVoice);
     const features = FeatureChoices.safeParse(stored.features);
+    const drawingAids = DrawingAidChoices.safeParse(stored.drawingAids);
     this.settings = {
       palette: palette.success ? palette.data : null,
       createPalette: createPalette.success ? createPalette.data : null,
@@ -59,6 +61,7 @@ export class SettingsHub {
       speakReplies: stored.speakReplies !== false,
       replyVoice: replyVoice.success ? replyVoice.data : "af_heart",
       features: features.success ? features.data : null,
+      drawingAids: drawingAids.success ? drawingAids.data : null,
       showHands: stored.showHands === true,
     };
   }
@@ -79,6 +82,7 @@ export class SettingsHub {
       speakReplies,
       replyVoice,
       features,
+      drawingAids,
       showHands,
     } = message.payload;
     const patch: Partial<Settings> = {
@@ -91,6 +95,8 @@ export class SettingsHub {
       ...(replyVoice ? { replyVoice } : {}),
       // Feature choices merge, so switching one feature never resets the others.
       ...(features ? { features: { ...this.settings.features, ...features } } : {}),
+      // Drawing aids merge the same way.
+      ...(drawingAids ? { drawingAids: { ...this.settings.drawingAids, ...drawingAids } } : {}),
       ...(showHands !== undefined ? { showHands } : {}),
     };
     this.settings = { ...this.settings, ...patch };

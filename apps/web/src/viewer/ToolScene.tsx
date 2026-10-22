@@ -35,6 +35,25 @@ export function MeasureMarks({ points, color }: { points: Point3Mm[]; color: str
 }
 
 /**
+ * A drawing aid's snap: a ring on the snapped point and the aid's name beside it. Drawn as page elements, so it keeps
+ * its size at any zoom and is never hidden by the element it snapped to.
+ */
+export function SnapMarker({ point, label }: { point: Point3Mm; label: string }) {
+  return (
+    <group position={toMetres(point)}>
+      <Html center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
+        <span className="snap-marker">
+          <span className="snap-dot" aria-hidden="true" />
+          <span className="snap-label" data-testid="snap-label" data-point={point.slice(0, 2).join(",")}>
+            {label}
+          </span>
+        </span>
+      </Html>
+    </group>
+  );
+}
+
+/**
  * Section: the cut drawn as a plane you can grab, a faint fill with a dashed outline around the model; stronger
  * when the pointer is over it (with the Section tool, a pinch there grabs it).
  */

@@ -33,6 +33,7 @@ describe("SettingsHub", () => {
           speakReplies: true,
           replyVoice: "af_heart",
           features: null,
+          drawingAids: null,
           showHands: false,
         },
       }),
@@ -70,6 +71,18 @@ describe("SettingsHub", () => {
     });
   });
 
+  it("drawing aid switches merge and persist, so changing one never resets another", () => {
+    const file = settingsFile(tempRoot());
+    const hub = new SettingsHub(file, () => {});
+    hub.handle(setSettings({ drawingAids: { ortho: true } }));
+    hub.handle(setSettings({ drawingAids: { endpoint: true, grid: false } }));
+    const sent: Message[] = [];
+    new SettingsHub(file, () => {}).greet((m) => sent.push(m));
+    expect(sent[0]).toMatchObject({
+      payload: { drawingAids: { ortho: true, endpoint: true, grid: false } },
+    });
+  });
+
   it("the create ring's layout persists apart from the tools ring", () => {
     const file = settingsFile(tempRoot());
     new SettingsHub(file, () => {}).handle(setSettings({ createPalette: LAYOUT }));
@@ -94,6 +107,7 @@ describe("SettingsHub", () => {
           speakReplies: true,
           replyVoice: "af_heart",
           features: null,
+          drawingAids: null,
           showHands: false,
         },
       }),

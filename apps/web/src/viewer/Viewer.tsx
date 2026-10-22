@@ -1,10 +1,22 @@
-import type { Element, GestureEvent, Hand, Point2, Point3Mm, SceneDocument, SunSetting } from "@aex/protocol";
-import { sunLightDirection } from "@aex/scene";
+import {
+  DRAWING_AIDS,
+  type Element,
+  type GestureEvent,
+  type Hand,
+  type Point2,
+  type Point3Mm,
+  type SceneDocument,
+  type SunSetting,
+} from "@aex/protocol";
+import type { MeshPart } from "@aex/scene";
+import { type Projector, sunLightDirection } from "@aex/scene";
 import { Edges, Grid } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
+  createContext,
   type FormEvent,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -14,21 +26,34 @@ import {
 import { createPortal } from "react-dom";
 import * as THREE from "three";
 import { canvasToPng, type ViewLink } from "../agent/view-link.ts";
+import { ExportReport, SaveAs3dmButton } from "../export/ExportControls.tsx";
+import type { ProjectExporter } from "../export/exporter.ts";
 import { isSoftwareRenderer } from "../gpu.ts";
+import { ImportButton, ImportDropZone, ImportReport } from "../import/ImportControls.tsx";
+import type { ModelImporter } from "../import/importer.ts";
+import type { ModelAssets } from "../import/model-assets.ts";
 import { handPointer, viewerToHand } from "../input/hand-mapping.ts";
 import { grabScroll } from "../input/hand-scroll.ts";
 import type { InputBus } from "../input/input-bus.ts";
+import {
+  type HandSnap,
+  NO_SNAP,
+  type SnapControl,
+  snappedPoint,
+  stepHandSnap,
+} from "../input/pointer-snap.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
+import type { DrawingAidsStore } from "../settings/drawing-aids.ts";
 import type { FeatureFlags } from "../settings/feature-flags.ts";
 import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
-import type { ToolController } from "../tools/controller.ts";
+import type { PointerSource, ToolController } from "../tools/controller.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
 import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
 import type { Hit } from "../tools/types.ts";
-import { elementGeometry, MM, sceneBounds } from "./geometry.ts";
+import { elementGeometry, MM, modelGeometry, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
 import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
-import { MeasureMarks, ReferenceMarkers, SectionClipping, SectionPlane } from "./ToolScene.tsx";
+import { MeasureMarks, ReferenceMarkers, SectionClipping, SectionPlane, SnapMarker } from "./ToolScene.tsx";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 
 const FOV = 45;
@@ -80,7 +105,11 @@ function elementAt(wrapper: HTMLElement | null, [x, y]: Point2): DomElement | nu
  * only for a checkbox or radio button (a click on it toggles that); dropdowns and text fields need the mouse.
  */
 function pressableAt(wrapper: HTMLElement | null, at: Point2): HTMLElement | null {
-  const target = elementAt(wrapper, at)?.closest<HTMLElement>(PRESSABLE) ?? null;
+  return pressable(elementAt(wrapper, at)?.closest<HTMLElement>(PRESSABLE) ?? null);
+}
+
+/** The element itself when a hand may press it: it is not disabled, and a label counts only for a toggle. */
+function pressable(target: HTMLElement | null): HTMLElement | null {
   if (!target || (target as HTMLButtonElement | HTMLInputElement).disabled) return null;
   if (target instanceof HTMLLabelElement) {
     const control = target.control;
@@ -89,6 +118,28 @@ function pressableAt(wrapper: HTMLElement | null, at: Point2): HTMLElement | nul
     return toggles && !control.disabled ? target : null;
   }
   return target;
+}
+
+/** Every control on screen that a hand could press, with its rectangle (px): what a pointer can snap to. */
+function snapControls(): Array<SnapControl<HTMLElement>> {
+  const controls: Array<SnapControl<HTMLElement>> = [];
+  for (const el of document.querySelectorAll<HTMLElement>(PRESSABLE)) {
+    if (!pressable(el) || el.closest("[inert]") || !el.checkVisibility({ visibilityProperty: true }))
+      continue;
+    const { left, top, right, bottom, width, height } = el.getBoundingClientRect();
+    if (width === 0 || height === 0 || right < 0 || bottom < 0 || left > innerWidth || top > innerHeight) {
+      continue;
+    }
+    controls.push({ key: el, rect: { left, top, right, bottom } });
+  }
+  return controls;
+}
+
+/** Whether a control is the topmost thing at its own middle (so a panel over it does not hide it from a snap). */
+function exposed({ key, rect }: SnapControl<HTMLElement>): boolean {
+  const [x, y] = snappedPoint([(rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2], rect);
+  const top = document.elementFromPoint(x, y);
+  return top !== null && (key === top || key.contains(top));
 }
 
 /** The nearest scrolled area at a viewer position that has more to show (a pinch-drag there scrolls it). */
@@ -140,7 +191,8 @@ declare global {
     __AEX_INPUT__?: {
       gestures(events: GestureEvent[]): void;
       /** The right hand's pinch point, and the left hand's (null where that hand is not in view). */
-      pointer(right: Point2 | null, left?: Point2 | null): void;
+      /** `closing`: the hands whose fingers are closing into a pinch (their pointers hold what they snapped to). */
+      pointer(right: Point2 | null, left?: Point2 | null, closing?: Partial<Record<Hand, boolean>>): void;
       engaged(engaged: boolean): void;
     };
   }
@@ -190,6 +242,26 @@ interface HandPointerState {
   focus: boolean;
 }
 
+/** The imported geometry the viewer draws; shared by every element mesh below it. */
+const ModelAssetsContext = createContext<ModelAssets | null>(null);
+
+/** The triangles of an imported element once its asset has arrived (it is fetched the first time it is needed). */
+function useModelPart(element: Element): MeshPart | null {
+  const assets = useContext(ModelAssetsContext);
+  const asset = element.type === "imported" ? element.asset : null;
+  const part = element.type === "imported" ? element.part : 0;
+  useEffect(() => {
+    if (assets && asset) assets.ensure(asset);
+  }, [assets, asset]);
+  useSyncExternalStore(assets?.subscribe ?? (() => () => {}), assets?.getVersion ?? (() => 0));
+  return (asset && assets?.parts(asset)?.[part]) || null;
+}
+
+/** An imported element's own display colour, unless it is drawn in a state colour (selected, hovered, marked). */
+function importedColor(element: Element): string | undefined {
+  return element.type === "imported" ? element.color : undefined;
+}
+
 function ElementMesh({
   element,
   doc,
@@ -215,31 +287,55 @@ function ElementMesh({
   /** Not created yet (a create tool or Copy is placing it): see-through, and never picked. */
   draft?: boolean;
 }) {
-  const geometry = useMemo(() => elementGeometry(element, doc.levels), [element, doc.levels]);
+  const mesh = useModelPart(element);
+  // An imported model is drawn from its asset's own arrays (millimetres), scaled and placed by the mesh; everything
+  // else, and a model whose triangles have not arrived (or are gone), from geometry built in metres.
+  const model = useMemo(() => (mesh ? modelGeometry(mesh) : null), [mesh]);
+  const built = useMemo(
+    () => (model ? null : elementGeometry(element, doc.levels)),
+    [model, element, doc.levels],
+  );
+  const geometry = (model ?? built) as THREE.BufferGeometry;
   useEffect(() => () => geometry.dispose(), [geometry]);
+  const translation = model && element.type === "imported" ? element.translation : null;
   const topMm = useMemo(() => {
     geometry.computeBoundingBox();
-    return (geometry.boundingBox?.max.z ?? 0) / MM;
-  }, [geometry]);
+    const top = geometry.boundingBox?.max.z ?? 0;
+    return model ? top + (translation?.[2] ?? 0) : top / MM;
+  }, [geometry, model, translation]);
   // Edge lines clip per segment by its first point, so a cut element's vertical edges would stick up through the
   // section; cut elements are drawn without edges instead.
-  const showEdges = sectionMm === null || topMm <= sectionMm;
-  let color = element.type === "massing" ? colors.massing : colors.element;
+  // Imported models have no edge lines: finding them costs time proportional to the triangles (a model of a million
+  // triangles cannot afford it), and on a detailed model they clutter the surface. Their normals show the forms.
+  const showEdges = (sectionMm === null || topMm <= sectionMm) && element.type !== "imported";
+  let color = element.type === "massing" ? colors.massing : (importedColor(element) ?? colors.element);
   if (hovered) color = colors.hover;
   if (selected) color = colors.selected;
   if (marked) color = colors.risk;
   const offset: [number, number, number] = offsetMm ? [offsetMm[0] * MM, offsetMm[1] * MM, 0] : [0, 0, 0];
+  // A model sits at its translation, and its millimetres become metres by scale.
+  const placed: [number, number, number] = translation
+    ? [offset[0] + translation[0] * MM, offset[1] + translation[1] * MM, offset[2] + translation[2] * MM]
+    : offset;
+  const scale = model ? MM : 1;
   if (draft) {
     return (
-      <mesh geometry={geometry} raycast={() => null} renderOrder={1}>
+      <mesh geometry={geometry} position={placed} scale={scale} raycast={() => null} renderOrder={1}>
         <meshStandardMaterial color={colors.selected} transparent opacity={0.55} depthWrite={false} />
         <Edges threshold={20} color={colors.selected} />
       </mesh>
     );
   }
   return (
-    <mesh geometry={geometry} position={offset} castShadow receiveShadow userData={{ elementId: element.id }}>
-      <meshStandardMaterial color={color} roughness={0.9} metalness={0} />
+    <mesh
+      geometry={geometry}
+      position={placed}
+      scale={scale}
+      castShadow
+      receiveShadow
+      userData={{ elementId: element.id }}
+    >
+      <meshStandardMaterial color={color} roughness={0.9} metalness={0} flatShading={model !== null} />
       {showEdges && <Edges threshold={20} color={colors.edge} />}
     </mesh>
   );
@@ -251,9 +347,17 @@ interface Picking {
   hit(x: number, y: number): Hit | null;
   ground(x: number, y: number, heightMm: number): Point3Mm | null;
   project(point: Point3Mm): Point2;
+  /** Where a scene point (mm) is on screen in px, for a view of this size; false when it is behind the camera. */
+  projector(width: number, height: number): Projector;
 }
 
-const noPicking: Picking = { id: () => null, hit: () => null, ground: () => null, project: () => [0, 0] };
+const noPicking: Picking = {
+  id: () => null,
+  hit: () => null,
+  ground: () => null,
+  project: () => [0, 0],
+  projector: () => () => false,
+};
 
 /** An angle difference brought into -180..180 degrees, the short way round. */
 function wrap180(degrees: number): number {
@@ -328,6 +432,24 @@ function CameraRig({
       project: (point) => {
         const v = new THREE.Vector3(point[0] * MM, point[1] * MM, point[2] * MM).project(camera);
         return [(v.x + 1) / 2, (1 - v.y) / 2];
+      },
+      projector: (width, height) => {
+        // The camera's view and projection as one matrix, so each point costs a few multiplications and no allocation.
+        camera.updateMatrixWorld();
+        const e = new THREE.Matrix4().multiplyMatrices(
+          camera.projectionMatrix,
+          camera.matrixWorldInverse,
+        ).elements;
+        return (p, out) => {
+          const [x, y, z] = [p[0] * MM, p[1] * MM, p[2] * MM];
+          const w = (e[3] as number) * x + (e[7] as number) * y + (e[11] as number) * z + (e[15] as number);
+          if (w <= 0) return false;
+          const cx = (e[0] as number) * x + (e[4] as number) * y + (e[8] as number) * z + (e[12] as number);
+          const cy = (e[1] as number) * x + (e[5] as number) * y + (e[9] as number) * z + (e[13] as number);
+          out[0] = ((cx / w + 1) / 2) * width;
+          out[1] = ((1 - cy / w) / 2) * height;
+          return true;
+        };
       },
     };
     return () => {
@@ -443,6 +565,10 @@ export function Viewer({
   askAgent,
   gestures,
   features,
+  aids,
+  importer,
+  exporter,
+  modelAssets,
   markers = [],
   children,
 }: {
@@ -459,6 +585,14 @@ export function Viewer({
   gestures: RouterOptions;
   /** Which features are switched on (Settings > Features). */
   features: FeatureFlags;
+  /** Which drawing aids are switched on (Settings > Drawing aids). */
+  aids: DrawingAidsStore;
+  /** Brings a Rhino .3dm file into the project (the Import button and dropping a file). */
+  importer: ModelImporter;
+  /** Saves the open project as a Rhino .3dm file (the Save as 3dm button). */
+  exporter: ProjectExporter;
+  /** The imported models the viewer draws, fetched from the bridge as they are first needed. */
+  modelAssets: ModelAssets;
   /** Elements captured while the user speaks, numbered in this order. */
   markers?: string[];
   /** HUD panels over the model (the agent panel); inside the viewer, so the hand can press their buttons. */
@@ -469,6 +603,10 @@ export function Viewer({
   const toolState = useSyncExternalStore(tools.subscribe, tools.getSnapshot);
   const sun = useSyncExternalStore(view.onSun, () => view.sun);
   const featureState = useSyncExternalStore(features.subscribe, features.getSnapshot);
+  const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
+  const modelVersion = useSyncExternalStore(modelAssets.subscribe, modelAssets.getVersion);
+  // The cut is applied again when elements change or a model's triangles arrive.
+  const clipVersion = useMemo(() => ({ doc: scene.doc, modelVersion }), [scene.doc, modelVersion]);
   // Picking another tool ends a sun study: the viewer's own light returns.
   const studiedTool = useRef(toolState.activeId);
   useEffect(() => {
@@ -486,7 +624,8 @@ export function Viewer({
   const lastMouse = useRef<Point2 | null>(null);
   const invalidateRef = useRef<() => void>(() => {});
   const rendersRef = useRef<() => number>(() => 0);
-  const framed = useRef(false);
+  /** The project the view was last framed for (the path), so each opened project is framed once. */
+  const framed = useRef<string | null | undefined>(undefined);
   const navigating = useRef(false);
   /** Each visible hand's pointer: its viewer position, where it is on screen, and whether it is over a control. */
   const [pointers, setPointers] = useState<Partial<Record<Hand, HandPointerState>>>({});
@@ -495,12 +634,21 @@ export function Viewer({
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [p90, setP90] = useState<number | null>(null);
   const [projectPath, setProjectPath] = useState("");
-  const [openingProject, setOpeningProject] = useState(false);
+  /** The folder form under the project bar: for opening a project or for starting a new one. */
+  const [projectForm, setProjectForm] = useState<"open" | "new" | null>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const askAgentRef = useRef(askAgent);
   askAgentRef.current = askAgent;
 
   useEffect(() => view.setPointed(hoverId), [view, hoverId]);
+  /** The control each hand's pointer is snapped to, if any (Settings > Features > Snap to buttons). */
+  const snapTargets = useRef<Partial<Record<Hand, HTMLElement>>>({});
+  /** The control a press from this source acts on: the one a hand is snapped to, else what is under the position. */
+  const controlFor = useCallback((at: Point2, source?: PointerSource): HTMLElement | null => {
+    const snapped = source && source !== "mouse" ? snapTargets.current[source] : undefined;
+    if (snapped?.isConnected && pressable(snapped)) return snapped;
+    return pressableAt(wrapper.current, at);
+  }, []);
   // Where the focus hand's pointer meets the ground, for a spoken "here".
   const groundAtRef = useRef<Point2 | null>(null);
   useEffect(
@@ -548,18 +696,45 @@ export function Viewer({
     return corners.map((c) => pickRef.current.project(c));
   }, [tools]);
 
-  // Frame the model the first time a scene arrives.
+  // After an import, frame what it brought in as soon as its elements have arrived from the bridge.
+  const framePending = useRef<string[] | null>(null);
+  useEffect(
+    () =>
+      importer.onImported((ids) => {
+        framePending.current = ids;
+      }),
+    [importer],
+  );
   useEffect(() => {
-    if (!scene.doc || framed.current) return;
-    const geometries = Object.values(scene.doc.elements).map((e) =>
-      elementGeometry(e, scene.doc?.levels ?? []),
-    );
+    const ids = framePending.current;
+    const doc = scene.doc;
+    if (!ids || !doc || !ids.every((id) => doc.elements[id])) return;
+    framePending.current = null;
+    const geometries = ids.map((id) => elementGeometry(doc.elements[id] as Element, doc.levels));
     const { min, max } = sceneBounds(geometries);
     for (const g of geometries) g.dispose();
     nav.current = frameBox(min, max);
     invalidateRef.current();
-    framed.current = true;
   }, [scene.doc]);
+
+  // Frame the model the first time a scene arrives, and again for each project that is opened; an empty project (a
+  // new one) frames a stretch of ground around the origin.
+  const framedPath = scene.project?.path ?? null;
+  useEffect(() => {
+    if (!scene.doc || framed.current === framedPath) return;
+    const geometries = Object.values(scene.doc.elements).map((e) =>
+      elementGeometry(e, scene.doc?.levels ?? []),
+    );
+    if (geometries.length === 0) {
+      nav.current = frameBox([-15, -15, 0], [15, 15, 5]);
+    } else {
+      const { min, max } = sceneBounds(geometries);
+      nav.current = frameBox(min, max);
+    }
+    for (const g of geometries) g.dispose();
+    invalidateRef.current();
+    framed.current = framedPath;
+  }, [scene.doc, framedPath]);
 
   // Tools act on the scene through the same client as everything else, and see the view through picking.
   useEffect(() => {
@@ -572,6 +747,11 @@ export function Viewer({
       // Under a HUD panel the model is hidden from the hand, as it is from the mouse.
       pick: ([x, y]) => (overHud(wrapper.current, [x, y]) ? null : pickRef.current.hit(x, y)),
       ground: ([x, y], heightMm = 0) => pickRef.current.ground(x, y, heightMm),
+      // The camera, for matching snaps on screen: the view's size in px, and where a scene point is on it.
+      screenSize: () => [wrapper.current?.clientWidth || 1, wrapper.current?.clientHeight || 1],
+      projector: () =>
+        pickRef.current.projector(wrapper.current?.clientWidth || 1, wrapper.current?.clientHeight || 1),
+      aids: () => aids.getSnapshot(),
       bounds: () => boundsRef.current,
       handToViewer: (p) => handPointer(wrapper.current, p).at,
       handAspect: () => handAspect.current,
@@ -588,12 +768,12 @@ export function Viewer({
           navigating.current = false;
         }
       },
-      press: (at) => {
-        const target = features.on("handPress") ? pressableAt(wrapper.current, at) : null;
+      press: (at, source) => {
+        const target = features.on("handPress") ? controlFor(at, source) : null;
         target?.click();
         return target !== null;
       },
-      isButton: (at) => features.on("handPress") && pressableAt(wrapper.current, at) !== null,
+      isButton: (at, source) => features.on("handPress") && controlFor(at, source) !== null,
       scrollAt: (at) => {
         const area = features.on("handScrolling") ? scrollableAt(wrapper.current, at) : null;
         return area ? grabScroll(area, () => wrapper.current?.clientHeight ?? 1) : null;
@@ -611,7 +791,7 @@ export function Viewer({
       },
       askAgent: () => askAgentRef.current(),
     });
-  }, [tools, client, sectionOutlineOnScreen, features]);
+  }, [tools, client, sectionOutlineOnScreen, features, aids, controlFor]);
 
   // Hand input: the router sends each gesture to the palette, the active tool or navigation (never the bridge).
   // Both hands are pointers: each shows what a pinch would do there and lights the control it would press. The
@@ -642,9 +822,14 @@ export function Viewer({
       outline(target);
     };
     const shown: Partial<Record<Hand, HandPointerState>> = {};
+    const snaps: Partial<Record<Hand, HandSnap<HTMLElement>>> = {};
+    const snapTargetOf = snapTargets.current;
     const publish = () => setPointers({ ...shown });
     const offPointer = bus.onPointer((sample) => {
       if (sample.aspect) handAspect.current = sample.aspect;
+      // Controls are measured once a frame, and only when a pointer could snap.
+      let controls: Array<SnapControl<HTMLElement>> | null = null;
+      const snapping = bus.engaged && features.on("snapToButtons") && features.on("handPress");
       for (const hand of ["Left", "Right"] as const) {
         const position = sample.hands[hand];
         if (!position) {
@@ -653,6 +838,8 @@ export function Viewer({
             hideTimers[hand] = setTimeout(() => {
               delete hideTimers[hand];
               delete shown[hand];
+              delete snaps[hand];
+              delete snapTargetOf[hand];
               markHover(hand, null);
               publish();
             }, POINTER_HOLD_MS);
@@ -662,10 +849,35 @@ export function Viewer({
         clearTimeout(hideTimers[hand]);
         delete hideTimers[hand];
         const { at, client } = handPointer(wrapper.current, position);
+        // A pointer near a control snaps to it and is drawn on it; a pinch that began there keeps it.
+        let drawn = client;
+        let snapped: SnapControl<HTMLElement> | null = null;
+        if (snapping) {
+          controls ??= snapControls();
+          const next = stepHandSnap(snaps[hand] ?? NO_SNAP, {
+            point: client,
+            now: performance.now(),
+            controls,
+            enabled: true,
+            closing: sample.closing?.[hand] ?? false,
+            ringOpen: tools.paletteOpen,
+            usable: exposed,
+          });
+          snaps[hand] = next;
+          snapped = next.target;
+        } else {
+          delete snaps[hand];
+        }
+        if (snapped) {
+          snapTargetOf[hand] = snapped.key;
+          drawn = snappedPoint(client, snapped.rect);
+        } else {
+          delete snapTargetOf[hand];
+        }
         // The pointer always shows where the hand is; controls respond only while engaged.
-        const target = bus.engaged ? pressableAt(wrapper.current, at) : null;
+        const target = snapped?.key ?? (bus.engaged ? pressableAt(wrapper.current, at) : null);
         markHover(hand, target);
-        shown[hand] = { at, client, overControl: target !== null, focus: false };
+        shown[hand] = { at, client: drawn, overControl: target !== null, focus: false };
       }
       let focusHand: Hand | null = null;
       if (shown[focus]) focusHand = focus;
@@ -707,7 +919,7 @@ export function Viewer({
       offStopArmed();
       for (const timer of Object.values(hideTimers)) clearTimeout(timer);
     };
-  }, [bus, tools, gestures]);
+  }, [bus, tools, gestures, features]);
 
   // Mouse: a click goes to the active tool; a left drag goes to the tool if it takes it, else orbits; right or
   // middle drag pans; holding the right button still opens the palette; the wheel zooms.
@@ -882,9 +1094,10 @@ export function Viewer({
     window.__AEX_TOOLS__ = tools;
     window.__AEX_INPUT__ = {
       gestures: (events) => bus.emitGestures(events),
-      pointer: (right, left = null) =>
+      pointer: (right, left = null, closing) =>
         bus.emitPointer({
           hands: { ...(right ? { Right: right } : {}), ...(left ? { Left: left } : {}) },
+          ...(closing ? { closing } : {}),
           ts: performance.timeOrigin + performance.now(),
         }),
       engaged: (engaged) => bus.setEngaged(engaged),
@@ -915,10 +1128,14 @@ export function Viewer({
       ? overlay.movePreview.offsetMm
       : null;
   const selected = scene.doc && scene.selection[0] ? scene.doc.elements[scene.selection[0]] : undefined;
-  const openProject = (e: FormEvent) => {
+  const submitProject = (e: FormEvent) => {
     e.preventDefault();
-    if (projectPath.trim()) client.openProject(projectPath.trim());
-    setOpeningProject(false);
+    const path = projectPath.trim();
+    if (path) {
+      if (projectForm === "new") client.createProject(path);
+      else client.openProject(path);
+    }
+    setProjectForm(null);
   };
 
   return (
@@ -983,20 +1200,22 @@ export function Viewer({
             <shadowMaterial opacity={0.22} />
           </mesh>
         )}
-        {scene.doc &&
-          Object.values(scene.doc.elements).map((element) => (
-            <ElementMesh
-              key={element.id}
-              element={element}
-              doc={scene.doc as SceneDocument}
-              colors={colors}
-              selected={selection.has(element.id)}
-              hovered={hoverId === element.id}
-              marked={overlay.marked === element.id}
-              offsetMm={previewOffset(element)}
-              sectionMm={overlay.sectionMm}
-            />
-          ))}
+        <ModelAssetsContext.Provider value={modelAssets}>
+          {scene.doc &&
+            Object.values(scene.doc.elements).map((element) => (
+              <ElementMesh
+                key={element.id}
+                element={element}
+                doc={scene.doc as SceneDocument}
+                colors={colors}
+                selected={selection.has(element.id)}
+                hovered={hoverId === element.id}
+                marked={overlay.marked === element.id}
+                offsetMm={previewOffset(element)}
+                sectionMm={overlay.sectionMm}
+              />
+            ))}
+        </ModelAssetsContext.Provider>
         {scene.doc && overlay.draft && (
           <ElementMesh
             key="draft"
@@ -1011,7 +1230,7 @@ export function Viewer({
             draft
           />
         )}
-        <SectionClipping heightMm={overlay.sectionMm} version={scene.doc} />
+        <SectionClipping heightMm={overlay.sectionMm} version={clipVersion} />
         {overlay.sectionMm !== null && (
           <SectionPlane
             heightMm={overlay.sectionMm}
@@ -1021,6 +1240,7 @@ export function Viewer({
           />
         )}
         {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
+        {overlay.snap && <SnapMarker point={overlay.snap.point} label={overlay.snap.label} />}
         {markers.length > 0 && <ReferenceMarkers ids={markers} doc={scene.doc} />}
         <CameraRig
           nav={nav}
@@ -1096,32 +1316,71 @@ export function Viewer({
             >
               Redo
             </button>
-            <button type="button" className="secondary" onClick={() => setOpeningProject((v) => !v)}>
+            <button
+              type="button"
+              className="secondary"
+              data-testid="open-project"
+              onClick={() => setProjectForm((f) => (f === "open" ? null : "open"))}
+            >
               Open project
             </button>
+            <button
+              type="button"
+              className="secondary"
+              data-testid="new-project"
+              title="Start a project with a clean space to import or draw in"
+              onClick={() => setProjectForm((f) => (f === "new" ? null : "new"))}
+            >
+              New project
+            </button>
+            <ImportButton importer={importer} />
+            <SaveAs3dmButton exporter={exporter} />
           </div>
-          {openingProject && (
-            <form className="open-project" onSubmit={openProject}>
+          {projectForm && (
+            <form className="open-project" onSubmit={submitProject} data-testid="project-form">
               <input
                 type="text"
                 value={projectPath}
                 onChange={(e) => setProjectPath(e.target.value)}
                 placeholder="D:\Projects\My building"
-                aria-label="Project folder path"
+                aria-label={projectForm === "new" ? "Folder for the new project" : "Project folder path"}
+                data-testid="project-path"
               />
-              <button type="submit" className="primary">
-                Open
+              <button type="submit" className="primary" data-testid="project-submit">
+                {projectForm === "new" ? "Create" : "Open"}
               </button>
             </form>
           )}
+          {scene.projectMessage && (
+            <p className="project-message" role="alert" data-testid="project-message">
+              {scene.projectMessage}
+              <button
+                type="button"
+                className="secondary"
+                data-hand-press
+                onClick={() => client.clearProjectMessage()}
+              >
+                Close
+              </button>
+            </p>
+          )}
         </div>
+        <ImportReport importer={importer} />
+        <ExportReport exporter={exporter} />
         {children}
       </div>
+      <ImportDropZone importer={importer} />
 
       <div className="viewer-status" data-hud>
         <ActiveTool controller={tools} />
         <span data-testid="selection-status">
           {selected ? `${selected.name} (${selected.type})` : "Nothing selected"}
+        </span>
+        <span data-testid="aids-status">
+          Aids:{" "}
+          {DRAWING_AIDS.filter((a) => aidState[a.id])
+            .map((a) => a.label)
+            .join(", ") || "none"}
         </span>
         {featureState.latencyReadout && (
           <span data-testid="hud-latency">

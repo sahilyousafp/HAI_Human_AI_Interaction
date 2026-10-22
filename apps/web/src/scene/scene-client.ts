@@ -13,6 +13,8 @@ export interface SceneState {
   projectError: string | null;
   /** Last rejected request, shown briefly to the user. */
   lastError: string | null;
+  /** Why the last Open or New project request was refused, if it was. */
+  projectMessage: string | null;
   /** The most recent change to the scene: what kind, its label, and when it arrived (ms). */
   lastChange: { kind: "apply" | "undo" | "redo"; label: string; at: number } | null;
 }
@@ -27,6 +29,7 @@ const INITIAL: SceneState = {
   savedAt: null,
   projectError: null,
   lastError: null,
+  projectMessage: null,
   lastChange: null,
 };
 
@@ -82,7 +85,12 @@ export class SceneClient {
         });
         return true;
       case "request.error":
-        this.update({ lastError: message.payload.message });
+        this.update({
+          lastError: message.payload.message,
+          ...(message.payload.requestId === this.projectRequest
+            ? { projectMessage: message.payload.message }
+            : {}),
+        });
         return true;
       default:
         return false;
@@ -106,8 +114,27 @@ export class SceneClient {
     this.send({ type: "selection.set", id: newId(), payload: { ids } });
   }
 
+  /** The id of the last Open or New project request, so its refusal can be told from other errors. */
+  private projectRequest: string | null = null;
+
   openProject(path: string): boolean {
-    return this.send({ type: "project.open", id: newId(), payload: { path } });
+    return this.projectCall("project.open", path);
+  }
+
+  /** Starts a new, empty project in a folder that holds none yet; the bridge refuses one that does. */
+  createProject(path: string): boolean {
+    return this.projectCall("project.create", path);
+  }
+
+  /** Dismisses the message about a refused project request. */
+  clearProjectMessage(): void {
+    this.update({ projectMessage: null });
+  }
+
+  private projectCall(type: "project.open" | "project.create", path: string): boolean {
+    this.projectRequest = newId();
+    this.update({ projectMessage: null });
+    return this.send({ type, id: this.projectRequest, payload: { path } });
   }
 
   private resync(): void {

@@ -15,6 +15,7 @@ import {
   TeamTask,
 } from "./agent.ts";
 import { GestureBindingsSchema } from "./bindings.ts";
+import { DrawingAidChoices } from "./drawing-aids.ts";
 import { BridgeStatusMessage, Envelope, HelloMessage, MessageId } from "./envelope.ts";
 import { FeatureChoices } from "./features.ts";
 import { ElementId, SceneDocument, SceneOp } from "./scene.ts";
@@ -52,6 +53,8 @@ export const Settings = z.strictObject({
   replyVoice: ReplyVoice.default("af_heart"),
   /** Features the user switched on or off; the rest are on. */
   features: FeatureChoices.nullable().default(null),
+  /** Drawing aids the user switched on or off; the rest keep their defaults (only Grid is on). */
+  drawingAids: DrawingAidChoices.nullable().default(null),
   /** Draw the user's hands as white shapes over the whole screen, so people watching a recording can follow. */
   showHands: z.boolean().default(false),
 });
@@ -196,6 +199,8 @@ export const SceneRedoMessage = message("scene.redo", z.strictObject({}));
 export const SceneResyncMessage = message("scene.resync", z.strictObject({}));
 export const SelectionSetMessage = message("selection.set", z.strictObject({ ids: z.array(ElementId) }));
 export const ProjectOpenMessage = message("project.open", z.strictObject({ path: z.string().min(1) }));
+/** Starts a new, empty project in a folder that does not hold one yet, and opens it. */
+export const ProjectCreateMessage = message("project.create", z.strictObject({ path: z.string().min(1) }));
 /** Changes one or more settings; what is left out keeps its value. */
 export const SettingsSetMessage = message(
   "settings.set",
@@ -208,6 +213,7 @@ export const SettingsSetMessage = message(
     speakReplies: z.boolean().optional(),
     replyVoice: ReplyVoice.optional(),
     features: FeatureChoices.optional(),
+    drawingAids: DrawingAidChoices.optional(),
     showHands: z.boolean().optional(),
   }),
 );
@@ -289,6 +295,7 @@ export const Message = z.discriminatedUnion("type", [
   SceneResyncMessage,
   SelectionSetMessage,
   ProjectOpenMessage,
+  ProjectCreateMessage,
   SettingsSetMessage,
   AgentSendMessage,
   AgentStopMessage,

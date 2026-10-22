@@ -17,6 +17,7 @@ import { ApprovalBroker } from "./agent/approvals.ts";
 import { ExtensionHub } from "./agent/extensions.ts";
 import { Team } from "./agent/team.ts";
 import { ViewContext } from "./agent/view-context.ts";
+import { ASSETS_PATH, handleAssets } from "./asset-routes.ts";
 import { assertLoopback } from "./config.ts";
 import { createLogger, type Logger, silentLogger } from "./log.ts";
 import { AgentTokens } from "./mcp/agent-tokens.ts";
@@ -186,6 +187,17 @@ export function createBridge(options: BridgeOptions): Bridge {
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
     if (req.method === "GET" && path === "/health") {
       res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+      return;
+    }
+    if (path.startsWith(ASSETS_PATH)) {
+      handleAssets(req, res, path, {
+        token,
+        allowedOrigins: options.allowedOrigins,
+        assets: scene.assets,
+        tokensMatch,
+      }).catch(() => {
+        if (!res.headersSent) res.writeHead(500).end();
+      });
       return;
     }
     if (path === MCP_PATH) {

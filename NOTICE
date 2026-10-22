@@ -6,3 +6,7 @@ This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 AEX is an independent open-source project. It is not affiliated with, endorsed by or sponsored by
 Anthropic, Robert McNeel & Associates, Google or the Blender Foundation. Product names are trademarks
 of their respective owners and are used only to describe compatibility.
+
+Third-party components shipped in the app
+- rhino3dm (MIT, Robert McNeel & Associates), including openNURBS, reads Rhino .3dm files in the import worker.
+  Its WebAssembly file is served from this app's own origin.

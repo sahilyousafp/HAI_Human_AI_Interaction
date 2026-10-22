@@ -32,6 +32,39 @@ export function openProject(
   return { ok: true, project: { name: basename(path), path }, doc: parsed.doc };
 }
 
+/** The scene of a new project: one ground level and nothing else, for importing into or drawing in. */
+export function emptyScene(name: string): SceneDocument {
+  return {
+    version: 1,
+    units: "mm",
+    up: "Z",
+    name,
+    levels: [{ id: "L0", name: "Ground", elevation: 0 }],
+    elements: {},
+  };
+}
+
+/**
+ * Creates a project in a folder with an empty scene, without opening it. A folder that already holds a project is left
+ * alone: nothing is written and the answer says so.
+ */
+export function createProject(dir: string): { ok: true } | { ok: false; error: string } {
+  const path = resolve(dir);
+  const file = join(path, SCENE_FILE);
+  if (existsSync(file))
+    return {
+      ok: false,
+      error: `${path} already holds a project. Open it instead, or choose another folder.`,
+    };
+  try {
+    mkdirSync(path, { recursive: true });
+    writeFileSync(file, `${JSON.stringify(emptyScene(basename(path) || "Project"), null, 2)}\n`);
+  } catch (error) {
+    return { ok: false, error: `Could not create ${file}: ${(error as Error).message}` };
+  }
+  return { ok: true };
+}
+
 const RETRYABLE = new Set(["EPERM", "EBUSY", "EACCES"]);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

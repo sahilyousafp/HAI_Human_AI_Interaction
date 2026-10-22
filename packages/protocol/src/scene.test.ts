@@ -89,3 +89,45 @@ describe("parseScene", () => {
     expect(parseScene(raw).ok).toBe(false);
   });
 });
+
+describe("imported elements", () => {
+  const imported = {
+    id: "i-1",
+    type: "imported",
+    name: "Facade panel",
+    asset: "0f8fad5b-d9cb-469f-a165-70867728950e",
+    part: 2,
+    bounds: { min: [0, 0, 0], max: [2000, 1000, 3000] },
+    layer: "Facade",
+    color: "#ff0000",
+  };
+
+  it("validates, and the translation defaults to zero", () => {
+    const result = parseScene(scene({ "i-1": imported }));
+    expect(result.ok).toBe(true);
+    if (result.ok)
+      expect(result.doc.elements["i-1"]).toMatchObject({ translation: [0, 0, 0], layer: "Facade" });
+  });
+
+  it("names the element and the field when the bounding box is missing", () => {
+    const { bounds: _bounds, ...without } = imported;
+    const result = parseScene(scene({ "i-1": without }));
+    expect(result).toEqual({ ok: false, error: expect.stringContaining('Element "i-1": bounds') });
+  });
+
+  it("rejects an inverted bounding box, a bad asset id and a bad colour", () => {
+    const flipped = { ...imported, bounds: { min: [5, 0, 0], max: [0, 1, 1] } };
+    expect(parseScene(scene({ "i-1": flipped })).ok).toBe(false);
+    expect(parseScene(scene({ "i-1": { ...imported, asset: "../../etc/passwd" } })).ok).toBe(false);
+    expect(parseScene(scene({ "i-1": { ...imported, color: "red" } })).ok).toBe(false);
+  });
+});
+
+describe("base height", () => {
+  it("walls, slabs and columns may carry their own base, and it must be a number", () => {
+    const ok = parseScene(scene({ "w-top": { ...wall, id: "w-top", level: undefined, base: 31_200 } }));
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.doc.elements["w-top"]).toMatchObject({ base: 31_200 });
+    expect(parseScene(scene({ "w-top": { ...wall, id: "w-top", base: "high" } })).ok).toBe(false);
+  });
+});

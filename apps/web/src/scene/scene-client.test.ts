@@ -77,4 +77,39 @@ describe("SceneClient", () => {
     });
     expect(client.getSnapshot().lastError).toBe("Nothing to undo");
   });
+
+  it("a new project request names the folder, and its refusal is kept apart from other errors", () => {
+    const { client, sent } = setup();
+    client.createProject("D:/Projects/Fresh");
+    const request = sent.at(-1);
+    expect(request).toMatchObject({ type: "project.create", payload: { path: "D:/Projects/Fresh" } });
+    // An unrelated rejection does not become the project message.
+    client.handle({
+      type: "request.error",
+      id: "e1",
+      payload: { requestId: "other", message: "Nothing to undo" },
+    });
+    expect(client.getSnapshot().projectMessage).toBeNull();
+    client.handle({
+      type: "request.error",
+      id: "e2",
+      payload: { requestId: request?.id ?? "", message: "That folder already holds a project." },
+    });
+    expect(client.getSnapshot().projectMessage).toBe("That folder already holds a project.");
+    client.clearProjectMessage();
+    expect(client.getSnapshot().projectMessage).toBeNull();
+  });
+
+  it("asking again clears the earlier message", () => {
+    const { client, sent } = setup();
+    client.openProject("D:/nope");
+    client.handle({
+      type: "request.error",
+      id: "e",
+      payload: { requestId: sent.at(-1)?.id ?? "", message: "Could not open" },
+    });
+    expect(client.getSnapshot().projectMessage).toBe("Could not open");
+    client.createProject("D:/other");
+    expect(client.getSnapshot().projectMessage).toBeNull();
+  });
 });
