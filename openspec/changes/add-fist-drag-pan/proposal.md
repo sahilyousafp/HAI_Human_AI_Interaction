@@ -7,8 +7,8 @@ Panning by hand is hard to find and hard to do. The only ways today are a two-ha
 ## What Changes
 
 - **A moving fist pans the view.**
-  - Close a hand into a fist and move it: the model follows the hand, like grabbing a map.
-  - Releasing while still moving coasts on, like every other navigation gesture.
+  - Close a hand into a fist and move it: the view moves with the hand (moving the fist right moves the view right, so the model slides left).
+  - The view follows the fist closely and stops where the hand stops: no coasting after the fist opens and no springing after it, so a closed hand feels like holding the view.
   - It works with either hand, and a new per-hand gesture setting, **Fist drag**, can change it to orbit or to nothing (default: pan).
 - **A still fist is a hold, and a longer one.**
   - A fist that stays still for 1.5 s still runs the fist action (cancel, back to Select, by default). It was 600 ms.
@@ -34,7 +34,7 @@ None.
   - A moving fist is reported as a fist drag, with the clutch events unchanged.
   - A fist that closes mid-drag is a clutch and never a fist drag.
   - "Fist drag" is a per-hand gesture setting, and the fist setting is described as a hold.
-- `viewport-navigation`: a fist drag pans (or orbits, if set so) the view, and coasts when released.
+- `viewport-navigation`: a fist drag pans (or orbits, if set so) the view, follows the hand closely and stops where the hand stops (no coasting).
 - `tool-palette`: the fist hold takes 1.5 s, and a moving fist never cancels; the hand pointer shows pan.
 
 ## Impact
@@ -50,7 +50,7 @@ None.
 - **apps/web**:
   - `input-router.ts`: routes the fist drag to navigation, cancels the fist hold when it starts, and keeps it off while both hands are fists.
   - `controller.ts`: `FIST_RESET_MS` from 600 to 1500.
-  - `navigation.ts`: handles the fist drag events and the flick on release.
+  - `navigation.ts`: handles the fist drag events, and a released fist never flicks.
   - `Viewer.tsx`, `styles.css`: the pan pointer, from the clutch and navigation events the viewer already gets.
   - `GestureSettingsCard.tsx`: the Fist drag row, its detection light, and the Fist hold wording.
 - **Docs**: `docs/gestures.md`, `docs/navigation.md`, `docs/tools.md`, `docs/settings.md`, and the new demo `demos/12b-fist-pan.md`.
@@ -66,4 +66,4 @@ None.
 
 ## Demo
 
-A 30-45 s clip, "Grab the view": engage, close the left hand and drag it to slide a building across the screen, flick it to coast; keep the right hand orbiting with a pinch; hold a fist still for 1.5 s and watch the tool snap back to Select. Script: `demos/12b-fist-pan.md`.
+A 30-45 s clip, "Grab the view": engage, close the left hand and drag it to slide a building across the screen, keep the right hand orbiting with a pinch; hold a fist still for 1.5 s and watch the tool snap back to Select. Script: `demos/12b-fist-pan.md`.

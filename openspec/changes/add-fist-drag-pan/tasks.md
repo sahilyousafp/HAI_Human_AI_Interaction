@@ -22,7 +22,7 @@
   - one hand fist-dragging, then the other closing: the drag ends and the stop still arms and fires;
   - not engaged: nothing is emitted.
 
-  Verify: `pnpm --filter @aex/perception test` passes.
+  Verify: `pnpm --filter @hai/perception test` passes.
 
 ## 3. Settings: Fist drag, Fist hold
 
@@ -32,13 +32,13 @@
 
 ## 4. Navigation: the fist drag pans
 
-- [x] 4.1 `navigation.ts`: handle `fist.drag.start|update|end` in the branches of `pinch.drag.*` (same gain, samples and flick), and add them to `movesCamera`. Verify: `navigation.test.ts` covers pan by 10% moves the target as the two-hand pan does, orbit mode orbits as the pinch does, and a flick sets momentum.
+- [x] 4.1 `navigation.ts`: handle `fist.drag.start|update|end` in the branches of `pinch.drag.*` (same gain as the pan), add them to `movesCamera`, and give a fist drag no flick on release. Verify: `navigation.test.ts` covers the pan, orbit mode, and that a fast release leaves no momentum while a pinch drag still flicks.
 - [x] 4.2 `input-router.ts`: route fist drags by `actionFor(bindings, "fistdrag", hand)` with that mode; call `tool.clutch(false)` on a fist drag start so the fist hold is dropped; drop fist drags while another hand navigates, a two-hand pinch runs, or a ring is open; end a running one when both hands become fists. Verify: `input-router.test.ts` has a case for each rule and for `none`.
-- [x] 4.3 `controller.ts`: `FIST_RESET_MS` from 600 to 1500. Verify: `pnpm --filter @aex/web test` passes; the doc comment and `docs/tools.md` say 1.5 s.
+- [x] 4.3 `controller.ts`: `FIST_RESET_MS` from 600 to 1500. Verify: `pnpm --filter @hai/web test` passes; the doc comment and `docs/tools.md` say 1.5 s.
 - [x] 4.4 E2E `e2e/fist-pan.spec.ts`, using the gesture bus like `two-hands.spec.ts`:
-  - a fist drag of 10% to the right moves the model 0.12 view heights, with distance and angles unchanged;
+  - a fist drag of 10% to the right moves the view 0.12 view heights to the right, with distance and angles unchanged;
   - it pans with the Wall tool active and starts no wall;
-  - a flick keeps the camera moving after the end;
+  - the drawn view follows a fast fist within 12 px and a release while moving ends where a release after resting does (no coasting, no spring);
   - a fist drag does not cancel Move after 2 s, while a still 1.5 s fist does;
   - the right hand orbiting is unaffected by the left hand's fist drag;
   - a hand whose fist drag is set to nothing stays a clutch while the other hand pans.
@@ -56,4 +56,4 @@
 
 - [ ] 6.1 Run the whole suite: `pnpm lint`, `pnpm test`, `pnpm exec playwright test`. Verify: no warnings, no failures; fix any, whether or not this change caused them.
 - [ ] 6.2 On the real webcam: fist-pan with each hand ten times, check the status bar's "Gesture to render" p90 stays under 50 ms, and count accidental pans while moving open hands and while clutching mid-drag (target: none in 20 tries). Verify: the numbers are written into the "Check on the real camera" list of the demo script.
-- [ ] 6.3 Demo: write `demos/12b-fist-pan.md` (setup, shot list, the real-camera checks, the post-recording checks, like `demos/12-3d-snapping-and-project-files.md`) for the clip "Grab the view": engage, left fist slides a building across the screen, flick coasts, right hand orbits with a pinch, a still fist for 1.5 s returns the tool to Select. Verify: the script's steps all work in one take on the real camera, and the clip is listed in `docs/PLAN.md`'s clips section.
+- [ ] 6.3 Demo: write `demos/12b-fist-pan.md` (setup, shot list, the real-camera checks, the post-recording checks, like `demos/12-3d-snapping-and-project-files.md`) for the clip "Grab the view": engage, left fist slides a building across the screen and stops where the hand stops, right hand orbits with a pinch, a still fist for 1.5 s returns the tool to Select. Verify: the script's steps all work in one take on the real camera, and the clip is listed in `docs/PLAN.md`'s clips section.

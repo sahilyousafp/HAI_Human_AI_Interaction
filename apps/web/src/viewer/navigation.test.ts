@@ -1,4 +1,4 @@
-import type { GestureEvent } from "@aex/protocol";
+import type { GestureEvent } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { coast, initialInput, movesCamera, navigate } from "./navigation.ts";
 import { cameraPosition, ELEVATION_MAX, orbit, pan, type Turntable, zoom } from "./turntable.ts";
@@ -191,16 +191,24 @@ describe("fist drag (spec: a fist drag pans the view)", () => {
           position: [0.5, 0.5],
         } as GestureEvent);
 
-  it("set to pan, moves the view exactly as the two-hand pan does and leaves distance and angles alone", () => {
+  it("set to pan, carries the view with the hand (the opposite of the two-hand pan) and leaves distance and angles alone", () => {
     const input = initialInput();
     input.dragMode = "pan";
     let t = navigate(start, input, fist("start"));
     t = navigate(t, input, fist("update", 0.1, 0.05));
-    const expected = pan(start, -0.1 * 1.2, 0.05 * 1.2);
+    const expected = pan(start, 0.1 * 1.2, -0.05 * 1.2);
     for (const [i, v] of t.target.entries()) expect(v).toBeCloseTo(expected.target[i] ?? 0, 9);
     expect(t.distance).toBe(start.distance);
     expect(t.azimuth).toBe(start.azimuth);
     expect(t.elevation).toBe(start.elevation);
+  });
+
+  it("a pinch drag set to pan keeps its direction: only the fist drag was turned round", () => {
+    const input = initialInput();
+    input.dragMode = "pan";
+    const viaPinch = navigate(start, input, drag(0.1, 0.05));
+    const expected = pan(start, -0.1 * 1.2, 0.05 * 1.2);
+    for (const [i, v] of viaPinch.target.entries()) expect(v).toBeCloseTo(expected.target[i] ?? 0, 9);
   });
 
   it("set to orbit, orbits like a pinch drag", () => {
@@ -216,27 +224,34 @@ describe("fist drag (spec: a fist drag pans the view)", () => {
     expect(movesCamera(fist("end"))).toBe(false);
   });
 
-  it("a fast fist drag released while moving coasts on, and grabbing again stops it", () => {
+  it("a fist drag released while still moving fast does not coast: the view stays where the hand stopped", () => {
     const input = initialInput();
     input.dragMode = "pan";
     let t = navigate(start, input, fist("start", 0, 0, 1000));
-    for (let i = 1; i <= 6; i++) t = navigate(t, input, fist("update", 0.01, 0, 1000 + i * 33));
+    for (let i = 1; i <= 6; i++) t = navigate(t, input, fist("update", 0.03, 0, 1000 + i * 33));
+    const atRelease = t;
     t = navigate(t, input, fist("end", 0, 0, 1000 + 7 * 33));
-    expect(input.momentum?.panX).toBeLessThan(0); // moving right pans the target left
-    const before = t.target;
-    for (let i = 0; i < 20; i++) t = coast(t, input, 16);
-    expect(t.target).not.toEqual(before);
-    navigate(t, input, fist("start", 0, 0, 5000));
     expect(input.momentum).toBeNull();
+    expect(coast(t, input, 16)).toEqual(atRelease);
   });
 
-  it("a fist held still before release does not coast", () => {
+  it("a fist drag holds the view while it runs, and a pinch drag flick still coasts as before", () => {
     const input = initialInput();
     input.dragMode = "pan";
+    expect(input.grabbing).toBe(false);
     let t = navigate(start, input, fist("start", 0, 0, 1000));
-    for (let i = 1; i <= 6; i++) t = navigate(t, input, fist("update", 0.01, 0, 1000 + i * 33));
-    for (let i = 7; i <= 12; i++) t = navigate(t, input, fist("update", 0, 0, 1000 + i * 33));
-    navigate(t, input, fist("end", 0, 0, 1000 + 13 * 33));
-    expect(input.momentum).toBeNull();
+    expect(input.grabbing).toBe(true);
+    t = navigate(t, input, fist("end", 0, 0, 1100));
+    expect(input.grabbing).toBe(false);
+    // Disengaging while holding the view lets go of it.
+    navigate(t, input, fist("start", 0, 0, 2000));
+    navigate(t, input, { type: "disengaged", ts: 2100, confidence: 1, reason: "idle" });
+    expect(input.grabbing).toBe(false);
+    // A pinch drag keeps its flick.
+    const pinch = initialInput();
+    let u = navigate(start, pinch, { ...drag(0, 0), type: "pinch.drag.start", ts: 3000 } as GestureEvent);
+    for (let i = 1; i <= 6; i++) u = navigate(u, pinch, { ...drag(0.03, 0), ts: 3000 + i * 33 });
+    navigate(u, pinch, { ...drag(0, 0), type: "pinch.drag.end", ts: 3000 + 7 * 33 } as GestureEvent);
+    expect(pinch.momentum).not.toBeNull();
   });
 });

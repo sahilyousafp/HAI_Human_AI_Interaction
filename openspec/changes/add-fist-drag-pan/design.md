@@ -14,7 +14,7 @@ See proposal.md - Why. Where the code stands:
 
 **Goals:**
 - A fist carries a deliberate move without ever turning into a cancel or a tool action.
-- Reuse the existing pan navigation path (gain, flick, coasting) instead of a second one.
+- Reuse the existing pan navigation path (gain) instead of a second one; a fist is a grab, so it has no flick (decision 5b).
 - Keep the clutch (reposition mid-drag) and the two-fists stop working exactly as now.
 - Everything is testable from recorded landmark frames: no human needed.
 
@@ -48,16 +48,26 @@ See proposal.md - Why. Where the code stands:
   The palm point is 6 to 8 times steadier while closing, and its held jitter is a third of the 3% threshold (decision 2), which is kept at 0.03. The pinch point would fake a pan on its own (closing) and would pass the threshold while held. `features.test.ts` pins these numbers against the clips.
 - Rejected: the fingertip centroid (moves as the hand closes); the wrist alone (tracked less reliably and turns with the forearm).
 
+**3b. Direction: the view moves with the fist.**
+- Moving the fist right moves the view right, and down moves it down, so the model slides the other way. This is the reverse of the two-hand pan and of a pinch drag set to pan (where the model follows the hand), and only the fist drag is turned round: the others keep the direction users already know.
+- `navigate()` flips the sign for `fist.drag.update` in pan mode; the gain is shared.
+- Rejected: the model following the hand (the first version of this change; it felt backwards on a real hand); flipping the pinch pan and the two-hand pan too (a change to gestures nobody asked to change).
+
 **4. The fist drag ends on the first non-fist frame, not after the 100 ms debounce.**
-- A hand opening moves and changes the landmarks. Ending the drag at the first frame that stops being a fist keeps that noise out of the flick measured over the last 100 ms. `clutch.end` still follows after its debounce, unchanged.
+- A hand opening moves and changes the landmarks. Ending the drag at the first frame that stops being a fist keeps that noise out of the drag (and a fist drag has no flick to measure at all, decision 5b). `clutch.end` still follows after its debounce, unchanged.
 - A hand lost for less than `pinch.lostGraceMs` (250 ms) keeps its fist drag, like a pinch.
 
 **5. Routing: fist drags go to navigation, per hand, with the hand's own mode.**
 - The router asks `actionFor(bindings, "fistdrag", hand)`. `pan` and `orbit` send the events to `navigation(event, mode)`; `none` ignores them.
-- `navigate()` handles `fist.drag.start|update|end` in the same branches as `pinch.drag.*`, so flick and coasting are shared. `movesCamera` includes them for the latency stamp.
+- `navigate()` handles `fist.drag.start|update` in the same branches as `pinch.drag.*`, so the gain is shared. `movesCamera` includes them for the latency stamp.
 - A fist drag is dropped (no owner) if another hand is already navigating, a two-hand pinch is active, or this hand's partner holds a ring open. Navigation state (`NavigationInput`) is shared, so two moving hands would fight over `samples` and `momentum`.
 - When the second hand closes into a fist, the recogniser ends a running fist drag at once (it knows both postures; the router only learns of the second fist after its 100 ms debounce) and the hand stays a pure clutch until it opens. The router also drops a fist drag that starts while it knows both hands are fists.
 - Rejected: letting both hands pan at once (the sum of two hands is not a gesture anyone can predict).
+
+**5b. A fist holds the view: close follow, no flick.**
+- Measured on a fast sweep (0.45 of the frame a second, 1280 px wide): with the camera's 100 ms easing the drawn view trailed the hand by 17 px, and a fist opened while still moving made the view coast 109 px beyond where the hand stopped (the flick), which felt elastic.
+- While a fist drag runs, `NavigationInput.grabbing` is set and the camera eases with a 50 ms time constant (`GRAB_EASE_MS`) instead of 100 ms: the lag falls to 6 px, and the remaining tail after the release is the same short ease (5 px). A released fist clears the momentum instead of measuring a flick, so the view stays where the hand stopped (277 px either way).
+- Rejected: a shorter ease for all navigation (the 100 ms ease smooths 22 fps tracking for orbit and zoom, which are not a grab); keeping the flick for fists (it is the elastic part); no ease at all while grabbing (the view would step at the tracking rate).
 
 **6. Cancel by fist: the same browser timer, 1.5 s, cleared by a fist drag.**
 - `FIST_RESET_MS` goes from 600 to 1500. The router calls `tool.clutch(false)` when a fist drag starts, which clears the timer, so a moving fist never cancels. A still fist, including normal tracking jitter under 3%, still runs the action.
@@ -81,10 +91,10 @@ Panning must not wait for anything else: it runs entirely in the browser, like o
 ## Risks / Trade-offs
 
 - **A fist is easy to confuse with a bad pinch** (the existing note in `docs/gestures.md`: on recorded footage the two shapes are close). A hand that half-closes could pan the view. → The fist posture requires all four fingers curled (it is already stricter than the pinch), the drag needs 100 ms of fist plus 3% of movement, and Fist drag can be set to nothing per hand. Measured on the recorded clips in task 1.3.
-- **Hand opening noise** could add a false flick. → Decision 4 ends the drag at the first non-fist frame, and tests feed a recorded opening.
+- **Hand opening noise** could move the view as the hand opens. → Decision 4 ends the drag at the first non-fist frame, and decision 5b gives a fist no flick at all.
 - **A longer hold (1.5 s) makes the cancel fist slower** when the user means it. → Intended by the proposal; the head shake and Escape still cancel at once.
 - **Mixed hands:** a fist drag on one hand and a pinch drag on the other are dropped, not combined (decision 5). A user who tries both at once sees only the first one move the view. → Documented in `docs/navigation.md`.
-- **Fatigue:** a raised fist moving for long is as tiring as any mid-air gesture. → Coasting after a flick lets a short move cover a long distance.
+- **Fatigue:** a raised fist moving for long is as tiring as any mid-air gesture. → Clutching (open, move back, close) lets a short reach cover a long distance, as the mouse does.
 
 ## Migration
 

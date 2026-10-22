@@ -1,4 +1,4 @@
-import type { GestureEvent } from "@aex/protocol";
+import type { GestureEvent } from "@hai/protocol";
 import { orbit, pan, type Turntable, zoom } from "./turntable.ts";
 
 /** How strongly hand motion moves the camera. Positions are fractions of the camera frame. */
@@ -50,6 +50,8 @@ export interface NavigationInput {
   samples: Array<Motion & { ts: number }>;
   /** Set after a flick: the view keeps moving like this, slowing down, until it stops or is grabbed. */
   momentum: Motion | null;
+  /** A fist drag is holding the view: the camera follows the hand closely (see `GRAB_EASE_MS`) and never coasts. */
+  grabbing: boolean;
 }
 
 export const initialInput = (): NavigationInput => ({
@@ -57,6 +59,7 @@ export const initialInput = (): NavigationInput => ({
   dragMode: "orbit",
   samples: [],
   momentum: null,
+  grabbing: false,
 });
 
 const KEYS = Object.keys(STILL) as Array<keyof Motion>;
@@ -111,7 +114,9 @@ export function coast(t: Turntable, input: NavigationInput, dtMs: number): Turnt
  * Applies one gesture event to the camera. Pure apart from `input`: returns the new camera state.
  * - One-hand pinch drag orbits like dragging the model with the mouse: dragging right turns the camera to negative
  *   azimuth, dragging down raises the view. Set to pan, it moves the view like the two-hand midpoint does. A fist drag
- *   is the same drag made with a closed hand, and its hand's own setting says whether it pans or orbits.
+ *   is the same drag made with a closed hand, and its hand's own setting says whether it pans or orbits; a fist that
+ *   pans carries the view with the hand (moving the fist right moves the view right). A fist holds the view like a
+ *   grab: the camera follows it closely and it stops where the hand stops (no flick, no coasting).
  * - Two-hand pinch: hands apart zooms in; the view pans opposite to the midpoint's motion; turning the hands like a
  *   dial turns the view.
  * - Releasing while still moving is a flick: `input.momentum` is set and `coast` keeps the view moving. Grabbing
@@ -130,15 +135,26 @@ export function navigate(
     return move(t, change);
   };
   switch (event.type) {
-    case "pinch.drag.start":
     case "fist.drag.start":
+      input.grabbing = true;
+      input.momentum = null;
+      input.samples = [];
+      return t;
+    case "pinch.drag.start":
       input.momentum = null;
       input.samples = [];
       return t;
     case "pinch.drag.update":
     case "fist.drag.update":
-      if (input.dragMode === "pan")
-        return record({ panX: -event.delta[0] * gains.pan, panY: event.delta[1] * gains.pan });
+      if (input.dragMode === "pan") {
+        // A pinch drag set to pan moves the way the two-hand pan does (the view opposite to the hand); a fist drag
+        // moves the view with the hand, so the model slides the other way.
+        const toward = event.type === "fist.drag.update" ? -1 : 1;
+        return record({
+          panX: -event.delta[0] * gains.pan * toward,
+          panY: event.delta[1] * gains.pan * toward,
+        });
+      }
       return record({
         azimuth: -event.delta[0] * gains.orbitAzimuth,
         elevation: event.delta[1] * gains.orbitElevation,
@@ -166,8 +182,16 @@ export function navigate(
         azimuth: turned ? turn * gains.rotate : 0,
       });
     }
-    case "pinch.drag.end":
     case "fist.drag.end":
+      // A closed hand holds the view: it stays where the hand stopped, with no flick.
+      input.grabbing = false;
+      input.momentum = null;
+      input.samples = [];
+      return t;
+    case "disengaged":
+      input.grabbing = false;
+      return t;
+    case "pinch.drag.end":
     case "twohand.end":
       input.momentum = fling(input.samples, event.ts);
       input.samples = [];

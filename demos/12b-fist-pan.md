@@ -1,6 +1,6 @@
 # Demo 12b - "Grab the view"
 
-A short bonus clip (not a roadmap week). Target length 30-45 s, 16:9, captions burned in. A closed hand grabs the model and slides it across the screen, a flick coasts, the other hand orbits with a pinch, and a still fist held for 1.5 s snaps the tool back to Select. Show my hands is on, so the closed hand is visible.
+A short bonus clip (not a roadmap week). Target length 30-45 s, 16:9, captions burned in. A closed hand grabs the model and slides it across the screen and stops where your hand stops, the other hand orbits with a pinch, and a still fist held for 1.5 s snaps the tool back to Select. Show my hands is on, so the closed hand is visible.
 
 ## Setup (before recording)
 
@@ -14,8 +14,8 @@ A short bonus clip (not a roadmap week). Target length 30-45 s, 16:9, captions b
 | # | Time | Do | Voice-over / caption |
 |---|---|---|---|
 | 1 | 0-6 s | Hold an open palm until engaged. Move the left hand into view, open: the pointer is a ring. | "Open hand: a pointer." |
-| 2 | 6-16 s | Close the left hand into a fist at rest and drag it across the screen. The pointer turns into four arrows, and fills in while the model slides with your hand. | "Close your hand to grab the view." |
-| 3 | 16-22 s | Flick the fist sideways and open it while still moving: the view coasts to a stop. | "Flick it and it keeps going." |
+| 2 | 6-16 s | Close the left hand into a fist at rest and drag it across the screen. The pointer turns into four arrows, and fills in while the view moves with your hand. | "Close your hand and the view moves with it." |
+| 3 | 16-22 s | Sweep the fist sideways fast and open it while still moving: the view stops right where your hand was, with no drift. | "It stops where your hand stops." |
 | 4 | 22-30 s | Right hand: pinch-drag to orbit. Then the left fist drag again: pan while the right hand rests. | "Right hand orbits. Left hand pans." |
 | 5 | 30-40 s | Press M (Move). Hold the left fist still: nothing for a second, then at 1.5 s the status bar goes back to Select. Then fist-drag again with Move active: it pans and never cancels. | "Hold still to cancel. Move to pan." |
 

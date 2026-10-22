@@ -11,9 +11,9 @@ Engage first by holding an open palm toward the camera (see [gestures.md](gestur
 | Pinch and drag with one hand | Orbit, like dragging the model with the mouse. Drag down looks from higher. The view stays between 5 and 89 degrees above the ground |
 | Pinch with both hands at once, move them apart or together | Zoom in or out |
 | Pinch with both hands, move them together sideways or up and down | Pan; the view moves the opposite way |
-| Close one hand into a fist (at rest) and move it | Pan: the model follows the hand like a grabbed map. The pointer shows a pan icon while the hand is a fist, filled while the view moves. Settings > Gestures > Fist drag can change it to orbit or nothing, for each hand |
+| Close one hand into a fist (at rest) and move it | Pan: the view moves with the hand (move the fist right and the view moves right, so the model slides left). The pointer shows a pan icon while the hand is a fist, filled while the view moves. Settings > Gestures > Fist drag can change it to orbit or nothing, for each hand |
 | Pinch with both hands and turn them like a dial | Turn the view the same way (turns under 0.6 degrees per frame are ignored as tracking jitter) |
-| Let go while still moving (a flick) | The view coasts on and slows to a stop, for orbit, zoom, pan and turn alike, whether by pinch or by fist. Pinching again, clicking or scrolling catches it |
+| Let go while still moving (a flick) | The view coasts on and slows to a stop, for orbit, zoom, pan and turn alike when made by pinch (a fist never coasts: it holds the view and stops where the hand stops). Pinching again, clicking or scrolling catches it |
 | Close a hand into a fist mid-drag | Clutch: move your hand back without moving the view, then pinch again. Only a fist closed at rest pans |
 | Hold a fist still for 1.5 s | The fist hold: back to Select (set in Settings > Gestures > Fist hold). A fist that moves never does this |
 | Point (a relaxed hand, not pinching) | A ring follows your pinch point, anywhere on the page; the element under it is highlighted |
@@ -45,7 +45,8 @@ Hand navigation runs entirely in the browser. It keeps working while the bridge 
 | Fist pan | Same gain as the two-hand pan (1.2 view heights per full frame of the palm's movement); starts after the fist has moved 3% of the frame width (`clutch.moveMin`) | same, `packages/perception/src/gestures/config.ts` |
 | Two-hand zoom | Proportional to the change in distance between the hands | same |
 | Two-hand turn | 1 degree of view per degree the hands turn | same |
-| Flick | Measured over the last 100 ms before letting go; coasting slows with a 320 ms time constant, so the view travels about a third of a second's worth of the release speed | same |
+| Fist follow | While a fist holds the view the camera eases toward the hand with a 50 ms time constant (100 ms otherwise), so it trails by about 1% of the screen width at 0.45 of the frame a second, and a released fist leaves no momentum | `apps/web/src/viewer/Viewer.tsx`, `navigation.ts` |
+| Flick | Measured over the last 100 ms before letting go (pinch and two-hand only, never a fist); coasting slows with a 320 ms time constant, so the view travels about a third of a second's worth of the release speed | same |
 | Pointer gain | 1.3 around the centre, so the hand does not have to reach the frame edges | `apps/web/src/viewer/Viewer.tsx` |
 | Camera easing | 100 ms time constant: hand input arrives about every 40 ms, so the camera glides between samples instead of stepping | same |
 | Mouse orbit | 0.3 degrees per pixel | same |
@@ -56,4 +57,4 @@ The status bar shows **Gesture to render p90**: the time from the camera capturi
 
 ## Projects
 
-The toolbar shows the open project and its save state. Every change is saved to `scene.aex.json` in the project folder within 2 seconds. **Open project** takes a folder path; a folder without a scene file starts from the sample building. The last project opened is reopened on the next start.
+The toolbar shows the open project and its save state. Every change is saved to `scene.hai.json` in the project folder within 2 seconds. **Open project** takes a folder path; a folder without a scene file starts from the sample building. The last project opened is reopened on the next start.

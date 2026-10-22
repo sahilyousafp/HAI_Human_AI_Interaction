@@ -16,7 +16,7 @@ type Hand = "Left" | "Right";
 
 async function send(page: Page, type: string, hand: Hand, position: [number, number], delta = [0, 0]) {
   const ts = await now(page);
-  await page.evaluate((e) => window.__AEX_INPUT__?.gestures([{ confidence: 1, ...e } as never]), {
+  await page.evaluate((e) => window.__HAI_INPUT__?.gestures([{ confidence: 1, ...e } as never]), {
     type,
     hand,
     position,
@@ -31,11 +31,11 @@ for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       bridge = await startTestBridge(page);
       await openViewer(page);
-      await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+      await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
       const at = await handAt(page, [0.6, 0.6]);
       await page.evaluate(
         ([h, side]) =>
-          side === "Left" ? window.__AEX_INPUT__?.pointer(null, h) : window.__AEX_INPUT__?.pointer(h),
+          side === "Left" ? window.__HAI_INPUT__?.pointer(null, h) : window.__HAI_INPUT__?.pointer(h),
         [at, hand] as const,
       );
       const pointer = page.getByTestId(`hand-pointer-${hand.toLowerCase()}`);

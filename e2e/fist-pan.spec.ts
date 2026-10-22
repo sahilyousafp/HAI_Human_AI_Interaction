@@ -4,7 +4,7 @@ import { pan, type Turntable } from "../apps/web/src/viewer/turntable.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { camera, handAt, now, openViewer, startTestBridge } from "./viewer.ts";
 
-// A fist closed at rest and then moved pans the view (the model follows the hand); holding it still is the cancel.
+// A fist closed at rest and then moved pans the view (the view moves with the hand); holding it still is the cancel.
 // Hand input is injected into the same bus the tracker feeds. Engagement is enforced by the recogniser before events
 // reach the bus, so "nothing happens while not engaged" is covered by its unit tests.
 let bridge: Bridge | null = null;
@@ -19,7 +19,7 @@ type Point = [number, number];
 const start = async (page: Page) => {
   bridge = await startTestBridge(page);
   await openViewer(page);
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
 };
 
 async function send(
@@ -30,7 +30,7 @@ async function send(
   position: Point,
   delta: Point = [0, 0],
 ) {
-  await page.evaluate((e) => window.__AEX_INPUT__?.gestures([{ confidence: 1, ...e } as never]), {
+  await page.evaluate((e) => window.__HAI_INPUT__?.gestures([{ confidence: 1, ...e } as never]), {
     type,
     hand,
     ts,
@@ -59,14 +59,14 @@ async function fistDrag(
 
 const turntable = (c: Awaited<ReturnType<typeof camera>>): Turntable => c;
 
-test("a fist dragged 10% to the right slides the model 0.12 view heights to the right, as the two-hand pan does", async ({
+test("a fist dragged 10% to the right moves the view 0.12 view heights to the right, the model sliding left", async ({
   page,
 }) => {
   await start(page);
   const before = await camera(page);
   await fistDrag(page, "Left", { dx: 0.01, steps: 10, rest: 400 }); // held still before letting go: no coast
   const after = await camera(page);
-  const expected = pan(turntable(before), -0.1 * 1.2, 0);
+  const expected = pan(turntable(before), 0.1 * 1.2, 0);
   for (const [i, v] of after.target.entries()) expect(v).toBeCloseTo(expected.target[i] ?? 0, 6);
   expect(after.distance).toBe(before.distance);
   expect(after.azimuth).toBe(before.azimuth);
@@ -77,21 +77,67 @@ test("it pans with the Wall tool active, and starts no wall", async ({ page }) =
   await start(page);
   await page.keyboard.press("w");
   await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "wall");
-  const elements = await page.evaluate(() => window.__AEX_VIEWER__?.meshCount());
+  const elements = await page.evaluate(() => window.__HAI_VIEWER__?.meshCount());
   const before = await camera(page);
   await fistDrag(page, "Right", { dx: 0.01, steps: 10, rest: 400 });
   expect((await camera(page)).target).not.toEqual(before.target);
   await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "wall");
-  expect(await page.evaluate(() => window.__AEX_VIEWER__?.meshCount())).toBe(elements);
+  expect(await page.evaluate(() => window.__HAI_VIEWER__?.meshCount())).toBe(elements);
 });
 
-test("a flick keeps the model sliding after the fist opens", async ({ page }) => {
+/**
+ * A fast sweep of the fist (0.45 of the frame a second), released while still moving or after resting; returns how far
+ * a fixed point of the ground is drawn to have moved, in px: when the last update arrived, at the release, and once
+ * everything has settled.
+ */
+async function sweep(page: Page, release: "moving" | "after-rest") {
+  const send = (type: string, ts: number, x: number, dx = 0) =>
+    page.evaluate(
+      (e) =>
+        window.__HAI_INPUT__?.gestures([
+          { confidence: 1, hand: "Left", delta: [e.dx, 0], position: [e.x, 0.5], ...e } as never,
+        ]),
+      {
+        type,
+        ts,
+        x,
+        dx,
+      },
+    );
+  const drawnX = () =>
+    page.evaluate(() => (window.__HAI_VIEWER__?.project([20, 15, 0])[0] ?? 0) * innerWidth);
+  const base = await drawnX();
+  let ts = await now(page);
+  await send("fist.drag.start", ts, 0.2);
+  let x = 0.2;
+  for (let i = 0; i < 25; i++) {
+    x += 0.015;
+    ts += 33;
+    await send("fist.drag.update", ts, x, 0.015);
+    await page.waitForTimeout(33);
+  }
+  const atLastUpdate = (await drawnX()) - base;
+  if (release === "after-rest") await page.waitForTimeout(500);
+  await send("fist.drag.end", ts + (release === "after-rest" ? 500 : 33), x);
+  const atRelease = (await drawnX()) - base;
+  await page.waitForTimeout(1500);
+  return { atLastUpdate, atRelease, settled: (await drawnX()) - base };
+}
+
+test("the view follows the fist closely and stops where the hand stops, with no spring or coasting", async ({
+  page,
+}) => {
   await start(page);
-  await fistDrag(page, "Left", { dx: 0.03, steps: 6 }); // released while still moving fast
-  const atRelease = await camera(page);
-  await expect.poll(async () => (await camera(page)).target[0]).not.toBe(atRelease.target[0]);
-  const later = await camera(page);
-  expect(Math.hypot(...later.target.map((v, i) => v - (atRelease.target[i] ?? 0)))).toBeGreaterThan(0);
+  const rested = await sweep(page, "after-rest");
+  await page.reload();
+  await openViewer(page);
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+  const flicked = await sweep(page, "moving");
+  // Released while still moving fast, the view ends where it ends when the hand rests first: it does not drift on.
+  expect(Math.abs(flicked.settled - rested.settled)).toBeLessThan(15);
+  expect(flicked.settled - flicked.atRelease).toBeLessThan(12);
+  // And while the hand moves, the drawn view is within a fingertip's width of where the hand has put it.
+  expect(rested.settled - rested.atLastUpdate).toBeLessThan(12);
 });
 
 test("a moving fist never cancels the tool, while a still fist held for 1.5 s does", async ({ page }) => {
@@ -137,7 +183,7 @@ test("set to nothing on one hand, that hand's fist stays a clutch; the other han
   await openSettings(page, "gestures");
   await page.getByTestId("gesture-fistdrag-left").selectOption("none");
   await closeSettings(page);
-  await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
   const before = await camera(page);
   await fistDrag(page, "Left", { dx: 0.01, steps: 10, rest: 400 });
   expect((await camera(page)).target).toEqual(before.target);
@@ -150,7 +196,7 @@ test.describe("the hand pointer shows pan", () => {
   async function showPointers(page: Page) {
     const left = await handAt(page, [0.55, 0.6]);
     const right = await handAt(page, [0.7, 0.6]);
-    await page.evaluate(([r, l]) => window.__AEX_INPUT__?.pointer(r, l), [right, left] as const);
+    await page.evaluate(([r, l]) => window.__HAI_INPUT__?.pointer(r, l), [right, left] as const);
   }
 
   test("a closed hand shows the pan icon, filled while the view moves, and the ring returns when it opens", async ({
@@ -181,7 +227,7 @@ test.describe("the hand pointer shows pan", () => {
     await page.getByTestId("gesture-fistdrag-left").selectOption("none");
     await page.getByTestId("gesture-fistdrag-right").selectOption("orbit");
     await closeSettings(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     await showPointers(page);
     for (const hand of ["Left", "Right"] as const) {
       await send(page, "clutch.start", hand, await now(page), [0.4, 0.5]);
@@ -198,7 +244,7 @@ test.describe("the hand pointer shows pan", () => {
     await openSettings(page, "gestures");
     await page.getByTestId("gesture-drag-right").selectOption("pan");
     await closeSettings(page);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(true));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     await showPointers(page);
     const pointer = page.getByTestId("hand-pointer-right");
     const t0 = await now(page);
@@ -214,7 +260,7 @@ test.describe("the hand pointer shows pan", () => {
     await start(page);
     await showPointers(page);
     await send(page, "clutch.start", "Left", await now(page), [0.4, 0.5]);
-    await page.evaluate(() => window.__AEX_INPUT__?.engaged(false));
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(false));
     const pointer = page.getByTestId("hand-pointer-left");
     await expect(pointer).toHaveAttribute("data-engaged", "false");
     await expect(pointer).toHaveAttribute("data-mode", "idle");

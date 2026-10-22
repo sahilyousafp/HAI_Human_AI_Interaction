@@ -9,9 +9,9 @@ import {
   type Point3Mm,
   type SceneDocument,
   type SunSetting,
-} from "@aex/protocol";
-import type { MeshPart } from "@aex/scene";
-import { type Projector, sunLightDirection } from "@aex/scene";
+} from "@hai/protocol";
+import type { MeshPart } from "@hai/scene";
+import { type Projector, sunLightDirection } from "@hai/scene";
 import { Edges, Grid } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
@@ -68,6 +68,8 @@ const PAN_ICON = "M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 
  * tens of milliseconds of lag on large moves (the first rendered change still follows the gesture at once).
  */
 const EASE_MS = 100;
+/** While a fist holds the view the camera follows the hand closer, so it does not trail or spring after it. */
+const GRAB_EASE_MS = 50;
 /** The eased camera counts as arrived (and rendering stops) within this of its target. */
 const SETTLED = { degrees: 0.01, distance: 0.001 };
 /** Holding the right mouse button this long without moving opens the tool palette; moving sooner pans. */
@@ -170,7 +172,7 @@ function overHud(wrapper: HTMLElement | null, at: Point2): boolean {
 declare global {
   interface Window {
     /** Dev builds only: viewer state for end-to-end tests. */
-    __AEX_VIEWER__?: {
+    __HAI_VIEWER__?: {
       camera(): Turntable;
       meshCount(): number;
       /** The element a click or tap at this viewer position would hit (null under a HUD panel). */
@@ -190,9 +192,9 @@ declare global {
       handAt(x: number, y: number): Point2;
     };
     /** Dev builds only: the tool controller, for end-to-end tests. */
-    __AEX_TOOLS__?: ToolController;
+    __HAI_TOOLS__?: ToolController;
     /** Dev builds only: inject hand input exactly as the tracker would. */
-    __AEX_INPUT__?: {
+    __HAI_INPUT__?: {
       gestures(events: GestureEvent[]): void;
       /** The right hand's pinch point, and the left hand's (null where that hand is not in view). */
       /** `closing`: the hands whose fingers are closing into a pinch (their pointers hold what they snapped to). */
@@ -479,7 +481,8 @@ function CameraRig({
     const target = nav.current;
     if (!target) return;
     // After an idle spell the first delta is long; cap it so the camera still eases instead of jumping.
-    const k = 1 - Math.exp((-Math.min(delta, 0.05) * 1000) / EASE_MS);
+    const k =
+      1 - Math.exp((-Math.min(delta, 0.05) * 1000) / (navInput.current.grabbing ? GRAB_EASE_MS : EASE_MS));
     const prev = eased.current ?? target;
     const dAz = wrap180(target.azimuth - prev.azimuth);
     const next: Turntable = {
@@ -1097,7 +1100,7 @@ export function Viewer({
   // Dev hooks for end-to-end tests.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    window.__AEX_VIEWER__ = {
+    window.__HAI_VIEWER__ = {
       camera: () => nav.current,
       meshCount: () => Object.keys(client.getSnapshot().doc?.elements ?? {}).length,
       // What a user can actually hit there: nothing under a HUD panel, as for the mouse and the hand.
@@ -1118,8 +1121,8 @@ export function Viewer({
           [x, y],
         ),
     };
-    window.__AEX_TOOLS__ = tools;
-    window.__AEX_INPUT__ = {
+    window.__HAI_TOOLS__ = tools;
+    window.__HAI_INPUT__ = {
       gestures: (events) => bus.emitGestures(events),
       pointer: (right, left = null, closing) =>
         bus.emitPointer({
