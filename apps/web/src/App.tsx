@@ -28,6 +28,9 @@ import { DrawingAidsStore } from "./settings/drawing-aids.ts";
 import { FeatureSettings } from "./settings/FeatureSettings.tsx";
 import { FeatureFlags } from "./settings/feature-flags.ts";
 import { SettingsPanel, type SettingsSection } from "./settings/SettingsPanel.tsx";
+import { FirstRun, useModelsState, useUpdateState } from "./setup/FirstRun.tsx";
+import { SetupSettings } from "./setup/SetupSettings.tsx";
+import { updatesView } from "./setup/updates-view.ts";
 import { DEFAULT_LAYOUT, registerBuiltinTools } from "./tools/builtin.ts";
 import { ToolController } from "./tools/controller.ts";
 import { DEFAULT_CREATE_LAYOUT } from "./tools/create.ts";
@@ -36,6 +39,7 @@ import { PaletteSettings, ToolIcon } from "./tools/ToolOverlays.tsx";
 import { ListGroup, ListRow, Switch } from "./ui/controls.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
 import { Viewer } from "./viewer/Viewer.tsx";
+import { voiceAvailability, voicePillText } from "./voice/availability.ts";
 import { listenInCloud, listenOnDevice } from "./voice/listeners.ts";
 import { bestEngine, resample, Speaker } from "./voice/speaker.ts";
 import { Transcriber } from "./voice/transcriber.ts";
@@ -166,6 +170,10 @@ export function App() {
     [sceneClient],
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Settings > Setup shows the first-run screens again (desktop app only).
+  const [setupOpen, setSetupOpen] = useState(false);
+  // The top bar's update pill asks the settings to show the Setup page.
+  const [settingsRequest, setSettingsRequest] = useState<{ page: string; seq: number } | null>(null);
   const [showHands, setShowHands] = useState(false);
   const renderLatency = useMemo(() => new LatencyTracker(), []);
   const tools = useMemo(() => {
@@ -246,8 +254,27 @@ export function App() {
       }),
     [transcriber, agent, sceneClient, viewLink, speaker],
   );
+  // In the desktop app the voice models are downloaded after install: until they are in place the voice says so, the
+  // speaker stays quiet and nothing asks for them. When they verify, voice starts without a reload.
+  const modelsState = useModelsState(window.haiDesktop);
+  // An update that is ready waits to restart while an agent turn is running, so the app is told when one is.
+  const updateState = useUpdateState(window.haiDesktop);
+  const update = updateState ? updatesView(updateState) : null;
+  const agentWorking = useSyncExternalStore(
+    agent.subscribe,
+    () => agent.getSnapshot().status?.state === "working",
+  );
+  useEffect(() => {
+    window.haiDesktop?.updates?.setBusy(agentWorking).catch(() => {});
+  }, [agentWorking]);
+  const voiceStatus = useMemo(
+    () => voiceAvailability(Boolean(window.haiDesktop), modelsState),
+    [modelsState],
+  );
+  const voiceReady = voiceStatus.kind === "ready";
+  useEffect(() => speaker.setHeld(!voiceReady), [speaker, voiceReady]);
   const startVoice = () => {
-    if (!features.on("voice")) return;
+    if (!features.on("voice") || !voiceReady) return;
     speaker.stop(); // talking to the agent interrupts its voice before listening starts
     agent.requestOpen();
     void voice.start(() => viewLink.pointedId);
@@ -260,8 +287,8 @@ export function App() {
   useEffect(() => voice.setHovered(() => viewLink.pointedId), [voice, viewLink]);
   // Listening for names needs the voice feature on.
   useEffect(
-    () => voice.setListenForNames(listenForNames && featureState.voice),
-    [voice, listenForNames, featureState],
+    () => voice.setListenForNames(listenForNames && featureState.voice && voiceReady),
+    [voice, listenForNames, featureState, voiceReady],
   );
 
   // What the hand points at, and what gets tapped into the selection, while the user speaks.
@@ -464,6 +491,7 @@ export function App() {
       title: "Voice",
       icon: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
       tint: "var(--tint-red)",
+      detail: voicePillText(voiceStatus) ?? undefined,
       render: () => (
         <VoiceSettingsCard
           mode={speech}
@@ -476,9 +504,32 @@ export function App() {
           onReplyVoice={changeReplyVoice}
           speaker={speaker}
           transcriber={transcriber}
+          availability={voiceStatus}
+          onDownload={() => {
+            window.haiDesktop?.models.start().catch(() => {});
+          }}
         />
       ),
     },
+    ...(window.haiDesktop
+      ? [
+          {
+            id: "setup",
+            title: "Setup",
+            icon: "M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+            tint: "var(--tint-gray)",
+            render: () => (
+              <SetupSettings
+                desktop={window.haiDesktop as NonNullable<typeof window.haiDesktop>}
+                onOpen={() => {
+                  setSettingsOpen(false);
+                  setSetupOpen(true);
+                }}
+              />
+            ),
+          },
+        ]
+      : []),
     {
       id: "permissions",
       title: "Agent permissions",
@@ -508,12 +559,29 @@ export function App() {
             <output
               className="status camera"
               data-testid="mic-indicator"
-              data-state={micState}
+              data-state={voiceReady ? micState : voiceStatus.kind}
               aria-live="polite"
             >
               <span className="dot" aria-hidden="true" />
-              <span>{MIC_LABEL[micState]}</span>
+              <span>{voicePillText(voiceStatus) ?? MIC_LABEL[micState]}</span>
             </output>
+          )}
+          {update?.pill && (
+            <button
+              type="button"
+              className="status update-pill"
+              data-testid="update-pill"
+              data-tone={update.tone}
+              data-hand-press
+              title="Open the update in Settings"
+              onClick={() => {
+                setSettingsOpen(true);
+                setSettingsRequest((r) => ({ page: "setup", seq: (r?.seq ?? 0) + 1 }));
+              }}
+            >
+              <span className="update-dot" aria-hidden="true" />
+              <span>{update.pill}</span>
+            </button>
           )}
           <output
             className="status"
@@ -566,6 +634,7 @@ export function App() {
                 voice={voice}
                 startVoice={startVoice}
                 voiceOn={featureState.voice}
+                voiceNotice={voiceReady ? null : voiceStatus.label}
                 nameOf={nameOf}
                 speaker={speaker}
                 speakReplies={speakReplies}
@@ -578,6 +647,7 @@ export function App() {
         </div>
         <SettingsPanel
           open={settingsOpen}
+          request={settingsRequest}
           onClose={() => setSettingsOpen(false)}
           sections={sections}
           quick={
@@ -601,6 +671,7 @@ export function App() {
         />
       </main>
       <HandOverlay session={session} on={showHands} />
+      <FirstRun desktop={window.haiDesktop} forced={setupOpen} onClose={() => setSetupOpen(false)} />
     </div>
   );
 }

@@ -1,0 +1,47 @@
+# How the desktop app is packaged. `pnpm --filter @hai/desktop run pack` builds an unpacked copy in release/win-unpacked;
+# `dist` builds the signed installer, `dist:unsigned` an unsigned one for a test build (see scripts/signing.ts).
+appId: io.github.sahilyousafp.hai
+productName: HAI
+copyright: Copyright (c) HAI contributors. Apache-2.0.
+
+# Plain files, not an archive: the bridge is started as its own process and the page's models and runtimes are
+# read as files, and most of the content is large binary data an archive would not shrink.
+asar: false
+
+directories:
+  output: release
+
+# Only what runs: the bundles that `build` writes to dist/ (main process, preload, bridge, web app). No sources,
+# no source maps, and no node_modules: the bundles carry their dependencies (electron-updater is a dependency so the
+# licence check sees it, and it is inside dist/main.js).
+files:
+  - package.json
+  - dist/**/*
+  - "!**/*.map"
+  - "!node_modules"
+
+win:
+  target:
+    - target: nsis
+      arch: x64
+
+# One click, for the current user only: no administrator prompt, installed under the user's local application folder, a
+# Start menu entry, and the app started when it finishes. Uninstalling removes the program and leaves the user's data
+# (projects, settings, downloaded voice models) unless they ask otherwise.
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  runAfterFinish: true
+  createStartMenuShortcut: true
+  createDesktopShortcut: true
+  shortcutName: HAI
+  deleteAppDataOnUninstall: false
+  artifactName: HAI-Setup-${version}.${ext}
+
+# Where the app looks for updates (electron-updater reads latest.yml from the release). Nothing is published from here:
+# the release workflow uploads the files.
+publish:
+  provider: github
+  owner: sahilyousafp
+  repo: HAI_Human_AI_Interaction

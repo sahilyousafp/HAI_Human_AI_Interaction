@@ -37,6 +37,8 @@ export class Speaker {
   private generation = 0;
   private playing = false;
   private muted = false;
+  /** Held back by the app (the voice models are still downloading), not by the user: the same as muted, apart. */
+  private held = false;
   /** Turns whose first sentence has been queued (for the first-audio statistic). */
   private readonly started = new Set<string>();
   private stats: SpeakerStats = { engine: null, firstAudio: [] };
@@ -56,7 +58,7 @@ export class Speaker {
 
   /** Starts loading the voice (a request was sent, so a reply is coming). */
   warm(): void {
-    if (!this.muted) void this.resolveEngine();
+    if (!this.silenced) void this.resolveEngine();
   }
 
   /** A sentence as samples, from the voice in use (null without a voice that makes samples). */
@@ -76,9 +78,20 @@ export class Speaker {
     this.notify();
   }
 
+  /** Nothing is spoken, and no voice loads, while held (the voice models are not in place yet). */
+  setHeld(held: boolean): void {
+    this.held = held;
+    if (held) this.stop();
+    this.notify();
+  }
+
+  private get silenced(): boolean {
+    return this.muted || this.held;
+  }
+
   /** A piece of a reply streaming in. */
   feed(turnId: string, text: string): void {
-    if (this.muted) return;
+    if (this.silenced) return;
     let splitter = this.splitters.get(turnId);
     if (!splitter) {
       splitter = new SentenceSplitter();
@@ -92,7 +105,7 @@ export class Speaker {
     const splitter = this.splitters.get(turnId);
     this.splitters.delete(turnId);
     this.started.delete(turnId);
-    if (!splitter || this.muted) return;
+    if (!splitter || this.silenced) return;
     for (const sentence of splitter.flush()) void this.enqueue(turnId, sentence);
   }
 
@@ -112,7 +125,7 @@ export class Speaker {
   private async enqueue(turnId: string, sentence: string): Promise<void> {
     const generation = this.generation;
     const engine = await this.resolveEngine();
-    if (!engine || generation !== this.generation || this.muted) return;
+    if (!engine || generation !== this.generation || this.silenced) return;
     const first = !this.started.has(turnId);
     this.started.add(turnId);
     this.queue.push({ speech: engine.prepare(sentence), at: this.now(), first });

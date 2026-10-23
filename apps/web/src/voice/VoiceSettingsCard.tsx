@@ -1,6 +1,7 @@
 import type { ReplyVoice, SpeechMode } from "@hai/protocol";
 import { useSyncExternalStore } from "react";
 import { ListGroup, ListRow, Switch } from "../ui/controls.tsx";
+import type { VoiceAvailability } from "./availability.ts";
 import { cloudSpeechAvailable } from "./listeners.ts";
 import type { Speaker } from "./speaker.ts";
 import { KOKORO_VOICES } from "./speaker-messages.ts";
@@ -22,6 +23,8 @@ export function VoiceSettingsCard({
   onReplyVoice,
   speaker,
   transcriber,
+  availability,
+  onDownload,
 }: {
   mode: SpeechMode;
   onMode: (mode: SpeechMode) => void;
@@ -33,6 +36,10 @@ export function VoiceSettingsCard({
   onReplyVoice: (voice: ReplyVoice) => void;
   speaker: Speaker;
   transcriber: Transcriber;
+  /** Whether the voice models are in place (in the desktop app they are downloaded after install). */
+  availability: VoiceAvailability;
+  /** Starts (or restarts) the download of the voice models. */
+  onDownload: () => void;
 }) {
   const stats = useSyncExternalStore(transcriber.subscribe, transcriber.getSnapshot);
   const latency = p90(stats.latencies);
@@ -40,6 +47,39 @@ export function VoiceSettingsCard({
   const firstAudio = p90(spoken.firstAudio);
   return (
     <div className="settings-page-body voice-settings" data-testid="voice-settings">
+      {availability.kind !== "ready" && (
+        <ListGroup
+          title="Voice models"
+          footer="Speech to text and spoken replies run on this computer, from models that are downloaded once."
+        >
+          <ListRow
+            label={
+              availability.kind === "preparing"
+                ? availability.percent === null
+                  ? "Getting ready"
+                  : "Downloading"
+                : availability.label
+            }
+            control={
+              availability.kind === "missing" ? (
+                <button
+                  type="button"
+                  className="secondary"
+                  data-testid="voice-models-download"
+                  data-hand-press
+                  onClick={onDownload}
+                >
+                  {availability.reason === "failed" ? "Try again" : "Download"}
+                </button>
+              ) : (
+                <span className="list-value" data-testid="voice-models-progress">
+                  {availability.percent === null ? "" : `${availability.percent}%`}
+                </span>
+              )
+            }
+          />
+        </ListGroup>
+      )}
       <ListGroup
         title="Speech to text"
         footer={

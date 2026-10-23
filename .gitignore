@@ -15,3 +15,10 @@ apps/web/public/mediapipe/
 apps/web/public/ort/
 apps/web/public/vad/
 apps/web/public/rhino3dm/
+posts/
+apps/desktop/release/
+apps/desktop/release-installtest/
+apps/desktop/release-signtest/
+apps/desktop/release-updatetest/
+apps/desktop/electron-builder.updatetest.yml
+site/

@@ -73,7 +73,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: ["clips/**", "visual/**", "voice/**"],
+      testIgnore: ["clips/**", "visual/**", "voice/**", "desktop*.spec.ts"],
       // Starting the camera loads MediaPipe in a fresh browser context each test (about 17 s on a CPU-only Windows
       // runner) and startCamera allows 45 s for frames, so the test needs more than the default 30 s.
       timeout: 60_000,

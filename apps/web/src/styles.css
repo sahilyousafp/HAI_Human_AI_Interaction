@@ -220,6 +220,26 @@ button {
   background: var(--risk);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--risk) 25%, transparent);
 }
+/* The update pill in the top bar: a status that can be pressed. */
+.update-pill {
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+/* Its own dot, so it does not compete with the status dots' many state rules. */
+.update-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.update-pill[data-tone="busy"] .update-dot {
+  background: var(--warn);
+}
+.update-pill:hover {
+  background: var(--fill-strong);
+}
 
 .workspace {
   position: relative;
@@ -2276,6 +2296,10 @@ kbd {
   background: var(--warn);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 25%, transparent);
 }
+.status.camera[data-testid="mic-indicator"][data-state="preparing"] .dot,
+.status.camera[data-testid="mic-indicator"][data-state="missing"] .dot {
+  background: var(--warn);
+}
 .voice-settings p {
   margin: 0;
   font-size: 12.5px;
@@ -2732,4 +2756,210 @@ kbd {
 }
 .list-value.placeholder {
   font-style: italic;
+}
+
+/* First run in the desktop app: the voice models to download. Over everything, until the user goes on. */
+.first-run {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: var(--blur);
+}
+.first-run-card {
+  display: grid;
+  gap: 14px;
+  width: min(520px, 100%);
+  padding: 28px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-l);
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+}
+.first-run-kicker {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.first-run-title {
+  margin: 0;
+  font: 600 24px / 1.2 var(--f-display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.first-run-detail {
+  margin: 0;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+.first-run-items {
+  display: grid;
+  margin: 2px 0 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--r-m);
+  background: var(--fill);
+  list-style: none;
+}
+.first-run-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+}
+.first-run-item + .first-run-item {
+  border-top: 0.5px solid var(--line);
+}
+.first-run-item-text {
+  display: grid;
+}
+.first-run-item-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.first-run-item-detail {
+  font-size: 13px;
+  color: var(--muted);
+}
+.first-run-item-size {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.first-run-item[data-state="done"] .first-run-item-size {
+  color: var(--ok);
+}
+/* Only while a download runs: before it starts, nothing is "waiting", it is all still to do. */
+.first-run[data-tone="busy"] .first-run-item[data-state="waiting"] {
+  opacity: 0.7;
+}
+.first-run-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--fill-strong);
+}
+.first-run-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s var(--ease);
+}
+.first-run-progress-label {
+  margin: -6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.first-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.first-run-actions .primary {
+  padding: 9px 20px;
+}
+.first-run-actions .secondary {
+  padding: 9px 16px;
+}
+.first-run[data-tone="problem"] .first-run-progress-label {
+  color: var(--warn);
+}
+@media (prefers-reduced-motion: reduce) {
+  .first-run-progress-fill {
+    transition: none;
+  }
+}
+
+/* First run: the Claude Code step. */
+.first-run-command {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--r-m);
+  background: var(--fill);
+}
+.first-run-command-label,
+.first-run-command-source,
+.first-run-manual {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.first-run-command-text {
+  display: block;
+  overflow-x: auto;
+  padding: 8px 10px;
+  border-radius: var(--r-s);
+  background: var(--panel);
+  font: 13px / 1.4 var(--f-mono);
+  color: var(--ink);
+  white-space: nowrap;
+  user-select: all;
+}
+.first-run-output {
+  max-height: 150px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: var(--r-m);
+  background: var(--fill);
+  font: 12px / 1.45 var(--f-mono);
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.first-run-manual a {
+  color: var(--accent);
+}
+.first-run-progress-indeterminate {
+  width: 35%;
+  animation: first-run-slide 1.3s var(--ease) infinite;
+}
+@keyframes first-run-slide {
+  from {
+    margin-left: -35%;
+  }
+  to {
+    margin-left: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .first-run-progress-indeterminate {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+.first-run-actions .primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Updates: the Setup page's rows. */
+.setup-update-progress {
+  padding: 4px 16px 10px;
+}
+.setup-update-detail {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+[data-testid="update-summary"][data-tone="problem"] {
+  color: var(--risk);
+}
+[data-testid="update-summary"][data-tone="attention"] {
+  color: var(--accent);
 }

@@ -1,0 +1,35 @@
+{
+  "name": "@hai/desktop",
+  "version": "0.0.0",
+  "description": "HAI, the Human AI Interface: the desktop app.",
+  "author": {
+    "name": "HAI contributors"
+  },
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "productName": "HAI",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "node scripts/dev.ts",
+    "build": "node scripts/build.ts",
+    "typecheck": "tsc -p .",
+    "pack": "node scripts/build.ts && electron-builder --dir --publish never && node scripts/check-package.ts",
+    "dist": "node scripts/dist.ts",
+    "dist:unsigned": "node scripts/dist.ts --unsigned",
+    "test:installer": "node scripts/installer-test.ts",
+    "test:signing": "node scripts/signing-test.ts",
+    "verify-signature": "node scripts/verify-signature.ts",
+    "test:update": "node scripts/update-fixtures.ts && node scripts/update-test.ts"
+  },
+  "dependencies": {
+    "@hai/agent-core": "workspace:*",
+    "@hai/protocol": "workspace:*",
+    "electron-updater": "6.8.9"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2"
+  }
+}

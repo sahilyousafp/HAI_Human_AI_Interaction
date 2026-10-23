@@ -8,6 +8,7 @@ export type SettingsSection =
   | "gestures"
   | "rings"
   | "voice"
+  | "setup"
   | "permissions";
 
 /** Opens the settings sheet, on its first page or on a section's page. */

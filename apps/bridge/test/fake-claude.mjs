@@ -21,6 +21,7 @@
 //   "stop A"     cancels A's current task (team_status, then cancel_task)
 //   "[team] ..." a report of finished tasks: replies "Report: " and the task lines
 // A specialist's task arrives with a "[task] ..." first line, which is dropped before the scripts above apply.
+// `--version` and `auth status --json` answer as an installed, signed-in Claude Code (see the env switches below).
 // `mcp add|remove --scope project` edit .mcp.json in the project folder in Claude Code's format, and the init event
 // lists those servers (one named "broken..." as failed) and the skills in .claude/skills, as the real CLI does.
 import { randomUUID } from "node:crypto";
@@ -32,6 +33,18 @@ const flag = (name) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 };
+
+// The checks the app runs before it starts a session. FAKE_CLAUDE_VERSION_FAILS=1 makes `--version` fail (installed
+// but does not start); FAKE_CLAUDE_LOGGED_IN=0 reports no signed-in account.
+if (args[0] === "--version") {
+  if (process.env.FAKE_CLAUDE_VERSION_FAILS === "1") process.exit(1);
+  process.stdout.write("2.1.303 (Claude Code)\n");
+  process.exit(0);
+}
+if (args[0] === "auth" && args[1] === "status") {
+  process.stdout.write(`${JSON.stringify({ loggedIn: process.env.FAKE_CLAUDE_LOGGED_IN !== "0" })}\n`);
+  process.exit(0);
+}
 
 const mcpFile = join(process.cwd(), ".mcp.json");
 const skillsDir = join(process.cwd(), ".claude", "skills");

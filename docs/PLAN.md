@@ -4,7 +4,7 @@ Decided 2026-10-19, updated the same day with the gesture tool palette, and on 2
 
 ## Decision
 
-**Hybrid.** Build our own interaction-layer app (camera, gestures, tool palette, HUD, agent loop), not our own modeler. Browser-first, Electron wrapper later. Rhino is the first external host, for modelling and drafting: the agent works through Python (a managed environment with any library, and Python inside the open Rhino), and a thin C# plugin adds camera sync, pointing, selection, the Python runner and turn review. Blender/Bonsai comes later.
+**Hybrid.** Build our own interaction-layer app (camera, gestures, tool palette, HUD, agent loop), not our own modeler. Browser-first, with an Electron desktop app (`apps/desktop`) as the way to give it to someone: a signed installer that starts the bridge, serves the web app and walks a first-time user through Claude Code and the voice models (see [desktop.md](desktop.md)). Rhino is the first external host, for modelling and drafting: the agent works through Python (a managed environment with any library, and Python inside the open Rhino), and a thin C# plugin adds camera sync, pointing, selection, the Python runner and turn review. Blender/Bonsai comes later.
 
 Why:
 - The novel part is the interaction layer. No maintained webcam-gesture + LLM-agent CAD/BIM tool exists.
@@ -17,6 +17,7 @@ Why:
 ```
 apps/web (Vite + React + R3F)       camera -> perception -> gestures -> palette, tools, navigation, HUD, viewer
 apps/bridge (Node)                  WebSocket hub, scene store, agent process, MCP scene tools, approvals
+apps/desktop                        Electron app and installer: the window, the bridge, first run, updates
 apps/overlay (Electron, later)      transparent click-through HUD over Rhino
 packages/protocol                   shared zod schemas for every cross-process message
 packages/perception                 MediaPipe worker, One Euro filter, gesture state machines

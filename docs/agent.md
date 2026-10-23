@@ -4,7 +4,7 @@ HAI drives **your own Claude**: the Claude Code command-line tool you installed 
 
 ## Before you start
 
-Install Claude Code and sign in once in a terminal by running `claude`. The bridge checks both with Claude Code's own commands (`claude --version`, then `claude auth status`, from which it reads only whether you are signed in). If either check fails, the panel says what is missing and what to do, and no session starts. The checks run again whenever the page connects, so after installing or signing in, reload the page.
+Install Claude Code and sign in once in a terminal by running `claude`. (The desktop app does both from its first-run screen, see [desktop.md](desktop.md).) A `claude` that is installed but not on the PATH is found in `%USERPROFILE%\.local\bin`, where Anthropic's installer puts it. The bridge checks both with Claude Code's own commands (`claude --version`, then `claude auth status`, from which it reads only whether you are signed in). If either check fails, the panel says what is missing and what to do, and no session starts. The checks run again whenever the page connects, so after installing or signing in, reload the page.
 
 ## How the session runs
 
@@ -94,8 +94,8 @@ User-level servers and skills stay yours to manage in Claude Code itself.
 
 | What you see | What to do |
 |---|---|
-| "Claude Code is not installed." | Install it, then reload the page |
-| "Claude Code is not logged in." | Run `claude` in a terminal and log in, then reload the page |
+| "Claude Code is not installed." | Install it, then reload the page. In the desktop app, the first-run screen (or Settings > Setup) can install it for you ([desktop.md](desktop.md)) |
+| "Claude Code is not logged in." | Run `claude` in a terminal and log in, then reload the page. In the desktop app, the first-run screen opens the sign-in window for you |
 | "Claude Code is installed but did not start." | Run `claude --version` in a terminal to see what is wrong |
 | A server shows "failed" | Check its command or URL in the Extensions tab; remove and add it again with the fix |
 | A card timed out | Ask again; or choose Always allow if you trust that tool in this project |

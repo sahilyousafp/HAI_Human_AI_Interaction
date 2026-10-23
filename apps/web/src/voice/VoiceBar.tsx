@@ -13,11 +13,14 @@ export function MicButton({
   voice,
   onStart,
   disabled = false,
+  notice = null,
 }: {
   voice: VoiceInput;
   onStart: () => void;
   /** No agent to send to (not installed or not signed in). */
   disabled?: boolean;
+  /** Why the microphone cannot be used yet (the voice models are downloading), or null. */
+  notice?: string | null;
 }) {
   const state = useSyncExternalStore(voice.subscribe, voice.getSnapshot);
   const live = state.phase === "starting" || state.phase === "listening";
@@ -29,9 +32,10 @@ export function MicButton({
       data-state={state.phase}
       data-hand-press
       aria-pressed={live}
-      disabled={disabled && !live}
-      aria-label={live ? "Stop listening" : "Speak to the agent"}
-      title={live ? "Stop listening" : "Speak to the agent (or hold the ` key)"}
+      data-voice={notice ? "preparing" : "ready"}
+      disabled={(disabled || notice !== null) && !live}
+      aria-label={live ? "Stop listening" : (notice ?? "Speak to the agent")}
+      title={live ? "Stop listening" : (notice ?? "Speak to the agent (or hold the ` key)")}
       onClick={() => (live ? voice.finish() : onStart())}
     >
       <ToolIcon path={live ? STOP_ICON : MIC_ICON} size={20} />

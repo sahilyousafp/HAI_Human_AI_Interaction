@@ -4,7 +4,8 @@ import { handAt, now, openViewer, startTestBridge } from "../viewer.ts";
 
 // Screenshots of the pan pointer: the four arrows on a closed hand, and filled in while the view moves, for each
 // hand and both colour schemes.
-// The crops are 80 px square, so the project's 2% tolerance would let a changed icon through: this spec allows 0.3%.
+// The crops are 80 px square, so the project's 2% tolerance would let a changed icon through: this spec allows 0.3%. The 3D
+// model behind the pointer is hidden (see below), so only the icon and the plain view background are compared.
 const TIGHT = { maxDiffPixelRatio: 0.003 };
 let bridge: Bridge | null = null;
 test.afterEach(async () => {
@@ -31,6 +32,9 @@ for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       bridge = await startTestBridge(page);
       await openViewer(page);
+      // The crops are of the pointer, so the 3D model behind it is hidden: its edges moved by a pixel from one run to the next
+      // (the frame it was last drawn in), which failed a screenshot of an icon that had not changed.
+      await page.addStyleTag({ content: "canvas { visibility: hidden !important; }" });
       await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
       const at = await handAt(page, [0.6, 0.6]);
       await page.evaluate(

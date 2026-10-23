@@ -58,8 +58,16 @@ export async function openViewer(page: Page): Promise<void> {
   await expect
     .poll(() => page.evaluate(() => window.__HAI_VIEWER__?.meshCount() ?? 0), { timeout: 30_000 })
     .toBeGreaterThan(0);
-  // Let the camera settle on its initial framing.
-  await page.waitForTimeout(400);
+  // Let the camera settle on its initial framing: wait until it has not moved for 400 ms (a fixed wait was too short on a
+  // slow frame, and a screenshot of the model then differed by a pixel from run to run).
+  let last = "";
+  let unchanged = 0;
+  for (let i = 0; i < 100 && unchanged < 4; i++) {
+    await page.waitForTimeout(100);
+    const now = JSON.stringify(await camera(page));
+    unchanged = now === last ? unchanged + 1 : 0;
+    last = now;
+  }
 }
 
 export const camera = (page: Page) => page.evaluate(() => window.__HAI_VIEWER__?.camera() as Camera);

@@ -45,9 +45,12 @@ export function SettingsPanel({
   onClose,
   quick,
   sections,
+  request,
 }: {
   open: boolean;
   onClose(): void;
+  /** Asks for a page to be shown: a new `seq` shows `page` (the top bar's update pill opens Setup this way). */
+  request?: { page: string; seq: number } | null;
   /** Switches shown at the top of the first page. */
   quick: ReactNode;
   sections: SettingsSection[];
@@ -60,6 +63,13 @@ export function SettingsPanel({
     writePage(id);
     body.current?.scrollTo({ top: 0 });
   };
+
+  const requestedSeq = request?.seq;
+  const requestedPage = request?.page;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per request; `go` only sets state.
+  useEffect(() => {
+    if (requestedSeq !== undefined && requestedPage) go(requestedPage);
+  }, [requestedSeq, requestedPage]);
 
   useEffect(() => {
     if (!open) return;

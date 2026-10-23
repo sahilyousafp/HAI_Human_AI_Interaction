@@ -17,7 +17,10 @@
     "test:e2e": "playwright test",
     "licenses:check": "node scripts/check-licenses.mjs",
     "credentials:check": "node scripts/credential-boundary.mjs",
-    "assets": "node scripts/fetch-assets.mjs"
+    "assets": "node scripts/fetch-assets.mjs",
+    "test:e2e:desktop": "playwright test -c playwright.desktop.config.ts",
+    "dev:desktop": "pnpm --filter @hai/desktop dev",
+    "test:e2e:desktop:packaged": "playwright test -c playwright.desktop-packaged.config.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

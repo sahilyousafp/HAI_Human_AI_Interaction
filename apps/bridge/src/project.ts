@@ -5,7 +5,9 @@ import { migrateLegacyProject } from "./legacy.ts";
 import { readSettingsFile, updateSettingsFile } from "./settings.ts";
 
 export const SCENE_FILE = "scene.hai.json";
-export const SAMPLE_SCENE = join(import.meta.dirname, "..", "samples", "mixed-use-block.hai.json");
+// The packaged app runs a bundle of the bridge, so the sample sits beside the bundle, not beside src/.
+export const SAMPLE_SCENE =
+  process.env.HAI_SAMPLE_SCENE ?? join(import.meta.dirname, "..", "samples", "mixed-use-block.hai.json");
 
 export interface ProjectInfo {
   name: string;

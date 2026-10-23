@@ -1,66 +1,51 @@
 // Places pinned runtime assets in apps/web/public so the app never fetches them from a CDN at runtime.
-// Models are downloaded once and verified by SHA-256; WASM and worklet files are copied from installed npm packages.
-// Usage: node scripts/fetch-assets.mjs [--check]   (--check verifies without downloading)
-import { createHash } from "node:crypto";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { basename, dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+// Models are downloaded once and verified by SHA-256 (the work is in assets-core.ts, which the desktop app also
+// uses for its first-run download); WASM and worklet files are copied from installed npm packages.
+// Usage: node scripts/fetch-assets.mjs [--check] [--shipped-only]
+//   --check          verifies without downloading
+//   --shipped-only   leaves out the voice models the desktop app downloads on first run (a release build does not need them)
+import { cpSync, existsSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { DownloadError, downloadModel, HashMismatchError, modelState, sha256File } from "./assets-core.ts";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const root = join(import.meta.dirname, "..");
 const publicDir = join(root, "apps", "web", "public");
 const lock = JSON.parse(readFileSync(join(root, "scripts", "assets.lock.json"), "utf8"));
 const checkOnly = process.argv.includes("--check");
-
-const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
+const shippedOnly = process.argv.includes("--shipped-only");
 
 let failed = false;
 
 for (const model of lock.models) {
-  const target = join(publicDir, model.file);
-  if (existsSync(target)) {
-    const actual = sha256(readFileSync(target));
-    if (actual === model.sha256) {
-      console.log(`ok       ${model.file}`);
-      continue;
-    }
+  if (shippedOnly && model.download) continue;
+  const state = await modelState(publicDir, model);
+  if (state === "ok") {
+    console.log(`ok       ${model.file}`);
+    continue;
+  }
+  if (state === "mismatch") {
+    const actual = await sha256File(join(publicDir, model.file));
     console.error(`MISMATCH ${model.file}: expected ${model.sha256}, found ${actual}`);
-    if (checkOnly) {
-      failed = true;
-      continue;
+  }
+  if (checkOnly) {
+    if (state === "missing") console.error(`MISSING  ${model.file}`);
+    failed = true;
+    continue;
+  }
+  try {
+    await downloadModel(publicDir, model);
+    const size = statSync(join(publicDir, model.file)).size;
+    console.log(`fetched  ${model.file} (${(size / 1e6).toFixed(1)} MB)`);
+  } catch (error) {
+    if (error instanceof HashMismatchError) {
+      console.error(`REJECTED ${model.file}: download hash ${error.actual} does not match the lock file`);
+    } else if (error instanceof DownloadError) {
+      console.error(`FAILED   ${error.message}`);
+    } else {
+      throw error;
     }
-    rmSync(target);
-  } else if (checkOnly) {
-    console.error(`MISSING  ${model.file}`);
     failed = true;
-    continue;
   }
-
-  const response = await fetch(model.url);
-  if (!response.ok) {
-    console.error(`FAILED   ${model.file}: HTTP ${response.status} from ${model.url}`);
-    failed = true;
-    continue;
-  }
-  const data = Buffer.from(await response.arrayBuffer());
-  const actual = sha256(data);
-  if (actual !== model.sha256) {
-    console.error(`REJECTED ${model.file}: download hash ${actual} does not match the lock file`);
-    failed = true;
-    continue;
-  }
-  mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(`${target}.part`, data);
-  renameSync(`${target}.part`, target);
-  console.log(`fetched  ${model.file} (${(data.length / 1e6).toFixed(1)} MB)`);
 }
 
 // Packages are installed under the web app. Some (tasks-vision) do not export package.json,
