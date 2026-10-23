@@ -1,7 +1,14 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { bridgeConnected, type Desktop, isAlive, launchDesktop, removeUserData } from "./desktop.ts";
+import {
+  bridgeConnected,
+  type Desktop,
+  isAlive,
+  launchDesktop,
+  removeUserData,
+  TEST_APP_VERSION,
+} from "./desktop.ts";
 import { openSettings } from "./settings.ts";
 
 // Updating in the installed app. The app is built with a stand-in for electron-updater (apps/desktop/test/updates-deps-fake.ts)
@@ -37,7 +44,7 @@ test.describe("finding an update", () => {
   test("says you are up to date when there is nothing newer, after a check you ask for", async () => {
     desktop = await launchDesktop();
     await openUpdates(desktop.page);
-    await expect(desktop.page.getByTestId("setup-updates")).toContainText("Version 0.0.0");
+    await expect(desktop.page.getByTestId("setup-updates")).toContainText(`Version ${TEST_APP_VERSION}`);
     await expect(summary(desktop.page)).toHaveText("You have the latest version", { timeout: 20_000 });
     await expect(pill(desktop.page)).toHaveCount(0);
   });
@@ -94,7 +101,7 @@ test.describe("getting it", () => {
       timeout: 20_000,
     });
     await expect(page.getByTestId("update-detail")).toContainText(
-      "HAI 0.0.0 is still installed and works as before",
+      `HAI ${TEST_APP_VERSION} is still installed and works as before`,
     );
     await expect(summary(page)).toHaveAttribute("data-tone", "problem");
     expect(existsSync(file(desktop, "restart-requested"))).toBe(false);

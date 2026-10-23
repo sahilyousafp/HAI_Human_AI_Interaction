@@ -8,6 +8,9 @@ import { _electron, type ElectronApplication, expect, type Page } from "@playwri
 /** Where `desktop-setup.ts` stages the app for the tests: package.json and dist/ with the test hooks and fake Claude. */
 export const DESKTOP_APP_DIR = join(import.meta.dirname, "..", ".hai", "desktop-e2e", "app");
 
+/** The version the staged and packaged test app reports. Not 0.0.0, so a version written into the code instead of read from the app shows up. */
+export const TEST_APP_VERSION = "3.2.1";
+
 /** HAI_DESKTOP_PACKAGED=1 runs the tests against the program electron-builder makes, not the staged folder. */
 export const PACKAGED = process.env.HAI_DESKTOP_PACKAGED === "1";
 export const DESKTOP_PACKAGED_DIR = join(import.meta.dirname, "..", ".hai", "desktop-e2e-packaged");

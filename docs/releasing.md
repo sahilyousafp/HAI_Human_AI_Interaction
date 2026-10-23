@@ -16,7 +16,7 @@ Pushing the tag starts the release pipeline. A few minutes later the release is 
 ## How it works
 
 - **GitHub Releases is where versions live.** Each release holds the installer (`HAI-Setup-<version>.exe`), its block map, the update feed (`latest.yml`) and the checksum. Installed copies of HAI read `latest.yml` from the latest release to find out whether there is something newer.
-- **The tag is the version.** The version number comes from the tag you push (`v0.2.0` is version `0.2.0`). You do not edit a version number in any file; `apps/desktop/package.json` says `0.0.0` on purpose and the pipeline overrides it.
+- **The tag is the version.** The version number comes from the tag you push (`v0.2.0` is version `0.2.0`). The pipeline builds with the tag's version whatever `apps/desktop/package.json` says. That file holds the version a local build (`pnpm --filter @hai/desktop run dist`) gets; set it to the version you are about to tag, in the commit before the tag, so a build on your computer and the release agree. The app reads its version from the build, so Settings > Setup, the top bar and the installer's file name all show it.
 - **npm is not involved.** HAI is an installed program, not a package. See [desktop.md](desktop.md) for the installer, signing and updating in detail.
 
 ## Choosing the version number

@@ -132,6 +132,8 @@ export function stageWeb(outdir: string, options: { testHooks?: boolean } = {}):
 export interface StageOptions {
   /** Write a package.json that points Electron at dist/main.js, for a folder that is not the package itself. */
   manifest?: boolean;
+  /** The version the staged app reports (with `manifest`). */
+  version?: string;
   /** Keep the web app's test hooks (development build). */
   testHooks?: boolean;
   /** Run the bridge with the fake Claude Code CLI instead of the real one. */
@@ -148,7 +150,7 @@ export async function stageApp(appDir: string, options: StageOptions = {}): Prom
     const manifest = {
       name: "hai-desktop",
       productName: "HAI",
-      version: "0.0.0",
+      version: options.version ?? "0.0.0",
       description: "HAI, the Human AI Interface: the desktop app.",
       author: { name: "HAI contributors" },
       main: "dist/main.js",

@@ -7,7 +7,8 @@ import { defaultProjectDir, readLastProject, writeLastProject } from "./project.
 import { createBridge } from "./server.ts";
 import { removeSessionFile, writeSessionFile } from "./session-file.ts";
 
-const VERSION = "0.0.0";
+// The desktop app tells the bridge which version it is (HAI_APP_VERSION); run from the repository there is no installed version.
+const VERSION = process.env.HAI_APP_VERSION ?? "0.0.0";
 
 /**
  * Starts the bridge as a program: reads its settings from the environment, listens, writes the session file, tells

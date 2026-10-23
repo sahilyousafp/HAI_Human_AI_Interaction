@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { packageApp, stageApp } from "../apps/desktop/scripts/bundle.ts";
-import { DESKTOP_APP_DIR, DESKTOP_PACKAGED_DIR, PACKAGED } from "./desktop.ts";
+import { DESKTOP_APP_DIR, DESKTOP_PACKAGED_DIR, PACKAGED, TEST_APP_VERSION } from "./desktop.ts";
 import { MODEL_SERVER_URL } from "./model-server.ts";
 
 /**
@@ -16,6 +16,7 @@ export default async function stage(): Promise<void> {
   // The voice models are downloaded from a local server (e2e/model-server.ts), not from their pinned addresses.
   await stageApp(appDir, {
     manifest: true,
+    version: TEST_APP_VERSION,
     testHooks: true,
     fakeClaude: true,
     modelsBaseUrl: MODEL_SERVER_URL,

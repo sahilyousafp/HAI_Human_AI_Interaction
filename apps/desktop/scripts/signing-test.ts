@@ -57,7 +57,13 @@ try {
       cwd: desktopRoot,
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
-      env: { ...process.env, CSC_LINK: pfx, CSC_KEY_PASSWORD: PASSWORD, HAI_PUBLISHER_NAME: PUBLISHER },
+      env: {
+        ...process.env,
+        CSC_LINK: pfx,
+        CSC_KEY_PASSWORD: PASSWORD,
+        HAI_PUBLISHER_NAME: PUBLISHER,
+        HAI_VERSION: "0.0.0", // the checks below name this file
+      },
     },
   );
   log.push(build.stdout, build.stderr);

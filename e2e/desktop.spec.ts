@@ -10,8 +10,10 @@ import {
   launchSecondInstance,
   removeUserData,
   startWebDevServer,
+  TEST_APP_VERSION,
 } from "./desktop.ts";
 import { watchOutgoingData } from "./privacy.ts";
+import { openSettings } from "./settings.ts";
 
 /** Replaces shell.openExternal in the app's main process so a test can see what it was asked to open. */
 async function recordExternalOpens(d: Desktop) {
@@ -36,6 +38,19 @@ test.afterEach(async () => {
   await desktop?.close();
   if (desktop) removeUserData(desktop.userData);
   desktop = null;
+});
+
+test.describe("the version", () => {
+  test("the top bar and Settings say the version of the app, not a number written into the code", async () => {
+    desktop = await launchDesktop();
+    const { page } = desktop;
+    await bridgeConnected(page);
+    expect(await desktop.app.evaluate(({ app }) => app.getVersion())).toBe(TEST_APP_VERSION);
+    // The top bar names the bridge's version, which the app passes on.
+    await expect(page.getByTestId("bridge-status")).toContainText(`v${TEST_APP_VERSION}`);
+    await openSettings(page, "setup");
+    await expect(page.getByTestId("setup-updates")).toContainText(`Version ${TEST_APP_VERSION}`);
+  });
 });
 
 test.describe("launch", () => {

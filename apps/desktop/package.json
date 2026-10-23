@@ -1,6 +1,6 @@
 {
   "name": "@hai/desktop",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "HAI, the Human AI Interface: the desktop app.",
   "author": {
     "name": "HAI contributors"

@@ -89,7 +89,11 @@ const build = spawnSync(
     `-c.nsis.shortcutName=${NAME}`,
     `-c.directories.output=${outDir}`,
   ],
-  { cwd: desktopRoot, stdio: "inherit", env: { ...process.env, HAI_PACKAGE_NAME: NAME } },
+  {
+    cwd: desktopRoot,
+    stdio: "inherit",
+    env: { ...process.env, HAI_PACKAGE_NAME: NAME, HAI_VERSION: "0.0.0" },
+  },
 );
 if (build.status !== 0) process.exit(build.status ?? 1);
 const installer = join(outDir, "HAI-Setup-0.0.0.exe");
