@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type AgentDefinitionInput, HAI_TOOLS, type TeamMemberInfo } from "@hai/protocol";
-import { HAI_SERVER } from "./agent-config.ts";
+import { builderCapabilities, HAI_SERVER } from "./agent-config.ts";
 import { listField, parseFrontmatter } from "./frontmatter.ts";
 
 const hai = (names: readonly string[]) => names.map((n) => `mcp__${HAI_SERVER}__${n}`);
@@ -272,5 +272,5 @@ export function rosterText(team: TeamMember[]): string {
   if (builders.length === 0) return list;
   // What the specialists can do beyond the scene's own element types. The lead has no modelling tools, so without
   // this it only knows the descriptions above and tells the user that curves and smooth forms are impossible.
-  return `${list}\n\n${builders.join(", ")} can do more than massings, walls, slabs and columns: they can model curves, polylines, NURBS surfaces and smooth or organic forms (domes, vaults, arches, canopies, minarets) by writing Python with rhino3dm (python_run), and when Rhino is connected they can model in Rhino. They save a .3dm and the user is offered Import into viewer. So never tell the user these things cannot be done, and never offer only a faceted look-alike: delegate it, and say in the instruction what to make and that python_run is the way.`;
+  return `${list}\n\n${builderCapabilities(builders)}`;
 }

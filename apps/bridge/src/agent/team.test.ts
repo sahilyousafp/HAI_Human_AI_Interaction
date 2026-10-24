@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -97,6 +97,20 @@ describe("the team with the fake Claude Code CLI", () => {
     const [mochi] = starts();
     expect(mochi?.args[(mochi?.args.indexOf("--agent") ?? 0) + 1]).toBe("mochi");
     expect(mochi?.args[(mochi?.args.indexOf("--resume") ?? 0) + 1]).toBe("earlier-conversation");
+  });
+
+  it("a conversation started under older instructions is not resumed: the agent starts a new one", async () => {
+    const { team, starts } = await start({
+      before: (dir) => {
+        const folder = agentDir(dir, "mochi");
+        mkdirSync(folder, { recursive: true });
+        // As an earlier version of HAI saved it: no mention of the instructions it was started under.
+        writeFileSync(join(folder, "session.json"), JSON.stringify({ sessionId: "said-it-cannot-be-done" }));
+      },
+    });
+    await team.request("hello");
+    const [mochi] = starts();
+    expect(mochi?.args).not.toContain("--resume");
   });
 
   it("two specialists at once: both run in their own sessions, and Mochi's turn ends without waiting", async () => {

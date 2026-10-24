@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -65,29 +66,79 @@ export function writeAgentConfig(
   return { mcpConfigPath, systemPromptPath };
 }
 
-/** The agent's conversation to resume in this project, if any. */
-export function readSessionId(projectDir: string, agent?: string): string | undefined {
+/** What the lead is told about the specialists that can change the model, whose names fill the first words. */
+export function builderCapabilities(names: string[]): string {
+  return `${names.join(", ")} can do more than massings, walls, slabs and columns: they can model curves, polylines, NURBS surfaces and smooth or organic forms (domes, vaults, arches, canopies, minarets) by writing Python with rhino3dm (python_run), and when Rhino is connected they can model in Rhino. They save a .3dm and the user is offered Import into viewer. So never tell the user these things cannot be done, and never offer only a faceted look-alike: delegate it, and say in the instruction what to make and that python_run is the way.`;
+}
+
+/**
+ * Which version of the instructions HAI gives every agent (the base prompt and what the lead is told about its
+ * team's abilities). It changes whenever that text does.
+ *
+ * A saved conversation carries the version it was started under. Resuming one from an older version would keep
+ * the agent to what it said before ("we can only make walls"), whatever the new instructions say, so such a
+ * conversation is not resumed: the agent starts a new one. The old conversation stays in Claude Code's own history.
+ */
+export function instructionsVersion(): string {
+  return createHash("sha1")
+    .update(SYSTEM_PROMPT)
+    .update("\n")
+    .update(builderCapabilities(["x"]))
+    .digest("hex")
+    .slice(0, 12);
+}
+
+interface SessionRecord {
+  sessionId: string;
+  /** The `instructionsVersion()` the conversation was started under; absent in files written before it existed. */
+  instructions?: string;
+}
+
+function readSessionRecord(projectDir: string, agent?: string): SessionRecord | undefined {
   try {
-    const id = JSON.parse(readFileSync(join(agentDir(projectDir, agent), "session.json"), "utf8")).sessionId;
-    return typeof id === "string" && id ? id : undefined;
+    const saved = JSON.parse(readFileSync(join(agentDir(projectDir, agent), "session.json"), "utf8"));
+    if (typeof saved.sessionId !== "string" || !saved.sessionId) return undefined;
+    return {
+      sessionId: saved.sessionId,
+      ...(typeof saved.instructions === "string" ? { instructions: saved.instructions } : {}),
+    };
   } catch {
     return undefined;
   }
 }
 
-export function writeSessionId(projectDir: string, sessionId: string, agent?: string): void {
+function writeSessionRecord(projectDir: string, record: SessionRecord, agent?: string): void {
   const dir = agentDir(projectDir, agent);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "session.json"), `${JSON.stringify({ sessionId }, null, 2)}\n`);
+  writeFileSync(join(dir, "session.json"), `${JSON.stringify(record, null, 2)}\n`);
+}
+
+/**
+ * The agent's conversation to resume in this project: the one saved, if it was started under the instructions
+ * HAI gives now. An older one is left alone and not resumed.
+ */
+export function readSessionId(projectDir: string, agent?: string): string | undefined {
+  const record = readSessionRecord(projectDir, agent);
+  return record?.instructions === instructionsVersion() ? record.sessionId : undefined;
+}
+
+/** Whether a conversation is saved for this agent but was started under older instructions, so it is not resumed. */
+export function hasOutdatedSession(projectDir: string, agent?: string): boolean {
+  return readSessionRecord(projectDir, agent) !== undefined && readSessionId(projectDir, agent) === undefined;
+}
+
+export function writeSessionId(projectDir: string, sessionId: string, agent?: string): void {
+  writeSessionRecord(projectDir, { sessionId, instructions: instructionsVersion() }, agent);
 }
 
 /**
  * A project used before the team existed has one conversation (`.hai/agent/session.json`). It becomes the lead's,
- * so the user's earlier conversation continues with Mochi.
+ * so the user's earlier conversation continues with Mochi (if it is still resumable; the version it carries moves
+ * with it).
  */
 export function migrateSessionToLead(projectDir: string, lead: string): void {
-  const old = readSessionId(projectDir);
-  if (!old || readSessionId(projectDir, lead)) return;
-  writeSessionId(projectDir, old, lead);
+  const old = readSessionRecord(projectDir);
+  if (!old || readSessionRecord(projectDir, lead)) return;
+  writeSessionRecord(projectDir, old, lead);
   rmSync(join(agentDir(projectDir), "session.json"), { force: true });
 }

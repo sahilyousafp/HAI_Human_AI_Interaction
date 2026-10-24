@@ -9,7 +9,13 @@ import type {
   RequestContext,
 } from "@hai/protocol";
 import { type Logger, silentLogger } from "../log.ts";
-import { PERMISSION_TOOL, readSessionId, writeAgentConfig, writeSessionId } from "./agent-config.ts";
+import {
+  hasOutdatedSession,
+  PERMISSION_TOOL,
+  readSessionId,
+  writeAgentConfig,
+  writeSessionId,
+} from "./agent-config.ts";
 
 type Send = (message: Message) => void;
 
@@ -279,6 +285,8 @@ export class AgentHub {
       ...(extraPrompt ? { extraPrompt } : {}),
     });
     const resumeSessionId = readSessionId(projectDir, agent);
+    if (hasOutdatedSession(projectDir, agent))
+      this.log.info("saved conversation not resumed: it was started under older instructions", { agent });
     const session = await this.options.provider.start({
       cwd: projectDir,
       ...paths,
