@@ -1,0 +1,11 @@
+{
+  "type": "rhino.status",
+  "id": "message-1",
+  "payload": {
+    "python": {
+      "state": "unavailable",
+      "reason": "no engine"
+    },
+    "document": "tower.3dm"
+  }
+}

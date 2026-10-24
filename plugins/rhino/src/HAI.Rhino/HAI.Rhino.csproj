@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The HAI plugin for Rhino 8. It runs in Rhino on .NET Framework 4.8 (Windows) and on .NET 7 (Rhino 8 on .NET Core,
+       Windows and Mac), so it targets both and loads whichever Rhino starts. RhinoCommon is a compile-time reference only:
+       Rhino supplies its own at run time, and so does it Newtonsoft.Json. -->
+  <PropertyGroup>
+    <TargetFrameworks>net48;net7.0</TargetFrameworks>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>HAI.Rhino</RootNamespace>
+    <AssemblyName>HAI.Rhino</AssemblyName>
+    <TargetExt>.rhp</TargetExt>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- net7.0 is out of support for general use but is what Rhino 8 runs the plugin on. -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <NoWarn>$(NoWarn);NETSDK1138</NoWarn>
+    <Version>0.1.0</Version>
+    <InformationalVersion>0.1.0</InformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RhinoCommon" Version="8.19.25132.1001" ExcludeAssets="runtime" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" ExcludeAssets="runtime" />
+    <ProjectReference Include="..\HAI.Rhino.Core\HAI.Rhino.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+</Project>

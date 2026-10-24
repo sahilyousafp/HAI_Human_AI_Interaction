@@ -1,0 +1,9 @@
+{
+  "type": "rhino.python.run",
+  "id": "bridge-1",
+  "payload": {
+    "id": "run-1",
+    "code": "# r: ladybug-core\nimport Rhino\nprint(1)\nresult = 42\n",
+    "timeoutMs": 60000
+  }
+}

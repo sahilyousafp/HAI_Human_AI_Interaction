@@ -1,0 +1,11 @@
+{
+  "type": "rhino.python.result",
+  "id": "message-1",
+  "payload": {
+    "id": "run-2",
+    "ok": false,
+    "stdout": "",
+    "error": "NameError: name x is not defined",
+    "durationMs": 3.0
+  }
+}

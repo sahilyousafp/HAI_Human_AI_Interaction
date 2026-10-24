@@ -1,0 +1,13 @@
+{
+  "type": "rhino.selection",
+  "id": "message-1",
+  "payload": {
+    "objects": [
+      {
+        "id": "7f1c0b0e-3f0a-4a53-9d0e-5d3f1c9a1b11",
+        "type": "brep",
+        "layer": "Roof"
+      }
+    ]
+  }
+}

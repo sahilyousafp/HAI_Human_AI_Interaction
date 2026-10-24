@@ -1,0 +1,14 @@
+{
+  "type": "hello",
+  "id": "message-1",
+  "payload": {
+    "client": "rhino",
+    "protocolVersion": 1,
+    "rhinoVersion": "8.12.24010.10",
+    "pluginVersion": "0.1.0",
+    "python": {
+      "state": "ready"
+    },
+    "document": "tower.3dm"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "type": "rhino.select",
+  "id": "bridge-2",
+  "payload": {
+    "ids": [
+      "7f1c0b0e-3f0a-4a53-9d0e-5d3f1c9a1b11",
+      "a2d4c6e8-0000-4000-8000-000000000002"
+    ]
+  }
+}

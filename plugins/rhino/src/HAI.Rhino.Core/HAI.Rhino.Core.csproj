@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Everything the Rhino plugin does that does not need Rhino: the wire messages, the change coalescer, the mesh asset
+       writer and the Python requirement and result handling. netstandard2.0 runs in Rhino 8 on .NET Framework 4.8 and on
+       .NET 7, and in the tests on any newer .NET. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>HAI.Rhino.Core</RootNamespace>
+    <AssemblyName>HAI.Rhino.Core</AssemblyName>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Rhino 8 ships Newtonsoft.Json, so the plugin and Rhino agree on one copy. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,7 @@
+{
+  "type": "rhino.select",
+  "id": "bridge-3",
+  "payload": {
+    "ids": []
+  }
+}

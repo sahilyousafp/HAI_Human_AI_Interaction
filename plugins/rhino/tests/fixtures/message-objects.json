@@ -1,0 +1,70 @@
+{
+  "type": "rhino.objects",
+  "id": "message-1",
+  "payload": {
+    "changed": [
+      {
+        "id": "7f1c0b0e-3f0a-4a53-9d0e-5d3f1c9a1b11",
+        "name": "Canopy",
+        "type": "brep",
+        "layer": "Roof::Canopy",
+        "color": "#3c6ec8",
+        "bounds": {
+          "min": [
+            0.0,
+            0.0,
+            3000.0
+          ],
+          "max": [
+            6000.0,
+            6000.0,
+            3900.0
+          ]
+        },
+        "asset": "0f8fad5b-d9cb-469f-a165-70867728950e",
+        "triangles": 1152,
+        "tags": {
+          "hai.owner": "architect"
+        }
+      },
+      {
+        "id": "a2d4c6e8-0000-4000-8000-000000000002",
+        "name": "",
+        "type": "mesh",
+        "layer": "Default",
+        "color": null,
+        "bounds": {
+          "min": [
+            -1.5,
+            0.0,
+            0.0
+          ],
+          "max": [
+            1.5,
+            2.0,
+            4.0
+          ]
+        },
+        "asset": null,
+        "triangles": 0,
+        "tags": {}
+      }
+    ],
+    "deleted": [
+      "b3e5d7f9-0000-4000-8000-000000000003"
+    ],
+    "notDrawn": {
+      "curves": 12,
+      "points": 0,
+      "annotations": 1,
+      "other": 0,
+      "heavy": 1
+    },
+    "sync": {
+      "done": 2,
+      "total": 40
+    },
+    "reset": true,
+    "changedAt": 1792790022951
+  }
+}

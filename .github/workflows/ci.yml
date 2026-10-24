@@ -80,3 +80,20 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  # The Rhino plugin is C# and does not need Rhino to be built or tested: its core (messages, change coalescer, mesh asset
+  # writer, Python requirement and result handling) runs in plain .NET, and the plugin itself is compiled for both of
+  # the runtimes Rhino 8 uses against the public RhinoCommon package. The TypeScript side reads the same fixtures in
+  # `pnpm test` (scripts/rhino-plugin-contract.test.mjs).
+  rhino-plugin:
+    name: rhino plugin (dotnet)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - run: dotnet test plugins/rhino/tests/HAI.Rhino.Core.Tests --configuration Release
+      - run: dotnet build plugins/rhino/src/HAI.Rhino/HAI.Rhino.csproj --configuration Release
