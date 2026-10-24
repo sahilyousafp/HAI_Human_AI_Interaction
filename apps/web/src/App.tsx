@@ -1,5 +1,5 @@
 import type { FeatureId, Message, MessageOf, ModellingMode, ReplyVoice, SpeechMode } from "@hai/protocol";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
 import { addressOf } from "./agent/addressing.ts";
 import { AgentClient } from "./agent/agent-client.ts";
@@ -311,19 +311,24 @@ export function App() {
     [modelsState],
   );
   const voiceReady = voiceStatus.kind === "ready";
+  /** What the hand rests on while the user speaks: nothing, unless they turned on Number what I point at. */
+  const pointedWhileSpeaking = useCallback(
+    () => (features.on("pointCapture") ? viewLink.pointedId : null),
+    [features, viewLink],
+  );
   useEffect(() => speaker.setHeld(!voiceReady), [speaker, voiceReady]);
   const startVoice = () => {
     if (!features.on("voice") || !voiceReady) return;
     speaker.stop(); // talking to the agent interrupts its voice before listening starts
     agent.requestOpen();
-    void voice.start(() => viewLink.pointedId);
+    void voice.start(pointedWhileSpeaking);
   };
   const startVoiceRef = useRef(startVoice);
   startVoiceRef.current = startVoice;
   const markers = useSyncExternalStore(voice.context.subscribe, () => voice.context.ids);
   const micState = useSyncExternalStore(voice.subscribe, () => voice.micState);
   const [listenForNames, setListenForNames] = useState(false);
-  useEffect(() => voice.setHovered(() => viewLink.pointedId), [voice, viewLink]);
+  useEffect(() => voice.setHovered(pointedWhileSpeaking), [voice, pointedWhileSpeaking]);
   // Listening for names needs the voice feature on.
   useEffect(
     () => voice.setListenForNames(listenForNames && featureState.voice && voiceReady),
@@ -331,7 +336,11 @@ export function App() {
   );
 
   // What the hand points at, and what gets tapped into the selection, while the user speaks.
-  useEffect(() => viewLink.onPointed((id) => voice.context.hover(id, Date.now())), [viewLink, voice]);
+  useEffect(
+    () =>
+      viewLink.onPointed((id) => voice.context.hover(features.on("pointCapture") ? id : null, Date.now())),
+    [viewLink, voice, features],
+  );
   useEffect(() => {
     let previous = sceneClient.getSnapshot().selection;
     return sceneClient.subscribe(() => {

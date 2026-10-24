@@ -2,8 +2,8 @@ import { z } from "zod";
 
 /**
  * Features the user can switch off as a unit (Settings > Features), so a demo or a release shows exactly what is
- * turned on. A switched-off feature leaves the interface and ignores its gestures; nothing else changes. Every
- * feature is on until the user turns it off.
+ * turned on. A switched-off feature leaves the interface and ignores its gestures; nothing else changes. A feature is
+ * on until the user turns it off, unless it says `defaultOn: false` (it then stays off until they turn it on).
  */
 export const FEATURES = [
   {
@@ -57,6 +57,19 @@ export const FEATURES = [
     description: "The agent panel and Ask agent.",
   },
   {
+    id: "snapToModels",
+    label: "Snap to models",
+    description:
+      "A hand pointer near a model selects it without a pixel-exact pinch, and lights it up before you pinch.",
+  },
+  {
+    id: "pointCapture",
+    label: "Number what I point at",
+    description:
+      "While you speak, elements your hand rests on get numbered markers and count as what you mean. Off: select what you mean first.",
+    defaultOn: false,
+  },
+  {
     id: "generatedPanels",
     label: "Generated panels",
     description: "The agent can offer a small panel for a task, such as a tolerance, and a nod opens it.",
@@ -66,7 +79,13 @@ export const FEATURES = [
     label: "Latency readout",
     description: "Gesture to render time in the status bar.",
   },
-] as const satisfies ReadonlyArray<{ id: string; label: string; description: string }>;
+] as const satisfies ReadonlyArray<{
+  id: string;
+  label: string;
+  description: string;
+  /** Whether the feature is on until the user changes it; on when left out. */
+  defaultOn?: boolean;
+}>;
 
 export type FeatureId = (typeof FEATURES)[number]["id"];
 export const FEATURE_IDS = FEATURES.map((f) => f.id) as FeatureId[];
@@ -74,7 +93,9 @@ export const FEATURE_IDS = FEATURES.map((f) => f.id) as FeatureId[];
 /** Which features are on. */
 export type Features = Record<FeatureId, boolean>;
 
-export const DEFAULT_FEATURES = Object.fromEntries(FEATURE_IDS.map((id) => [id, true])) as Features;
+export const DEFAULT_FEATURES = Object.fromEntries(
+  FEATURES.map((feature) => [feature.id, "defaultOn" in feature ? feature.defaultOn : true]),
+) as Features;
 
 /** The user's choices: only the features they changed. Unknown names (from a newer or older app) are ignored. */
 export const FeatureChoices = z.record(z.string(), z.boolean());

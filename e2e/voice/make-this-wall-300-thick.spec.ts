@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { fakeProvider } from "../../apps/bridge/test/fake-provider.ts";
 import { watchOutgoingData } from "../privacy.ts";
-import { openSettings } from "../settings.ts";
+import { closeSettings, openSettings } from "../settings.ts";
 import { findElementOnScreen, handAt, openViewer, startTestBridge } from "../viewer.ts";
 
 // The fake microphone plays test-assets/speech/make-this-wall-300-thick.wav once from when the microphone opens:
@@ -85,6 +85,10 @@ test('"make this 300 thick" while pointing: the wall gets marker 1 and is the fi
 }) => {
   const { bridge, received } = await start(page);
   try {
+    // Pointing numbers elements only when asked for (it is off by default).
+    await openSettings(page, "features");
+    await page.getByTestId("feature-pointCapture").click();
+    await closeSettings(page);
     const wall = await findElementOnScreen(page, "wall-s");
     await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     await page.getByTestId("mic-button").click();

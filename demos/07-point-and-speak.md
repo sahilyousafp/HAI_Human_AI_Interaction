@@ -9,7 +9,8 @@ Week 7 clip. Target length 40-55 s, 16:9, captions burned in. Speech is transcri
 3. `pnpm dev`; open http://127.0.0.1:5173 in Edge (dark theme). The agent panel says **Ready**; the Voice card in the sidebar says **On this laptop**.
 4. Say one warm-up request off camera ("What is in this scene? One sentence.") so the speech model is loaded and the session has started. Reload the page.
 5. Start the camera and check the Detection card: both hands found close to 100%.
-6. Recorder at 1080p, 30 fps, capturing the browser window.
+6. For this clip only: Settings > Features > **Number what I point at** on (it is off by default, so a hand moving over the model while you talk marks nothing). Without it, select the element first, then speak.
+7. Recorder at 1080p, 30 fps, capturing the browser window.
 
 ## Shot list
 

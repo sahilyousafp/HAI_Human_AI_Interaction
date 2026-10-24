@@ -2,9 +2,18 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_FEATURES, FEATURE_IDS, FEATURES, resolveFeatures } from "./features.ts";
 
 describe("features", () => {
-  it("every feature is on until the user turns it off", () => {
-    expect(FEATURE_IDS.every((id) => DEFAULT_FEATURES[id])).toBe(true);
+  it("every feature is on until the user turns it off, except those that say they start off", () => {
+    const startOff = FEATURES.filter((f) => "defaultOn" in f && f.defaultOn === false).map((f) => f.id);
+    expect(startOff).toEqual(["pointCapture"]);
+    expect(FEATURE_IDS.filter((id) => !DEFAULT_FEATURES[id])).toEqual(startOff);
     expect(resolveFeatures(null)).toEqual(DEFAULT_FEATURES);
+  });
+
+  it("Snap to models is on by default and Number what I point at is off until turned on", () => {
+    expect(resolveFeatures(null).snapToModels).toBe(true);
+    expect(resolveFeatures(null).pointCapture).toBe(false);
+    expect(resolveFeatures({ pointCapture: true }).pointCapture).toBe(true);
+    expect(resolveFeatures({ snapToModels: false }).snapToModels).toBe(false);
   });
 
   it("stored choices apply, and unknown names are ignored", () => {

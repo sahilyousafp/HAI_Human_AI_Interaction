@@ -10,6 +10,7 @@ interface Window {
     meshCount(): number;
     pick(x: number, y: number): string | null;
     latencyP90(): number | null;
+    hovered?(): string | null;
     renders(): number;
     project(point: [number, number, number]): [number, number];
     overSection(x: number, y: number): boolean;
@@ -81,6 +82,7 @@ interface Window {
     context: {
       begin(now: number, hoveredId: string | null): void;
       hover(id: string | null, now: number): void;
+      tick(now: number): void;
       end(now: number): void;
       clear(): void;
     };

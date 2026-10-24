@@ -21,12 +21,11 @@ Nod and shake here are the gestures bound to "Yes" and "No" in the Gestures sett
 
 ## Point and speak
 
-While you speak, the app records what your hand points at:
+Select what you mean, then speak: the current selection is what "this" and "these" refer to. While you speak, every element you tap into the selection is captured too, in order, and shows a numbered marker in the model (1, 2, ...) until the request is sent or discarded, so you see what it will mean before it goes. A hand pointer snaps to the nearest model when you pinch close to it ([gestures.md](gestures.md)), so selecting does not take a pixel-exact pinch.
 
-- Every element the hand pointer rests on for 300 ms or more is captured, in order. Passing over something briefly does not count.
-- Every element you tap into the selection while speaking is captured too.
-- Each captured element shows a numbered marker in the model (1, 2, ...) until the request is sent or discarded, so you see what "this" and "these" will mean before it goes.
-- If you did not point at anything, the current selection is what you meant: select first, then speak.
+To have the hand pointer pick things out for you instead, turn on **Number what I point at** in Settings > Features (it is off by default, so moving your hand across the model while talking marks nothing):
+
+- Every element the hand pointer rests on for 300 ms or more is captured, in order, and numbered. Passing over something briefly does not count.
 
 The agent receives the transcript with a short context block: the captured elements in order (type, id and name), the selection, and the point on the ground under your hand when you stopped speaking (millimetres). It can still read the full context with `get_user_context`.
 
@@ -49,7 +48,7 @@ All values live in `apps/web/src/voice/voice-config.ts`; a unit test checks that
 | `noSpeechMs` | 8000 | Listening stops if you say nothing for this long |
 | `sendDelayMs` | 5000 | The transcript is sent this long after you stop, unless you send or discard it first |
 | `afterNameMs` | 5000 | After a name on its own ("Hey Mochi") the microphone stays open this long for the rest of the request |
-| `dwellMs` | 300 | The hand pointer must rest on an element this long while you speak for it to be captured |
+| `dwellMs` | 300 | With Number what I point at on, the hand pointer must rest on an element this long while you speak for it to be captured |
 
 The Voice settings show where transcription runs and the 90th percentile of the time from the end of speech to the transcript. The target is under one second; on the reference laptop a two-second phrase transcribes in about 0.2 s. The speech model (63 MB) loads while you speak the first request, in about 1.5 s.
 

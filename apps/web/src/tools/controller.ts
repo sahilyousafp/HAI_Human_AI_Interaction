@@ -62,7 +62,8 @@ export interface ToolEnvironment {
   undo(): void;
   redo(): void;
   select(ids: string[]): void;
-  pick(at: Point2): Hit | null;
+  /** What is at a viewer position; for a hand (`source`) the nearest model in reach when none is exactly there. */
+  pick(at: Point2, source?: PointerSource): Hit | null;
   ground(at: Point2, heightMm?: number): Point3Mm | null;
   /** The size of the view, px, and where a scene point is on it: the camera, for matching snaps on screen. */
   screenSize?(): Point2;
@@ -121,6 +122,8 @@ export class ToolController {
   private paletteRing: Ring = "tools";
   private paletteHand: Hand | null = null;
   private env: ToolEnvironment | null = null;
+  /** What moved the pointer in the latest tap, hover or drag start: a hand snaps to models, the mouse does not. */
+  private pickSource: PointerSource = "mouse";
   /**
    * Each pointer's drag. A pinch that began on an on-screen button presses it when released, however long it
    * lasted; one that began on a scrolled area scrolls it; otherwise the active tool may take it, for one pointer at
@@ -239,6 +242,7 @@ export class ToolController {
   // Pointer input, in viewer coordinates
 
   tap(at: Point2, source: PointerSource = "mouse"): void {
+    this.pickSource = source;
     const ctx = this.ctx();
     if (!ctx || this.env?.press(at, source)) return;
     // Tapping the section's outline selects the section, except with Delete, which removes it (its own tap).
@@ -253,7 +257,8 @@ export class ToolController {
    * Hover feedback. The section outline responds in every tool (it lights up and the pointer shows grab), so the
    * section can be picked up whatever tool is active.
    */
-  hover(at: Point2): void {
+  hover(at: Point2, source: PointerSource = "mouse"): void {
+    this.pickSource = source;
     const ctx = this.ctx();
     if (!ctx || this.toolDragger !== null) return;
     const line = this.onSectionLine(at);
@@ -291,6 +296,7 @@ export class ToolController {
    * the other hand's drag navigates.
    */
   dragStart(at: Point2, source: PointerSource = "mouse"): boolean {
+    this.pickSource = source;
     const ctx = this.ctx();
     if (!ctx) return false;
     this.cancelDrag(source);
@@ -390,7 +396,7 @@ export class ToolController {
 
   /** Selects the element at a viewer position (or clears the selection over empty space), whatever the tool. */
   selectAt(at: Point2): void {
-    const hit = this.env?.pick(at);
+    const hit = this.env?.pick(at, "Right"); // only a hand selects this way
     this.env?.select(hit ? [hit.elementId] : []);
   }
 
@@ -440,7 +446,7 @@ export class ToolController {
       undo: () => env.undo(),
       redo: () => env.redo(),
       select: (ids) => env.select(ids),
-      pick: (at) => env.pick(at),
+      pick: (at) => env.pick(at, this.pickSource),
       ground: (at, heightMm) => env.ground(at, heightMm),
       aids: () => env.aids?.() ?? DEFAULT_DRAWING_AIDS,
       resolve: (at, options) => this.resolveSnap(env, at, options),

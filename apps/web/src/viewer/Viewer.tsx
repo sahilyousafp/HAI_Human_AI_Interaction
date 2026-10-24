@@ -60,6 +60,7 @@ import type { Hit } from "../tools/types.ts";
 import { elementGeometry, MM, modelGeometry, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
 import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
+import { nearestModel, type SnapCandidate, snapRadius } from "./snap-pick.ts";
 import { MeasureMarks, ReferenceMarkers, SectionClipping, SectionPlane, SnapMarker } from "./ToolScene.tsx";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 import { between, resolveView, VIEW_ANIMATION_MS } from "./view-request.ts";
@@ -184,6 +185,8 @@ declare global {
       /** The element a click or tap at this viewer position would hit (null under a HUD panel). */
       pick(x: number, y: number): string | null;
       latencyP90(): number | null;
+      /** The element lit up under the hand pointer now (a pinch there would select it), or null. */
+      hovered(): string | null;
       /** Frames rendered so far (the canvas renders on demand, so an idle view adds none). */
       renders(): number;
       /** Viewer position (0..1) of a scene point in millimetres. */
@@ -357,6 +360,8 @@ function ElementMesh({
 interface Picking {
   id(x: number, y: number): string | null;
   hit(x: number, y: number): Hit | null;
+  /** Like `hit`, but a pointer that hits nothing snaps to the nearest model within reach (a hand's imprecise pinch). */
+  near(x: number, y: number): Hit | null;
   ground(x: number, y: number, heightMm: number): Point3Mm | null;
   project(point: Point3Mm): Point2;
   /** Where a scene point (mm) is on screen in px, for a view of this size; false when it is behind the camera. */
@@ -366,6 +371,7 @@ interface Picking {
 const noPicking: Picking = {
   id: () => null,
   hit: () => null,
+  near: () => null,
   ground: () => null,
   project: () => [0, 0],
   projector: () => () => false,
@@ -406,7 +412,7 @@ function CameraRig({
   /** Reports the camera to the agent and captures the view for it. */
   view: ViewLink;
 }) {
-  const { camera, scene, raycaster, invalidate, gl } = useThree();
+  const { camera, scene, raycaster, invalidate, gl, size } = useThree();
   invalidateRef.current = invalidate;
   rendersRef.current = () => gl.info.render.frame;
   const eased = useRef<Turntable | null>(null);
@@ -432,8 +438,47 @@ function CameraRig({
       }
       return null;
     };
+    /** The nearest model within a few centimetres on screen of a pointer that hit nothing. */
+    const near = (x: number, y: number): Hit | null => {
+      const direct = hit(x, y);
+      if (direct) return direct;
+      const cut = sectionRef.current;
+      const candidates: SnapCandidate[] = [];
+      const centres = new Map<string, Point3Mm>();
+      const corner = new THREE.Vector3();
+      const box = new THREE.Box3();
+      scene.traverse((object) => {
+        const id = object.userData.elementId;
+        const mesh = object as THREE.Mesh;
+        if (typeof id !== "string" || !mesh.isMesh || !mesh.visible) return;
+        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+        const local = mesh.geometry.boundingBox;
+        if (!local) return;
+        box.copy(local).applyMatrix4(mesh.matrixWorld);
+        if (cut !== null && box.min.z / MM > cut + 1) return; // hidden above the section
+        const corners: Point2[] = [];
+        for (let i = 0; i < 8; i++) {
+          corner.set(
+            i & 1 ? box.max.x : box.min.x,
+            i & 2 ? box.max.y : box.min.y,
+            i & 4 ? box.max.z : box.min.z,
+          );
+          const depth = corner.clone().applyMatrix4(camera.matrixWorldInverse).z;
+          if (depth >= 0) return; // part of it is behind the camera: its outline on screen is not meaningful
+          corner.project(camera);
+          corners.push([((corner.x + 1) / 2) * size.width, ((1 - corner.y) / 2) * size.height]);
+        }
+        const centre = box.getCenter(new THREE.Vector3());
+        candidates.push({ id, corners, depth: centre.distanceTo(camera.position) });
+        centres.set(id, [centre.x / MM, centre.y / MM, centre.z / MM]);
+      });
+      const id = nearestModel(candidates, [x * size.width, y * size.height], snapRadius(size.height));
+      const point = id ? centres.get(id) : undefined;
+      return id && point ? { elementId: id, point } : null;
+    };
     pickRef.current = {
       hit,
+      near,
       id: (x, y) => hit(x, y)?.elementId ?? null,
       ground: (x, y, heightMm) => {
         cast(x, y);
@@ -467,7 +512,7 @@ function CameraRig({
     return () => {
       scene.onAfterRender = () => {};
     };
-  }, [camera, scene, raycaster, pendingTs, latency, pickRef, sectionRef]);
+  }, [camera, scene, raycaster, size, pendingTs, latency, pickRef, sectionRef]);
 
   // The agent's picture of the view: render the current frame, then read the canvas.
   useEffect(
@@ -673,6 +718,8 @@ export function Viewer({
   const [engaged, setEngaged] = useState(bus.engaged);
   const [stopArmed, setStopArmed] = useState(bus.stopArmed);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const hoverIdRef = useRef<string | null>(null);
+  hoverIdRef.current = hoverId;
   const [p90, setP90] = useState<number | null>(null);
   const [projectPath, setProjectPath] = useState("");
   /** The folder form under the project bar: for opening a project or for starting a new one. */
@@ -812,7 +859,12 @@ export function Viewer({
         }
       },
       // Under a HUD panel the model is hidden from the hand, as it is from the mouse.
-      pick: ([x, y]) => (overHud(wrapper.current, [x, y]) ? null : pickRef.current.hit(x, y)),
+      // A hand's pinch is rarely pixel-exact, so it snaps to the nearest model in reach; the mouse stays exact.
+      pick: ([x, y], source) => {
+        if (overHud(wrapper.current, [x, y])) return null;
+        const snapping = source !== undefined && source !== "mouse" && features.on("snapToModels");
+        return snapping ? pickRef.current.near(x, y) : pickRef.current.hit(x, y);
+      },
       ground: ([x, y], heightMm = 0) => pickRef.current.ground(x, y, heightMm),
       // The camera, for matching snaps on screen: the view's size in px, and where a scene point is on it.
       screenSize: () => [wrapper.current?.clientWidth || 1, wrapper.current?.clientHeight || 1],
@@ -1050,8 +1102,11 @@ export function Viewer({
         setHoverId(null);
         return;
       }
-      setHoverId(pickRef.current.id(pointer.at[0], pointer.at[1]));
-      tools.hover(pointer.at);
+      const lit = features.on("snapToModels")
+        ? pickRef.current.near(pointer.at[0], pointer.at[1])
+        : pickRef.current.hit(pointer.at[0], pointer.at[1]);
+      setHoverId(lit?.elementId ?? null);
+      tools.hover(pointer.at, focusHand ?? "Right");
     });
     const offEngaged = bus.onEngaged((value) => {
       setEngaged(value);
@@ -1226,6 +1281,7 @@ export function Viewer({
       // What a user can actually hit there: nothing under a HUD panel, as for the mouse and the hand.
       pick: (x, y) => (overHud(wrapper.current, [x, y]) ? null : pickRef.current.id(x, y)),
       latencyP90: () => latency.p90(),
+      hovered: () => hoverIdRef.current,
       renders: () => rendersRef.current(),
       project: (point) => pickRef.current.project(point),
       sectionOutline: () => sectionOutlineOnScreen(),

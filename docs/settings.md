@@ -20,7 +20,7 @@ The bridge keeps every setting in `.hai/settings.json` in the workspace, so they
 
 ## Features
 
-Every feature can be switched off on its own, so a demo or a release shows exactly what you want it to. A switched-off feature leaves the interface and ignores its gestures, keys and controls; nothing else changes. Every feature is on until you switch it off.
+Every feature can be switched off on its own, so a demo or a release shows exactly what you want it to. A switched-off feature leaves the interface and ignores its gestures, keys and controls; nothing else changes. Every feature is on until you switch it off, except Number what I point at, which is off until you switch it on.
 
 | Feature | Off means |
 |---|---|
@@ -34,6 +34,8 @@ Every feature can be switched off on its own, so a demo or a release shows exact
 | Stop gesture | Both fists then open hands do not stop the agents |
 | Voice | No microphone button or indicator, the talk key does nothing, listening for names is off |
 | Agent | No agent panel; Ask agent says the agent is switched off |
+| Snap to models | A hand pointer must be exactly on a model to select it, and no model lights up before the pinch |
+| Number what I point at | Off by default. When on, elements your hand rests on while you speak get numbered markers and count as what you mean |
 | Generated panels | The agent is not offered the panel tools, and an open panel closes and drops its preview |
 | Latency readout | The status bar does not show the gesture-to-render time |
 

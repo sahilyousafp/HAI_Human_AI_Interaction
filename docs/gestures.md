@@ -32,7 +32,7 @@ Nothing but engagement produces a command until you are engaged. Lowering both h
 | Gesture | Default | Can also |
 |---|---|---|
 | Open palm | Engage | (fixed) |
-| Pinch tap (each hand) | Use the active tool | Select what it points at (whatever the tool), undo, redo, cancel, ask or stop the agent, nothing |
+| Pinch tap (each hand) | Use the active tool | Select what it points at (whatever the tool; a pointer near a model snaps to it), undo, redo, cancel, ask or stop the agent, nothing |
 | Long pinch (each hand) | Right: open the tools ring. Left: open the create ring | The other ring, select, undo, redo, cancel, ask or stop the agent, nothing |
 | Pinch drag (each hand) | Active tool, else orbit | Always orbit, pan the view, nothing |
 | Fist drag (each hand) | Pan the view | Orbit the view, nothing |
