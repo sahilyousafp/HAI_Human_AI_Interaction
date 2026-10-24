@@ -51,7 +51,7 @@ function startBridgeProcess(): Promise<BridgeSession | null> {
     origin,
     sampleScene: join(bridgeDir, "samples", "mixed-use-block.hai.json"),
     // The bridge's own lines already start with "[bridge]"; anything else it prints (a crash) gets the tag.
-    env: { HAI_APP_VERSION: app.getVersion() },
+    env: { HAI_APP_VERSION: app.getVersion(), HAI_PYTHON_HELPERS: join(bridgeDir, "python") },
     log: (line) => log?.info(line.startsWith("[bridge]") ? line : `[bridge] ${line}`),
     fork: (entry, env) =>
       utilityProcess.fork(entry, [], {

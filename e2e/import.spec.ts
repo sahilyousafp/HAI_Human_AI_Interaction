@@ -122,9 +122,12 @@ test("layers and colours are kept, and the report lists what was skipped", async
 
   await page.getByTestId("import-close").click();
   await page.getByTestId("import-input").setInputFiles(model("with-curves-and-note.3dm"));
-  await expect(page.getByTestId("import-summary")).toContainText("Skipped 5: 4 curves, 1 annotation", {
-    timeout: 30_000,
-  });
+  await expect(page.getByTestId("import-summary")).toContainText(
+    "4 curves drawn as thin tubes. Skipped 1: 1 annotation",
+    {
+      timeout: 30_000,
+    },
+  );
 });
 
 test("a file that is not a Rhino file, and a picture, change nothing and say why", async ({ page }) => {

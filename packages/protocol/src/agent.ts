@@ -139,8 +139,18 @@ export type TeamMemberInfo = z.infer<typeof TeamMemberInfo>;
 export const HAI_TOOLS = {
   read: ["get_scene_summary", "get_elements", "get_user_context", "capture_view"],
   write: ["create_elements", "update_elements", "delete_elements", "set_selection"],
+  /** Offering and showing a generated panel; granted to every agent that changes the model. */
+  panel: ["offer_panel", "open_panel", "update_panel", "close_panel"],
   team: ["delegate", "team_status", "cancel_task"],
   climate: ["sun_study"],
+  /** Moves the viewer's camera and nothing else, so every agent has it. */
+  view: ["set_view"],
+  /** Runs Python in the managed environment; granted to the agents that change the model, and to any agent whose file lists it. */
+  python: ["python_run"],
+  /** Runs Python inside the open Rhino document; granted to the agents that change the model. */
+  rhino: ["rhino_run_python"],
+  /** Reads the Rhino document without running code; every agent has it. */
+  rhinoRead: ["rhino_get_document"],
 } as const;
 
 /** An agent's whole definition, for the Agents tab: what the panel shows plus its instructions. */
@@ -187,6 +197,8 @@ export const ApprovalRequest = z.strictObject({
   agent: z.string().optional(),
   /** When it is denied automatically (epoch ms). */
   expiresAt: z.number(),
+  /** The packages a Python run would install on the user's machine, shown on its card. */
+  installs: z.array(z.string()).optional(),
 });
 export type ApprovalRequest = z.infer<typeof ApprovalRequest>;
 

@@ -11,7 +11,7 @@ import {
   type SunSetting,
 } from "@hai/protocol";
 import type { MeshPart } from "@hai/scene";
-import { type Projector, sunLightDirection } from "@hai/scene";
+import { elementBounds, type Projector, sunLightDirection } from "@hai/scene";
 import { Edges, Grid } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
@@ -44,6 +44,11 @@ import {
   snappedPoint,
   stepHandSnap,
 } from "../input/pointer-snap.ts";
+import { GeneratedPanel } from "../panel/GeneratedPanel.tsx";
+import type { PanelClient } from "../panel/panel-client.ts";
+import { MirrorLayer } from "../rhino/MirrorLayer.tsx";
+import type { RhinoMirror } from "../rhino/rhino-mirror.ts";
+import { useMirrorVersion } from "../rhino/use-mirror-version.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
 import type { DrawingAidsStore } from "../settings/drawing-aids.ts";
 import type { FeatureFlags } from "../settings/feature-flags.ts";
@@ -57,6 +62,7 @@ import type { LatencyTracker } from "./latency.ts";
 import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
 import { MeasureMarks, ReferenceMarkers, SectionClipping, SectionPlane, SnapMarker } from "./ToolScene.tsx";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
+import { between, resolveView, VIEW_ANIMATION_MS } from "./view-request.ts";
 
 const FOV = 45;
 /** The pan pointer's icon: arrows in the four directions. */
@@ -576,6 +582,9 @@ export function Viewer({
   importer,
   exporter,
   modelAssets,
+  panels,
+  mirror,
+  mirrorAssets,
   markers = [],
   children,
 }: {
@@ -600,6 +609,12 @@ export function Viewer({
   exporter: ProjectExporter;
   /** The imported models the viewer draws, fetched from the bridge as they are first needed. */
   modelAssets: ModelAssets;
+  /** The generated panel the agent offered, and the preview its controls lay over the scene. */
+  panels: PanelClient;
+  /** Rhino's objects, drawn read-only beside the scene while Rhino is connected. */
+  mirror: RhinoMirror;
+  /** The meshes of Rhino's objects, fetched from the bridge as they are first needed. */
+  mirrorAssets: ModelAssets;
   /** Elements captured while the user speaks, numbered in this order. */
   markers?: string[];
   /** HUD panels over the model (the agent panel); inside the viewer, so the hand can press their buttons. */
@@ -607,13 +622,22 @@ export function Viewer({
 }) {
   const software = useMemo(isSoftwareRenderer, []);
   const scene = useSyncExternalStore(client.subscribe, client.getSnapshot);
+  // A generated panel's preview is laid over the scene for drawing only: tools and the bridge see the committed one.
+  useSyncExternalStore(panels.subscribe, () => panels.getSnapshot().previewVersion);
+  const shownDoc = panels.shownDoc(scene.doc);
   const toolState = useSyncExternalStore(tools.subscribe, tools.getSnapshot);
   const sun = useSyncExternalStore(view.onSun, () => view.sun);
   const featureState = useSyncExternalStore(features.subscribe, features.getSnapshot);
   const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
   const modelVersion = useSyncExternalStore(modelAssets.subscribe, modelAssets.getVersion);
+  // The count of documents that have arrived whole, to frame each once; the objects themselves are the layer's own.
+  const rhinoSynced = useSyncExternalStore(mirror.subscribe, () => mirror.getSnapshot().synced);
+  const mirrorVersion = useMirrorVersion(mirror, mirrorAssets);
   // The cut is applied again when elements change or a model's triangles arrive.
-  const clipVersion = useMemo(() => ({ doc: scene.doc, modelVersion }), [scene.doc, modelVersion]);
+  const clipVersion = useMemo(
+    () => ({ doc: shownDoc, modelVersion, mirrorVersion }),
+    [shownDoc, modelVersion, mirrorVersion],
+  );
   // Picking another tool ends a sun study: the viewer's own light returns.
   const studiedTool = useRef(toolState.activeId);
   useEffect(() => {
@@ -658,6 +682,21 @@ export function Viewer({
   askAgentRef.current = askAgent;
 
   useEffect(() => view.setPointed(hoverId), [view, hoverId]);
+  /** Pointers whose press began inside a generated panel's frame (their moves and release go into it). */
+  const framePresses = useRef(new Set<PointerSource>());
+  /** A viewer position as a point in the open panel's frame, px, kept inside it; null without a frame. */
+  const inFrame = useCallback(
+    (at: Point2): Point2 | null => {
+      const frame = panels.frame?.element;
+      const view = wrapper.current?.getBoundingClientRect();
+      if (!frame || !view) return null;
+      const box = frame.getBoundingClientRect();
+      const x = view.left + at[0] * view.width - box.left;
+      const y = view.top + at[1] * view.height - box.top;
+      return [Math.min(box.width, Math.max(0, x)), Math.min(box.height, Math.max(0, y))];
+    },
+    [panels],
+  );
   /** The control each hand's pointer is snapped to, if any (Settings > Features > Snap to buttons). */
   const snapTargets = useRef<Partial<Record<Hand, HTMLElement>>>({});
   /** The control a press from this source acts on: the one a hand is snapped to, else what is under the position. */
@@ -760,7 +799,18 @@ export function Viewer({
       apply: (label, ops) => void client.apply(label, ops),
       undo: () => void client.undo(),
       redo: () => void client.redo(),
-      select: (ids) => client.select(ids),
+      select: (ids) => {
+        // A pick on a Rhino object selects it in Rhino (and what Rhino reports back is highlighted here); the HAI
+        // selection is cleared so the two never show different things at once.
+        const picked = ids.length > 0 && ids.every((id) => mirror.has(id));
+        if (picked) {
+          if (client.getSnapshot().selection.length > 0) client.select([]);
+          mirror.select(ids);
+        } else {
+          client.select(ids);
+          if (mirror.getSnapshot().selection.length > 0) mirror.select([]);
+        }
+      },
       // Under a HUD panel the model is hidden from the hand, as it is from the mouse.
       pick: ([x, y]) => (overHud(wrapper.current, [x, y]) ? null : pickRef.current.hit(x, y)),
       ground: ([x, y], heightMm = 0) => pickRef.current.ground(x, y, heightMm),
@@ -795,8 +845,29 @@ export function Viewer({
       },
       press: (at, source) => {
         const target = features.on("handPress") ? controlFor(at, source) : null;
-        target?.click();
+        // A press over a generated panel's frame cannot be a click: the frame is sandboxed, so its runtime is told
+        // where the pointer let go and acts on the control beneath it.
+        const place = target && target === panels.frame?.element ? inFrame(at) : null;
+        if (place) {
+          const source_ = source ?? "mouse";
+          if (!framePresses.current.delete(source_)) panels.frame?.press("down", place[0], place[1]);
+          panels.frame?.press("up", place[0], place[1]);
+        } else target?.click();
         return target !== null;
+      },
+      pressStart: (at, source) => {
+        const target = features.on("handPress") ? controlFor(at, source) : null;
+        const place = target && target === panels.frame?.element ? inFrame(at) : null;
+        if (!place) return;
+        framePresses.current.add(source);
+        panels.frame?.press("down", place[0], place[1]);
+      },
+      pressMove: (at, source) => {
+        const place = framePresses.current.has(source) ? inFrame(at) : null;
+        if (place) panels.frame?.press("move", place[0], place[1]);
+      },
+      pressCancel: (source) => {
+        framePresses.current.delete(source);
       },
       isButton: (at, source) => features.on("handPress") && controlFor(at, source) !== null,
       scrollAt: (at) => {
@@ -816,7 +887,56 @@ export function Viewer({
       },
       askAgent: () => askAgentRef.current(),
     });
-  }, [tools, client, sectionOutlineOnScreen, features, aids, controlFor, shapeOf]);
+  }, [tools, client, sectionOutlineOnScreen, features, aids, controlFor, shapeOf, panels, inFrame, mirror]);
+
+  // When a whole Rhino document has arrived, frame it once (as a project is framed when it opens).
+  const syncedSeen = useRef(rhinoSynced);
+  useEffect(() => {
+    if (rhinoSynced === syncedSeen.current) return;
+    syncedSeen.current = rhinoSynced;
+    const box = mirror.bounds();
+    if (!box) return;
+    nav.current = frameBox(
+      [box.min[0] * MM, box.min[1] * MM, box.min[2] * MM],
+      [box.max[0] * MM, box.max[1] * MM, box.max[2] * MM],
+    );
+    invalidateRef.current();
+  }, [rhinoSynced, mirror]);
+
+  // The agent asks for a view: the camera animates there, and gives way at once to the user's own navigation.
+  useEffect(
+    () =>
+      view.onViewRequest((request) => {
+        const doc = client.getSnapshot().doc;
+        const boxOf = (ids: string[]) => {
+          const boxes = ids.flatMap((id) => {
+            const mirrored = mirror.getSnapshot().objects.find((o) => o.id === id);
+            if (mirrored) return [mirrored.bounds];
+            const element = doc?.elements[id];
+            return element && doc ? [elementBounds(element, doc.levels)] : [];
+          });
+          if (boxes.length === 0) return null;
+          return {
+            min: [0, 1, 2].map((k) => Math.min(...boxes.map((b) => b.min[k] as number))) as Point3Mm,
+            max: [0, 1, 2].map((k) => Math.max(...boxes.map((b) => b.max[k] as number))) as Point3Mm,
+          };
+        };
+        const from = nav.current;
+        const to = resolveView(from, request, boxOf);
+        const started = performance.now();
+        let last: Turntable = from;
+        const step = () => {
+          if (nav.current !== last) return; // the user took the camera: their navigation continues from here
+          const t = Math.min(1, (performance.now() - started) / VIEW_ANIMATION_MS);
+          last = t >= 1 ? to : between(from, to, t);
+          nav.current = last;
+          invalidateRef.current();
+          if (t < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }),
+    [view, client, mirror],
+  );
 
   // Hand input: the router sends each gesture to the palette, the active tool or navigation (never the bridge).
   // Both hands are pointers: each shows what a pinch would do there and lights the control it would press. The
@@ -1234,13 +1354,19 @@ export function Viewer({
             <shadowMaterial opacity={0.22} />
           </mesh>
         )}
+        <MirrorLayer
+          mirror={mirror}
+          assets={mirrorAssets}
+          colors={{ element: colors.element, hover: colors.hover, selected: colors.selected }}
+          hoverId={hoverId}
+        />
         <ModelAssetsContext.Provider value={modelAssets}>
-          {scene.doc &&
-            Object.values(scene.doc.elements).map((element) => (
+          {shownDoc &&
+            Object.values(shownDoc.elements).map((element) => (
               <ElementMesh
                 key={element.id}
                 element={element}
-                doc={scene.doc as SceneDocument}
+                doc={shownDoc as SceneDocument}
                 colors={colors}
                 selected={selection.has(element.id)}
                 hovered={hoverId === element.id}
@@ -1250,11 +1376,11 @@ export function Viewer({
               />
             ))}
         </ModelAssetsContext.Provider>
-        {scene.doc && overlay.draft && (
+        {shownDoc && overlay.draft && (
           <ElementMesh
             key="draft"
             element={overlay.draft}
-            doc={scene.doc}
+            doc={shownDoc}
             colors={colors}
             selected={false}
             hovered={false}
@@ -1275,7 +1401,7 @@ export function Viewer({
         )}
         {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
         {overlay.snap && <SnapMarker point={overlay.snap.point} label={overlay.snap.label} />}
-        {markers.length > 0 && <ReferenceMarkers ids={markers} doc={scene.doc} />}
+        {markers.length > 0 && <ReferenceMarkers ids={markers} doc={shownDoc} />}
         <CameraRig
           nav={nav}
           navInput={navInput}
@@ -1322,6 +1448,7 @@ export function Viewer({
 
       <ToolOverlays controller={tools} />
       <UndoStrip client={client} />
+      <GeneratedPanel client={panels} scene={client} />
 
       {/* The project bar and the HUD panels stack down the model's left side. */}
       <div className="viewer-left">

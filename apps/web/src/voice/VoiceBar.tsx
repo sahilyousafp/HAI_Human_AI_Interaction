@@ -76,7 +76,8 @@ export function VoiceBar({ voice, nameOf }: { voice: VoiceInput; nameOf: (id: st
   }, [state.phase, voice]);
 
   // Listening for names shows only in the header: speech without a name is never shown anywhere.
-  if (state.phase === "off" || state.phase === "sent" || state.phase === "names") return null;
+  if (state.phase === "off" || state.phase === "sent" || (state.phase === "names" && !state.heard))
+    return null;
   const refs = references.length > 0 && (
     <ol className="voice-refs" data-testid="voice-refs" aria-label="What this refers to">
       {references.map((id, i) => (
@@ -90,6 +91,11 @@ export function VoiceBar({ voice, nameOf }: { voice: VoiceInput; nameOf: (id: st
   return (
     <div className="voice-bar" data-testid="voice-bar" data-phase={state.phase} aria-live="polite">
       {state.phase === "starting" && <p className="voice-status">Starting the microphone...</p>}
+      {state.phase === "names" && state.heard && (
+        <p className="voice-status" data-testid="voice-after-name">
+          Heard &ldquo;{state.heard}&rdquo;. Go on, I am listening.
+        </p>
+      )}
       {state.phase === "listening" && (
         <>
           <p className="voice-status">

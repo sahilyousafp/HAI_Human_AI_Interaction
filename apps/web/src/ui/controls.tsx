@@ -41,15 +41,18 @@ export function Segmented<T extends string>({
   onChange,
   label,
   testId,
+  wide = false,
 }: {
   value: T;
   options: ReadonlyArray<{ value: T; label: string; testId?: string }>;
   onChange(value: T): void;
   label: string;
   testId?: string;
+  /** The choices share the full width of their row, for labels longer than a word. */
+  wide?: boolean;
 }) {
   return (
-    <fieldset className="seg-control" data-testid={testId}>
+    <fieldset className={wide ? "seg-control seg-wide" : "seg-control"} data-testid={testId}>
       <legend className="visually-hidden">{label}</legend>
       {options.map((option) => (
         <button

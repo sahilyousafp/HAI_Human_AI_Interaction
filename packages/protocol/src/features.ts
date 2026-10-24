@@ -57,6 +57,11 @@ export const FEATURES = [
     description: "The agent panel and Ask agent.",
   },
   {
+    id: "generatedPanels",
+    label: "Generated panels",
+    description: "The agent can offer a small panel for a task, such as a tolerance, and a nod opens it.",
+  },
+  {
     id: "latencyReadout",
     label: "Latency readout",
     description: "Gesture to render time in the status bar.",

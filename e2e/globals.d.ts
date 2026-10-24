@@ -31,7 +31,33 @@ interface Window {
   __HAI_SCENE__?: {
     apply(label: string, ops: unknown[]): boolean;
     select(ids: string[]): void;
-    getSnapshot(): { doc: { elements: Record<string, Record<string, unknown>> } | null; selection: string[] };
+    undo(): boolean;
+    redo(): boolean;
+    getSnapshot(): {
+      doc: { elements: Record<string, Record<string, unknown>> } | null;
+      selection: string[];
+      canUndo: boolean;
+      canRedo: boolean;
+      lastChange: { kind: string; label: string; at: number } | null;
+    };
+  };
+  /** The generated panel client: `shownDoc` is the scene with the open panel's preview laid over it. */
+  __HAI_PANELS__?: {
+    shownDoc(
+      doc: unknown,
+    ): { elements: Record<string, { type: string; position?: [number, number] }> } | null;
+  };
+  /** The Rhino mirror: what Rhino reported, and how long its changes took to be drawn. */
+  __HAI_MIRROR__?: {
+    getSnapshot(): {
+      connected: boolean;
+      mode: "auto" | "rhino" | "python";
+      inUse: "rhino" | "python";
+      objects: Array<{ id: string; name: string; layer: string; bounds: { min: number[]; max: number[] } }>;
+      selection: string[];
+      sync: { done: number; total: number } | null;
+    };
+    latencyP90(): number | null;
   };
   __HAI_TOOLS__?: {
     getSnapshot(): {

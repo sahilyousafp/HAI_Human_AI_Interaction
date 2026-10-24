@@ -29,9 +29,11 @@ The active tool is always shown at the bottom left of the view. To leave it and 
 - shake your head,
 - or hold a closed fist still for 1.5 s (a fist that moves pans the view instead, see [navigation.md](navigation.md)).
 
-Escape and a head shake first close an open palette, answer "keep" to a question, or drop a drag in progress; the next one returns to Select.
+Escape and a head shake first close an open palette, answer "keep" to a question, or drop a drag in progress; the next one returns to Select. A shake that skips the agent's panel offer, or denies its approval card, leaves the active tool as it is. A nod or shake answers what waits for one in this order: a spoken request under review, an approval card, a panel offer, then the tool's question (the full rules are in [gestures.md](gestures.md)).
 
 Hands reach the whole window, the model, the toolbar, the camera view and the settings alike, and press what the mouse clicks: buttons, links, checkboxes and their labels (dropdowns and text fields stay mouse and keyboard). Point at a control so it gets an outline and the pointer shrinks to a dot, then pinch and let go. Any pinch that starts on a control presses it, however long you hold it; it never grabs or orbits. After an undo or redo, a strip says what was undone and offers **Undo again** and **Redo**, so stepping back several changes takes a few taps.
+
+**The agent's panel offers.** When your request is about a tolerance or a range, the agent may offer a small panel for it: a card in the agent panel with **Open** and **Skip**. Press either, or nod to open and shake to skip. The panel floats over the model, never blocks orbiting, panning or zooming outside it, and the model under it is not picked through it. Its header drags it around the window; **Done** keeps what you changed as one undo step and **Close** puts the model back. Hands press its Done and Close and the controls inside it (see [agent.md](agent.md#generated-panels)).
 
 **Pointers snap to buttons.** A hand pointer within about 28 pixels of a button locks onto it: the pointer is drawn on the button, the button is outlined, and a pinch presses it. It lets go when your hand is more than 44 pixels away, so it does not flicker between neighbours. A pinch that starts on a locked button keeps it however far your hand drifts while the fingers close, and a pinch that starts on the model (an orbit, a drag with a tool) never locks onto a button on the way past. Each hand snaps on its own, the mouse is never snapped, and **Settings > Features > Snap to buttons** turns it off.
 

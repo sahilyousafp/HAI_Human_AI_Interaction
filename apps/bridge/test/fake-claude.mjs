@@ -8,6 +8,16 @@
 //   "column"     creates a column with the app's create_elements tool, asking the permission prompt tool first
 //   "bad column" the same with a zero height, so the scene tool fails validation
 //   "columns N"  creates N columns, one create_elements call each
+//   "panel"      offers a panel (offer_panel); if the user accepts, opens a clearance slider that moves col-a1
+//   "panel HTML" the same with HTML as the panel document, for tests that need a particular panel
+//   "panel wait N"  the same, but writes the panel N ms after the user accepted (the loading state shows meanwhile)
+//   "panel stay"  the same, then keeps the turn running (stoppable like "slow") while the panel is open
+//   "panel update HTML"  replaces the open panel's document, then replies
+//   "panel close"  closes the open panel
+//   "view JSON"   sets the user's view (set_view) with JSON as its input, e.g. view {"azimuth":225}
+//   "python write FILE"  runs a Python script (python_run) that copies the .3dm FILE into the project, as a model
+//                        that wrote a file would; "python box" builds a 2 x 1 x 3 m box with rhino3dm and saves it
+//                        through hai_3dm; "python packages A" runs a long script that asks to install A
 //   "winter shadows" runs sun_study for 21 December, 12:00, in London (as Climate would)
 //   "two sentences"  replies with one sentence, then a second 1.5 s later (to hear the first spoken early)
 //   "stream"     a reply in five pieces, 150 ms apart (to watch it stream)
@@ -254,6 +264,121 @@ function asLead(text, forAgent) {
   return false;
 }
 
+/** The panel the fake agent writes by default: a clearance slider that previews moving column col-a1. */
+const SAMPLE_PANEL = `<h2>Column clearance</h2>
+<label for="s">Clearance <output id="v">150</output> mm</label>
+<input id="s" type="range" min="50" max="400" step="10" value="150">
+<p id="state">Within tolerance</p>
+<button id="apply" type="button">Apply</button>
+<script>
+  const slider = document.getElementById("s"), out = document.getElementById("v"), state = document.getElementById("state");
+  let base = null;
+  hai.scene.get({ ids: ["col-a1"] }).then(({ elements }) => { base = elements[0]; });
+  function move() {
+    out.textContent = slider.value;
+    const ok = Number(slider.value) >= 100 && Number(slider.value) <= 300;
+    state.textContent = ok ? "Within tolerance" : "Outside 100-300 mm";
+    state.style.color = ok ? "" : "var(--risk)";
+    if (base) hai.preview([{ op: "update", id: base.id, patch: { position: [base.position[0] + Number(slider.value) - 150, base.position[1]] } }]);
+  }
+  slider.addEventListener("input", move);
+  document.getElementById("apply").addEventListener("click", () => hai.commit());
+</script>`;
+
+/** "panel", "panel HTML", "panel update HTML" or "panel close": the panel tools, as a model that writes panels would. */
+async function panelRequest(rest) {
+  if (rest === "close") {
+    const closed = await appTool("close_panel", {});
+    delta(closed.error ? `Close refused: ${closed.error}` : "Panel closed.");
+    result();
+    return;
+  }
+  if (rest.startsWith("update ")) {
+    const updated = await appTool("update_panel", { html: rest.slice("update ".length) });
+    delta(updated.error ? `Update failed: ${updated.error}` : "Panel updated.");
+    result();
+    return;
+  }
+  const offer = await appTool("offer_panel", { purpose: "Set the wall to column clearance" });
+  if (offer.error || offer.answer !== "accepted") {
+    delta(offer.error ? `Offer refused: ${offer.error}` : `Offer ${offer.answer}.`);
+    result();
+    return;
+  }
+  const wait = /^wait (\d+)$/.exec(rest);
+  if (wait) await new Promise((resolve) => setTimeout(resolve, Number(wait[1])));
+  const opened = await appTool("open_panel", {
+    title: "Clearance",
+    width: 320,
+    height: 260,
+    html: !rest || wait || rest === "stay" ? SAMPLE_PANEL : rest,
+  });
+  delta(opened.error ? `Panel failed: ${opened.error}` : "Panel ready.");
+  if (rest === "stay") {
+    let n = 0;
+    slowTimer = setInterval(() => {
+      n += 1;
+      delta(`${n} `);
+      if (n >= 100) {
+        clearInterval(slowTimer);
+        slowTimer = null;
+        result();
+      }
+    }, 200);
+    return;
+  }
+  result();
+}
+
+/** "view JSON": the camera tool, as a model that wants to show something would call it. */
+async function viewRequest(json) {
+  let input;
+  try {
+    input = JSON.parse(json);
+  } catch {
+    delta("The view request was not JSON.");
+    result();
+    return;
+  }
+  const moved = await appTool("set_view", input);
+  delta(moved.error ? `View refused: ${moved.error}` : "View set.");
+  result();
+}
+
+/** "python write FILE" or "python packages A,B": the Python workbench, as a model that writes files would use it. */
+async function pythonRequest(rest) {
+  const write = /^write (.+)$/.exec(rest);
+  const packages = /^packages (.+)$/.exec(rest);
+  const input =
+    rest === "box"
+      ? {
+          title: "A box",
+          code: [
+            "import rhino3dm as r",
+            "import hai_3dm",
+            "model = r.File3dm()",
+            "box = r.Brep.CreateFromBoundingBox(r.BoundingBox(r.Point3d(0, 0, 0), r.Point3d(2000, 1000, 3000)))",
+            "hai_3dm.add(model, box, 'Box', 'Structure')",
+            "hai_3dm.save(model, 'box.3dm')",
+            "",
+          ].join("\n"),
+        }
+      : write
+        ? {
+            title: "Write a box",
+            code: `import shutil\nshutil.copy(${JSON.stringify(write[1])}, "written-box.3dm")\nprint("written")\n`,
+          }
+        : {
+            title: "Ladybug study",
+            // Long enough that the approval card has to scroll.
+            code: `import ladybug\n${Array.from({ length: 60 }, (_, i) => `# study step ${i + 1}`).join("\n")}\nprint(ladybug.__name__)\n`,
+            packages: (packages?.[1] ?? "").split(","),
+          };
+  const ran = await appTool("python_run", input);
+  delta(ran.error ? `Python refused: ${ran.error}` : `Python ${ran.ok ? "ran" : "failed"}.`);
+  result();
+}
+
 function onRequest(raw) {
   init();
   let text = raw;
@@ -270,6 +395,18 @@ function onRequest(raw) {
   // A spoken request's "[context] ..." line (what the user pointed at) comes before what they said.
   const said = text.replace(/^\[context\][^\n]*\n/, "");
   if (asLead(forAgent ? text : said, forAgent)) return;
+  if (text === "panel" || text.startsWith("panel ")) {
+    void panelRequest(text.slice("panel".length).trim());
+    return;
+  }
+  if (text.startsWith("view ")) {
+    void viewRequest(text.slice("view ".length));
+    return;
+  }
+  if (text.startsWith("python ")) {
+    void pythonRequest(text.slice("python ".length));
+    return;
+  }
   if (text.startsWith("shell: ")) {
     const command = text.slice("shell: ".length);
     toolCall("Bash", { command, description: "Run a command" }, async () => `ran: ${command}`).then(

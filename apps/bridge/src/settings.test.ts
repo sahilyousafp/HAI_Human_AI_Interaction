@@ -17,6 +17,38 @@ const setSettings = (payload: unknown): Message => {
 };
 const set = (palette: unknown) => setSettings({ palette });
 
+describe("SettingsHub modelling mode", () => {
+  it("starts on auto, keeps the choice in the file, and ignores a value it does not know", () => {
+    const file = settingsFile(tempRoot());
+    const hub = new SettingsHub(file, () => {});
+    expect(hub.modelling).toBe("auto");
+    hub.handle(setSettings({ modelling: "python" }));
+    expect(hub.modelling).toBe("python");
+    expect(new SettingsHub(file, () => {}).modelling).toBe("python");
+    writeFileSync(file, JSON.stringify({ modelling: "sometimes" }));
+    expect(new SettingsHub(file, () => {}).modelling).toBe("auto");
+  });
+});
+
+describe("SettingsHub features", () => {
+  it("reports each feature that was switched on or off, once, and answers featureOn", () => {
+    const changes: Array<[string, boolean]> = [];
+    const hub = new SettingsHub(
+      null,
+      () => {},
+      (feature, on) => changes.push([feature, on]),
+    );
+    expect(hub.featureOn("generatedPanels")).toBe(true);
+    hub.handle(setSettings({ features: { generatedPanels: false, voice: true } }));
+    expect(changes).toEqual([["generatedPanels", false]]);
+    expect(hub.featureOn("generatedPanels")).toBe(false);
+    hub.handle(setSettings({ features: { generatedPanels: false } }));
+    expect(changes).toHaveLength(1);
+    hub.handle(setSettings({ features: { generatedPanels: true } }));
+    expect(changes.at(-1)).toEqual(["generatedPanels", true]);
+  });
+});
+
 describe("SettingsHub", () => {
   it("starts with no palette layout (the app's default applies) and greets with it", () => {
     const sent: Message[] = [];
@@ -35,6 +67,7 @@ describe("SettingsHub", () => {
           features: null,
           drawingAids: null,
           showHands: false,
+          modelling: "auto",
         },
       }),
     ]);
@@ -109,6 +142,7 @@ describe("SettingsHub", () => {
           features: null,
           drawingAids: null,
           showHands: false,
+          modelling: "auto",
         },
       }),
     ]);

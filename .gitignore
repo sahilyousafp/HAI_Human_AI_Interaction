@@ -22,3 +22,7 @@ apps/desktop/release-signtest/
 apps/desktop/release-updatetest/
 apps/desktop/electron-builder.updatetest.yml
 site/
+
+# .NET build output (plugins/rhino)
+plugins/rhino/**/bin/
+plugins/rhino/**/obj/

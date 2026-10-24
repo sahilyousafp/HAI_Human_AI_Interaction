@@ -50,6 +50,19 @@ describe("ApprovalBroker", () => {
     expect(sent).toEqual([]);
   });
 
+  it.each(["offer_panel", "open_panel", "update_panel", "close_panel"])(
+    "the panel tool %s is allowed at once: the user's nod is the consent, so no card",
+    async (name) => {
+      const { broker, sent } = setup();
+      const input = { purpose: "Set the clearance" };
+      expect(await broker.decide(`mcp__hai__${name}`, input)).toEqual({
+        behavior: "allow",
+        updatedInput: input,
+      });
+      expect(sent).toEqual([]);
+    },
+  );
+
   it("anything else waits for the user; Deny tells the agent the user declined", async () => {
     const { broker, card, outcome, decide } = setup();
     const decision = broker.decide("Bash", { command: "ls" });

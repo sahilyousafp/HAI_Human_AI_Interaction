@@ -3,7 +3,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ApprovalOutcome, ApprovalRequest, Message } from "@hai/protocol";
 import type { Logger } from "../log.ts";
+import { packageName } from "../python/python-env.ts";
 import { HAI_SERVER } from "./agent-config.ts";
+
+/** The tools that run code: they always show a card with the script and its packages, however the scene tools are treated. */
+export const CODE_TOOLS = [`mcp__${HAI_SERVER}__python_run`, `mcp__${HAI_SERVER}__rhino_run_python`] as const;
 
 type Send = (message: Message) => void;
 
@@ -33,6 +37,11 @@ export function summarizeInput(tool: string, input: Record<string, unknown>): st
   return text.length > SUMMARY_MAX ? `${text.slice(0, SUMMARY_MAX - 1)}…` : text;
 }
 
+/** A one-line card summary of a code run: its title (the card shows the script and what it would install below). */
+function summarizeCode(input: Record<string, unknown>): string {
+  return typeof input.title === "string" && input.title ? input.title : "Python script";
+}
+
 /** The project's "always allow" list, kept in the project's git-ignored `.hai` folder. */
 export function approvalsFile(projectDir: string): string {
   return join(projectDir, ".hai", "approvals.json");
@@ -47,9 +56,31 @@ export function readAlwaysAllowed(projectDir: string): string[] {
   }
 }
 
-function writeAlwaysAllowed(projectDir: string, tools: string[]): void {
+function readApprovalsFile(projectDir: string): Record<string, unknown> {
+  try {
+    const data = JSON.parse(readFileSync(approvalsFile(projectDir), "utf8"));
+    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeApprovalsFile(projectDir: string, patch: Record<string, unknown>): void {
   mkdirSync(join(projectDir, ".hai"), { recursive: true });
-  writeFileSync(approvalsFile(projectDir), `${JSON.stringify({ alwaysAllow: tools }, null, 2)}\n`);
+  writeFileSync(
+    approvalsFile(projectDir),
+    `${JSON.stringify({ ...readApprovalsFile(projectDir), ...patch }, null, 2)}\n`,
+  );
+}
+
+function writeAlwaysAllowed(projectDir: string, tools: string[]): void {
+  writeApprovalsFile(projectDir, { alwaysAllow: tools });
+}
+
+/** The packages the user has approved for Python in this project (names as pip compares them). */
+export function readApprovedPackages(projectDir: string): string[] {
+  const list = readApprovalsFile(projectDir).pythonPackages;
+  return Array.isArray(list) ? list.filter((p): p is string => typeof p === "string") : [];
 }
 
 interface Pending {
@@ -62,6 +93,8 @@ export interface ApprovalBrokerOptions {
   projectDir(): string | null;
   timeoutMs?: number;
   log?: Logger;
+  /** The packages a call to a code tool would install, so the card lists them and "always allow" can be checked against them. */
+  pythonInstalls?(tool: string, input: Record<string, unknown>): string[];
 }
 
 /**
@@ -87,7 +120,13 @@ export class ApprovalBroker {
     return projectDir ? readAlwaysAllowed(projectDir) : [];
   }
 
-  isPreApproved(tool: string): boolean {
+  isPreApproved(tool: string, installs: string[] = []): boolean {
+    if ((CODE_TOOLS as readonly string[]).includes(tool)) {
+      // Code runs only with the user's say-so: always allow covers a tool, but never a package the user has not seen.
+      const projectDir = this.options.projectDir();
+      const approved = new Set(projectDir ? readApprovedPackages(projectDir) : []);
+      return this.alwaysAllowed.includes(tool) && installs.every((spec) => approved.has(packageName(spec)));
+    }
     return tool.startsWith(`mcp__${HAI_SERVER}__`) || this.alwaysAllowed.includes(tool);
   }
 
@@ -103,14 +142,18 @@ export class ApprovalBroker {
     toolUseId?: string,
     agent?: string | null,
   ): Promise<PermissionDecision> {
-    if (this.isPreApproved(tool)) return Promise.resolve({ behavior: "allow", updatedInput: input });
+    const isCode = (CODE_TOOLS as readonly string[]).includes(tool);
+    const installs = isCode ? (this.options.pythonInstalls?.(tool, input) ?? []) : [];
+    if (this.isPreApproved(tool, installs))
+      return Promise.resolve({ behavior: "allow", updatedInput: input });
     const timeoutMs = this.options.timeoutMs ?? APPROVAL_TIMEOUT_MS;
     const request: ApprovalRequest = {
       id: randomUUID(),
       tool,
       source: toolSource(tool),
-      summary: summarizeInput(tool, input),
+      summary: isCode ? summarizeCode(input) : summarizeInput(tool, input),
       input,
+      ...(isCode ? { installs } : {}),
       ...(toolUseId ? { toolUseId } : {}),
       ...(agent ? { agent } : {}),
       expiresAt: Date.now() + timeoutMs,
@@ -150,7 +193,7 @@ export class ApprovalBroker {
     const { id, decision } = message.payload;
     const entry = this.pending.get(id);
     if (!entry) return true; // already decided (another client, or it timed out)
-    if (decision === "always") this.remember(entry.request.tool);
+    if (decision === "always") this.remember(entry.request.tool, entry.request.installs);
     entry.settle(decision === "deny" ? "denied" : "allowed");
     return true;
   }
@@ -162,11 +205,17 @@ export class ApprovalBroker {
     }
   }
 
-  private remember(tool: string): void {
+  private remember(tool: string, installs: string[] = []): void {
     const projectDir = this.options.projectDir();
     if (!projectDir) return;
     const tools = readAlwaysAllowed(projectDir);
     if (!tools.includes(tool)) writeAlwaysAllowed(projectDir, [...tools, tool]);
+    // The packages on this card are now known to the user: a later run that adds another one asks again.
+    if (installs.length > 0) {
+      const known = new Set(readApprovedPackages(projectDir));
+      for (const spec of installs) known.add(packageName(spec));
+      writeApprovalsFile(projectDir, { pythonPackages: [...known] });
+    }
     this.announce();
   }
 }

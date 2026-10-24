@@ -348,3 +348,93 @@ describe("the team with the fake Claude Code CLI", () => {
     expect(refused.payload.message).toBe("Mochi leads the team: keep its delegate tool.");
   });
 });
+
+describe("the close note for a generated panel", () => {
+  const document = { title: "Clearance", width: 320, height: 240, html: "<p>hi</p>" };
+
+  /** Architect offers, the page accepts, Architect opens, and the page reports it loaded. */
+  async function openPanel(viewer: Awaited<ReturnType<typeof start>>["viewer"]) {
+    const panels = (bridge as Bridge).panels;
+    const offered = panels.offer("architect", "Set the clearance");
+    const offer = await viewer.waitFor("panel.offer", (m) => m.payload.state === "waiting");
+    viewer.send("panel.offer.answer", { offerId: offer.payload.offerId, answer: "accepted" });
+    await offered;
+    const opened = panels.open("architect", document);
+    const panelId = (await viewer.waitFor("panel.open")).payload.panelId;
+    viewer.send("panel.status", { panelId, state: "ready" });
+    await opened;
+    return panelId;
+  }
+  const notes = (team: Team, agent: string) =>
+    transcript(team, agent).filter((t) => t.request.startsWith("[panel]"));
+
+  it("after Done the agent that opened the panel hears once that the result was kept", async () => {
+    const { team, viewer } = await start();
+    await team.request("hello");
+    const panelId = await openPanel(viewer);
+    viewer.send("panel.closed", { panelId, outcome: "kept" });
+    await vi.waitFor(() => expect(notes(team, "architect")).toHaveLength(1));
+    await team.settled();
+    expect(notes(team, "architect")).toHaveLength(1);
+    expect(notes(team, "architect")[0]).toMatchObject({
+      kind: "digest",
+      request: expect.stringContaining('the panel "Clearance" and kept the result'),
+    });
+    // Nobody else is told.
+    expect(notes(team, "mochi")).toHaveLength(0);
+  });
+
+  it("after Close the agent hears that the result was discarded", async () => {
+    const { team, viewer } = await start();
+    await team.request("hello");
+    const panelId = await openPanel(viewer);
+    viewer.send("panel.closed", { panelId, outcome: "discarded" });
+    await vi.waitFor(() => expect(notes(team, "architect")).toHaveLength(1));
+    expect(notes(team, "architect")[0]?.request).toContain("discarded the result");
+  });
+
+  it("an agent that closes its own panel is not told about it", async () => {
+    const { team, viewer } = await start();
+    await team.request("hello");
+    await openPanel(viewer);
+    expect((bridge as Bridge).panels.close("architect")).toEqual({ ok: true });
+    await team.settled();
+    expect(notes(team, "architect")).toHaveLength(0);
+  });
+
+  it("while the agent is busy the note waits, and arrives once after its turn", async () => {
+    const { team, viewer } = await start();
+    await team.request("delegate architect: work 1500");
+    await vi.waitFor(() => expect(team.board.some((t) => t.status === "running")).toBe(true));
+    const panelId = await openPanel(viewer);
+    viewer.send("panel.closed", { panelId, outcome: "kept" });
+    await vi.waitFor(() => expect(team.board.some((t) => t.status === "running")).toBe(true));
+    expect(notes(team, "architect")).toHaveLength(0);
+    await team.settled();
+    const turns = transcript(team, "architect");
+    expect(turns.map((t) => t.kind)).toEqual(["task", "digest"]);
+    expect(notes(team, "architect")).toHaveLength(1);
+  });
+
+  it("a turn that ends with its offer unanswered leaves 'No panel was made'", async () => {
+    const { team, viewer } = await start();
+    await team.request("delegate architect: work 300");
+    await vi.waitFor(() => expect(team.board.some((t) => t.status === "running")).toBe(true));
+    const offered = (bridge as Bridge).panels.offer("architect", "Set the clearance");
+    await viewer.waitFor("panel.offer", (m) => m.payload.state === "waiting");
+    await team.settled();
+    expect(await offered).toEqual({ ok: true, answer: "expired" });
+    await viewer.waitFor("panel.offer", (m) => m.payload.state === "unused");
+    expect((bridge as Bridge).panels.active).toBe(false);
+  });
+
+  it("stopping the team ends a waiting offer too", async () => {
+    const { team, viewer } = await start();
+    await team.request("delegate architect: work 5000");
+    await vi.waitFor(() => expect(team.board.some((t) => t.status === "running")).toBe(true));
+    void (bridge as Bridge).panels.offer("architect", "Set the clearance");
+    await viewer.waitFor("panel.offer", (m) => m.payload.state === "waiting");
+    viewer.send("agent.stop", {});
+    await viewer.waitFor("panel.offer", (m) => m.payload.state === "unused");
+  });
+});

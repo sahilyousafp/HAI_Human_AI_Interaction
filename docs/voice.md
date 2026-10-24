@@ -8,7 +8,7 @@ Speaking is the main way to ask the agent. Say what you want while you point at 
 - Speak. The microphone indicator in the header shows **Mic on** while the microphone is live, and the bar above the input shows a level meter while you speak.
 - Start with a name to choose who does it: "Architect, add a stair core here". The name is taken out and Mochi hands the request to Architect ([agents.md](agents.md)).
 - Stop talking: after a short silence the request ends, the microphone stops, and the transcript appears.
-- The transcript waits 1.5 seconds with a countdown, then goes to the agent.
+- The transcript waits 5 seconds with a countdown, then goes to the agent.
   - To send it at once: nod, press **Enter**, or press **Send**.
   - To throw it away: shake your head, press **Escape**, or press **Discard**. The transcript then shows as discarded.
   - Click the transcript to correct a word. That stops the countdown; press **Enter** when it reads right.
@@ -17,7 +17,7 @@ Nod and shake here are the gestures bound to "Yes" and "No" in the Gestures sett
 
 ## Listen for names
 
-**Listen for names** in the Voice settings keeps the microphone open so a request can start with just a name: "Mochi, what is everyone doing?" or "Hey Mochi, status?" It is off until you turn it on, and the header then shows **Listening for names**. Only transcripts that start with a team name go to review; everything else is dropped at once, in memory. See [agents.md](agents.md#listen-for-names).
+**Listen for names** in the Voice settings keeps the microphone open so a request can start with just a name: "Mochi, what is everyone doing?" or "Hey Mochi, status?" It is off until you turn it on, and the header then shows **Listening for names**. Only transcripts that start with a team name go to review; everything else is dropped at once, in memory. If you say only the name ("Hey Mochi") and then pause, the microphone stays open for 5 seconds for the rest of the request, and the bar says so; the name and the request are one request. Say nothing more and the name alone goes to review. See [agents.md](agents.md#listen-for-names).
 
 ## Point and speak
 
@@ -47,7 +47,8 @@ All values live in `apps/web/src/voice/voice-config.ts`; a unit test checks that
 | `silenceMs` | 800 | Silence after speech that ends the request |
 | `maxUtteranceMs` | 20000 | A request ends after this long, whatever |
 | `noSpeechMs` | 8000 | Listening stops if you say nothing for this long |
-| `sendDelayMs` | 1500 | The transcript is sent this long after you stop, unless you send or discard it first |
+| `sendDelayMs` | 5000 | The transcript is sent this long after you stop, unless you send or discard it first |
+| `afterNameMs` | 5000 | After a name on its own ("Hey Mochi") the microphone stays open this long for the rest of the request |
 | `dwellMs` | 300 | The hand pointer must rest on an element this long while you speak for it to be captured |
 
 The Voice settings show where transcription runs and the 90th percentile of the time from the end of speech to the transcript. The target is under one second; on the reference laptop a two-second phrase transcribes in about 0.2 s. The speech model (63 MB) loads while you speak the first request, in about 1.5 s.

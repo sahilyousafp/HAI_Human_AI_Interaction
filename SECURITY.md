@@ -10,6 +10,20 @@ HAI drives an AI agent on your machine, so its local surface is treated as secur
 - **Token stays local.** The token is written to `.hai/session.json` (git-ignored) and injected into the dev page. The dev server sends no CORS headers, so other origins cannot read the page.
 - **Camera frames stay on device.** Video is processed inside a browser worker. Only hand and face landmarks leave it. Nothing is recorded or uploaded.
 - **Your agent credentials are never touched.** See [PROVIDERS.md](PROVIDERS.md).
+- **Generated panels are sandboxed.** The agent can write a small panel for you, and you open it with a nod. It is code an agent wrote, so it runs where it can reach nothing but the scene. See below.
+
+## Generated panels
+
+A panel is one HTML document the agent wrote, shown in a frame over the model. It is treated as untrusted code, and three layers each stop the common attacks on their own: the frame's sandbox flags, a content security policy, and the bridge's own token and origin checks.
+
+- **Isolated from the app.** The frame is `sandbox="allow-scripts"` with no `allow-same-origin`, so its origin is opaque. It cannot read the page, `window.__HAI_SESSION__` (the session token), storage or cookies. Without `allow-forms`, `allow-popups`, `allow-modals` and `allow-top-navigation` it cannot post a form, open a window, show a dialog or navigate the app.
+- **No network.** Its policy is `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; frame-src 'none'`, set both as the frame's `csp` attribute and as the first element of its document. It cannot fetch, open a socket or an event stream, send a beacon, load an image, script or frame from outside itself, or reach the bridge. The bridge would also refuse it: the frame's origin is `null`, which is not on the allow-list, and it has no token.
+- **It cannot send itself elsewhere.** The app's own policy (`frame-src about:`) lets a frame hold only its own document, and the app ends a panel whose frame loads a second time.
+- **One way out.** After the frame loads, the app gives it a single message port. Everything the panel sends is checked against the protocol's schemas: it can read the scene and send scene operations, nothing else, and an invalid operation changes nothing. At most 60 messages per second are accepted, a document is limited to 256 KB, and it cannot call the agent's tools.
+- **The panel's controls are not its own.** Done and Close are outside the frame, so the document cannot hide, move or imitate them. An offer to open a panel is answered by you (a nod, a click), and one accepted offer allows exactly one panel.
+- **What it cannot stop.** A panel runs its own script in its own process, so it can use that process's CPU and memory while it is open; the app ends a document that never finishes loading (after 8 seconds) and you can close any panel at once. A panel can show you anything it likes inside its own frame, so read what it asks you to do. A preview is shown only to you, and nothing is saved until you press Done or the panel's own commit.
+
+The tests that keep these limits true are in `e2e/panel-sandbox.spec.ts` (a hostile panel tries each of the reads, requests and navigations above and none succeeds), `e2e/panel.spec.ts` (the frame controls) and the schema and host unit tests in `packages/protocol` and `apps/web/src/panel`.
 
 ## Reporting a vulnerability
 

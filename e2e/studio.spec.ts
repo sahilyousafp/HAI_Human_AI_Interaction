@@ -90,6 +90,12 @@ test("switching the agent off takes the agent panel away", async ({ page }) => {
   await expect(page.getByTestId("agent-panel")).toBeVisible();
 });
 
+test("the settings sheet lists Generated panels, on by default", async ({ page }) => {
+  await start(page);
+  await openSettings(page, "features");
+  await expect(page.getByTestId("feature-generatedPanels")).toHaveAttribute("aria-checked", "true");
+});
+
 test("Show my hands draws a white hand at its pointer, and input still goes through it", async ({ page }) => {
   await start(page);
   await openSettings(page);

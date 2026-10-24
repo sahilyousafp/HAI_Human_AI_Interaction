@@ -82,6 +82,7 @@ Each built week ends in a clip; its script is in `demos/`. Tick a week once its 
 - [ ] Week 11: `demos/11-precision-and-import.md`
 - [ ] Week 12: `demos/12-3d-snapping-and-project-files.md`
 - [ ] Bonus: `demos/12b-fist-pan.md` (fist-drag pan; `add-fist-drag-pan`; fill in its real-camera checks before posting)
+- [ ] Bonus: `demos/15b-generated-panel.md` ("My AI builds a panel for the job"; `add-generated-panels`; fill in its real-camera checks before posting)
 
 ## Change dependencies
 

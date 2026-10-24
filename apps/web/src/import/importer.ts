@@ -48,7 +48,8 @@ export function summarise(report: ImportReport): string {
   parts[0] += `, read as ${report.units.name}`;
   const skipped = totalSkipped(report.skipped);
   if (report.units.assumed) parts[0] += " (the file does not say, so millimetres are assumed)";
-  const text = `${parts[0]}.`;
+  const curves = report.curvesDrawn ?? 0;
+  const text = `${parts[0]}.${curves > 0 ? ` ${plural(curves, "curve")} drawn as thin tubes.` : ""}`;
   return skipped > 0 ? `${text} Skipped ${skipped}: ${describeSkips(report.skipped)}.` : text;
 }
 

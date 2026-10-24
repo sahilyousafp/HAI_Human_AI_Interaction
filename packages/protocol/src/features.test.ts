@@ -14,6 +14,14 @@ describe("features", () => {
     expect(Object.keys(features)).toEqual(FEATURE_IDS);
   });
 
+  it("Generated panels is a feature, on by default, that can be switched off", () => {
+    const feature = FEATURES.find((f) => f.id === "generatedPanels");
+    expect(feature?.label).toBe("Generated panels");
+    expect(feature?.description).toBeTruthy();
+    expect(resolveFeatures(null).generatedPanels).toBe(true);
+    expect(resolveFeatures({ generatedPanels: false }).generatedPanels).toBe(false);
+  });
+
   it("Snap to buttons is a feature, on by default, with a description", () => {
     expect(FEATURE_IDS).toContain("snapToButtons");
     expect(resolveFeatures(null).snapToButtons).toBe(true);

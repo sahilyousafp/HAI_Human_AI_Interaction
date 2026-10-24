@@ -7,7 +7,9 @@ export const VOICE = {
   /** Listening stops if no speech starts within this long. */
   noSpeechMs: 8000,
   /** The transcript is sent this long after the utterance ends, unless the user sends or discards it first. */
-  sendDelayMs: 1500,
+  sendDelayMs: 5000,
+  /** After a bare name ("Hey Mochi") the microphone stays open this long for the rest of the request. */
+  afterNameMs: 5000,
   /** The hand pointer must rest on an element this long while speaking for the element to be captured. */
   dwellMs: 300,
 } as const;

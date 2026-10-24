@@ -28,6 +28,8 @@ export interface VoiceDeps {
   context(recorder: UtteranceContext): RequestContext;
   /** Whether a transcript starts with a team name (listening for names keeps only those). */
   isNamed?(text: string): boolean;
+  /** Whether a transcript is only a team name and a greeting ("Hey Mochi"), with no request after it. */
+  isBareName?(text: string): boolean;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -38,7 +40,7 @@ export type MicError = "denied" | "not-found" | "failed";
 export type VoiceState =
   | { phase: "off" }
   /** Listening for a team name (opt-in): the microphone is open and only named utterances become requests. */
-  | { phase: "names"; speaking: boolean }
+  | { phase: "names"; speaking: boolean; heard?: string }
   | { phase: "starting" }
   | { phase: "listening"; speaking: boolean; level: number }
   | { phase: "transcribing" }
@@ -90,6 +92,8 @@ export class VoiceInput {
   /** The microphone is opening to listen for names. */
   private namesOpening = false;
   private hovered: () => string | null = () => null;
+  /** A bare name was heard ("Hey Mochi"): the rest of the request is awaited until this timer ends. */
+  private pendingName: { text: string; timer: unknown } | null = null;
 
   constructor(private readonly deps: VoiceDeps) {
     this.now = deps.now ?? (() => Date.now());
@@ -325,7 +329,13 @@ export class VoiceInput {
           if (session !== this.namesSession || !this.idle) return;
           this.context.clear();
           this.context.begin(this.now(), this.hovered());
-          this.update({ phase: "names", speaking: true });
+          // Someone is speaking again: the wait for the rest of a request does not run out mid-sentence.
+          if (this.pendingName) this.clearTimer(this.pendingName.timer);
+          this.update({
+            phase: "names",
+            speaking: true,
+            ...(this.pendingName ? { heard: this.pendingName.text } : {}),
+          });
           this.ticking(this.session);
         },
         speechEnd: (result) => void this.heard(session, result),
@@ -352,6 +362,7 @@ export class VoiceInput {
   }
 
   private stopNames(): void {
+    this.dropPendingName();
     this.namesSession++;
     this.namesOpening = false;
     this.namesListener?.cancel();
@@ -376,13 +387,45 @@ export class VoiceInput {
     }
     if (session !== this.namesSession || !this.idle) return;
     text = text.trim();
+    // The name came first and the request follows: both are one request.
+    if (this.pendingName) {
+      const { text: name } = this.pendingName;
+      if (!text) {
+        this.waitForRest(name); // noise, or nothing the model could write: keep waiting
+        return;
+      }
+      this.dropPendingName();
+      this.review(this.deps.isNamed?.(text) ? text : `${name} ${text}`);
+      return;
+    }
     if (text && this.deps.isNamed?.(text)) {
+      if (this.deps.isBareName?.(text)) {
+        this.waitForRest(text);
+        return;
+      }
       this.review(text);
       return;
     }
     // Not for the team: dropped here, in memory, and listening goes on.
     this.context.clear();
     this.update({ phase: "names", speaking: false });
+  }
+
+  /** "Hey Mochi" alone: the microphone stays open for the rest of the request, then the name is sent as it is. */
+  private waitForRest(name: string): void {
+    if (this.pendingName) this.clearTimer(this.pendingName.timer);
+    const timer = this.setTimer(() => {
+      if (this.pendingName?.timer !== timer) return;
+      this.pendingName = null;
+      this.review(name);
+    }, VOICE.afterNameMs);
+    this.pendingName = { text: name, timer };
+    this.update({ phase: "names", speaking: false, heard: name });
+  }
+
+  private dropPendingName(): void {
+    if (this.pendingName) this.clearTimer(this.pendingName.timer);
+    this.pendingName = null;
   }
 
   private update(state: VoiceState): void {

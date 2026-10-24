@@ -9,6 +9,8 @@ export type AssetState =
 export type AssetSource = () => { port: number; token: string } | null;
 
 export const assetUrl = (port: number, id: string): string => `http://127.0.0.1:${port}/assets/${id}`;
+/** Where the bridge keeps the meshes of Rhino's objects while it is connected (apart from the project's assets). */
+export const mirrorAssetUrl = (port: number, id: string): string => `http://127.0.0.1:${port}/mirror/${id}`;
 
 /**
  * The imported geometry the viewer draws, fetched from the bridge once per asset and kept (assets never change under
@@ -23,6 +25,7 @@ export class ModelAssets {
   constructor(
     private readonly source: AssetSource,
     private readonly fetchAsset: typeof fetch = (input, init) => fetch(input, init),
+    private readonly urlFor: (port: number, id: string) => string = assetUrl,
   ) {}
 
   subscribe = (listener: () => void): (() => void) => {
@@ -71,7 +74,7 @@ export class ModelAssets {
 
   private async load(id: string, session: { port: number; token: string }): Promise<void> {
     try {
-      const response = await this.fetchAsset(assetUrl(session.port, id), {
+      const response = await this.fetchAsset(this.urlFor(session.port, id), {
         headers: { authorization: `Bearer ${session.token}` },
       });
       if (!response.ok) {

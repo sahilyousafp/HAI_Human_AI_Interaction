@@ -84,6 +84,14 @@ export interface ToolEnvironment {
   press(at: Point2, source?: PointerSource): boolean;
   /** Whether there is an on-screen button at a viewer position (or the pointer of `source` is snapped to one). */
   isButton(at: Point2, source?: PointerSource): boolean;
+  /**
+   * A pinch began on a control that has a drag of its own (a slider in a generated panel); `press` follows when it
+   * lets go. `pressMove` follows the pointer meanwhile, and `pressCancel` drops it (the pinch became a scroll, or
+   * was cancelled).
+   */
+  pressStart?(at: Point2, source: PointerSource): void;
+  pressMove?(at: Point2, source: PointerSource): void;
+  pressCancel?(source: PointerSource): void;
   /** Grabs the scrolled area at a viewer position (one with more to show), or null if there is none. */
   scrollAt(at: Point2): ScrollGrab | null;
   /** Opens the agent panel ready for a request; returns why it cannot, or null. */
@@ -289,6 +297,7 @@ export class ToolController {
     if (this.env?.isButton(at, source)) {
       // Pinches longer than a quick tap arrive as drags; on a button they are presses, never grabs or orbits.
       this.grabs.set(source, { kind: "press", start: at });
+      this.env.pressStart?.(at, source);
       return true;
     }
     const scroll = this.env?.scrollAt(at) ?? null;
@@ -308,10 +317,12 @@ export class ToolController {
     const grab = this.grabs.get(source);
     if (!grab) return;
     if (grab.kind === "press") {
+      this.env?.pressMove?.(at, source);
       // Moving up or down from a button in a scrolled area scrolls it instead of pressing.
       if (Math.abs(at[1] - grab.start[1]) < SCROLL_SLOP) return;
       const scroll = this.env?.scrollAt(grab.start) ?? null;
       if (!scroll) return;
+      this.env?.pressCancel?.(source);
       this.grabs.set(source, { kind: "scroll", scroll, last: grab.start });
       this.drag(at, source);
       return;
@@ -344,6 +355,7 @@ export class ToolController {
       if (source !== undefined && s !== source) continue;
       this.grabs.delete(s);
       if (grab.kind === "scroll") grab.scroll.release();
+      if (grab.kind === "press") this.env?.pressCancel?.(s);
       if (grab.kind === "tool") {
         const ctx = this.ctx();
         if (ctx) this.active?.onDragCancel?.(ctx);

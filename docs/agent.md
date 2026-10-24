@@ -39,16 +39,44 @@ The `hai` MCP server gives each agent the tools its definition lists, from these
 | `create_elements`, `update_elements`, `delete_elements` | Change the scene. Each batch is checked as a whole: if one element is invalid, nothing changes and the error names it |
 | `set_selection` | Select elements for everyone |
 | `capture_view` | A PNG of what you see in the viewer, at most 1280 px on its longest side |
+| `python_run` | Runs a Python script in an environment HAI manages in the project (no Rhino needed). You see the whole script and the packages it would install first; every run is kept in `.hai/scripts`; a `.3dm` it writes can be imported into the viewer with one click (Architect, Product, Climate) |
+| `rhino_run_python` | Runs a Python script inside your open Rhino 8 with all of RhinoCommon, as one undo step, after you have seen it. Only offered while Rhino is connected and the mode is not Python only (Architect, Product) |
+| `rhino_get_document` | Reads Rhino's units, layers, object counts, selection and active view (every agent, while Rhino is connected) |
+| `set_view` | Moves your camera: turn, tilt, nearer or further, look at a point, or frame elements. It changes nothing in the model (every agent) |
 | `sun_study` | Sets the viewer's sun for a date, time and place and returns its altitude and azimuth with a picture (Climate) |
+| `offer_panel`, `open_panel`, `update_panel`, `close_panel` | Offer you a small panel for a task, show it once you accept, replace it, close it (every agent that changes the model; see [Generated panels](#generated-panels)) |
 | `delegate`, `team_status`, `cancel_task` | Hand a task to a specialist, see what everyone is doing, stop a task (Mochi) |
 
 **One task is one undo step.** Everything a specialist changes in one task is a single transaction labelled with the agent and the task, for example "Architect: Stair core". You watch the model change as it works, and one Undo reverts the whole task. Only one agent changes the model at a time.
+
+## Generated panels
+
+Some requests are about numbers you want to feel out, not type once: a clearance between a wall and a column, a slab overhang within a tolerance. For those the agent can offer to write you a small panel.
+
+- **The agent offers first.** It calls `offer_panel` with what the panel is for, and a card appears in the agent panel: "Open a tolerance panel?" with **Open** and **Skip**. Nod to open or shake to skip (the card is answered after a voice transcript under review and an approval card, see [gestures.md](gestures.md)). An offer nobody answers expires after 60 seconds and the agent is told.
+- **Your nod is the consent.** A panel is never opened without an accepted offer, and one accepted offer allows exactly one panel. An offer is refused while another offer is waiting or a panel is open, so there is at most one panel at a time across all agents.
+- **The panel shell appears at once** (within 150 ms of your answer) with a loading state, while the agent writes the panel with `open_panel`: one self-contained HTML document with a title and a size (at most 256 KB). The call returns `ready` as soon as the page loaded it, or the error if it did not, so the agent can fix it with `update_panel`. It does not wait for you to finish with the panel, so it never holds up the team.
+- **Which agents.** The four panel tools go to every agent that changes the model (Architect and Product by default), whatever its definition file lists, so projects made before panels existed get them without any change. Mochi, Reviewer and Climate do not change the model, so Mochi hands the task to Architect or Product, which offers the panel. **Settings > Features > Generated panels** switches the tools off; an open panel then closes and drops its preview.
+- **No approval card.** Your acceptance of the offer is the approval. A panel can only read the scene and send scene operations that are checked like every other edit.
+- **When the panel closes** (Done, Close, Escape, or the agent closing it) the agent that opened it is told, as a short note, whether you kept the result. It arrives as a turn when the agent is idle, or right after the turn it is in, the way Mochi's reports do. An agent that closes its own panel is not told. A panel stays open when the agent's turn ends or is stopped.
+- **An offer ends with its turn.** If the turn that made an offer ends or is stopped before you answer, or you accepted and the agent never supplied a panel, the card says "No panel was made".
+
+### The panel's sandbox
+
+A panel is code the agent wrote, so it runs in a sandboxed frame (the full list is in [SECURITY.md](../SECURITY.md#generated-panels)):
+
+- It cannot read the app, its session token, storage or cookies, and it cannot call the bridge or the agent's tools.
+- It cannot make any network request, load anything from outside itself (use `data:` URIs for images and fonts), open windows, submit forms, show dialogs, nest frames or navigate the app or itself. A panel whose frame tries to leave is ended.
+- It sees the scene through `hai.scene.get`, hears about changes through `hai.on`, and sends scene operations with `hai.preview` and `hai.commit`. Each operation is checked like every other edit; an invalid one changes nothing and the panel is told which element and field. At most 60 messages per second are accepted, and a document is at most 256 KB.
+- The header, **Done** and **Close** belong to the app: the document cannot hide, move or imitate them.
+- A preview is drawn for you only. It adds no undo step, is not saved, and the agent does not see it. **Done** keeps it as one undo step labelled with the panel's title; **Close**, Escape and a lost connection put the model back.
+- A panel that throws or never finishes loading shows **Failed** in its header with the reason, and the agent is told, so it can fix the document with `update_panel`.
 
 ## Approvals
 
 Some tool calls need your say-so.
 
-- **The scene tools run without asking**, because every change shows in the model and can be undone.
+- **The scene tools run without asking**, because every change shows in the model and can be undone. So do the panel tools, because accepting an offer is the consent.
 - **Your own Claude Code rules apply first.** Anything your Claude Code settings already allow, and read-only commands Claude Code considers safe, run without a card. A card only appears for a call you would have been asked about in a terminal.
 - **Everything else shows an approval card** in the turn, under the tool's chip, naming the agent that asks. A specialist's card also waits under its hand-off chip in Mochi's chat. The card shows the tool, where it comes from (Claude Code itself or the MCP server's name), and the command, path, URL or input.
   - **Allow** with a click, or by nodding while engaged.

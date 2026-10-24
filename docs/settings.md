@@ -9,6 +9,7 @@ The first page lists the sections; each opens its own page with a back button, a
 | **For recordings** (top of the first page) | **Show my hands**: see below |
 | **Camera and tracking** | Which camera, whether its image is mirrored, what is drawn over the preview, the live Gestures and Detection cards, and the frame rate, inference time and backend ([perception.md](perception.md)) |
 | **Features** | One switch per feature: see below |
+| **Modelling** | How the agent models: Automatic, Rhino or Python only, and what is connected now: see below |
 | **Drawing aids** | Grid, Ortho, Endpoint, Midpoint, Centre, Project and Perpendicular for the create tools and Move ([tools.md](tools.md)) |
 | **Gestures** | What each gesture does, for each hand where a gesture belongs to one, including what a fist drag does (pan by default) and what a still fist does (cancel) ([gestures.md](gestures.md)) |
 | **Tool rings** | The eight slots of the tools ring and of the create ring ([tools.md](tools.md)) |
@@ -33,9 +34,24 @@ Every feature can be switched off on its own, so a demo or a release shows exact
 | Stop gesture | Both fists then open hands do not stop the agents |
 | Voice | No microphone button or indicator, the talk key does nothing, listening for names is off |
 | Agent | No agent panel; Ask agent says the agent is switched off |
+| Generated panels | The agent is not offered the panel tools, and an open panel closes and drops its preview |
 | Latency readout | The status bar does not show the gesture-to-render time |
 
 The list lives in `packages/protocol/src/features.ts`. To put a new feature behind a switch, add it there and check `features.on("<id>")` where the feature acts (a tool can name its feature in `Tool.feature` instead).
+
+## Modelling
+
+The agent can model in two ways, and you choose which in Settings > Modelling ([rhino.md](rhino.md)).
+
+| Choice | The agent works in | The Rhino model |
+|---|---|---|
+| **Automatic** (the default) | Rhino while it is connected, the Python workbench otherwise | Drawn in the viewer while Rhino is connected |
+| **Rhino** | Rhino; it says so when Rhino is not connected | Drawn in the viewer while Rhino is connected |
+| **Python only** | The Python workbench, which writes `.3dm` files without Rhino | Not drawn; Rhino's own tools are not offered to the agent |
+
+The page also says what is connected now: the mode in use, the Rhino document, whether Python runs inside Rhino (and what to do when it does not), the progress of a first sync of a large document, and what the viewer leaves out (curves, points, annotations, objects too heavy to draw in full). The top bar shows the same as a pill: **Rhino connected**, **Syncing 120 of 4000**, **Rhino not connected** (when you chose Rhino) or **Python only**, and next to it **Rhino to HAI 80 ms**, how long the last changes in Rhino took to be drawn here.
+
+The choice is kept in `.hai/settings.json` with the others, so it follows the workspace from a machine with Rhino to one without.
 
 ## Show my hands
 
@@ -50,7 +66,7 @@ For recordings: your hands are drawn as solid white shapes over the whole screen
 
 | Where | What |
 |---|---|
-| Top | The toolbar: the camera, microphone and bridge indicators, and the settings gear |
+| Top | The toolbar: the camera, microphone, Rhino (while it is in use) and bridge indicators, and the settings gear |
 | Left | The project bar, then the agent panel |
 | Bottom left | The status bar: the active tool, the selection and the latency readout |
 | Bottom centre | The section readout with Remove, and the undo strip after an undo |

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Message, SunSetting, ViewCamera } from "@hai/protocol";
+import type { Message, SunSetting, ViewCamera, ViewRequest } from "@hai/protocol";
 
 type Send = (message: Message) => void;
 
@@ -46,6 +46,14 @@ export class ViewContext {
       return true;
     }
     return false;
+  }
+
+  /** Asks every open viewer to move to a view; they animate there and give way at once to the user's own navigation. */
+  setView(request: ViewRequest): { ok: true } | { ok: false; error: string } {
+    if (this.viewers() === 0)
+      return { ok: false, error: "No viewer is open, so the view cannot be changed." };
+    this.broadcast({ type: "view.set", id: randomUUID(), payload: request });
+    return { ok: true };
   }
 
   /** A PNG of the current view from an open viewer; with `sun`, the viewer's light is set to it first. */

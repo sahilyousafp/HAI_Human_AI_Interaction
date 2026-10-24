@@ -38,7 +38,8 @@ interface DefaultAgent {
 }
 
 const SPECIALIST_CLOSE = `You receive tasks from Mochi, the team lead. Do the task with the hai tools, then end with a short summary of
-what you did and anything left open: it goes back to Mochi, who reports to the user. Lengths are millimetres, Z is up.`;
+what you did and anything left open: it goes back to Mochi, who reports to the user. Lengths are millimetres, Z is up.
+When the task says the user wants to tune, adjust or try values themselves (a clearance, a tolerance, a size), call offer_panel first and, if they accept, open_panel with sliders for those values; do not hide the values in element properties.`;
 
 /** The team a project starts with. Files are written only where missing, so the user's edits always win. */
 const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
@@ -66,7 +67,12 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
   architect: {
     description:
       "Architecture: massing, levels, walls, slabs, columns and cores. Creates and edits building elements.",
-    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.write)],
+    tools: [
+      ...hai(HAI_TOOLS.read),
+      ...hai(HAI_TOOLS.write),
+      ...hai(HAI_TOOLS.python),
+      ...hai(HAI_TOOLS.rhino),
+    ],
     model: "sonnet",
     prompt: `You are Architect, the team's architectural designer. You plan and model massing, levels, walls, slabs,
 columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIALIST_CLOSE}`,
@@ -74,7 +80,12 @@ columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIAL
   },
   product: {
     description: "Product design: furniture, fixtures and components at product scale.",
-    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.write)],
+    tools: [
+      ...hai(HAI_TOOLS.read),
+      ...hai(HAI_TOOLS.write),
+      ...hai(HAI_TOOLS.python),
+      ...hai(HAI_TOOLS.rhino),
+    ],
     model: "sonnet",
     prompt: `You are Product, the team's product designer. You design furniture, fixtures and components at product
 scale, with attention to ergonomics, materials and how they are made. Model them with the scene elements you have
@@ -83,7 +94,12 @@ scale, with attention to ergonomics, materials and how they are made. Model them
   },
   climate: {
     description: "Environmental simulation: sun path, shadows, orientation and daylight studies.",
-    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.climate)],
+    tools: [
+      ...hai(HAI_TOOLS.read),
+      ...hai(HAI_TOOLS.climate),
+      ...hai(HAI_TOOLS.python),
+      ...hai(HAI_TOOLS.rhinoRead),
+    ],
     model: "sonnet",
     prompt: `You are Climate, the team's environmental analyst. You study sun path, shadows, orientation and
 daylight. Use sun_study for a date, time and location (ask Mochi if the location is unknown; London is 51.5, -0.1)
@@ -93,7 +109,7 @@ and describe what the shadows mean for the design. You do not change the model.\
   reviewer: {
     description:
       "Checks the model against the brief and rules (heights, counts, clearances) and reports issues. Never edits.",
-    tools: hai(HAI_TOOLS.read),
+    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.rhinoRead)],
     model: "sonnet",
     prompt: `You are Reviewer. You check the model against the brief and common rules (heights, counts, clearances,
 overlaps) and report issues clearly with element names. You never change the model.\n\n${SPECIALIST_CLOSE}`,
@@ -219,17 +235,26 @@ export function readRoster(projectDir: string): TeamMember[] {
 /**
  * The `hai` tools an agent may call, by their short names: those its definition lists, without the model-changing
  * ones unless it is marked as writing (the scheduler lets only one writing agent run at a time, so an agent it treats
- * as read-only must not write).
+ * as read-only must not write). Panel tools change the model through the user, so they go to every writing agent
+ * whatever its definition lists: HAI never overwrites a definition the user edited, and existing projects would
+ * otherwise never see them. Whether the Generated panels feature is on is decided when a tool is called.
  */
 export function allowedHaiTools(member: TeamMember): Set<string> {
   const prefix = `mcp__${HAI_SERVER}__`;
-  const writeTools: readonly string[] = HAI_TOOLS.write;
-  return new Set(
+  const writeTools: readonly string[] = member.writes
+    ? []
+    : [...HAI_TOOLS.write, ...HAI_TOOLS.panel, ...HAI_TOOLS.rhino];
+  const tools = new Set(
     member.tools
       .filter((t) => t.startsWith(prefix))
       .map((t) => t.slice(prefix.length))
-      .filter((t) => member.writes || !writeTools.includes(t)),
+      .filter((t) => !writeTools.includes(t)),
   );
+  if (member.writes)
+    for (const tool of [...HAI_TOOLS.panel, ...HAI_TOOLS.python, ...HAI_TOOLS.rhino]) tools.add(tool);
+  // Looking around changes no element, so every agent may do it, whatever its definition lists.
+  for (const tool of [...HAI_TOOLS.view, ...HAI_TOOLS.rhinoRead]) tools.add(tool);
+  return tools;
 }
 
 /** An agent as the panel shows it (everything but its instructions). */
@@ -242,5 +267,10 @@ export function memberInfo(member: TeamMember): TeamMemberInfo {
 export function rosterText(team: TeamMember[]): string {
   const others = team.filter((m) => !m.lead);
   if (others.length === 0) return "There are no specialists in this project yet.";
-  return `Your team (use the name with delegate):\n${others.map((m) => `- ${m.name}: ${m.description}`).join("\n")}`;
+  const list = `Your team (use the name with delegate):\n${others.map((m) => `- ${m.name}: ${m.description}`).join("\n")}`;
+  const builders = others.filter((m) => m.writes).map((m) => m.name);
+  if (builders.length === 0) return list;
+  // What the specialists can do beyond the scene's own element types. The lead has no modelling tools, so without
+  // this it only knows the descriptions above and tells the user that curves and smooth forms are impossible.
+  return `${list}\n\n${builders.join(", ")} can do more than massings, walls, slabs and columns: they can model curves, polylines, NURBS surfaces and smooth or organic forms (domes, vaults, arches, canopies, minarets) by writing Python with rhino3dm (python_run), and when Rhino is connected they can model in Rhino. They save a .3dm and the user is offered Import into viewer. So never tell the user these things cannot be done, and never offer only a faceted look-alike: delegate it, and say in the instruction what to make and that python_run is the way.`;
 }

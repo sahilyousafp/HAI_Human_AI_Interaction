@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { AgentProvider } from "@hai/agent-core";
 import { loadConfig } from "./config.ts";
+import { discoveryFilePath, removeDiscoveryFile, writeDiscoveryFile } from "./discovery-file.ts";
 import { hostLink } from "./host-link.ts";
 import { migrateLegacyFolder } from "./legacy.ts";
 import { defaultProjectDir, readLastProject, writeLastProject } from "./project.ts";
@@ -24,6 +25,7 @@ export async function runBridge(provider: AgentProvider): Promise<void> {
     allowedOrigins: config.allowedOrigins,
     version: VERSION,
     settingsFile: join(config.workspaceRoot, ".hai", "settings.json"),
+    mirrorDir: join(config.workspaceRoot, ".hai", "mirror"),
     agent: { provider },
     log: (line) => console.log(line),
     scene: {
@@ -39,6 +41,11 @@ export async function runBridge(provider: AgentProvider): Promise<void> {
     pid: process.pid,
     startedAt: bridge.startedAt,
   });
+  // The Rhino plugin finds the bridge through this file in the user's own application data.
+  const discovery = discoveryFilePath();
+  const own = { pid: process.pid, token: bridge.token };
+  const written = writeDiscoveryFile(discovery, { port: address.port, startedAt: bridge.startedAt, ...own });
+  if (written.warning) bridge.log.info(written.warning);
   bridge.log.info(`listening on http://${address.address}:${address.port} (loopback only)`);
 
   // Started by the desktop app: tell it where the bridge listens, and stop cleanly when it asks.
@@ -50,6 +57,7 @@ export async function runBridge(provider: AgentProvider): Promise<void> {
     if (stopping) return;
     stopping = true;
     removeSessionFile(config.workspaceRoot);
+    removeDiscoveryFile(discovery, own);
     await bridge.stop();
     process.exit(0);
   }

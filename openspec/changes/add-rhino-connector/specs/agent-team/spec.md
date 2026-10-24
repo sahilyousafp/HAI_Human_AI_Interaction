@@ -12,3 +12,11 @@ The agents that change the model (Architect, Product) SHALL be able to use all t
 #### Scenario: Reviewer cannot run Python
 - **WHEN** Reviewer's session calls the Rhino run tool or the workbench tool
 - **THEN** the bridge refuses the call because the tool is not in its definition
+
+### Requirement: Every agent can set the view
+The tool that changes the viewer's camera SHALL be offered to every agent, including Reviewer, because it does not change the scene.
+
+#### Scenario: Reviewer can look around
+- **WHEN** Reviewer's session lists its tools
+- **THEN** it includes `set_view`
+

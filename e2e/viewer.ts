@@ -1,7 +1,8 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page } from "@playwright/test";
+import type { PythonEnv } from "../apps/bridge/src/python/python-env.ts";
 import { type Bridge, createBridge } from "../apps/bridge/src/server.ts";
 import type { AgentProvider } from "../packages/agent-core/src/index.ts";
 import { E2E_ORIGINS } from "./stack.ts";
@@ -22,17 +23,24 @@ let nextPort = 4900;
 export async function startTestBridge(
   page: Page,
   /** `speak`: Mochi's replies are spoken (off in other tests, so they do not load the 325 MB voice). */
-  options: { agent?: AgentProvider; speak?: boolean } = {},
+  options: {
+    agent?: AgentProvider;
+    speak?: boolean;
+    /** A ready Python environment, so a test that runs Python does not install one. */
+    pythonEnv?: PythonEnv;
+    /** The folder to work in (settings, project, mirror), to start a second bridge on the same workspace. */
+    root?: string;
+  } = {},
 ): Promise<Bridge & { port: number }> {
   const port = nextPort++;
   const token = `viewer-e2e-${port}-0123456789`;
-  const root = mkdtempSync(join(tmpdir(), "hai-e2e-"));
+  const root = options.root ?? mkdtempSync(join(tmpdir(), "hai-e2e-"));
   const projectDir = join(root, "project");
   mkdirSync(join(root, ".hai"), { recursive: true });
-  writeFileSync(
-    join(root, ".hai", "settings.json"),
-    JSON.stringify({ speakReplies: options.speak ?? false }),
-  );
+  const settingsFile = join(root, ".hai", "settings.json");
+  // A workspace that is started again keeps its settings.
+  if (!existsSync(settingsFile))
+    writeFileSync(settingsFile, JSON.stringify({ speakReplies: options.speak ?? false }));
   const bridge = createBridge({
     host: "127.0.0.1",
     port,
@@ -40,7 +48,9 @@ export async function startTestBridge(
     version: "e2e",
     token,
     scene: { projectDir, saveDelayMs: 200 },
-    settingsFile: join(root, ".hai", "settings.json"),
+    settingsFile,
+    mirrorDir: join(root, "mirror"),
+    ...(options.pythonEnv ? { pythonEnv: options.pythonEnv } : {}),
     ...(options.agent ? { agent: { provider: options.agent } } : {}),
   });
   await bridge.start();

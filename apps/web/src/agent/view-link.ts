@@ -1,4 +1,4 @@
-import type { Message, Point3Mm, SunSetting, ViewCamera } from "@hai/protocol";
+import type { Message, Point3Mm, SunSetting, ViewCamera, ViewRequest } from "@hai/protocol";
 
 /** Captured views are scaled down so their longest side is at most this many pixels. */
 export const CAPTURE_MAX_SIDE = 1280;
@@ -121,11 +121,23 @@ export class ViewLink {
       this.schedule();
       return false; // the scene client handles the snapshot itself
     }
+    if (message.type === "view.set") {
+      for (const listener of this.viewListeners) listener(message.payload);
+      return true;
+    }
     if (message.type !== "view.capture") return false;
     if (message.payload.sun) this.setSun(message.payload.sun); // the light moves before the picture is taken
     void this.answer(message.payload.requestId);
     return true;
   }
+
+  private readonly viewListeners = new Set<(request: ViewRequest) => void>();
+
+  /** The agent asked for a view (azimuth, elevation, distance, a target or elements to frame). */
+  onViewRequest = (listener: (request: ViewRequest) => void): (() => void) => {
+    this.viewListeners.add(listener);
+    return () => this.viewListeners.delete(listener);
+  };
 
   dispose(): void {
     if (this.timer) clearTimeout(this.timer);

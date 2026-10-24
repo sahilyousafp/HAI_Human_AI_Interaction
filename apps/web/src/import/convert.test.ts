@@ -45,14 +45,97 @@ describe("convert3dm", () => {
     expect(result.parts[1]).toMatchObject({ name: "Blue panel", layer: "Facade", color: "#0000ff" });
   });
 
-  it("counts what it leaves out, by reason", () => {
+  it("counts what it leaves out, by reason, and draws curves as tubes", () => {
     const result = convert3dm(rhino, model("with-curves-and-note.3dm"));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.report.imported).toBe(2);
-    expect(result.report.skipped).toMatchObject({ curves: 4, annotations: 1 });
-    expect(totalSkipped(result.report.skipped)).toBe(5);
-    expect(describeSkips(result.report.skipped)).toBe("4 curves, 1 annotation");
+    expect(result.report.imported).toBe(6); // two boxes and four lines drawn as thin tubes
+    expect(result.report.curvesDrawn).toBe(4);
+    expect(result.report.skipped).toMatchObject({ curves: 0, annotations: 1 });
+    expect(totalSkipped(result.report.skipped)).toBe(1);
+    expect(describeSkips(result.report.skipped)).toBe("1 annotation");
+  });
+
+  describe("curves", () => {
+    const fileOf = (build: (f: import("rhino3dm").File3dm) => void) => {
+      const f = new rhino.File3dm();
+      f.settings().modelUnitSystem = rhino.UnitSystem.Millimeters;
+      build(f);
+      return new Uint8Array(f.toByteArray());
+    };
+    const points = (flat: number[][]) => flat.map((p) => p as unknown as number[]);
+
+    it("a line is a tube from end to end, with the width of a thin line", () => {
+      const line = convert3dm(rhino, model("with-curves-and-note.3dm"));
+      if (!line.ok) throw new Error(line.error);
+      const tube = line.parts.find((p) => p.indices.length > 36 && p.name !== "Box A" && p.name !== "Box B");
+      expect(tube).toBeDefined();
+      const b = partBounds(tube as never);
+      expect(b.min[0]).toBeCloseTo(0, 3);
+      expect(b.max[0]).toBeCloseTo(1000, 3);
+      // 1000 mm long: a 4 mm radius (the smallest), six sides.
+      expect(b.max[1] - b.min[1]).toBeGreaterThan(6);
+      expect(b.max[1] - b.min[1]).toBeLessThanOrEqual(8.1);
+    });
+
+    it("a smooth curve follows its shape, not its control polygon", () => {
+      const bytes = fileOf((f) => {
+        const curve = rhino.NurbsCurve.create(
+          false,
+          3,
+          points([
+            [0, 0, 0],
+            [1000, 1000, 0],
+            [2000, -1000, 0],
+            [3000, 1000, 0],
+            [4000, 0, 0],
+          ]) as never,
+        );
+        f.objects().addCurve(curve as never, null as never);
+      });
+      const result = convert3dm(rhino, bytes);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.report.curvesDrawn).toBe(1);
+      const b = partBounds(result.parts[0] as never);
+      expect(b.min[0]).toBeLessThan(5);
+      expect(b.max[0]).toBeGreaterThan(3995);
+      // The curve stays inside its control points' hull: it never reaches the 1000 mm of a control point.
+      expect(b.max[1]).toBeLessThan(900);
+      expect(b.max[1]).toBeGreaterThan(100);
+      expect(result.parts[0]?.indices.length).toBeGreaterThan(600);
+    });
+
+    it("a polyline keeps its corners", () => {
+      const bytes = fileOf((f) => {
+        const curve = rhino.NurbsCurve.create(
+          false,
+          1,
+          points([
+            [0, 0, 0],
+            [1000, 0, 0],
+            [1000, 1000, 500],
+            [0, 1000, 0],
+          ]) as never,
+        );
+        f.objects().addCurve(curve as never, null as never);
+      });
+      const result = convert3dm(rhino, bytes);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const b = partBounds(result.parts[0] as never);
+      expect(b.max[2]).toBeGreaterThan(499); // the high corner is on the tube, not cut off
+      // Three pieces, six sides each, plus two end caps of six triangles.
+      expect(result.parts[0]?.indices.length).toBe(3 * 6 * 6 + 2 * 6 * 3);
+    });
+
+    it("curves count toward the model's limit like any triangles", () => {
+      const result = convert3dm(rhino, model("with-curves-and-note.3dm"), {
+        ...IMPORT_LIMITS,
+        maxTriangles: 100,
+      });
+      expect(result.ok).toBe(false);
+    });
   });
 
   it("a Brep with no stored mesh is reported, not imported", () => {

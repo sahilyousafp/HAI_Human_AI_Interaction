@@ -4,11 +4,14 @@ import { dirname } from "node:path";
 import {
   DrawingAidChoices,
   FeatureChoices,
+  type FeatureId,
   GestureBindingsSchema,
   type Message,
   type MessageOf,
+  ModellingMode,
   PaletteLayout,
   ReplyVoice,
+  resolveFeatures,
   type Settings,
   SpeechMode,
 } from "@hai/protocol";
@@ -43,6 +46,8 @@ export class SettingsHub {
   constructor(
     private readonly file: string | null,
     private readonly broadcast: Send,
+    /** A feature the user switched on or off (called once per switch). */
+    private readonly featureChanged: (feature: FeatureId, on: boolean) => void = () => {},
   ) {
     const stored = file ? readSettingsFile(file) : {};
     const palette = PaletteLayout.safeParse(stored.palette);
@@ -52,6 +57,7 @@ export class SettingsHub {
     const replyVoice = ReplyVoice.safeParse(stored.replyVoice);
     const features = FeatureChoices.safeParse(stored.features);
     const drawingAids = DrawingAidChoices.safeParse(stored.drawingAids);
+    const modelling = ModellingMode.safeParse(stored.modelling);
     this.settings = {
       palette: palette.success ? palette.data : null,
       createPalette: createPalette.success ? createPalette.data : null,
@@ -63,11 +69,22 @@ export class SettingsHub {
       features: features.success ? features.data : null,
       drawingAids: drawingAids.success ? drawingAids.data : null,
       showHands: stored.showHands === true,
+      modelling: modelling.success ? modelling.data : "auto",
     };
   }
 
   greet(send: Send): void {
     send(this.snapshot());
+  }
+
+  /** How the user chose the agent to model (Settings > Modelling). */
+  get modelling(): ModellingMode {
+    return this.settings.modelling;
+  }
+
+  /** Whether a feature is on (every feature is until the user switches it off). */
+  featureOn(id: FeatureId): boolean {
+    return resolveFeatures(this.settings.features)[id];
   }
 
   /** Handles a settings message from a client. Returns false for other messages. */
@@ -84,6 +101,7 @@ export class SettingsHub {
       features,
       drawingAids,
       showHands,
+      modelling,
     } = message.payload;
     const patch: Partial<Settings> = {
       ...(palette ? { palette } : {}),
@@ -98,10 +116,15 @@ export class SettingsHub {
       // Drawing aids merge the same way.
       ...(drawingAids ? { drawingAids: { ...this.settings.drawingAids, ...drawingAids } } : {}),
       ...(showHands !== undefined ? { showHands } : {}),
+      ...(modelling ? { modelling } : {}),
     };
+    const before = resolveFeatures(this.settings.features);
     this.settings = { ...this.settings, ...patch };
     if (this.file) updateSettingsFile(this.file, patch);
     this.broadcast(this.snapshot());
+    const after = resolveFeatures(this.settings.features);
+    for (const id of Object.keys(after) as FeatureId[])
+      if (before[id] !== after[id]) this.featureChanged(id, after[id]);
     return true;
   }
 

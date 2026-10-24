@@ -31,6 +31,7 @@ async function start(): Promise<AddressInfo> {
     allowedOrigins: [ORIGIN],
     version: "t",
     token: TOKEN,
+    mirrorDir: join(mkdtempSync(join(tmpdir(), "hai-mcp-mirror-")), "mirror"),
     scene: { projectDir, saveDelayMs: 50 },
   });
   return bridge.start();
@@ -149,14 +150,20 @@ describe("MCP endpoint access", () => {
       [
         "approve_tool",
         "capture_view",
+        "close_panel",
         "create_elements",
         "delete_elements",
         "get_elements",
         "get_scene_summary",
         "get_user_context",
+        "offer_panel",
+        "open_panel",
+        "python_run",
         "set_selection",
+        "set_view",
         "sun_study",
         "update_elements",
+        "update_panel",
       ].sort(),
     );
   });
@@ -388,5 +395,252 @@ describe("write tools", () => {
     const doc = bridge?.scene.scene.doc;
     expect(Object.values(doc?.elements ?? {}).filter((e) => e.name.startsWith("Agent column"))).toEqual([]);
     expect(doc?.elements["wall-s"]).toEqual(wallBefore);
+  });
+});
+
+describe("panel tools", () => {
+  const panelDoc = { title: "Clearance", width: 320, height: 240, html: "<p>hi</p>" };
+
+  /** A browser connection that answers panel offers and reports panel loads, as the page does. */
+  async function page(address: AddressInfo) {
+    return connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+  }
+  const offerOf = async (browser: Awaited<ReturnType<typeof page>>) =>
+    (await browser.waitFor("panel.offer", (m) => m.payload.state === "waiting")).payload;
+  const panelOf = async (browser: Awaited<ReturnType<typeof page>>) =>
+    (await browser.waitFor("panel.open")).payload.panelId;
+  /** The agent offers, the page accepts, the agent opens and the page reports it ready. */
+  async function openPanel(address: AddressInfo) {
+    const browser = await page(address);
+    const agent = await mcp(address);
+    const offered = agent.callTool({ name: "offer_panel", arguments: { purpose: "Set the clearance" } });
+    const offer = await offerOf(browser);
+    browser.send("panel.offer.answer", { offerId: offer.offerId, answer: "accepted" });
+    expect(json(await offered).answer).toBe("accepted");
+    const opened = agent.callTool({ name: "open_panel", arguments: panelDoc });
+    const panelId = await panelOf(browser);
+    browser.send("panel.status", { panelId, state: "ready" });
+    expect(json(await opened)).toEqual({ status: "ready" });
+    return { browser, agent, panelId };
+  }
+
+  it("the offer waits for the user and returns the answer; no approval card is shown", async () => {
+    const address = await start();
+    const browser = await page(address);
+    const agent = await mcp(address);
+    const offered = agent.callTool({
+      name: "offer_panel",
+      arguments: { purpose: "Set the wall to column clearance" },
+    });
+    const offer = await offerOf(browser);
+    expect(offer.purpose).toBe("Set the wall to column clearance");
+    expect(bridge?.approvals.waiting).toEqual([]);
+    browser.send("panel.offer.answer", { offerId: offer.offerId, answer: "skipped" });
+    const result = json(await offered);
+    expect(result.answer).toBe("skipped");
+    expect(result.next).toMatch(/chat/);
+    expect(browser.received.some((m) => m.type === "approval.pending")).toBe(false);
+  });
+
+  it("supply without acceptance: open_panel is refused and tells the agent to offer first", async () => {
+    const address = await start();
+    const browser = await page(address);
+    const agent = await mcp(address);
+    const refused = await agent.callTool({ name: "open_panel", arguments: panelDoc });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toMatch(/offer_panel/);
+    expect(browser.received.some((m) => m.type === "panel.open")).toBe(false);
+  });
+
+  it("an oversized document is refused with the limit, and the accepted offer stays usable", async () => {
+    const address = await start();
+    const browser = await page(address);
+    const agent = await mcp(address);
+    const offered = agent.callTool({ name: "offer_panel", arguments: { purpose: "Tolerance" } });
+    browser.send("panel.offer.answer", { offerId: (await offerOf(browser)).offerId, answer: "accepted" });
+    await offered;
+    const refused = await agent.callTool({
+      name: "open_panel",
+      arguments: { ...panelDoc, html: "a".repeat(300 * 1024) },
+    });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toMatch(/256 KB/);
+    expect(browser.received.some((m) => m.type === "panel.open")).toBe(false);
+    expect(bridge?.panels.stateOf(null)).toBe("accepted");
+    const opened = agent.callTool({ name: "open_panel", arguments: panelDoc });
+    browser.send("panel.status", { panelId: await panelOf(browser), state: "ready" });
+    expect(json(await opened)).toEqual({ status: "ready" });
+  });
+
+  it("open_panel reports a document that failed to load, with the reason", async () => {
+    const address = await start();
+    const browser = await page(address);
+    const agent = await mcp(address);
+    const offered = agent.callTool({ name: "offer_panel", arguments: { purpose: "Tolerance" } });
+    browser.send("panel.offer.answer", { offerId: (await offerOf(browser)).offerId, answer: "accepted" });
+    await offered;
+    const opened = agent.callTool({ name: "open_panel", arguments: panelDoc });
+    browser.send("panel.status", {
+      panelId: await panelOf(browser),
+      state: "failed",
+      reason: "ReferenceError: x is not defined",
+    });
+    const result = await opened;
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe("ReferenceError: x is not defined");
+  });
+
+  it("an offer while a panel is open is refused", async () => {
+    const address = await start();
+    const { agent } = await openPanel(address);
+    const refused = await agent.callTool({ name: "offer_panel", arguments: { purpose: "Another" } });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toMatch(/already open/);
+  });
+
+  it("update_panel replaces the document and keeps the title and size it does not change", async () => {
+    const address = await start();
+    const { browser, agent, panelId } = await openPanel(address);
+    const updated = agent.callTool({ name: "update_panel", arguments: { html: "<p>second</p>" } });
+    const message = await browser.waitFor("panel.update");
+    expect(message.payload).toMatchObject({ panelId, title: "Clearance", width: 320, html: "<p>second</p>" });
+    browser.send("panel.status", { panelId, state: "ready" });
+    expect(json(await updated)).toEqual({ status: "ready" });
+  });
+
+  it("close_panel closes the panel on the page; a second close finds none", async () => {
+    const address = await start();
+    const { browser, agent, panelId } = await openPanel(address);
+    expect(json(await agent.callTool({ name: "close_panel", arguments: {} }))).toEqual({ status: "closed" });
+    expect((await browser.waitFor("panel.close")).payload).toEqual({ panelId, reason: "agent" });
+    expect((await agent.callTool({ name: "close_panel", arguments: {} })).isError).toBe(true);
+  });
+
+  it("switched off: none of the agent's tools is a panel tool, and an open panel is closed", async () => {
+    const address = await start();
+    const { browser, agent, panelId } = await openPanel(address);
+    browser.send("settings.set", { features: { generatedPanels: false } });
+    expect((await browser.waitFor("panel.close")).payload).toEqual({ panelId, reason: "switched-off" });
+    const { tools } = await agent.listTools();
+    expect(tools.map((t) => t.name).filter((n) => n.endsWith("_panel"))).toEqual([]);
+    const refused = await agent
+      .callTool({ name: "offer_panel", arguments: { purpose: "x" } })
+      .then(textOf, (error: Error) => error.message);
+    expect(refused).toMatch(/not found|unknown/i);
+    expect(bridge?.panels.active).toBe(false);
+  });
+
+  it("open_panel's description documents the panel API, the styles and hand input", async () => {
+    const address = await start();
+    const { tools } = await (await mcp(address)).listTools();
+    const description = tools.find((t) => t.name === "open_panel")?.description ?? "";
+    for (const part of [
+      "hai.scene.get",
+      "hai.preview",
+      "hai.commit",
+      "hai.on(",
+      "256 KB",
+      "pinch",
+      "<select>",
+    ]) {
+      expect(description).toContain(part);
+    }
+  });
+});
+
+describe("set_view", () => {
+  it("the agent sets the view: every open page is asked to move, and the answer names what was asked", async () => {
+    const address = await start();
+    const browser = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    const agent = await mcp(address);
+    const result = json(
+      await agent.callTool({ name: "set_view", arguments: { azimuth: 225, elevation: 30 } }),
+    );
+    expect(result).toMatchObject({ status: "moving", azimuth: 225, elevation: 30 });
+    const asked = await browser.waitFor("view.set");
+    expect(asked.payload).toMatchObject({ azimuth: 225, elevation: 30 });
+  });
+
+  it("frames elements by id", async () => {
+    const address = await start();
+    const browser = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    const agent = await mcp(address);
+    await agent.callTool({ name: "set_view", arguments: { frame: ["col-a1", "wall-n"] } });
+    expect((await browser.waitFor("view.set")).payload.frame).toEqual(["col-a1", "wall-n"]);
+  });
+
+  it("asking for nothing, or for an impossible view, is refused", async () => {
+    const address = await start();
+    await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    const agent = await mcp(address);
+    const nothing = await agent.callTool({ name: "set_view", arguments: {} });
+    expect(nothing.isError).toBe(true);
+    expect(textOf(nothing)).toMatch(/at least one/i);
+    const flat = await agent.callTool({ name: "set_view", arguments: { elevation: 2 } });
+    expect(flat.isError).toBe(true);
+  });
+
+  it("with no viewer open the agent is told so", async () => {
+    const address = await start();
+    const agent = await mcp(address);
+    const result = await agent.callTool({ name: "set_view", arguments: { azimuth: 90 } });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/No viewer is open/);
+  });
+
+  it("every agent has it, even one allowed no other tool", async () => {
+    const address = await start();
+    const reviewer = await mcp(address, agentToken({ agent: "reviewer", tools: new Set(["set_view"]) }));
+    const { tools } = await reviewer.listTools();
+    expect(tools.map((t) => t.name).sort()).toEqual(["approve_tool", "set_view"]);
+  });
+});
+
+describe("the user context in Rhino", () => {
+  it("'this' in Rhino: the Rhino object under the pointer, and the Rhino selection, with their layers", async () => {
+    const { connectFakeRhino, rhinoBatch, rhinoObject } = await import("../../test/rhino-client.ts");
+    const address = await start();
+    const browser = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
+    const asset = await rhino.uploadMesh();
+    rhino.send(
+      "rhino.objects",
+      rhinoBatch({
+        reset: true,
+        changed: [
+          rhinoObject("brep-1", asset, {
+            name: "Facade panel",
+            layer: "Facade",
+            tags: { "hai.owner": "architect" },
+          }),
+        ],
+      }),
+    );
+    await browser.waitFor("rhino.objects");
+    rhino.send("rhino.selection", { objects: [{ id: "brep-1", type: "Brep", layer: "Facade" }] });
+    await browser.waitFor("rhino.selection");
+    browser.send("context.update", { pointed: "brep-1", camera: null });
+    const agent = await mcp(address);
+    await expect
+      .poll(
+        async () =>
+          json(await agent.callTool({ name: "get_user_context", arguments: {} })).rhino?.pointed?.id,
+      )
+      .toBe("brep-1");
+    const context = json(await agent.callTool({ name: "get_user_context", arguments: {} }));
+    expect(context.rhino.pointed).toEqual({
+      id: "brep-1",
+      name: "Facade panel",
+      type: "brep",
+      layer: "Facade",
+      tags: { "hai.owner": "architect" },
+    });
+    expect(context.rhino.selection).toEqual([{ id: "brep-1", type: "Brep", layer: "Facade" }]);
+  });
+
+  it("without Rhino the context has no Rhino part", async () => {
+    const address = await start();
+    const agent = await mcp(address);
+    expect(json(await agent.callTool({ name: "get_user_context", arguments: {} })).rhino).toBeUndefined();
   });
 });

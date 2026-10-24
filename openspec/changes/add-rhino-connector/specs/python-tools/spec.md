@@ -85,3 +85,23 @@ The workbench SHALL NOT change the built-in viewer's scene directly. Its results
 #### Scenario: The scene is untouched
 - **WHEN** a script writes a `.3dm` into the project folder
 - **THEN** the built-in viewer's scene is unchanged until the user imports the file
+
+### Requirement: Geometry written by Python can be seen
+A `.3dm` written through the workbench's helper SHALL import into the viewer with every Brep, revolve and extrusion drawn, planar trimmed faces drawn with their outline, and no object skipped for lack of a mesh.
+
+#### Scenario: A canopy and a revolved solid draw
+- **GIVEN** a script that builds a freeform NURBS canopy and a revolved solid and saves through the helper
+- **WHEN** the file is imported into the viewer
+- **THEN** both objects are drawn, and the solid's end caps are discs
+
+#### Scenario: A plain save is reported
+- **GIVEN** a script that writes a Brep with `rhino3dm` directly, without the helper
+- **WHEN** the file is imported
+- **THEN** the import says how many objects had no mesh and why
+
+### Requirement: The agent is told what the workbench cannot model
+The `python_run` tool description SHALL state which operations the workbench has and which it lacks (loft, sweep, boolean, fillet, offset and meshing of a Brep), so the agent chooses another way instead of calling what does not exist.
+
+#### Scenario: Description lists the limits
+- **WHEN** the agent lists its tools
+- **THEN** the `python_run` description names the operations it cannot do and says to prefer Rhino for them

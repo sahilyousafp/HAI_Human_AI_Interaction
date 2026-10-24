@@ -1,5 +1,6 @@
 import type { MeshPart } from "@hai/scene";
 import type { File3dm, File3dmObject, GeometryBase, RhinoModule } from "rhino3dm";
+import { type CurveLike, polylineLength, sampleCurve, tubeAlong, tubeRadiusMm } from "./curve-tube.ts";
 
 /** The most an import may bring in; beyond this nothing is imported. */
 export interface ImportLimits {
@@ -35,6 +36,8 @@ export interface ImportReport {
   objects: number;
   /** The objects were merged per layer and colour. */
   grouped: boolean;
+  /** How many of the objects are curves, drawn as thin tubes along them. */
+  curvesDrawn?: number;
   skipped: SkipCounts;
   /** The file's unit system by name, and how many millimetres one of its units is. */
   units: { name: string; mm: number; assumed: boolean };
@@ -139,8 +142,9 @@ function merge(meshes: Array<{ position: Float32Array; index: Uint32Array }>): M
 
 /**
  * Reads a `.3dm` file into triangle parts in millimetres, Z up. Meshes come as they are; Breps and extrusions through
- * the render meshes the file stores for their faces; block references are expanded through their transforms. Curves,
- * points, annotations and anything else are counted, not imported, so the report can say what was left out.
+ * the render meshes the file stores for their faces; block references are expanded through their transforms. Curves
+ * are drawn as thin tubes along them. Points, annotations and anything else are counted, not imported, so the report
+ * can say what was left out.
  */
 export function convert3dm(
   rhino: RhinoModule,
@@ -183,6 +187,7 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
   const parts: ImportedPart[] = [];
   let triangles = 0;
   let overLimit = false;
+  let curvesDrawn = 0;
 
   const layerOf = (index: number) =>
     index >= 0 && index < file.layers().count ? file.layers().get(index) : null;
@@ -216,6 +221,15 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
     }
     const merged = found.length > 0 ? merge(found) : null;
     return merged && merged.indices.length > 0 ? merged : null;
+  };
+
+  /** A thin tube along a curve, in file units, or null when the curve has nothing to draw. */
+  const curveOf = (geometry: GeometryBase): MeshPart | null => {
+    const points = sampleCurve(geometry as unknown as CurveLike);
+    if (!points) return null;
+    const radius = tubeRadiusMm(polylineLength(points) * units.mm) / units.mm;
+    const tube = tubeAlong(points, radius);
+    return { positions: tube.positions, indices: tube.indices };
   };
 
   const add = (
@@ -257,13 +271,14 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
       return;
     }
     if (depth === 0 && attributes.isInstanceDefinitionObject) return; // a block's own geometry: placed through its references
-    if (kind === T.Curve) return void skipped.curves++;
     if (kind === T.Point || kind === T.PointSet) return void skipped.points++;
     if (kind === T.Annotation || kind === T.TextDot || kind === T.Hatch) return void skipped.annotations++;
-    if (kind !== T.Mesh && kind !== T.Brep && kind !== T.Extrusion) return void skipped.unsupported++;
+    if (kind !== T.Mesh && kind !== T.Brep && kind !== T.Extrusion && kind !== T.Curve)
+      return void skipped.unsupported++;
 
-    const mesh = meshOf(geometry);
-    if (!mesh) return void skipped.noMesh++;
+    const mesh = kind === T.Curve ? curveOf(geometry) : meshOf(geometry);
+    if (!mesh) return void (kind === T.Curve ? skipped.curves++ : skipped.noMesh++);
+    if (kind === T.Curve) curvesDrawn++;
     const count = mesh.indices.length / 3;
     triangles += count;
     if (triangles > limits.maxTriangles) {
@@ -316,7 +331,15 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
   return {
     ok: true,
     parts: elements,
-    report: { imported: elements.length, objects: parts.length, grouped, skipped, units, triangles },
+    report: {
+      imported: elements.length,
+      objects: parts.length,
+      grouped,
+      ...(curvesDrawn > 0 ? { curvesDrawn } : {}),
+      skipped,
+      units,
+      triangles,
+    },
   };
 }
 

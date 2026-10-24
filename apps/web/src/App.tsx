@@ -1,8 +1,9 @@
-import type { FeatureId, Message, MessageOf, ReplyVoice, SpeechMode } from "@hai/protocol";
+import type { FeatureId, Message, MessageOf, ModellingMode, ReplyVoice, SpeechMode } from "@hai/protocol";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
 import { addressOf } from "./agent/addressing.ts";
 import { AgentClient } from "./agent/agent-client.ts";
+import { answerYesNo } from "./agent/answer.ts";
 import { ViewLink } from "./agent/view-link.ts";
 import {
   type BridgeConnection,
@@ -13,15 +14,19 @@ import {
 import { ProjectExporter } from "./export/exporter.ts";
 import { buildInWorker } from "./export/rhino-client.ts";
 import { ModelImporter } from "./import/importer.ts";
-import { assetUrl, ModelAssets } from "./import/model-assets.ts";
+import { assetUrl, ModelAssets, mirrorAssetUrl } from "./import/model-assets.ts";
 import { convertInWorker } from "./import/rhino-client.ts";
 import { GestureSettingsCard } from "./input/GestureSettingsCard.tsx";
 import { GestureSettings } from "./input/gesture-settings.ts";
 import { InputBus } from "./input/input-bus.ts";
+import { PanelClient } from "./panel/panel-client.ts";
 import { CameraSettings } from "./perception/CameraSettings.tsx";
 import { CameraView } from "./perception/CameraView.tsx";
 import { HandOverlay } from "./perception/HandOverlay.tsx";
 import { TrackingSession } from "./perception/tracking-session.ts";
+import { ModellingSettings } from "./rhino/ModellingSettings.tsx";
+import { RhinoMirror } from "./rhino/rhino-mirror.ts";
+import { rhinoPill } from "./rhino/rhino-view.ts";
 import { SceneClient } from "./scene/scene-client.ts";
 import { DrawingAidsSettings } from "./settings/DrawingAidsSettings.tsx";
 import { DrawingAidsStore } from "./settings/drawing-aids.ts";
@@ -49,6 +54,8 @@ import { VoiceInput } from "./voice/voice-input.ts";
 declare global {
   interface Window {
     __HAI_SCENE__?: SceneClient;
+    __HAI_PANELS__?: PanelClient;
+    __HAI_MIRROR__?: RhinoMirror;
     __HAI_CAMERA__?: TrackingSession;
     __HAI_VOICE__?: VoiceInput;
     __HAI_SPEECH__?: { speaker: Speaker; roundTrip(text: string): Promise<string | null> };
@@ -60,6 +67,8 @@ const SETTINGS_ICON =
 
 /** The microphone indicator: listening for names looks different from a request being spoken. */
 const MIC_LABEL = { on: "Mic on", names: "Listening for names", off: "Mic off" } as const;
+/** The Rhino pill reuses the connection pill's look: green when connected, pulsing while syncing, amber when absent. */
+const RHINO_PILL_STATE = { on: "connected", busy: "connecting", off: "offline" } as const;
 const LABELS: Record<ConnectionState["status"], { text: string; hint?: string }> = {
   "no-session": { text: "Bridge not started", hint: "Run pnpm dev from the repository root, then reload." },
   connecting: { text: "Connecting" },
@@ -81,6 +90,16 @@ export function App() {
   const agent = useMemo(
     () => new AgentClient((message: Message) => connection.current?.send(message) ?? false),
     [],
+  );
+  // The generated panel the agent offers, and the preview its controls make.
+  const panels = useMemo(
+    () =>
+      new PanelClient({
+        send: (message: Message) => connection.current?.send(message) ?? false,
+        scene: sceneClient,
+        runningTurn: (name) => agent.runningTurnId(name),
+      }),
+    [sceneClient, agent],
   );
   const viewLink = useMemo(
     () => new ViewLink((message: Message) => connection.current?.send(message) ?? false),
@@ -123,6 +142,22 @@ export function App() {
   const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
   // The imported models the viewer draws and the project saves, fetched from the bridge as they are first needed.
   const modelAssets = useMemo(() => new ModelAssets(() => window.__HAI_SESSION__ ?? null), []);
+  // Rhino's objects, drawn read-only beside the scene while Rhino is connected, and their meshes from the bridge.
+  const mirror = useMemo(
+    () => new RhinoMirror((message: Message) => connection.current?.send(message) ?? false),
+    [],
+  );
+  const mirrorAssets = useMemo(
+    () => new ModelAssets(() => window.__HAI_SESSION__ ?? null, undefined, mirrorAssetUrl),
+    [],
+  );
+  const rhinoState = useSyncExternalStore(mirror.subscribe, mirror.getStatus);
+  // How long a change in Rhino takes to be drawn here, refreshed twice a second.
+  const [rhinoMs, setRhinoMs] = useState<number | null>(null);
+  useEffect(() => {
+    const id = setInterval(() => setRhinoMs(mirror.latencyP90()), 500);
+    return () => clearInterval(id);
+  }, [mirror]);
   // Saving the project as a Rhino file: the models it uses are fetched, the file is written in a worker, and offered.
   const exporter = useMemo(
     () =>
@@ -251,6 +286,10 @@ export function App() {
         // While Mochi speaks, what the microphone hears is Mochi: its words never count as a request.
         isNamed: (text) =>
           !speaker.speaking && addressOf(text, agent.getSnapshot().team?.members ?? []).agent !== null,
+        isBareName: (text) => {
+          const { agent: named, text: rest } = addressOf(text, agent.getSnapshot().team?.members ?? []);
+          return named !== null && rest.trim() === "";
+        },
       }),
     [transcriber, agent, sceneClient, viewLink, speaker],
   );
@@ -339,15 +378,19 @@ export function App() {
       bindings: gestureSettings.getSnapshot,
       enabled: (feature: FeatureId) => features.on(feature),
       agent: {
-        // "Yes" and "no" first answer a spoken request waiting to be sent, then the agent's approval card.
-        answer: (yes: boolean) => {
-          if (voice.reviewing) {
-            if (yes) voice.confirm();
-            else voice.discard();
-            return true;
-          }
-          return agent.answer(yes, bus.engaged);
-        },
+        // "Yes" and "no" answer, in this order: a spoken request waiting to be sent, the agent's approval card, a
+        // panel offer; then the active tool's own question.
+        answer: (yes: boolean) =>
+          answerYesNo(yes, {
+            voice,
+            approvals: {
+              get waiting() {
+                return agent.pending.length;
+              },
+              answer: (y) => agent.answer(y, bus.engaged),
+            },
+            offers: { answer: (y) => panels.answerOnly(y, bus.engaged) },
+          }),
         // Both fists, then open hands, stop everything: the team's work and Mochi's voice, even after its reply
         // has ended.
         stop: () => {
@@ -357,7 +400,7 @@ export function App() {
         ask: () => tools.choose("ask-agent"),
       },
     }),
-    [gestureSettings, agent, bus, tools, voice, speaker, features],
+    [gestureSettings, agent, bus, tools, voice, speaker, features, panels],
   );
 
   // The camera session goes on the page once mounted; dev builds hand it to end-to-end tests too.
@@ -370,6 +413,14 @@ export function App() {
   useEffect(() => {
     if (import.meta.env.DEV) window.__HAI_SCENE__ = sceneClient;
   }, [sceneClient]);
+  // Dev builds only: lets end-to-end tests read what Rhino reports.
+  useEffect(() => {
+    if (import.meta.env.DEV) window.__HAI_MIRROR__ = mirror;
+  }, [mirror]);
+  // Dev builds only: lets end-to-end tests see what the viewer draws with a panel's preview over the scene.
+  useEffect(() => {
+    if (import.meta.env.DEV) window.__HAI_PANELS__ = panels;
+  }, [panels]);
   // Dev builds only: lets end-to-end tests drive what a spoken request captured.
   useEffect(() => {
     if (import.meta.env.DEV) window.__HAI_VOICE__ = voice;
@@ -388,7 +439,14 @@ export function App() {
 
   useEffect(() => {
     const conn = connectToBridge(window.__HAI_SESSION__ ?? null, browserDeps, setBridge, (message) => {
-      if (viewLink.handle(message) || agent.handle(message) || sceneClient.handle(message)) return;
+      if (
+        viewLink.handle(message) ||
+        agent.handle(message) ||
+        panels.handle(message) ||
+        mirror.handle(message) ||
+        sceneClient.handle(message)
+      )
+        return;
       if (message.type === "settings.snapshot") {
         tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT, "tools");
         tools.loadLayout(message.payload.createPalette ?? DEFAULT_CREATE_LAYOUT, "create");
@@ -408,7 +466,13 @@ export function App() {
       conn.close();
       viewLink.dispose();
     };
-  }, [sceneClient, tools, viewLink, agent, gestureSettings, speaker, features, aids]);
+  }, [sceneClient, tools, viewLink, agent, panels, mirror, gestureSettings, speaker, features, aids]);
+
+  // A panel needs the bridge (its Done sends the result there) and its feature: without either it closes and its
+  // preview goes, so the model shows what the bridge has.
+  useEffect(() => {
+    if (bridge.status !== "connected" || !featureState.generatedPanels) panels.reset();
+  }, [bridge.status, featureState.generatedPanels, panels]);
 
   const askAgent = () => {
     if (!features.on("agent")) return "The agent is switched off in Settings > Features.";
@@ -428,6 +492,24 @@ export function App() {
   const changeListenForNames = (on: boolean) => {
     setListenForNames(on);
     saveSetting({ listenForNames: on });
+  };
+  const changeModelling = (mode: ModellingMode) => saveSetting({ modelling: mode });
+  /** Brings a .3dm the agent wrote into the viewer: fetched from the bridge, then imported as any file is. */
+  const importWritten = (path: string) => {
+    void importer.importFile({
+      name: path.split("/").at(-1) ?? path,
+      arrayBuffer: async () => {
+        const session = window.__HAI_SESSION__;
+        if (!session) throw new Error("The bridge is not connected.");
+        const url = `http://127.0.0.1:${session.port}/project-file/${path.split("/").map(encodeURIComponent).join("/")}`;
+        const response = await fetch(url, { headers: { authorization: `Bearer ${session.token}` } });
+        if (!response.ok) throw new Error(`The bridge answered ${response.status} for ${path}.`);
+        return response.arrayBuffer();
+      },
+    });
+  };
+  const openWrittenInRhino = (path: string) => {
+    connection.current?.send({ type: "rhino.open", id: crypto.randomUUID(), payload: { path } });
   };
   const changeShowHands = (on: boolean) => {
     setShowHands(on);
@@ -463,6 +545,14 @@ export function App() {
       tint: "var(--tint-blue)",
       detail: changedFeatures > 0 ? `${changedFeatures} off` : "All on",
       render: () => <FeatureSettings flags={features} />,
+    },
+    {
+      id: "modelling",
+      title: "Modelling",
+      icon: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5",
+      tint: "var(--tint-blue)",
+      detail: rhinoState.inUse === "rhino" ? "Rhino" : "Python only",
+      render: () => <ModellingSettings mirror={mirror} onChange={changeModelling} />,
     },
     {
       id: "drawing-aids",
@@ -566,6 +656,27 @@ export function App() {
               <span>{voicePillText(voiceStatus) ?? MIC_LABEL[micState]}</span>
             </output>
           )}
+          {(() => {
+            const pill = rhinoPill(rhinoState);
+            return pill ? (
+              <output
+                className="status"
+                data-testid="rhino-status"
+                data-state={RHINO_PILL_STATE[pill.tone]}
+                data-rhino={pill.tone}
+                aria-live="polite"
+              >
+                <span className="dot" aria-hidden="true" />
+                <span>{pill.text}</span>
+              </output>
+            ) : null;
+          })()}
+          {rhinoState.connected && rhinoMs !== null && (
+            <output className="status" data-testid="rhino-latency" aria-live="off">
+              <span className="dot" aria-hidden="true" />
+              <span>Rhino to HAI {Math.round(rhinoMs)} ms</span>
+            </output>
+          )}
           {update?.pill && (
             <button
               type="button"
@@ -626,11 +737,15 @@ export function App() {
             importer={importer}
             exporter={exporter}
             modelAssets={modelAssets}
+            panels={panels}
+            mirror={mirror}
+            mirrorAssets={mirrorAssets}
             markers={markers}
           >
             {featureState.agent && (
               <AgentPanel
                 client={agent}
+                panels={panels}
                 voice={voice}
                 startVoice={startVoice}
                 voiceOn={featureState.voice}
@@ -639,6 +754,9 @@ export function App() {
                 speaker={speaker}
                 speakReplies={speakReplies}
                 onSpeakReplies={changeSpeakReplies}
+                rhinoConnected={rhinoState.connected && rhinoState.mode !== "python"}
+                onImportFile={importWritten}
+                onOpenInRhino={openWrittenInRhino}
               />
             )}
           </Viewer>

@@ -58,6 +58,17 @@ export interface TeamView {
   maxRunning: number;
 }
 
+/** A `.3dm` file a Python run left in the project, offered for import into the viewer or to open in Rhino. */
+export interface WrittenFile {
+  /** Relative to the project folder. */
+  path: string;
+  size: number;
+  /** The kept script that wrote it. */
+  script: string;
+  /** The agent that ran it. */
+  agent?: string;
+}
+
 export interface ApprovalView {
   request: ApprovalRequest;
   /** The turn that was running when the card arrived. */
@@ -78,6 +89,8 @@ export interface AgentState {
   approvals: ApprovalView[];
   /** Tools the user chose "Always allow" for in the open project. */
   alwaysAllowed: string[];
+  /** Files the agent's Python wrote, until the user imports, opens or dismisses them. */
+  written: WrittenFile[];
   /** The last request the bridge refused (shown under the input). */
   error: string | null;
   /** Counts requests to show the panel (a voice request starting): it opens on the chat when this changes. */
@@ -103,6 +116,7 @@ const INITIAL: AgentState = {
   team: null,
   approvals: [],
   alwaysAllowed: [],
+  written: [],
   error: null,
   openTick: 0,
   extensions: null,
@@ -225,6 +239,11 @@ export class AgentClient {
     );
   }
 
+  /** The id of the turn an agent is running now (the lead's when no agent is named), if any. */
+  runningTurnId(agent?: string): string | null {
+    return runningTurn(this.threadOf(agent).turns);
+  }
+
   /** One agent's conversation (the lead's is the chat). */
   thread(agent: string): AgentThread {
     if (agent === this.lead) return { status: this.state.status, turns: this.state.turns };
@@ -302,6 +321,14 @@ export class AgentClient {
         this.update({
           approvals: this.state.approvals.map((a) => (a.request.id === id ? { ...a, outcome } : a)),
         });
+        return true;
+      }
+      case "python.written": {
+        const { files, script, agent } = message.payload;
+        const fresh = files.map((f) => ({ ...f, script, ...(agent ? { agent } : {}) }));
+        const paths = new Set(fresh.map((f) => f.path));
+        // A file written again replaces its earlier offer.
+        this.update({ written: [...this.state.written.filter((w) => !paths.has(w.path)), ...fresh] });
         return true;
       }
       case "approvals.allowed":
@@ -422,6 +449,11 @@ export class AgentClient {
 
   decide(approvalId: string, decision: "allow" | "deny" | "always"): void {
     this.send({ type: "approval.decide", id: newId(), payload: { id: approvalId, decision } });
+  }
+
+  /** Takes a written file off the list (it was imported, opened or dismissed). */
+  dismissWritten(path: string): void {
+    this.update({ written: this.state.written.filter((w) => w.path !== path) });
   }
 
   revoke(tool: string): void {

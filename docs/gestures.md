@@ -38,11 +38,23 @@ Nothing but engagement produces a command until you are engaged. Lowering both h
 | Fist drag (each hand) | Pan the view | Orbit the view, nothing |
 | Two-hand pinch | Zoom, pan and turn the view | Nothing |
 | Fist hold (each hand, kept still for 1.5 s) | Cancel, back to Select | Undo, redo, ask or stop the agent, nothing |
-| Nod | Yes: confirm the tool's question, or allow the agent's only waiting approval | Undo, redo, cancel, ask or stop the agent, nothing |
-| Shake | No: cancel, or deny the agent's only waiting approval | Undo, redo, cancel, ask or stop the agent, nothing |
+| Nod | Yes: send a spoken request, allow the agent's only waiting approval, open a panel the agent offered, or confirm the tool's question | Undo, redo, cancel, ask or stop the agent, nothing |
+| Shake | No: discard a spoken request, deny the only waiting approval, skip a panel offer, or cancel | Undo, redo, cancel, ask or stop the agent, nothing |
 | Two fists, then open hands | Stop the agents | Undo, cancel, nothing |
 
-While both hands are fists, neither hand's fist action runs, so the stop never also cancels the tool. Whichever gesture is set to "Yes" or "No" answers an approval card first (allowing needs you to be engaged), and only then the tool's question, so one gesture never does both.
+While both hands are fists, neither hand's fist action runs, so the stop never also cancels the tool. Whichever gesture is set to "Yes" or "No" answers what waits for it in a fixed order, and only one thing per gesture: a spoken request under review first, then an approval card (when exactly one waits), then a panel offer (when it is the only thing waiting), and only then the tool's question. Allowing a card and opening a panel need you to be engaged, so a stray nod never does either. A shake that answers a card or an offer never also cancels the active tool.
+
+## Hands in a generated panel
+
+When the agent offers a panel and you open it, both hands work inside it as they do anywhere else on screen: point at a control (the pointer snaps to the panel as a whole, and stays where your hand is inside it), then pinch.
+
+| Control | By hand |
+|---|---|
+| Button | A pinch presses it when you let go, like a click |
+| Checkbox, radio button | A pinch toggles or selects it |
+| Range (slider) | Pinch on the track to set it there, or pinch and drag along it: it moves exactly as it does with the mouse, and the model follows live |
+
+Dropdowns (`select`), text fields and text selection need the mouse and keyboard, so a panel written for hands uses buttons and sliders. The panel's own **Done** and **Close** are ordinary buttons and work the same way, and **Escape** closes the panel from the keyboard (the model goes back as it was). The agent is told which controls work by hand when it writes the panel, so ask for "a panel I can use by hand" if you want one made for it.
 
 ## Thresholds
 

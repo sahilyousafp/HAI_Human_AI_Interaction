@@ -12,7 +12,8 @@ Checked on `.3dm` files written with rhino3dm itself; files saved by Rhino are c
 | Brep | one render mesh per face if the file has them (`face.getMesh(MeshType.Any)`), else `null` | imported from face meshes; none means "no mesh" in the report |
 | Extrusion | `getMesh` is `null` without a stored mesh; `toBrep(true)` faces carry none either | imported if a mesh is stored, else "no mesh" |
 | Block instance | `InstanceReference` with `parentIdefId` and a row-major 4x4 `xform`; the definition's objects are flagged `isInstanceDefinitionObject` and listed by `getObjectIds()` | definition objects are skipped at top level and expanded through each reference's transform |
-| Curves, points, text, hatches, SubD | geometry objects | skipped and counted by reason |
+| Curve | `domain`, `pointAt(t)`; polylines list their points, straight NURBS their knots | drawn as a thin tube (see below), one element each |
+| Points, text, hatches, SubD | geometry objects | skipped and counted by reason |
 | Units | `settings().modelUnitSystem` | scaled to millimetres |
 | Layer and colour | `attributes().layerIndex`, `objectColor` with `colorSource`, layer `color` | kept on the element |
 
@@ -24,7 +25,7 @@ A Brep saved by Rhino with **Save small** has no render meshes, so its objects c
 
 - **Import** in the project bar opens a file picker (or press Ctrl+I). Browsers open a file picker only after a real mouse click or key press, so a pinch on the button explains that instead of opening it when you have not just used the mouse or keyboard; click it, press Ctrl+I, or drop the file.
 - **Drop** a `.3dm` file anywhere on the page. A message shows while the file is over it, and the browser never opens or downloads the file.
-- The model appears, the view frames it, and a report says how many objects came in and what was left out: `Imported 5 objects, read as millimeters. Skipped 5: 4 curves, 1 annotation.` The whole import is one undo step.
+- The model appears, the view frames it, and a report says how many objects came in and what was left out: `Imported 6 objects, read as millimeters. 4 curves drawn as thin tubes. Skipped 1: 1 annotation.` The whole import is one undo step.
 - Nothing is imported, and the scene is not changed, when the file cannot be read, has nothing importable, is over **500 MB**, or has more than **5 million triangles**; the report says which.
 
 ## What you get
@@ -33,7 +34,8 @@ Imported models are **reference geometry**: you can select, measure, section, mo
 
 - One element per object, named after the object (or the block, or the layer), with its layer name and display colour (Rhino's default black means no colour was chosen).
 - A model with **more than 1000 objects** becomes one element per layer and colour, named after the layer and the number of objects it holds (`Facade (4210 objects)`), so the scene file stays small and quick to draw. A stand with 48 692 objects and 2.9 million triangles became 14 elements.
-- Curves, points, text and hatches are not imported. A file that has only those (a plan drawn in curves, say) reports `The file has nothing that can be imported` and lists how many of each it skipped.
+- **Curves are drawn as thin tubes** along them: lines and polylines keep their corners, a smooth curve is sampled (24 to 160 points by its control points), and the tube is six-sided, 4 to 40 mm thick by the curve's length, with capped ends. It is a picture of the curve for the viewer (picking, bounds, sectioning); the file you saved keeps the real curve. Curves count toward the triangle limit like any geometry, so a plan of many thousands of curves can be over it.
+- Points, text and hatches are not imported; the report counts them.
 - Imported models are drawn with flat shading (each face lit by its own direction) and no edge lines (finding them costs time in proportion to the triangles).
 
 ## Where it is kept

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RhinoPythonStatus } from "./rhino.ts";
 
 /** Bumped whenever a message shape changes incompatibly. */
 export const PROTOCOL_VERSION = 1;
@@ -19,14 +20,28 @@ export const Envelope = z.strictObject({
 });
 export type Envelope = z.infer<typeof Envelope>;
 
-/** First message a client sends after connecting. */
+const WebHello = z.strictObject({
+  client: z.literal("web"),
+  protocolVersion: z.literal(PROTOCOL_VERSION),
+});
+
+/** What the Rhino plugin tells the bridge about itself when it connects. */
+export const RhinoHello = z.strictObject({
+  client: z.literal("rhino"),
+  protocolVersion: z.literal(PROTOCOL_VERSION),
+  rhinoVersion: z.string().max(40),
+  pluginVersion: z.string().max(40),
+  python: RhinoPythonStatus,
+  /** The open document's name, or null for an unsaved one. */
+  document: z.string().max(260).nullable(),
+});
+export type RhinoHello = z.infer<typeof RhinoHello>;
+
+/** First message a client sends after connecting: a browser page, or the Rhino plugin. */
 export const HelloMessage = z.strictObject({
   type: z.literal("hello"),
   id: MessageId,
-  payload: z.strictObject({
-    client: z.literal("web"),
-    protocolVersion: z.literal(PROTOCOL_VERSION),
-  }),
+  payload: z.discriminatedUnion("client", [WebHello, RhinoHello]),
 });
 export type HelloMessage = z.infer<typeof HelloMessage>;
 

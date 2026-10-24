@@ -15,6 +15,7 @@ import type { AgentTokens } from "../mcp/agent-tokens.ts";
 import type { TeamTools } from "../mcp/scene-tools.ts";
 import { HAI_SERVER, migrateSessionToLead } from "./agent-config.ts";
 import { AgentHub, type TurnHooks } from "./agent-hub.ts";
+import type { PanelClosure } from "./panels.ts";
 import {
   allowedHaiTools,
   defaultRoster,
@@ -65,6 +66,16 @@ const refusal = (requestId: string, message: string): Message => ({
   payload: { requestId, message },
 });
 
+/** What an agent is told when the panel it opened was closed. */
+function panelNote(closure: PanelClosure): string {
+  const outcome =
+    closure.outcome === "kept"
+      ? "kept the result: it is in the model as one undo step"
+      : "discarded the result: the model is as it was";
+  const who = closure.by === "user" ? "The user closed" : "The app closed";
+  return `[panel] ${who} the panel "${closure.title}" and ${outcome}. Reply in chat if it helps, and do not reopen it unless asked.`;
+}
+
 /** The report Mochi receives when the tasks it handed out in one turn have all finished. */
 function digestText(tasks: TeamTask[]): string {
   const lines = tasks.map(
@@ -83,6 +94,8 @@ export interface TeamOptions {
   /** The scene's undo grouping: one group per writing task. */
   scene: { beginTurn(label: string): void; endTurn(): void };
   approvals: { readonly waiting: ApprovalRequest[]; denyAll(message: string, agent?: string): void };
+  /** Generated panels: an agent's turn ended or was stopped, so an offer it left unanswered is over. */
+  panels?: { turnEnded(agent: string): void };
   /** An agent session reported what it loaded (servers, tools, skills). */
   initialized?(event: Extract<AgentEvent, { type: "init" }>): void;
   idleMs?: number;
@@ -114,6 +127,10 @@ export class Team {
   /** Mochi's turns whose hand-offs have been reported (or need no report). */
   private readonly reported = new Set<string>();
   private readonly digests: TeamTask[][] = [];
+  /** What agents are to be told about panels they opened, until they are free to hear it. */
+  private readonly panelNotes = new Map<string, string[]>();
+  /** Note turns in progress (for settled()). */
+  private readonly noteRuns = new Set<Promise<unknown>>();
   /** Mochi's report turn in progress (a user request waits for it). */
   private digestRunning: Promise<unknown> | null = null;
   /** The agent whose writing task holds the scene's undo group. */
@@ -348,6 +365,18 @@ export class Team {
     await Promise.all([...this.hubs.values()].map((hub) => hub.restart()));
   }
 
+  /**
+   * A panel an agent opened has closed: the agent hears how, as a turn when it is idle (or right after the turn it
+   * is in), the way Mochi hears a report. Nothing is sent when the agent closed it itself.
+   */
+  panelClosed(closure: PanelClosure): void {
+    if (closure.by === "agent" || closure.agent === null) return;
+    const notes = this.panelNotes.get(closure.agent) ?? [];
+    notes.push(panelNote(closure));
+    this.panelNotes.set(closure.agent, notes);
+    this.pumpNotes(closure.agent);
+  }
+
   /** The approval cards changed: a task waiting for the user shows as waiting. */
   approvalsChanged(): void {
     const waiting = new Set(this.options.approvals.waiting.map((a) => a.agent));
@@ -457,9 +486,13 @@ export class Team {
           this.groupOwner = name;
         }
       },
-      stopping: () => this.options.approvals.denyAll("The user stopped the request.", name),
+      stopping: () => {
+        this.options.approvals.denyAll("The user stopped the request.", name);
+        this.options.panels?.turnEnded(name);
+      },
       ended: () => {
         this.options.approvals.denyAll("The request ended before the user answered.", name);
+        this.options.panels?.turnEnded(name);
         if (this.groupOwner === name) {
           this.groupOwner = null;
           this.options.scene.endTurn();
@@ -530,6 +563,24 @@ export class Team {
     if (this.stopping.has(task.id)) outcome = "stopped";
     this.activeTask.delete(task.agent);
     this.finish(task, outcome, summary);
+    this.pumpNotes(task.agent);
+  }
+
+  /** Tells an agent what became of the panels it opened, once it has no turn running. */
+  private pumpNotes(name: string): void {
+    const hub = this.hub(name);
+    if (this.activeTask.has(name) || hub.runningTurn || hub.currentStatus.state === "unavailable") return;
+    const notes = this.panelNotes.get(name)?.splice(0);
+    if (!notes?.length) return;
+    const run = hub
+      .request(notes.join("\n"), undefined, { kind: "digest" })
+      .catch((error: Error) => this.log.info("panel note not delivered", { reason: error.message }))
+      .finally(() => {
+        this.noteRuns.delete(run);
+        this.pumpNotes(name);
+        this.resolveSettled();
+      });
+    this.noteRuns.add(run);
   }
 
   private finish(task: TeamTask, status: TeamTask["status"], summary?: string): void {
@@ -594,6 +645,7 @@ export class Team {
     return (
       this.digests.length === 0 &&
       !this.digestRunning &&
+      this.noteRuns.size === 0 &&
       !this.hub(this.lead).runningTurn &&
       this.tasks.every((t) => FINISHED.has(t.status))
     );

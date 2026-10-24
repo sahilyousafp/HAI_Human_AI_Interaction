@@ -92,6 +92,18 @@ export class AssetStore {
     }
   }
 
+  /** Removes one asset (the mirror drops a mesh when its object changes or goes). */
+  remove(id: string): void {
+    const file = this.file(id);
+    if (file) rmSync(file, { force: true });
+  }
+
+  /** Removes every asset in this store. Only the Rhino mirror's store is ever cleared: a project's assets are swept. */
+  clearAll(): void {
+    const dir = this.projectDir();
+    if (dir) rmSync(join(dir, ASSETS_DIR), { recursive: true, force: true });
+  }
+
   /** Removes the assets no element refers to; returns how many. Called when a project opens. */
   sweep(doc: SceneDocument): number {
     const dir = this.projectDir();

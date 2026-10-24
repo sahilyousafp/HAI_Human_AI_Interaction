@@ -64,8 +64,9 @@ describe("bridge access control", () => {
     expect(await outcome(connect({ token: TOKEN, origin: "https://evil.example" }))).toBe(403);
   });
 
-  it("refuses a connection with no origin", async () => {
-    expect(await outcome(connect({ token: TOKEN }))).toBe(403);
+  it("accepts a local program (no origin) only with the token", async () => {
+    expect(await outcome(connect({ token: TOKEN }))).toBe("open");
+    expect(await outcome(connect({}))).toBe(401);
   });
 });
 

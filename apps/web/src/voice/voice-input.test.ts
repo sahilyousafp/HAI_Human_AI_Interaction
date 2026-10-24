@@ -162,7 +162,8 @@ describe("listening for names", () => {
         return true;
       },
       context: () => ({ references: [], selection: [], groundPoint: null }),
-      isNamed: (text) => /^(mochi|architect)\b/i.test(text),
+      isNamed: (text) => /^(hey )?(mochi|architect)\b/i.test(text),
+      isBareName: (text) => /^(hey )?(mochi|architect)[\s,.!?]*$/i.test(text),
     });
     const flush = async () => {
       for (let i = 0; i < 6; i++) await Promise.resolve();
@@ -196,6 +197,69 @@ describe("listening for names", () => {
     expect(sent).toEqual(["Mochi, what is everyone doing?"]);
     expect(openNow()).toBe(1);
     expect(voice.micState).toBe("names");
+  });
+
+  describe("a name on its own, then the request", () => {
+    it("waits for the rest instead of sending the name, and joins the two", async () => {
+      const { voice, sent, flush, say } = names(["Hey Mochi", "make the wall thicker"]);
+      voice.setListenForNames(true);
+      await flush();
+      await say();
+      expect(voice.getSnapshot()).toEqual({ phase: "names", speaking: false, heard: "Hey Mochi" });
+      // Well past the old quiet time: nothing has been sent, and the microphone is still waiting.
+      vi.advanceTimersByTime(VOICE.afterNameMs - 1);
+      expect(sent).toEqual([]);
+      await say();
+      expect(voice.getSnapshot()).toMatchObject({ phase: "review", text: "Hey Mochi make the wall thicker" });
+      vi.advanceTimersByTime(VOICE.sendDelayMs);
+      expect(sent).toEqual(["Hey Mochi make the wall thicker"]);
+    });
+
+    it("says the name again with the request: only that one is kept", async () => {
+      const { voice, flush, say } = names(["Hey Mochi", "Mochi, what is everyone doing?"]);
+      voice.setListenForNames(true);
+      await flush();
+      await say();
+      await say();
+      expect(voice.getSnapshot()).toMatchObject({ phase: "review", text: "Mochi, what is everyone doing?" });
+    });
+
+    it("the wait does not run out while the user is speaking", async () => {
+      const { voice, sent, flush, say, opened } = names(["Hey Mochi", "make the wall thicker"]);
+      voice.setListenForNames(true);
+      await flush();
+      await say();
+      vi.advanceTimersByTime(VOICE.afterNameMs - 500);
+      opened.at(-1)?.events.speechStart();
+      vi.advanceTimersByTime(2000); // speaking past the original deadline
+      expect(voice.getSnapshot()).toMatchObject({ phase: "names", speaking: true, heard: "Hey Mochi" });
+      opened.at(-1)?.events.speechEnd({ audio: new Float32Array(16_000) });
+      await flush();
+      expect(voice.getSnapshot()).toMatchObject({ phase: "review", text: "Hey Mochi make the wall thicker" });
+      expect(sent).toEqual([]);
+    });
+
+    it("with nothing more said, the name alone goes to review after the wait, as before", async () => {
+      const { voice, sent, flush, say } = names(["Hey Mochi"]);
+      voice.setListenForNames(true);
+      await flush();
+      await say();
+      vi.advanceTimersByTime(VOICE.afterNameMs);
+      expect(voice.getSnapshot()).toMatchObject({ phase: "review", text: "Hey Mochi" });
+      vi.advanceTimersByTime(VOICE.sendDelayMs);
+      expect(sent).toEqual(["Hey Mochi"]);
+    });
+
+    it("turning listening for names off forgets the name that was waiting", async () => {
+      const { voice, sent, flush, say } = names(["Hey Mochi"]);
+      voice.setListenForNames(true);
+      await flush();
+      await say();
+      voice.setListenForNames(false);
+      vi.advanceTimersByTime(VOICE.afterNameMs * 2);
+      expect(sent).toEqual([]);
+      expect(voice.getSnapshot()).toEqual({ phase: "off" });
+    });
   });
 
   it("other speech is ignored: nothing is shown or sent, and listening goes on", async () => {

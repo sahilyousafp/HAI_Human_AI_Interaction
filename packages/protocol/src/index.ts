@@ -6,5 +6,7 @@ export * from "./envelope.ts";
 export * from "./features.ts";
 export * from "./gestures.ts";
 export * from "./messages.ts";
+export * from "./panel.ts";
+export * from "./rhino.ts";
 export * from "./scene.ts";
 export * from "./tracking.ts";

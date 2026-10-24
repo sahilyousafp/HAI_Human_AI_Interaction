@@ -134,3 +134,47 @@ Both produced the same text, "Make this wall 300 thick". WebGPU has to unpack in
 - The init event advertises the capability as `interrupt_receipt_v1`.
 
 **Decision.** Stop sends the interrupt request and maps the following `result` to a turn that ended "stopped" (not an error). If the turn has not ended within 1.5 s, the process is ended and the next request resumes the conversation with `--resume` in a new process. Either way the turn stops well within the 3 s requirement. Code: `packages/agent-core/src/claude/provider.ts` (`ClaudeCliSession.interrupt`).
+
+## Modelling NURBS without Rhino: what rhino3dm can do, and what it cannot (2026-10-23)
+
+**Question.** Can the agent create NURBS geometry and save a `.3dm` with Rhino not installed, and can HAI's own viewer then draw it?
+
+**Experiment.** Windows 11, Python 3.13, `rhino3dm` 8.35.0 in a fresh virtual environment, then `build123d` (OpenCascade) in another. A script built geometry, wrote a v8 `.3dm`, read it back, and the file was run through `convert3dm` (the importer in `apps/web/src/import/convert.ts`).
+
+**Result.**
+
+- Works: NURBS curves and surfaces from control points and knots, `Brep.CreateFromSurface`, `CreateFromRevSurface` (a revolved solid), cylinder and box extrusions, ruled surfaces, planar trimmed Breps (`CreateTrimmedPlane`), `Brep.CreateFromMesh`, transforms, layers and object names. The file reads back valid.
+- Not exposed: loft, sweep, booleans, fillet, offset, Brep-Brep intersection, and meshing a Brep. The Brep face, loop and trim lists are read-only, so a trimmed Brep cannot be built from parts: only the static creators produce one.
+- The importer only draws the render meshes a file stores for a Brep, so a Brep from `rhino3dm` is skipped ("no mesh") until a mesh is attached with `BrepFace.SetMesh(mesh, MeshType.Render)`. With meshes attached by evaluating the surface on a grid, a 5x5 cubic canopy (1152 triangles) and a revolved vase (3072) imported. An extrusion has no mesh either and was skipped. The vase's planar end caps were meshed as full squares, because a grid over the underlying surface ignores the trim: trimmed faces need a trim-aware mesher.
+- `SetMesh` shares ownership of the mesh with Python: the process crashed (access violation) at interpreter shutdown even though the file was written. Ending with `os._exit(0)` after the write exits cleanly.
+- `build123d` installed (736 MB with its OpenCascade wheel) but Windows Application Control blocked the unsigned OpenCascade DLL on this machine, so its booleans and fillets could not be run. A virtual environment under a long path also failed to install (the 260 character path limit); a short path worked.
+
+**Decision.** Two modelling modes. Rhino 8 connected is the main way to model: it has the real kernel, meshes, and trims. The Python workbench (`rhino3dm`) is the lightweight mode when Rhino is absent, for freeform surfaces, revolves, extrusions and planar shapes, and it ships a small helper that attaches meshes and ends the process cleanly. An OpenCascade kernel is not part of this change: it is 736 MB, can be blocked by Application Control, and cannot become native trimmed Breps because `rhino3dm` cannot build Brep topology (a STEP file would be the only exact exchange). Revisit it if users ask for booleans without Rhino.
+
+## The Rhino plugin: C# in two projects, and what could be measured without Rhino (2026-10-24)
+
+**Question.** How is the plugin built so that most of it can be tested without Rhino, and does the Rhino to HAI budget hold?
+
+**Decision.** `plugins/rhino` has `HAI.Rhino.Core` (netstandard2.0: the wire messages, the change coalescer, the mesh asset writer, the Python requirement and result handling) and `HAI.Rhino` (`net48;net7.0`, the commands, the bridge client, the mirror of the document), plus xUnit tests that run on plain .NET. The core is the part with logic; the plugin is thin glue over RhinoCommon. The two languages meet in committed fixtures (`plugins/rhino/tests/fixtures`): the C# tests write the messages the plugin sends and a mesh asset and compare them with the files, and `scripts/rhino-plugin-contract.test.mjs` reads the same files with the bridge's zod schemas and HAI's mesh reader, so a change on either side that breaks the other fails a test. This already found one defect: a very long error, once cut, plus its "left out" marker was over the 10 000 characters the bridge accepts for one.
+
+**Measured (the stand-in plugin, the development laptop, the dev build of the web app).** A 50-object edit with every mesh replaced was drawn at a Rhino to HAI p90 of 215 to 344 ms at first, over the 300 ms budget. The cause was not the network (the 50 fetches were done in about 70 ms) but the web app redrawing everything on every mesh that arrived: the whole app and the whole viewer re-rendered once per mesh and per batch. Subscribing each mesh to its own asset, giving the top bar a status that only changes when what it shows changes, and telling the viewer once per frame brought the p90 to 80 to 115 ms. A unit test pins that an edit leaves the status object unchanged. The figure excludes the time Rhino spends meshing (the plugin stamps a batch when it sends it); the demo will record the real one.
+
+**Constraints met on the way.**
+
+- RhinoCommon on NuGet has a `net7.0` build only from 8.19 on; the plugin compiles against 8.19.25132.1001 for both targets and uses only long-standing APIs. RhinoCommon and Newtonsoft.Json are compile-time references that Rhino supplies at run time, and neither is shipped.
+- Windows Smart App Control, on this machine, blocks freshly built unsigned .NET assemblies after their first run, so the C# tests ran once from a new build and were then refused (as the OpenCascade DLL was). The compile, the TypeScript contract test and the CI job (windows-latest, no such policy) are not affected; locally, a rebuild gets another run.
+- The plugin's Python runner is not written: how to run Python 3 in process with output capture, cancellation and `# r:` lines (task 5.1) has to be found on a real Rhino 8. Until then the plugin reports Python as unavailable and answers a run request with an error, so the agent uses the workbench.
+
+## Does the real agent offer a panel on its own? A live run says not yet (2026-10-24)
+
+**Question.** Task 7.1 of `add-generated-panels`: with the signed-in Claude Code CLI and no hint, does the agent offer a panel for "about 150 millimetres of clearance between col-a1 and the north wall, with a tolerance. Let me tune it."?
+
+**Experiment.** `HAI_LIVE_CLAUDE=1 pnpm exec playwright test e2e/panel-live.spec.ts`, three runs on the maintainer's plan (each about 4 minutes before the offer was given up on), changing the wording between runs.
+
+**Result.**
+
+- Run 1, as the tools were: Mochi handed Architect "move col-a1 to 150 mm from the north wall" and left out "let me tune it". Architect moved the column and set a tolerance property. No offer.
+- Run 2, after the `delegate` description told the lead to quote the user's words: Mochi did pass "tune it yourself" on, but Architect stored `clearance_mm` and `clearance_tolerance_mm` as properties of the column and told the user where to change them. No offer.
+- Run 3, after the specialists' default prompt and the `offer_panel` description said to offer a panel first when the user wants to tune values: Architect reported "there are no sliders, you can only tune the value as properties". No offer.
+
+**Decision.** The wording changes stay (they are correct, and the first one fixed a real loss of the user's intent between the lead and the specialist), but they are not enough: a real specialist does not reach for `offer_panel` unprompted. Not yet known is whether it sees the tool at all (Claude Code may defer a long list of MCP tools behind its tool search) or sees it and chooses not to. The next step is to read Architect's own session transcript from a live run, and then either name the panel tools in the specialist prompt, or let the lead offer the panel itself. Until then the generated panel is reliably reached by asking for it ("build me a panel for this"), which the fake-CLI tests cover, and the live check stays unticked.

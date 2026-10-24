@@ -1,4 +1,10 @@
-import type { AgentStatus, TeamMemberInfo, TeamTask } from "@hai/protocol";
+import {
+  type AgentStatus,
+  PANEL_OFFER_TIMEOUT_MS,
+  type PanelOfferState,
+  type TeamMemberInfo,
+  type TeamTask,
+} from "@hai/protocol";
 import {
   type CSSProperties,
   type FormEvent,
@@ -8,6 +14,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { OfferView, PanelClient } from "../panel/panel-client.ts";
 import { ToolIcon } from "../tools/ToolOverlays.tsx";
 import type { Speaker } from "../voice/speaker.ts";
 import { MicButton, VoiceBar } from "../voice/VoiceBar.tsx";
@@ -21,6 +28,7 @@ import {
   type ToolOutcome,
   type TurnItem,
   type TurnView,
+  type WrittenFile,
 } from "./agent-client.ts";
 import { ExtensionsView } from "./ExtensionsView.tsx";
 
@@ -40,6 +48,13 @@ const OUTCOME_LABEL: Record<ToolOutcome | "waiting", string> = {
   denied: "denied",
 };
 const APPROVAL_LABEL = { allowed: "Allowed", denied: "Denied", "timed-out": "Timed out" } as const;
+const OFFER_LABEL: Record<PanelOfferState, string> = {
+  waiting: "Waiting for you",
+  accepted: "Opened",
+  skipped: "Skipped",
+  expired: "Expired",
+  unused: "No panel was made",
+};
 /** A specialist's state in the team strip. */
 type MemberState = "idle" | "working" | "queued" | "waiting";
 const MEMBER_STATE_LABEL: Record<MemberState, string> = {
@@ -72,6 +87,12 @@ const DETAIL_MAX = 1200;
 export function toolLabel(name: string): { tool: string; server?: string } {
   const match = /^mcp__(.+?)__(.+)$/.exec(name);
   return match ? { tool: match[2] ?? name, server: match[1] ?? "" } : { tool: name };
+}
+
+/** The script a code tool (python_run, rhino_run_python) would run, or null for any other call. */
+function codeOf(input: unknown): string | null {
+  const code = typeof input === "object" && input !== null ? (input as { code?: unknown }).code : undefined;
+  return typeof code === "string" && code.length > 0 ? code : null;
 }
 
 const clip = (text: string) => (text.length > DETAIL_MAX ? `${text.slice(0, DETAIL_MAX - 1)}…` : text);
@@ -132,6 +153,7 @@ function ApprovalCard({
   const { request, outcome } = approval;
   const label = toolLabel(request.tool);
   const seconds = useSecondsLeft(request.expiresAt, !outcome);
+  const code = codeOf(request.input);
   return (
     <section
       className="approval-card"
@@ -151,6 +173,19 @@ function ApprovalCard({
       <code className="approval-summary" data-testid="approval-summary">
         {request.summary}
       </code>
+      {code !== null && (
+        // A script the agent wants to run is shown whole and scrolls; the user decides on what it will really do.
+        <section aria-label="Script to run">
+          <pre className="approval-code" data-testid="approval-code">
+            {code}
+          </pre>
+        </section>
+      )}
+      {request.installs && request.installs.length > 0 && (
+        <p className="approval-installs" data-testid="approval-installs">
+          Installs on your machine: <code>{request.installs.join(", ")}</code>
+        </p>
+      )}
       {outcome ? (
         <p className="approval-outcome" data-testid="approval-outcome">
           {APPROVAL_LABEL[outcome]}
@@ -190,6 +225,138 @@ function ApprovalCard({
         </>
       )}
     </section>
+  );
+}
+
+/** The agent's offer of a panel: Open and Skip while it waits, then what became of it. */
+function OfferCard({
+  offer,
+  panels,
+  only,
+}: {
+  offer: OfferView;
+  panels: PanelClient;
+  /** The only thing waiting for a yes or no: nod and shake decide it. */
+  only: boolean;
+}) {
+  const waiting = offer.state === "waiting";
+  const seconds = useSecondsLeft(offer.at + PANEL_OFFER_TIMEOUT_MS, waiting);
+  return (
+    <section
+      className="offer-card"
+      data-testid="offer-card"
+      data-state={offer.state}
+      aria-label="Panel offer"
+    >
+      <div className="offer-head">
+        {offer.agent && (
+          <span className="approval-agent" data-testid="offer-agent">
+            {displayName(offer.agent)}
+          </span>
+        )}
+        <strong>{waiting ? "Open a panel?" : "Panel offer"}</strong>
+      </div>
+      <p className="offer-purpose" data-testid="offer-purpose">
+        {offer.purpose}
+      </p>
+      {waiting ? (
+        <>
+          <div className="offer-actions">
+            <button
+              type="button"
+              className="primary"
+              data-testid="offer-open"
+              data-hand-press
+              onClick={() => panels.answer(offer.offerId, true)}
+            >
+              Open
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              data-testid="offer-skip"
+              data-hand-press
+              onClick={() => panels.answer(offer.offerId, false)}
+            >
+              Skip
+            </button>
+          </div>
+          <p className="offer-hint muted">
+            {only ? "Nod to open, shake to skip. " : ""}Expires in {seconds} s.
+          </p>
+        </>
+      ) : (
+        <p className="offer-outcome" data-testid="offer-outcome">
+          {OFFER_LABEL[offer.state]}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * `.3dm` files the agent's Python wrote: each can be brought into the viewer with one click, or opened in Rhino when
+ * it is connected. Nothing is imported or opened until the user chooses it.
+ */
+function WrittenFiles({
+  files,
+  rhinoConnected,
+  onImport,
+  onOpenInRhino,
+  onDismiss,
+}: {
+  files: WrittenFile[];
+  rhinoConnected: boolean;
+  onImport: (path: string) => void;
+  onOpenInRhino: (path: string) => void;
+  onDismiss: (path: string) => void;
+}) {
+  return (
+    <ul className="written-files" data-testid="written-files" aria-label="Files the agent wrote">
+      {files.map((file) => (
+        <li key={file.path} className="written-file" data-testid="written-file">
+          <span className="written-name" title={`${file.script} wrote this`}>
+            {file.path}
+          </span>
+          <button
+            type="button"
+            className="primary"
+            data-testid="written-import"
+            data-hand-press
+            onClick={() => {
+              onImport(file.path);
+              onDismiss(file.path);
+            }}
+          >
+            Import into viewer
+          </button>
+          {rhinoConnected && (
+            <button
+              type="button"
+              className="secondary"
+              data-testid="written-open"
+              data-hand-press
+              onClick={() => {
+                onOpenInRhino(file.path);
+                onDismiss(file.path);
+              }}
+            >
+              Open in Rhino
+            </button>
+          )}
+          <button
+            type="button"
+            className="icon-button"
+            data-testid="written-dismiss"
+            data-hand-press
+            aria-label={`Dismiss ${file.path}`}
+            onClick={() => onDismiss(file.path)}
+          >
+            ×
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -274,11 +441,21 @@ function Turn({
   team,
   onOpenTask,
   taskApprovals,
+  panels,
+  offers,
+  taskOffers,
+  onlyOfferId,
 }: {
   turn: TurnView;
   approvals: ApprovalView[];
   client: AgentClient;
   onlyPendingId: string | null;
+  /** The panel offers: this turn's, and every offer (for the waiting ones of the tasks this turn handed out). */
+  panels: PanelClient;
+  offers: OfferView[];
+  taskOffers?: OfferView[];
+  /** The only offer waiting for a yes or no (nod and shake decide it). */
+  onlyOfferId: string | null;
   /** The team agent whose turn this is (its name goes on the tool chips). */
   agent?: string;
   team?: TeamView | null;
@@ -299,6 +476,11 @@ function Turn({
       only={approval.request.id === onlyPendingId}
     />
   );
+  const offerCard = (offer: OfferView) => (
+    <OfferCard key={offer.offerId} offer={offer} panels={panels} only={offer.offerId === onlyOfferId} />
+  );
+  // An offer sits under the chip of the offer_panel call that made it (the n-th call, the n-th offer).
+  let offered = 0;
   return (
     <li
       className="agent-turn"
@@ -329,14 +511,17 @@ function Turn({
             </p>
           );
         const approval = cardFor(item.id);
+        const offer = toolLabel(item.name).tool === "offer_panel" ? offers[offered++] : undefined;
         return (
           <div key={item.id} className="agent-tool">
             <ToolChip item={item} approval={approval} {...(agent ? { agent } : {})} />
             {approval && card(approval)}
+            {offer && offerCard(offer)}
           </div>
         );
       })}
       {unlinked.map(card)}
+      {offers.slice(offered).map(offerCard)}
       {onOpenTask &&
         handOffs.map((task) => (
           <div key={task.id} className="agent-tool">
@@ -347,6 +532,7 @@ function Turn({
             />
             {/* A specialist's card waits here too, so the user sees it without opening the task. */}
             {taskApprovals?.filter((a) => !a.outcome && a.turnId === task.turnId).map(card)}
+            {taskOffers?.filter((o) => o.turnId !== null && o.turnId === task.turnId).map(offerCard)}
           </div>
         ))}
       {!turn.ended && <span className="agent-working" role="img" aria-label="Working" />}
@@ -522,6 +708,7 @@ function TaskHead({
  */
 export function AgentPanel({
   client,
+  panels,
   voice,
   startVoice,
   voiceOn = true,
@@ -530,8 +717,13 @@ export function AgentPanel({
   speaker,
   speakReplies,
   onSpeakReplies,
+  rhinoConnected = false,
+  onImportFile,
+  onOpenInRhino,
 }: {
   client: AgentClient;
+  /** The panel offers the agents make. */
+  panels: PanelClient;
   /** Voice is the main way to ask: the microphone button comes first and typing is the fallback. */
   voice: VoiceInput;
   startVoice: () => void;
@@ -545,6 +737,12 @@ export function AgentPanel({
   speaker: Speaker;
   speakReplies: boolean;
   onSpeakReplies: (on: boolean) => void;
+  /** Rhino is connected: written files can be opened in it. */
+  rhinoConnected?: boolean;
+  /** Brings a file the agent wrote (a path in the project) into the viewer. */
+  onImportFile?: (path: string) => void;
+  /** Opens a file the agent wrote in Rhino. */
+  onOpenInRhino?: (path: string) => void;
 }) {
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -563,6 +761,13 @@ export function AgentPanel({
   const canSend = status === "idle" && draft.trim().length > 0;
   const pending = state.approvals.filter((a) => !a.outcome);
   const onlyPendingId = pending.length === 1 ? (pending[0]?.request.id ?? null) : null;
+  const { offers } = useSyncExternalStore(panels.subscribe, panels.getSnapshot);
+  const waitingOffers = offers.filter((o) => o.state === "waiting");
+  // A nod answers an offer only when nothing else waits for one (approval cards come first).
+  const onlyOfferId =
+    pending.length === 0 && waitingOffers.length === 1 ? (waitingOffers[0]?.offerId ?? null) : null;
+  const toApprove = pending.length + waitingOffers.length;
+  const offersOf = (turnId: string) => offers.filter((o) => o.turnId === turnId);
 
   const setPanelCollapsed = (value: boolean) => {
     setCollapsed(value);
@@ -587,13 +792,13 @@ export function AgentPanel({
   useEffect(() => {
     const el = transcript.current;
     if (!el) return;
-    const arrived = shownTurns.length > seen.current.turns || pending.length > seen.current.pending;
-    seen.current = { turns: shownTurns.length, pending: pending.length };
+    const arrived = shownTurns.length > seen.current.turns || toApprove > seen.current.pending;
+    seen.current = { turns: shownTurns.length, pending: toApprove };
     if (arrived || following.current) {
       el.scrollTop = el.scrollHeight;
       following.current = true;
     }
-  }, [shownTurns.length, lastTurn, state.approvals, state.team, collapsed, openTask]);
+  }, [shownTurns.length, lastTurn, state.approvals, state.team, collapsed, openTask, offers]);
   const onTranscriptScroll = () => {
     const el = transcript.current;
     if (el) following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -627,9 +832,9 @@ export function AgentPanel({
           <span className="agent-dot" aria-hidden="true" />
           {STATUS_LABEL[status]}
         </output>
-        {collapsed && pending.length > 0 && (
+        {collapsed && toApprove > 0 && (
           <span className="agent-badge" data-testid="agent-pending-badge">
-            {pending.length} to approve
+            {toApprove} to approve
           </span>
         )}
         {!collapsed && (
@@ -699,6 +904,9 @@ export function AgentPanel({
                   approvals={state.approvals.filter((a) => a.turnId === turn.id)}
                   client={client}
                   onlyPendingId={onlyPendingId}
+                  panels={panels}
+                  offers={offersOf(turn.id)}
+                  onlyOfferId={onlyOfferId}
                   agent={task.agent}
                 />
               ))}
@@ -717,12 +925,30 @@ export function AgentPanel({
                   approvals={state.approvals.filter((a) => a.turnId === turn.id)}
                   client={client}
                   onlyPendingId={onlyPendingId}
+                  panels={panels}
+                  offers={offersOf(turn.id)}
+                  onlyOfferId={onlyOfferId}
                   {...(team
-                    ? { agent: client.lead, team, onOpenTask: setOpenTask, taskApprovals: state.approvals }
+                    ? {
+                        agent: client.lead,
+                        team,
+                        onOpenTask: setOpenTask,
+                        taskApprovals: state.approvals,
+                        taskOffers: offers,
+                      }
                     : {})}
                 />
               ))}
           </ol>
+          {state.written.length > 0 && onImportFile && (
+            <WrittenFiles
+              files={state.written}
+              rhinoConnected={rhinoConnected}
+              onImport={onImportFile}
+              onOpenInRhino={(path) => onOpenInRhino?.(path)}
+              onDismiss={(path) => client.dismissWritten(path)}
+            />
+          )}
           {voiceOn && <VoiceBar voice={voice} nameOf={nameOf} />}
           <form className="agent-input" onSubmit={submit}>
             {voiceOn && (

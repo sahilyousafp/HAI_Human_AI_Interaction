@@ -18,6 +18,20 @@ import { GestureBindingsSchema } from "./bindings.ts";
 import { DrawingAidChoices } from "./drawing-aids.ts";
 import { BridgeStatusMessage, Envelope, HelloMessage, MessageId } from "./envelope.ts";
 import { FeatureChoices } from "./features.ts";
+import { PanelDocument, PanelId, PanelOfferState, PanelOutcome } from "./panel.ts";
+import {
+  ModellingInUse,
+  ModellingMode,
+  RHINO_PYTHON_MAX_CODE,
+  RhinoBatch,
+  RhinoNotDrawn,
+  RhinoObject,
+  RhinoPythonResult,
+  RhinoPythonStatus,
+  RhinoSelected,
+  RhinoSync,
+  ViewRequest,
+} from "./rhino.ts";
 import { ElementId, SceneDocument, SceneOp } from "./scene.ts";
 
 function message<T extends string, P extends z.ZodType>(type: T, payload: P) {
@@ -57,6 +71,8 @@ export const Settings = z.strictObject({
   drawingAids: DrawingAidChoices.nullable().default(null),
   /** Draw the user's hands as white shapes over the whole screen, so people watching a recording can follow. */
   showHands: z.boolean().default(false),
+  /** How the agent models: with Rhino when it is connected (default), always with Rhino, or only with Python. */
+  modelling: ModellingMode.default("auto"),
 });
 export type Settings = z.infer<typeof Settings>;
 const Project = z.strictObject({ name: z.string(), path: z.string() });
@@ -188,7 +204,102 @@ export const ApprovalsAllowedMessage = message(
   z.strictObject({ tools: z.array(z.string()) }),
 );
 
+/**
+ * A panel offer: the agent asks whether the user wants a panel for a task. Sent when it is made and again for each
+ * change of state, so every client shows the same card.
+ */
+export const PanelOfferMessage = message(
+  "panel.offer",
+  z.strictObject({
+    offerId: PanelId,
+    purpose: z.string().trim().min(1).max(200),
+    state: PanelOfferState,
+    agent: AgentName,
+  }),
+);
+/** The agent supplied the panel (the first document after an accepted offer). */
+export const PanelOpenMessage = message(
+  "panel.open",
+  PanelDocument.extend({ panelId: PanelId, offerId: PanelId, agent: AgentName }),
+);
+/** The agent replaced the open panel's document; any uncommitted preview is discarded. */
+export const PanelUpdateMessage = message("panel.update", PanelDocument.extend({ panelId: PanelId }));
+/** The bridge closes the panel: the agent asked, or the Generated panels feature was switched off. */
+export const PanelCloseMessage = message(
+  "panel.close",
+  z.strictObject({ panelId: PanelId, reason: z.enum(["agent", "switched-off"]) }),
+);
+
+/**
+ * Everything the viewer needs to know about Rhino: whether it is connected, how the agent models now, and the
+ * mirrored objects. Sent on connect and whenever the connection, the mode or the document is replaced; changes in
+ * between arrive as `rhino.objects` and `rhino.selection`.
+ */
+export const RhinoStateMessage = message(
+  "rhino.state",
+  z.strictObject({
+    connected: z.boolean(),
+    mode: ModellingMode,
+    inUse: ModellingInUse,
+    python: RhinoPythonStatus.nullable(),
+    document: z.string().nullable(),
+    objects: z.array(RhinoObject),
+    notDrawn: RhinoNotDrawn,
+    sync: RhinoSync.nullable(),
+    selection: z.array(z.string()),
+  }),
+);
+/** A Python run left these `.3dm` files in the project: the HUD offers to import them or open them in Rhino. */
+export const PythonWrittenMessage = message(
+  "python.written",
+  z.strictObject({
+    files: z
+      .array(z.strictObject({ path: z.string().min(1).max(520), size: z.number().int().nonnegative() }))
+      .min(1)
+      .max(50),
+    /** The kept script that wrote them, relative to the project. */
+    script: z.string().max(520),
+    agent: z.string().max(64).optional(),
+  }),
+);
+/** The agent asked for a different view; the viewer animates to it. */
+export const ViewSetMessage = message("view.set", ViewRequest);
+/** Bridge -> Rhino: run a Python script in the open document. */
+export const RhinoPythonRunMessage = message(
+  "rhino.python.run",
+  z.strictObject({
+    id: z.string().min(1).max(64),
+    code: z.string().min(1).max(RHINO_PYTHON_MAX_CODE),
+    timeoutMs: z.int().positive().max(600_000),
+  }),
+);
+
+// Rhino plugin -> bridge (the bridge relays objects and selection to the viewers)
+/** The Python status or the document changed. */
+export const RhinoStatusMessage = message(
+  "rhino.status",
+  z.strictObject({ python: RhinoPythonStatus, document: z.string().max(260).nullable() }),
+);
+/** What changed in the document: objects added or replaced (with their meshes already uploaded), and objects deleted. */
+export const RhinoObjectsMessage = message("rhino.objects", RhinoBatch);
+/** The selection in Rhino changed. */
+export const RhinoSelectionMessage = message(
+  "rhino.selection",
+  z.strictObject({ objects: z.array(RhinoSelected).max(2000) }),
+);
+export const RhinoPythonResultMessage = message("rhino.python.result", RhinoPythonResult);
+
 // Clients -> bridge
+/**
+ * Open a project file in Rhino. From a page the path is relative to the project folder; the bridge checks it and sends
+ * the plugin the absolute path.
+ */
+export const RhinoOpenMessage = message("rhino.open", z.strictObject({ path: z.string().min(1).max(1024) }));
+/** Select these Rhino objects (a pick in the viewer); the bridge passes it on to the plugin. Empty clears. */
+export const RhinoSelectMessage = message(
+  "rhino.select",
+  z.strictObject({ ids: z.array(ElementId).max(500) }),
+);
 export const SceneApplyMessage = message(
   "scene.apply",
   z.strictObject({ label: z.string().min(1).max(120), ops: z.array(SceneOp).min(1) }),
@@ -215,6 +326,7 @@ export const SettingsSetMessage = message(
     features: FeatureChoices.optional(),
     drawingAids: DrawingAidChoices.optional(),
     showHands: z.boolean().optional(),
+    modelling: ModellingMode.optional(),
   }),
 );
 export const AgentSendMessage = message(
@@ -268,6 +380,25 @@ export const ExtensionsRemoveSkillMessage = message(
 );
 /** Removes a tool from the open project's "Always allow" list: it asks again next time. */
 export const ApprovalsRevokeMessage = message("approvals.revoke", z.strictObject({ tool: z.string() }));
+/** The user's answer to a panel offer (Open or nod, Skip or shake). */
+export const PanelOfferAnswerMessage = message(
+  "panel.offer.answer",
+  z.strictObject({ offerId: PanelId, answer: z.enum(["accepted", "skipped"]) }),
+);
+/** Whether the panel's document loaded: the agent's open_panel call waits for this. */
+export const PanelStatusMessage = message(
+  "panel.status",
+  z.strictObject({
+    panelId: PanelId,
+    state: z.enum(["ready", "failed"]),
+    reason: z.string().max(2000).optional(),
+  }),
+);
+/** The panel closed, and whether its result was kept (Done) or discarded. */
+export const PanelClosedMessage = message(
+  "panel.closed",
+  z.strictObject({ panelId: PanelId, outcome: PanelOutcome }),
+);
 
 export const Message = z.discriminatedUnion("type", [
   HelloMessage,
@@ -288,6 +419,20 @@ export const Message = z.discriminatedUnion("type", [
   ApprovalResolvedMessage,
   ApprovalsAllowedMessage,
   ExtensionsSnapshotMessage,
+  RhinoStateMessage,
+  ViewSetMessage,
+  RhinoPythonRunMessage,
+  RhinoStatusMessage,
+  RhinoObjectsMessage,
+  RhinoSelectionMessage,
+  RhinoPythonResultMessage,
+  RhinoSelectMessage,
+  RhinoOpenMessage,
+  PythonWrittenMessage,
+  PanelOfferMessage,
+  PanelOpenMessage,
+  PanelUpdateMessage,
+  PanelCloseMessage,
   ViewCaptureMessage,
   SceneApplyMessage,
   SceneUndoMessage,
@@ -309,6 +454,9 @@ export const Message = z.discriminatedUnion("type", [
   ExtensionsRemoveSkillMessage,
   ContextUpdateMessage,
   ViewCapturedMessage,
+  PanelOfferAnswerMessage,
+  PanelStatusMessage,
+  PanelClosedMessage,
 ]);
 export type Message = z.infer<typeof Message>;
 export type MessageOf<T extends Message["type"]> = Extract<Message, { type: T }>;

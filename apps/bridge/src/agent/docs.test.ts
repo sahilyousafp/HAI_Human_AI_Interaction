@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { HAI_TOOLS } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { TEAM } from "./team.ts";
 
@@ -20,5 +21,24 @@ describe("docs/agents.md", () => {
 
   it("never uses an em dash", () => {
     expect(doc).not.toContain("—");
+  });
+});
+
+describe("docs/agent.md tool table", () => {
+  const agentDoc = readFileSync(
+    join(import.meta.dirname, "..", "..", "..", "..", "docs", "agent.md"),
+    "utf8",
+  );
+  const table = agentDoc.slice(
+    agentDoc.indexOf("## What the agent can do in the scene"),
+    agentDoc.indexOf("## Generated panels"),
+  );
+
+  it.each(Object.values(HAI_TOOLS).flat())("lists the %s tool", (tool) => {
+    expect(table).toContain(`\`${tool}\``);
+  });
+
+  it("never uses an em dash", () => {
+    expect(agentDoc).not.toContain("—");
   });
 });

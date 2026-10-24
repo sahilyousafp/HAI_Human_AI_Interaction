@@ -1701,6 +1701,24 @@ kbd {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.approval-code {
+  max-height: 168px;
+  margin: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  font: 12px / 1.45 var(--f-mono);
+  white-space: pre;
+}
+.approval-installs {
+  margin: 0;
+  font-size: 12.5px;
+}
+.approval-installs code {
+  font: 600 12px / 1.3 var(--f-mono);
+}
 .approval-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2566,6 +2584,17 @@ kbd {
   font: 500 13px / 1.2 var(--f-body);
   cursor: pointer;
 }
+.seg-control.seg-wide {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  justify-self: stretch;
+  width: 100%;
+}
+.seg-control.seg-wide button[aria-pressed] {
+  padding-inline: 8px;
+  white-space: nowrap;
+}
 .seg-control button[aria-pressed="true"] {
   background: var(--segment);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
@@ -2962,4 +2991,196 @@ kbd {
 }
 [data-testid="update-summary"][data-tone="attention"] {
   color: var(--accent);
+}
+
+/* Generated panel: a small interface the agent wrote, floating over the model. Its header and footer are the app's. */
+.generated-panel {
+  position: fixed;
+  z-index: 33; /* above the expanded camera view, below the settings sheet */
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 16px);
+  overflow: hidden;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-l);
+  background: var(--material-strong);
+  backdrop-filter: var(--blur);
+  box-shadow: var(--shadow-2);
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.panel-head:active {
+  cursor: grabbing;
+}
+.panel-grip {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: radial-gradient(circle, var(--muted) 1.4px, transparent 1.6px) 0 0 / 7px 7px;
+  opacity: 0.7;
+}
+.panel-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font: 600 14px / 1.2 var(--f-display);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--risk) 18%, transparent);
+  color: var(--risk);
+  font: 600 11.5px / 1.4 var(--f-body);
+}
+.panel-reason {
+  margin: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--risk) 8%, transparent);
+  color: var(--ink);
+  font: 12.5px / 1.4 var(--f-mono);
+  overflow-wrap: anywhere;
+}
+.panel-body {
+  position: relative;
+  max-width: 100%;
+  background: var(--panel);
+}
+.panel-frame {
+  max-width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.panel-frame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--panel);
+}
+.panel-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  background: var(--panel);
+  color: var(--muted);
+  font: 500 13px / 1.3 var(--f-body);
+}
+.panel-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--fill-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: panel-spin 0.9s linear infinite;
+}
+@keyframes panel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-spinner {
+    animation: none;
+  }
+}
+.panel-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+.panel-foot button {
+  min-width: 84px;
+  min-height: 40px;
+}
+
+/* A panel offer in the agent's turn. */
+.offer-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-m);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.offer-card[data-state="accepted"],
+.offer-card[data-state="skipped"],
+.offer-card[data-state="expired"],
+.offer-card[data-state="unused"] {
+  border-color: var(--line);
+  background: transparent;
+}
+.offer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.offer-purpose {
+  margin: 0;
+  font-size: 13px;
+}
+.offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.offer-actions button {
+  padding: 7px 14px;
+  font-size: 13.5px;
+}
+.offer-hint,
+.offer-outcome {
+  margin: 0;
+  font-size: 12.5px;
+}
+.offer-outcome {
+  font: 600 12px / 1.3 var(--f-body);
+  color: var(--muted);
+}
+.offer-card[data-state="accepted"] .offer-outcome {
+  color: var(--ok);
+}
+
+/* Files the agent's Python wrote: one row each, with the choices. */
+.written-files {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 14px;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.written-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.written-name {
+  flex: 1 1 100%;
+  overflow: hidden;
+  font: 600 12.5px / 1.3 var(--f-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.written-file button.primary,
+.written-file button.secondary {
+  padding: 6px 12px;
+  font-size: 13px;
 }
