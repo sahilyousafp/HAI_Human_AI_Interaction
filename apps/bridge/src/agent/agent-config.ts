@@ -35,6 +35,16 @@ export const agentDir = (projectDir: string, agent?: string) =>
 export interface AgentConfigPaths {
   mcpConfigPath: string;
   systemPromptPath: string;
+  /** The agent's definition as the app runs it; absent when the agent has none (the unnamed session). */
+  agentsPath?: string;
+}
+
+/** The agent's definition in the form Claude Code's `--agents` takes. */
+export interface ManagedDefinition {
+  description: string;
+  prompt: string;
+  tools: string[];
+  model?: string;
 }
 
 /**
@@ -45,7 +55,7 @@ export interface AgentConfigPaths {
 export function writeAgentConfig(
   projectDir: string,
   mcp: { url: string; token: string },
-  options: { agent?: string; extraPrompt?: string } = {},
+  options: { agent?: string; extraPrompt?: string; definition?: ManagedDefinition } = {},
 ): AgentConfigPaths {
   const dir = agentDir(projectDir, options.agent);
   mkdirSync(dir, { recursive: true });
@@ -63,7 +73,14 @@ export function writeAgentConfig(
     systemPromptPath,
     options.extraPrompt ? `${SYSTEM_PROMPT}\n${options.extraPrompt}\n` : SYSTEM_PROMPT,
   );
-  return { mcpConfigPath, systemPromptPath };
+  if (!options.agent || !options.definition) return { mcpConfigPath, systemPromptPath };
+  const agentsPath = join(dir, "agents.json");
+  writeFileSync(
+    agentsPath,
+    `${JSON.stringify({ [options.agent]: options.definition }, null, 2)}
+`,
+  );
+  return { mcpConfigPath, systemPromptPath, agentsPath };
 }
 
 /** What the lead is told about the specialists that can change the model, whose names fill the first words. */
@@ -79,11 +96,13 @@ export function builderCapabilities(names: string[]): string {
  * the agent to what it said before ("we can only make walls"), whatever the new instructions say, so such a
  * conversation is not resumed: the agent starts a new one. The old conversation stays in Claude Code's own history.
  */
-export function instructionsVersion(): string {
+export function instructionsVersion(surface = ""): string {
   return createHash("sha1")
     .update(SYSTEM_PROMPT)
     .update("\n")
     .update(builderCapabilities(["x"]))
+    .update("\n")
+    .update(surface)
     .digest("hex")
     .slice(0, 12);
 }
@@ -117,18 +136,21 @@ function writeSessionRecord(projectDir: string, record: SessionRecord, agent?: s
  * The agent's conversation to resume in this project: the one saved, if it was started under the instructions
  * HAI gives now. An older one is left alone and not resumed.
  */
-export function readSessionId(projectDir: string, agent?: string): string | undefined {
+export function readSessionId(projectDir: string, agent?: string, surface = ""): string | undefined {
   const record = readSessionRecord(projectDir, agent);
-  return record?.instructions === instructionsVersion() ? record.sessionId : undefined;
+  return record?.instructions === instructionsVersion(surface) ? record.sessionId : undefined;
 }
 
 /** Whether a conversation is saved for this agent but was started under older instructions, so it is not resumed. */
-export function hasOutdatedSession(projectDir: string, agent?: string): boolean {
-  return readSessionRecord(projectDir, agent) !== undefined && readSessionId(projectDir, agent) === undefined;
+export function hasOutdatedSession(projectDir: string, agent?: string, surface = ""): boolean {
+  return (
+    readSessionRecord(projectDir, agent) !== undefined &&
+    readSessionId(projectDir, agent, surface) === undefined
+  );
 }
 
-export function writeSessionId(projectDir: string, sessionId: string, agent?: string): void {
-  writeSessionRecord(projectDir, { sessionId, instructions: instructionsVersion() }, agent);
+export function writeSessionId(projectDir: string, sessionId: string, agent?: string, surface = ""): void {
+  writeSessionRecord(projectDir, { sessionId, instructions: instructionsVersion(surface) }, agent);
 }
 
 /**

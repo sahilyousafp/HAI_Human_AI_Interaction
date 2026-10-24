@@ -30,6 +30,19 @@ describe("the version of the instructions", () => {
     expect(instructionsVersion()).toBe(instructionsVersion());
   });
 
+  it("also covers the tools the agent was started with", () => {
+    expect(instructionsVersion("a,b")).not.toBe(instructionsVersion("a,b,python_run"));
+    expect(instructionsVersion("a,b")).toBe(instructionsVersion("a,b"));
+  });
+
+  it("a conversation held under other tools is not resumed, and one under the same tools is", () => {
+    const dir = project();
+    writeSessionId(dir, "s1", "architect", "get_elements");
+    expect(readSessionId(dir, "architect", "get_elements")).toBe("s1");
+    expect(readSessionId(dir, "architect", "get_elements,python_run")).toBeUndefined();
+    expect(hasOutdatedSession(dir, "architect", "get_elements,python_run")).toBe(true);
+  });
+
   it("the texts it covers say what the agents must be told about curves", () => {
     expect(SYSTEM_PROMPT).toContain("python_run");
     expect(builderCapabilities(["architect", "product"])).toMatch(/^architect, product can do more than/);

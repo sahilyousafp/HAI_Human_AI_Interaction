@@ -3,7 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseFrontmatter } from "./frontmatter.ts";
-import { agentsDir, allowedHaiTools, ensureDefaultAgents, readRoster, rosterText } from "./roster.ts";
+import {
+  agentsDir,
+  allowedHaiTools,
+  ensureDefaultAgents,
+  managedDefinition,
+  readRoster,
+  rosterText,
+} from "./roster.ts";
 
 const project = () => mkdtempSync(join(tmpdir(), "hai-roster-"));
 
@@ -62,6 +69,100 @@ describe("the team", () => {
     expect(text).toMatch(/never tell the user these things cannot be done/);
     // Without anyone who can model there is nothing to promise.
     expect(rosterText(team.filter((m) => !m.writes))).not.toContain("python_run");
+  });
+
+  describe("the definition the agent is run with", () => {
+    const OLD_TOOLS = [
+      "get_scene_summary",
+      "get_elements",
+      "get_user_context",
+      "capture_view",
+      "create_elements",
+      "update_elements",
+      "delete_elements",
+      "set_selection",
+    ]
+      .map((t) => `mcp__hai__${t}`)
+      .join(", ");
+    /** A project's agent file as HAI wrote it before Python, the view and the panels existed. */
+    const file = (name: string, tools: string, body = "You are Architect.") =>
+      `---\nname: ${name}\ndescription: Architecture.\ntools: ${tools}\nmodel: sonnet\n---\n\n${body}\n`;
+    const names = (dir: string, agent: string) => {
+      const member = readRoster(dir).find((m) => m.name === agent);
+      if (!member) throw new Error(`no ${agent}`);
+      return managedDefinition(member).tools;
+    };
+
+    it("an old file that lists only eight tools still gives the model Python, panels and the view", () => {
+      const dir = project();
+      ensureDefaultAgents(dir);
+      writeFileSync(join(agentsDir(dir), "architect.md"), file("architect", OLD_TOOLS));
+      const tools = names(dir, "architect");
+      for (const wanted of [
+        "python_run",
+        "rhino_run_python",
+        "offer_panel",
+        "open_panel",
+        "set_view",
+        "create_elements",
+      ])
+        expect(tools).toContain(`mcp__hai__${wanted}`);
+    });
+
+    it("the prompt, model and description stay as the file has them", () => {
+      const dir = project();
+      ensureDefaultAgents(dir);
+      writeFileSync(join(agentsDir(dir), "architect.md"), file("architect", OLD_TOOLS));
+      const member = readRoster(dir).find((m) => m.name === "architect");
+      if (!member) throw new Error("no architect");
+      expect(managedDefinition(member)).toMatchObject({
+        description: "Architecture.",
+        prompt: "You are Architect.",
+        model: "sonnet",
+      });
+    });
+
+    it("what the user listed that is not HAI's is kept", () => {
+      const dir = project();
+      ensureDefaultAgents(dir);
+      writeFileSync(
+        join(agentsDir(dir), "architect.md"),
+        file("architect", "Read, Bash, mcp__github__create_issue, mcp__hai__get_elements"),
+      );
+      expect(names(dir, "architect").slice(0, 3)).toEqual(["Read", "Bash", "mcp__github__create_issue"]);
+    });
+
+    it("Reviewer and Climate never get the tools that change the model, whatever their files list", () => {
+      const dir = project();
+      ensureDefaultAgents(dir);
+      writeFileSync(
+        join(agentsDir(dir), "reviewer.md"),
+        file("reviewer", "mcp__hai__create_elements, mcp__hai__offer_panel, mcp__hai__get_elements"),
+      );
+      const reviewer = names(dir, "reviewer");
+      for (const banned of ["create_elements", "offer_panel", "rhino_run_python", "python_run"])
+        expect(reviewer).not.toContain(`mcp__hai__${banned}`);
+      expect(reviewer).toContain("mcp__hai__get_elements");
+      expect(names(dir, "climate")).toContain("mcp__hai__python_run");
+      expect(names(dir, "climate")).not.toContain("mcp__hai__create_elements");
+    });
+
+    it("Mochi keeps its team tools and gets no modelling tools", () => {
+      const dir = project();
+      ensureDefaultAgents(dir);
+      const tools = names(dir, "mochi");
+      expect(tools).toContain("mcp__hai__delegate");
+      expect(tools).not.toContain("mcp__hai__create_elements");
+      expect(tools).not.toContain("mcp__hai__python_run");
+    });
+
+    it("the new defaults list every tool the role has, so the Agents tab shows them", () => {
+      const dir = project();
+      ensureDefaultAgents(dir);
+      const architect = readRoster(dir).find((m) => m.name === "architect");
+      for (const wanted of ["offer_panel", "open_panel", "set_view", "python_run", "rhino_get_document"])
+        expect(architect?.tools).toContain(`mcp__hai__${wanted}`);
+    });
   });
 
   it("each agent's hai tools come from its definition; Reviewer only reads", () => {

@@ -11,10 +11,10 @@ Install Claude Code and sign in once in a terminal by running `claude`. (The des
 HAI runs a small team of agents, each its own Claude Code session (see [agents.md](agents.md)). When an agent first has work in a project, the bridge starts one long-lived process for it in the project folder:
 
 ```text
-claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --mcp-config <project>/.hai/agent/<name>/mcp.json --permission-prompt-tool mcp__hai__approve_tool --append-system-prompt-file <project>/.hai/agent/<name>/system.md --agent <name> --resume <session id>
+claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --mcp-config <project>/.hai/agent/<name>/mcp.json --permission-prompt-tool mcp__hai__approve_tool --append-system-prompt-file <project>/.hai/agent/<name>/system.md --agent <name> --agents <project>/.hai/agent/<name>/agents.json --resume <session id>
 ```
 
-`--agent` names the team member the process runs as (see [agents.md](agents.md)); `--resume` is only added when that agent already has a conversation. A unit test checks that this command matches the code (`buildClaudeArgs` in `packages/agent-core/src/claude/provider.ts`).
+`--agent` names the team member the process runs as (see [agents.md](agents.md)). `--agents` points at the definition HAI runs that agent with: the project's `.claude/agents/<name>.md` (its prompt, model and your own tools such as Read or your MCP servers) with HAI's own tools taken from the agent's role instead of the file, because Claude Code hides every tool a definition's `tools:` line does not list, and a file written by an earlier HAI never lists the tools added since (`python_run`, the panel tools). A conversation is resumed only under the same set of tools, so an agent that was told earlier that it cannot do something starts fresh once it can; `--resume` is only added when that agent already has a conversation. A unit test checks that this command matches the code (`buildClaudeArgs` in `packages/agent-core/src/claude/provider.ts`).
 
 - **One process per agent.** Every request to Mochi, and every task for a specialist, is a new turn for that agent's process, so each agent remembers its conversation. Opening another project starts that project's own conversations.
 - **Files it writes**, all in the project's `.hai` folder, which is kept out of git:

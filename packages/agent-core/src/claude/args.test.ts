@@ -23,3 +23,19 @@ describe("buildClaudeArgs", () => {
     expect(args).not.toContain("--resume");
   });
 });
+
+describe("buildClaudeArgs with the app's definition of the agent", () => {
+  it("passes the definition file after --agent", () => {
+    const args = buildClaudeArgs({ ...base, agent: "architect", agentsPath: "agents.json" });
+    expect(args.slice(args.indexOf("--agents"), args.indexOf("--agents") + 2)).toEqual([
+      "--agents",
+      "agents.json",
+    ]);
+    expect(args.indexOf("--agents")).toBeGreaterThan(args.indexOf("--agent"));
+  });
+
+  it("is left out without an agent or without a definition", () => {
+    expect(buildClaudeArgs({ ...base, agentsPath: "agents.json" })).not.toContain("--agents");
+    expect(buildClaudeArgs({ ...base, agent: "architect" })).not.toContain("--agents");
+  });
+});

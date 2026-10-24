@@ -38,6 +38,7 @@ export function buildClaudeArgs(options: StartOptions): string[] {
     "--append-system-prompt-file",
     options.systemPromptPath,
     ...(options.agent ? ["--agent", options.agent] : []),
+    ...(options.agent && options.agentsPath ? ["--agents", options.agentsPath] : []),
     ...(options.resumeSessionId ? ["--resume", options.resumeSessionId] : []),
   ];
 }

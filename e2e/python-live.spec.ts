@@ -2,6 +2,8 @@
 //   HAI_LIVE_CLAUDE=1 pnpm exec playwright test e2e/python-live.spec.ts
 // The real agent is asked to model something and save it as a .3dm with no Rhino anywhere: it should use the Python
 // workbench (python_run), the user allows the script, and the written file is imported into the viewer.
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { sharedPythonEnv } from "../apps/bridge/test/python-env.ts";
 import { ClaudeCliProvider } from "../packages/agent-core/src/index.ts";
@@ -183,4 +185,80 @@ test("asked of Mochi with no specialist named, the lead does not say curves are 
   } finally {
     await bridge.stop();
   }
+});
+
+/** A project's Architect as an earlier HAI wrote it: eight tools, none for Python, the view or panels. */
+const OLD_ARCHITECT = `---
+name: architect
+description: Architecture: massing, levels, walls, slabs, columns and cores. Creates and edits building elements.
+tools: mcp__hai__get_scene_summary, mcp__hai__get_elements, mcp__hai__get_user_context, mcp__hai__capture_view, mcp__hai__create_elements, mcp__hai__update_elements, mcp__hai__delete_elements, mcp__hai__set_selection
+model: sonnet
+---
+
+You are Architect, the team's architectural designer. You plan and model massing, levels, walls, slabs,
+columns, cores and stairs with sensible proportions and clearances.
+
+You receive tasks from Mochi, the team lead. Do the task with the hai tools, then end with a short summary of
+what you did and anything left open: it goes back to Mochi, who reports to the user. Lengths are millimetres, Z is up.
+`;
+
+test.describe("a project whose Architect file is the old eight-tool one", () => {
+  async function open(page: import("@playwright/test").Page) {
+    const env = await sharedPythonEnv();
+    test.skip(!env, "needs a Python 3.10 or newer on this machine");
+    const bridge = await startTestBridge(page, {
+      agent: new ClaudeCliProvider(),
+      ...(env ? { pythonEnv: env } : {}),
+    });
+    const dir = join(bridge.scene.projectDir ?? "", ".claude", "agents");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "architect.md"), OLD_ARCHITECT);
+    await openViewer(page);
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+    await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle", { timeout: 60_000 });
+    return bridge;
+  }
+
+  test("it still writes curves with Python", async ({ page }) => {
+    test.setTimeout(600_000);
+    const bridge = await open(page);
+    try {
+      await page
+        .getByTestId("agent-input")
+        .fill("Build a domed pavilion with a truly smooth NURBS dome and curved arches.");
+      await page.getByTestId("agent-input").press("Enter");
+      const allow = page.getByRole("button", { name: "Allow", exact: true });
+      const files = page.getByTestId("written-files");
+      for (let i = 0; i < 150 && !(await files.isVisible()); i++) {
+        if (await allow.first().isVisible()) await allow.first().click();
+        await page.waitForTimeout(2_000);
+      }
+      console.log(
+        `LIVE said: ${(await page.getByTestId("agent-text").allTextContents()).join(" | ").slice(0, 400)}`,
+      );
+      await expect(files).toBeVisible({ timeout: 10_000 });
+      console.log(`LIVE files: ${await files.textContent()}`);
+    } finally {
+      await bridge.stop();
+    }
+  });
+
+  test("it offers a panel when the user wants to tune values", async ({ page }) => {
+    test.setTimeout(600_000);
+    const bridge = await open(page);
+    try {
+      await page
+        .getByTestId("agent-input")
+        .fill(
+          "Architect, I want about 150 millimetres of clearance between the column col-a1 and the north wall, with a tolerance. Let me tune it.",
+        );
+      await page.getByTestId("agent-input").press("Enter");
+      await expect(page.getByTestId("offer-card").last()).toBeVisible({ timeout: 300_000 });
+      console.log(
+        `LIVE offer: ${await page.getByTestId("offer-card").last().getByTestId("offer-purpose").textContent()}`,
+      );
+    } finally {
+      await bridge.stop();
+    }
+  });
 });

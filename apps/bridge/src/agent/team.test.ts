@@ -9,7 +9,7 @@ import { fakeProvider } from "../../test/fake-provider.ts";
 import { connectClient } from "../../test/ws-client.ts";
 import { type Bridge, createBridge } from "../server.ts";
 import { agentDir, writeSessionId } from "./agent-config.ts";
-import { agentsDir } from "./roster.ts";
+import { agentsDir, defaultRoster, managedDefinition, readRoster } from "./roster.ts";
 import type { Team } from "./team.ts";
 
 const ORIGIN = "http://localhost:5173";
@@ -92,11 +92,49 @@ describe("the team with the fake Claude Code CLI", () => {
   });
 
   it("an earlier single conversation continues as Mochi's", async () => {
-    const { team, starts } = await start({ before: (dir) => writeSessionId(dir, "earlier-conversation") });
+    const { team, starts } = await start({
+      before: (dir) => {
+        const lead = readRoster(dir).find((m) => m.lead) ?? defaultRoster().find((m) => m.lead);
+        writeSessionId(
+          dir,
+          "earlier-conversation",
+          undefined,
+          lead ? managedDefinition(lead).tools.join(",") : "",
+        );
+      },
+    });
     await team.request("hello");
     const [mochi] = starts();
     expect(mochi?.args[(mochi?.args.indexOf("--agent") ?? 0) + 1]).toBe("mochi");
     expect(mochi?.args[(mochi?.args.indexOf("--resume") ?? 0) + 1]).toBe("earlier-conversation");
+  });
+
+  it("an agent whose old file lists only the first eight tools is still started with Python and panels", async () => {
+    const { team, starts } = await start({
+      before: (dir) => {
+        mkdirSync(agentsDir(dir), { recursive: true });
+        writeFileSync(
+          join(agentsDir(dir), "architect.md"),
+          "---\nname: architect\ndescription: Architecture.\ntools: mcp__hai__get_elements, mcp__hai__create_elements\nmodel: sonnet\n---\n\nYou are Architect.\n",
+        );
+      },
+    });
+    await team.request("delegate architect: work 100");
+    await team.settled();
+    const [architect] = starts().filter((s) => s.args.includes("architect"));
+    const path = architect?.args[(architect?.args.indexOf("--agents") ?? 0) + 1] ?? "";
+    expect(path).toMatch(/agent[\\/]architect[\\/]agents\.json$/);
+    const definition = JSON.parse(readFileSync(path, "utf8")).architect;
+    expect(definition.tools).toEqual(
+      expect.arrayContaining([
+        "mcp__hai__get_elements",
+        "mcp__hai__python_run",
+        "mcp__hai__offer_panel",
+        "mcp__hai__open_panel",
+        "mcp__hai__set_view",
+      ]),
+    );
+    expect(definition.prompt).toBe("You are Architect.");
   });
 
   it("a conversation started under older instructions is not resumed: the agent starts a new one", async () => {
@@ -328,20 +366,30 @@ describe("the team with the fake Claude Code CLI", () => {
       color: "#aa5500",
       writes: true,
     });
-    // Editing Architect restarts its process for its next task (resuming its conversation).
-    viewer.send("agents.save", {
-      agent: {
-        ...structure,
-        name: "architect",
-        description: "Only cores.",
-        tools: ["mcp__hai__get_elements"],
-      },
-    });
+    // Changing Architect's tools restarts its process for its next task, and starts a new conversation: the old one
+    // was held under other tools, and an agent resuming it keeps to what it said it could not do.
+    const onlyCores = {
+      ...structure,
+      name: "architect",
+      description: "Only cores.",
+      tools: ["mcp__hai__get_elements"],
+    };
+    viewer.send("agents.save", { agent: onlyCores });
     await viewer.waitFor("agents.snapshot", (m) => m.payload.saved === "architect");
     await team.request("delegate architect: work 100");
     await team.settled();
-    const architectStarts = starts().filter((s) => s.args.includes("architect"));
+    let architectStarts = starts().filter((s) => s.args.includes("architect"));
     expect(architectStarts).toHaveLength(2);
+    expect(architectStarts.filter((s) => s.args.includes("--resume"))).toHaveLength(0);
+    // Changing only what it says about itself keeps the conversation.
+    viewer.send("agents.save", { agent: { ...onlyCores, description: "Only cores and stairs." } });
+    await viewer.waitFor("agents.snapshot", (m) =>
+      m.payload.definitions.some((d) => d.description === "Only cores and stairs."),
+    );
+    await team.request("delegate architect: work 100");
+    await team.settled();
+    architectStarts = starts().filter((s) => s.args.includes("architect"));
+    expect(architectStarts).toHaveLength(3);
     expect(architectStarts.filter((s) => s.args.includes("--resume"))).toHaveLength(1);
   });
 

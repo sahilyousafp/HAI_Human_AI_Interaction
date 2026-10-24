@@ -16,6 +16,7 @@ describe("docs/agent.md", () => {
       systemPromptPath: "system.md",
       permissionPromptTool: "mcp__hai__approve_tool",
       agent: "mochi",
+      agentsPath: "<project>/.hai/agent/<name>/agents.json",
       resumeSessionId: "session",
     }).filter((arg) => arg.startsWith("-"));
     expect(documented).toEqual(actual);

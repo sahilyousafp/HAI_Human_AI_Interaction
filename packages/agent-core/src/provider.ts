@@ -28,6 +28,12 @@ export interface StartOptions {
    * Code `.claude/agents/<name>.md`).
    */
   agent?: string;
+  /**
+   * A file with the agent's definition as the app wants it to run (`{ <name>: { description, prompt, tools, model } }`).
+   * It overrides the project's `.claude/agents/<name>.md`, whose `tools:` line would otherwise hide every tool it
+   * does not list, including the app's own.
+   */
+  agentsPath?: string;
 }
 
 /**

@@ -11,6 +11,7 @@ import type {
 import { type Logger, silentLogger } from "../log.ts";
 import {
   hasOutdatedSession,
+  type ManagedDefinition,
   PERMISSION_TOOL,
   readSessionId,
   writeAgentConfig,
@@ -53,6 +54,8 @@ export interface AgentHubOptions {
   agent?: string;
   /** Added to the agent's system prompt when its process starts (the lead's roster of specialists). */
   extraPrompt?(): string | undefined;
+  /** The agent's definition as the app runs it (its tools included), read when its process starts. */
+  definition?(): ManagedDefinition | undefined;
 }
 
 const id = () => randomUUID();
@@ -90,6 +93,8 @@ export class AgentHub {
   private status: AgentStatus = { state: "starting" };
   private readonly turns: AgentTurn[] = [];
   private session: AgentSession | null = null;
+  /** The tools the running process was started with, which a conversation is only resumed under the same of. */
+  private surface = "";
   private sessionProject: string | null = null;
   /** The previous process ended unexpectedly: the next turn resumes and is marked recovered. */
   private crashed = false;
@@ -218,7 +223,7 @@ export class AgentHub {
           this.log.info("agent turn ended", { reason: event.reason, durationMs: event.durationMs });
         this.broadcast({ type: "agent.event", id: id(), payload: { turnId: turn.id, event, ...this.named } });
         if (event.type === "init") {
-          if (event.sessionId) writeSessionId(projectDir, event.sessionId, this.options.agent);
+          if (event.sessionId) writeSessionId(projectDir, event.sessionId, this.options.agent, this.surface);
           this.options.hooks?.initialized?.(event);
         }
       }
@@ -280,12 +285,15 @@ export class AgentHub {
     this.setStatus({ state: this.crashed ? "recovering" : "starting" });
     const { agent } = this.options;
     const extraPrompt = this.options.extraPrompt?.();
+    const definition = this.options.definition?.();
+    this.surface = definition ? definition.tools.join(",") : "";
     const paths = writeAgentConfig(projectDir, this.options.mcp(), {
       ...(agent ? { agent } : {}),
       ...(extraPrompt ? { extraPrompt } : {}),
+      ...(definition ? { definition } : {}),
     });
-    const resumeSessionId = readSessionId(projectDir, agent);
-    if (hasOutdatedSession(projectDir, agent))
+    const resumeSessionId = readSessionId(projectDir, agent, this.surface);
+    if (hasOutdatedSession(projectDir, agent, this.surface))
       this.log.info("saved conversation not resumed: it was started under older instructions", { agent });
     const session = await this.options.provider.start({
       cwd: projectDir,

@@ -20,6 +20,7 @@ import {
   allowedHaiTools,
   defaultRoster,
   ensureDefaultAgents,
+  managedDefinition,
   memberInfo,
   readRoster,
   rosterText,
@@ -186,6 +187,10 @@ export class Team {
           };
         },
         extraPrompt: () => (name === this.lead ? rosterText(this.members) : undefined),
+        definition: () => {
+          const member = this.member(name);
+          return member ? managedDefinition(member) : undefined;
+        },
         pending: () => this.options.approvals.waiting.filter((a) => a.agent === name),
         hooks: this.hooksFor(name),
         agent: name,

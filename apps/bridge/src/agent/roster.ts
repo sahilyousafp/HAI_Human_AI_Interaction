@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type AgentDefinitionInput, HAI_TOOLS, type TeamMemberInfo } from "@hai/protocol";
-import { builderCapabilities, HAI_SERVER } from "./agent-config.ts";
+import { builderCapabilities, HAI_SERVER, type ManagedDefinition } from "./agent-config.ts";
 import { listField, parseFrontmatter } from "./frontmatter.ts";
 
 const hai = (names: readonly string[]) => names.map((n) => `mcp__${HAI_SERVER}__${n}`);
@@ -39,14 +39,15 @@ interface DefaultAgent {
 
 const SPECIALIST_CLOSE = `You receive tasks from Mochi, the team lead. Do the task with the hai tools, then end with a short summary of
 what you did and anything left open: it goes back to Mochi, who reports to the user. Lengths are millimetres, Z is up.
-When the task says the user wants to tune, adjust or try values themselves (a clearance, a tolerance, a size), call offer_panel first and, if they accept, open_panel with sliders for those values; do not hide the values in element properties.`;
+If you have offer_panel and open_panel: when the task involves values the user will want to feel out (a clearance, a tolerance, a count, a size, a colour, or a choice between design options), call offer_panel first, before you change the model, and if the user accepts, open_panel with sliders and buttons for those values, previewing with hai.preview and keeping the result with hai.commit. Do not hide such values in element properties, and do not offer a panel for a one-off edit.
+If you have python_run (or rhino_run_python), curves, NURBS surfaces and smooth or organic forms are within your reach: write them in Python with rhino3dm, save a .3dm with hai_3dm, and say the user can import it. Never tell the user these cannot be made.`;
 
 /** The team a project starts with. Files are written only where missing, so the user's edits always win. */
 const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
   mochi: {
     description:
       "The team lead. Takes every request, hands work to the specialists and reports what everyone is doing.",
-    tools: [...hai(HAI_TOOLS.team), ...hai(HAI_TOOLS.read)],
+    tools: [...hai(HAI_TOOLS.team), ...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.view)],
     model: "sonnet",
     prompt: `You are Mochi, the lead of a small design team working on a shared 3D model in HAI.
 
@@ -70,8 +71,11 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
     tools: [
       ...hai(HAI_TOOLS.read),
       ...hai(HAI_TOOLS.write),
+      ...hai(HAI_TOOLS.panel),
+      ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.python),
       ...hai(HAI_TOOLS.rhino),
+      ...hai(HAI_TOOLS.rhinoRead),
     ],
     model: "sonnet",
     prompt: `You are Architect, the team's architectural designer. You plan and model massing, levels, walls, slabs,
@@ -83,13 +87,16 @@ columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIAL
     tools: [
       ...hai(HAI_TOOLS.read),
       ...hai(HAI_TOOLS.write),
+      ...hai(HAI_TOOLS.panel),
+      ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.python),
       ...hai(HAI_TOOLS.rhino),
+      ...hai(HAI_TOOLS.rhinoRead),
     ],
     model: "sonnet",
     prompt: `You are Product, the team's product designer. You design furniture, fixtures and components at product
-scale, with attention to ergonomics, materials and how they are made. Model them with the scene elements you have
-(massing for blocks, columns for legs and posts) until finer geometry tools arrive.\n\n${SPECIALIST_CLOSE}`,
+scale, with attention to ergonomics, materials and how they are made. Model simple shapes with the scene elements
+(massing for blocks, columns for legs and posts) and anything curved or detailed with Python (python_run).\n\n${SPECIALIST_CLOSE}`,
     meta: { aliases: ["products", "producer"], color: "#e2ab4f", writes: true, lead: false },
   },
   climate: {
@@ -97,6 +104,7 @@ scale, with attention to ergonomics, materials and how they are made. Model them
     tools: [
       ...hai(HAI_TOOLS.read),
       ...hai(HAI_TOOLS.climate),
+      ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.python),
       ...hai(HAI_TOOLS.rhinoRead),
     ],
@@ -109,7 +117,7 @@ and describe what the shadows mean for the design. You do not change the model.\
   reviewer: {
     description:
       "Checks the model against the brief and rules (heights, counts, clearances) and reports issues. Never edits.",
-    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.rhinoRead)],
+    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.view), ...hai(HAI_TOOLS.rhinoRead)],
     model: "sonnet",
     prompt: `You are Reviewer. You check the model against the brief and common rules (heights, counts, clearances,
 overlaps) and report issues clearly with element names. You never change the model.\n\n${SPECIALIST_CLOSE}`,
@@ -255,6 +263,25 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
   // Looking around changes no element, so every agent may do it, whatever its definition lists.
   for (const tool of [...HAI_TOOLS.view, ...HAI_TOOLS.rhinoRead]) tools.add(tool);
   return tools;
+}
+
+/**
+ * The agent's definition as HAI runs it, for Claude Code's `--agents`. Claude Code hides every tool a definition's
+ * `tools:` line does not list, and a project's file was written by whichever HAI created it (the user's own copy
+ * lists whatever tools existed then, and never the panel tools), so the app's own tools are taken from
+ * `allowedHaiTools` instead of the file. What the user listed that is not the app's (Read, Bash, their own MCP
+ * servers), the prompt, the model and the description stay as in the file.
+ */
+export function managedDefinition(member: TeamMember): ManagedDefinition {
+  const prefix = `mcp__${HAI_SERVER}__`;
+  const others = member.tools.filter((t) => !t.startsWith(prefix));
+  const own = [...allowedHaiTools(member)].sort().map((t) => `${prefix}${t}`);
+  return {
+    description: member.description,
+    prompt: member.prompt,
+    tools: [...others, ...own],
+    ...(member.model ? { model: member.model } : {}),
+  };
 }
 
 /** An agent as the panel shows it (everything but its instructions). */
