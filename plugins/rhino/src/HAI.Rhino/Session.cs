@@ -94,6 +94,10 @@ namespace HAI.Rhino
                     if (open != null && !string.IsNullOrWhiteSpace(open.Path))
                         RhinoApp.InvokeOnUiThread(new Action(() => RhinoApp.RunScript($"-_Open \"{open.Path}\" _Enter", false)));
                     break;
+                case Wire.Undo:
+                    // The user chose to undo a script that went outside its claim. Each run is one undo step.
+                    RhinoApp.InvokeOnUiThread(new Action(() => RhinoApp.RunScript("_Undo", false)));
+                    break;
                 case Wire.PythonRun:
                     var run = message.As<PythonRunRequest>();
                     if (run != null) _ = client.Send(Wire.PythonResult, PythonSupport.Refuse(run.Id));

@@ -18,6 +18,33 @@ import { closeSettings, openSettings } from "./settings.ts";
 
 test.afterEach(stopBridge);
 
+test.describe("several agents", () => {
+  test("a second agent's offer waits behind the open panel and is shown when it closes; a panel names its agent", async ({
+    page,
+  }) => {
+    await start(page);
+    // Two writers with their own parts both offer a panel; the user sees one offer at a time.
+    await team().request("delegate architect[a]: panel | product[b]: panel");
+    await expect(page.getByTestId("offer-card")).toHaveCount(1);
+    const first = (await page.getByTestId("offer-agent").first().textContent()) ?? "";
+    expect(["Architect", "Product"]).toContain(first);
+    const other = first === "Architect" ? "Product" : "Architect";
+    await page.getByTestId("offer-open").click();
+    await expect(frame(page).locator("#s")).toBeVisible();
+    await expect(shell(page).getByTestId("panel-agent")).toHaveText(first);
+    // While the first panel is open the other agent's offer waits, unseen.
+    await page.waitForTimeout(400);
+    await expect(page.getByTestId("offer-card")).toHaveCount(1);
+    // Closing it shows the waiting offer.
+    await shell(page).getByTestId("panel-done").click();
+    await expect(page.getByTestId("offer-card")).toHaveCount(2);
+    await expect(page.getByTestId("offer-agent").last()).toHaveText(other);
+    await expect(page.getByTestId("offer-open").last()).toBeVisible();
+    await page.getByTestId("offer-skip").last().click();
+    await team().settled();
+  });
+});
+
 test.describe("the offer", () => {
   test("Offer is shown: a card with the purpose, Open and Skip; no panel is open", async ({ page }) => {
     await start(page);

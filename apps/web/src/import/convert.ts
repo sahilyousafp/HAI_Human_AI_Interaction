@@ -15,6 +15,8 @@ export interface ImportedPart extends MeshPart {
   layer?: string;
   /** Display colour, #rrggbb; absent when the file leaves it at the default. */
   color?: string;
+  /** The object's id in the file (a block's parts take the block instance's); absent once parts are merged. */
+  objectId?: string;
 }
 
 /** What was left out, by reason. */
@@ -235,10 +237,12 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
   const add = (
     object: File3dmObject,
     transform: Matrix,
-    inherited: { name: string; color?: string } | null,
+    inherited: { name: string; color?: string; sourceId?: string } | null,
     depth: number,
   ) => {
     const attributes = object.attributes();
+    // The object in the file this part comes from: for a block's parts, the block instance placed in the model.
+    const sourceId = inherited?.sourceId ?? (attributes.id as string | undefined);
     const geometry = object.geometry();
     const kind = geometry.objectType;
     const T = rhino.ObjectType;
@@ -256,7 +260,11 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
           ? hex(attributes.objectColor as never)
           : undefined;
       const color = own ?? inherited?.color ?? (layer ? hex(layer.color as never) : undefined);
-      const next = { name: attributes.name || definition.name || "Block", ...(color ? { color } : {}) };
+      const next = {
+        name: attributes.name || definition.name || "Block",
+        ...(color ? { color } : {}),
+        ...(sourceId ? { sourceId } : {}),
+      };
       const matrix = multiply(
         transform,
         Array.from(
@@ -313,6 +321,7 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
       name,
       ...(layer?.name ? { layer: layer.name } : {}),
       ...(color ? { color } : {}),
+      ...(sourceId ? { objectId: sourceId } : {}),
     });
   };
 

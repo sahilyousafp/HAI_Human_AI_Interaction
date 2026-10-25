@@ -5,6 +5,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import type { ModelAssets } from "../import/model-assets.ts";
 import { MM, modelGeometry } from "../viewer/geometry.ts";
+import { OWNER_TINT, tint, useOwnerDisplay, useWear } from "../viewer/owner-display.tsx";
 import type { RhinoMirror } from "./rhino-mirror.ts";
 
 /** The colours the layer needs from the viewer. */
@@ -59,9 +60,15 @@ function MirrorMesh({
     },
     [geometries],
   );
-  let color = object.color ?? colors.element;
+  const { owner, glow } = useOwnerDisplay(object.id, object.tags);
+  const base = object.color ?? colors.element;
+  // What an agent's picture shows: the owner's tint, without the user's hover and selection.
+  const clean = owner ? tint(base, owner, OWNER_TINT) : base;
+  let color = base;
+  if (owner && !selected && !hovered) color = tint(color, owner, OWNER_TINT);
   if (hovered) color = colors.hover;
   if (selected) color = colors.selected;
+  useWear(object.id, color, null, glow);
   return (
     <>
       {geometries.map((geometry, i) => (
@@ -72,9 +79,15 @@ function MirrorMesh({
           scale={scale}
           castShadow
           receiveShadow
-          userData={{ elementId: object.id, rhino: true }}
+          userData={{ elementId: object.id, rhino: true, cleanColor: clean }}
         >
-          <meshStandardMaterial color={color} roughness={0.9} metalness={0} flatShading />
+          <meshStandardMaterial
+            color={color}
+            roughness={0.9}
+            metalness={0}
+            flatShading
+            {...(glow ? { emissive: glow, emissiveIntensity: 0.6 } : {})}
+          />
         </mesh>
       ))}
     </>

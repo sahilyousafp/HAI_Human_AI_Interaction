@@ -43,6 +43,13 @@ describe("the version of the instructions", () => {
     expect(hasOutdatedSession(dir, "architect", "get_elements,python_run")).toBe(true);
   });
 
+  it("agents are told to check their work with cameras of their own, and to leave the user's view alone", () => {
+    expect(SYSTEM_PROMPT).toMatch(/camera_set/);
+    expect(SYSTEM_PROMPT).toMatch(/camera_capture with iso, top, front, left or orbit-sheet/);
+    expect(SYSTEM_PROMPT).toMatch(/the user's view never moves/);
+    expect(SYSTEM_PROMPT).toMatch(/capture_view only to see what the user is looking at/);
+  });
+
   it("the texts it covers say what the agents must be told about curves", () => {
     expect(SYSTEM_PROMPT).toContain("python_run");
     expect(builderCapabilities(["architect", "product"])).toMatch(/^architect, product can do more than/);

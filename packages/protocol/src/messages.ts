@@ -10,7 +10,11 @@ import {
   ExtensionName,
   ExtensionsState,
   McpServerSpec,
+  PlanOutcome,
+  PlanPart,
   RequestContext,
+  TaskScope,
+  TeamClaim,
   TeamMemberInfo,
   TeamTask,
 } from "./agent.ts";
@@ -73,6 +77,12 @@ export const Settings = z.strictObject({
   showHands: z.boolean().default(false),
   /** How the agent models: with Rhino when it is connected (default), always with Rhino, or only with Python. */
   modelling: ModellingMode.default("auto"),
+  /** Tint and outline the elements agents own in their colour, and draw region claims (the panel lists claims anyway). */
+  showOwners: z.boolean().default(true),
+  /** Draw a small marker for each camera an agent placed (the panel shows its pictures either way). */
+  showCameras: z.boolean().default(true),
+  /** How many agent sessions may run at once: Mochi, the specialists and their workers. Each is a model session with its own cost. */
+  maxSessions: z.number().int().min(2).max(12).default(6),
 });
 export type Settings = z.infer<typeof Settings>;
 const Project = z.strictObject({ name: z.string(), path: z.string() });
@@ -94,6 +104,8 @@ export const ScenePatchMessage = message(
     seq: z.int().positive(),
     kind: z.enum(["apply", "undo", "redo"]),
     label: z.string(),
+    /** Who made the change: "user", or the name of the agent. */
+    by: z.string().min(1).default("user"),
     ops: z.array(SceneOp),
     ...UndoState,
   }),
@@ -126,6 +138,40 @@ export const ViewCamera = z.strictObject({
   target: z.tuple([z.number(), z.number(), z.number()]),
 });
 export type ViewCamera = z.infer<typeof ViewCamera>;
+
+/** A camera an agent placed for itself: named, and private to that agent. Same units as `ViewCamera`. */
+export const AgentCamera = z.strictObject({
+  name: z.string().min(1).max(32),
+  azimuth: z.number(),
+  elevation: z.number(),
+  distance: z.number().positive(),
+  target: z.tuple([z.number(), z.number(), z.number()]),
+});
+export type AgentCamera = z.infer<typeof AgentCamera>;
+/** At most this many cameras per agent, and per picture request. */
+export const MAX_AGENT_CAMERAS = 8;
+
+/** What a picture from an agent camera may show of the user's own state; both are off unless asked for. */
+export const ShotOptions = z.strictObject({
+  /** The section cut the user has set. */
+  section: z.boolean().default(false),
+  /** The selection, hover and deletion marks. */
+  selection: z.boolean().default(false),
+});
+export type ShotOptions = z.infer<typeof ShotOptions>;
+
+/** The last picture an agent took, as the strip shows it. */
+export const TeamShot = z.strictObject({
+  agent: z.string().min(1).max(64),
+  camera: z.string().min(1).max(32),
+  at: z.number(),
+  /** A small JPEG as a data URL. */
+  thumb: z.string().max(60_000),
+});
+export type TeamShot = z.infer<typeof TeamShot>;
+/** One agent camera, for the markers in the model. */
+export const TeamCamera = AgentCamera.extend({ agent: z.string().min(1).max(64) });
+export type TeamCamera = z.infer<typeof TeamCamera>;
 
 // Agent session, bridge -> clients
 /** Which agent of the team a message is about; without it, the single session of a bridge without a team. */
@@ -166,8 +212,17 @@ export const TeamSnapshotMessage = message(
   z.strictObject({
     members: z.array(TeamMemberInfo),
     tasks: z.array(TeamTask),
+    /** What the running writing tasks hold. */
+    claims: z.array(TeamClaim).default([]),
     /** How many specialists may run at once. */
     maxRunning: z.number().int().min(1),
+    /** How many sessions (Mochi, specialists, workers) may run at once, and how many do. */
+    maxSessions: z.number().int().min(1).default(6),
+    sessions: z.number().int().min(0).default(0),
+    /** The last picture each agent took from one of its cameras. */
+    shots: z.array(TeamShot).default([]),
+    /** The cameras agents have placed. */
+    cameras: z.array(TeamCamera).default([]),
   }),
 );
 /** The project's agent definitions (Agents tab); `saved` names the agent just saved. */
@@ -176,6 +231,21 @@ export const AgentsSnapshotMessage = message(
   z.strictObject({ definitions: z.array(AgentDefinition), saved: z.string().optional() }),
 );
 export const ApprovalPendingMessage = message("approval.pending", ApprovalRequest);
+/** Mochi shows the user how it means to split a request, before it hands any part out. */
+export const PlanPendingMessage = message(
+  "plan.pending",
+  z.strictObject({
+    id: z.string(),
+    parts: z.array(PlanPart).min(1).max(12),
+    agent: z.string().optional(),
+    expiresAt: z.number(),
+  }),
+);
+/** How a plan ended, with the ids of the parts the user kept. */
+export const PlanResolvedMessage = message(
+  "plan.resolved",
+  z.strictObject({ id: z.string(), outcome: PlanOutcome, keep: z.array(z.string()) }),
+);
 /** A sun position for the viewer's light (a sun study), in degrees; azimuth clockwise from north (+Y). */
 export const SunSetting = z.strictObject({
   altitude: z.number().min(-90).max(90),
@@ -187,7 +257,16 @@ export type SunSetting = z.infer<typeof SunSetting>;
 /** The agent asked to see the view: a viewer answers with a PNG, after setting the sun when one is given. */
 export const ViewCaptureMessage = message(
   "view.capture",
-  z.strictObject({ requestId: z.string(), sun: SunSetting.optional() }),
+  z.strictObject({
+    requestId: z.string(),
+    sun: SunSetting.optional(),
+    /** The agent asking. With `cameras`, the pictures are taken off-screen from them; without, from the user's view. */
+    agent: z.string().min(1).max(64).optional(),
+    cameras: z.array(AgentCamera).min(1).max(MAX_AGENT_CAMERAS).optional(),
+    /** The longest side of each picture in pixels (at most 1280). */
+    size: z.number().int().min(64).max(1280).optional(),
+    options: ShotOptions.optional(),
+  }),
 );
 export const ApprovalResolvedMessage = message(
   "approval.resolved",
@@ -250,17 +329,23 @@ export const RhinoStateMessage = message(
   }),
 );
 /** A Python run left these `.3dm` files in the project: the HUD offers to import them or open them in Rhino. */
+const WrittenFile = z.strictObject({
+  path: z.string().min(1).max(520),
+  size: z.number().int().nonnegative(),
+});
 export const PythonWrittenMessage = message(
   "python.written",
-  z.strictObject({
-    files: z
-      .array(z.strictObject({ path: z.string().min(1).max(520), size: z.number().int().nonnegative() }))
-      .min(1)
-      .max(50),
-    /** The kept script that wrote them, relative to the project. */
-    script: z.string().max(520),
-    agent: z.string().max(64).optional(),
-  }),
+  z
+    .strictObject({
+      /** The files the run declared and wrote: these are offered. */
+      files: z.array(WrittenFile).max(50),
+      /** `.3dm` files that changed during the run without being declared: reported, not offered. */
+      outside: z.array(WrittenFile).max(50).optional(),
+      /** The kept script that wrote them, relative to the project. */
+      script: z.string().max(520),
+      agent: z.string().max(64).optional(),
+    })
+    .refine((p) => p.files.length > 0 || (p.outside?.length ?? 0) > 0, "no files"),
 );
 /** The agent asked for a different view; the viewer animates to it. */
 export const ViewSetMessage = message("view.set", ViewRequest);
@@ -271,6 +356,37 @@ export const RhinoPythonRunMessage = message(
     id: z.string().min(1).max(64),
     code: z.string().min(1).max(RHINO_PYTHON_MAX_CODE),
     timeoutMs: z.int().positive().max(600_000),
+    /** The agent that asked and the run's title, kept with the undo step. */
+    agent: z.string().max(64).optional(),
+    title: z.string().max(80).optional(),
+    /** The part the agent's task works on: objects the run adds are stamped `hai.part` with it. */
+    part: z.string().max(64).optional(),
+    /** The part of the model the agent's task may change; absent means all of it. */
+    claim: TaskScope.optional(),
+  }),
+);
+/** Bridge -> Rhino: undo the last Python run (it is one undo step). */
+export const RhinoUndoMessage = message("rhino.undo", z.strictObject({}));
+/** What a Rhino script did outside its claim, found after the run: for the user's panel, with the way to undo it. */
+export const RhinoRunReportMessage = message(
+  "rhino.run.report",
+  z.strictObject({
+    agent: z.string().max(64).nullable(),
+    title: z.string().max(80),
+    strays: z
+      .array(
+        z.strictObject({
+          id: ElementId,
+          name: z.string().max(200),
+          what: z.enum(["added", "changed", "deleted"]),
+          /** Whose claim it is in, when someone's. */
+          holder: z.string().max(200).optional(),
+        }),
+      )
+      .min(1)
+      .max(100),
+    /** More strays than are listed. */
+    truncated: z.boolean(),
   }),
 );
 
@@ -327,6 +443,9 @@ export const SettingsSetMessage = message(
     drawingAids: DrawingAidChoices.optional(),
     showHands: z.boolean().optional(),
     modelling: ModellingMode.optional(),
+    showOwners: z.boolean().optional(),
+    showCameras: z.boolean().optional(),
+    maxSessions: z.number().int().min(2).max(12).optional(),
   }),
 );
 export const AgentSendMessage = message(
@@ -348,6 +467,13 @@ export const ViewCapturedMessage = message(
     requestId: z.string(),
     /** Base64 PNG, longest side at most 1280 px. */
     png: z.string().max(12_000_000).optional(),
+    /** The pictures of a request with cameras, in the order asked, each with a small thumbnail (a JPEG data URL). */
+    shots: z
+      .array(
+        z.strictObject({ camera: z.string(), png: z.string().max(6_000_000), thumb: z.string().max(60_000) }),
+      )
+      .max(MAX_AGENT_CAMERAS)
+      .optional(),
     error: z.string().optional(),
   }),
 );
@@ -357,6 +483,11 @@ export const AgentStopMessage = message("agent.stop", z.strictObject({}));
 export const AgentsSaveMessage = message("agents.save", z.strictObject({ agent: AgentDefinitionInput }));
 /** Stops one task, or takes it off the queue. */
 export const TaskStopMessage = message("task.stop", z.strictObject({ id: z.string() }));
+/** The user's answer to a plan: the parts to keep, or null to skip the plan. */
+export const PlanAnswerMessage = message(
+  "plan.answer",
+  z.strictObject({ id: z.string(), keep: z.array(z.string()).nullable() }),
+);
 export const ApprovalDecideMessage = message(
   "approval.decide",
   z.strictObject({ id: z.string(), decision: z.enum(["allow", "deny", "always"]) }),
@@ -416,12 +547,16 @@ export const Message = z.discriminatedUnion("type", [
   TeamSnapshotMessage,
   AgentsSnapshotMessage,
   ApprovalPendingMessage,
+  PlanPendingMessage,
+  PlanResolvedMessage,
   ApprovalResolvedMessage,
   ApprovalsAllowedMessage,
   ExtensionsSnapshotMessage,
   RhinoStateMessage,
   ViewSetMessage,
   RhinoPythonRunMessage,
+  RhinoUndoMessage,
+  RhinoRunReportMessage,
   RhinoStatusMessage,
   RhinoObjectsMessage,
   RhinoSelectionMessage,
@@ -447,6 +582,7 @@ export const Message = z.discriminatedUnion("type", [
   TaskStopMessage,
   AgentsSaveMessage,
   ApprovalDecideMessage,
+  PlanAnswerMessage,
   ApprovalsRevokeMessage,
   ExtensionsAddServerMessage,
   ExtensionsRemoveServerMessage,

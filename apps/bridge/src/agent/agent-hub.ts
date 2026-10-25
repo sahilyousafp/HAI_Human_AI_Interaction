@@ -56,6 +56,8 @@ export interface AgentHubOptions {
   extraPrompt?(): string | undefined;
   /** The agent's definition as the app runs it (its tools included), read when its process starts. */
   definition?(): ManagedDefinition | undefined;
+  /** The read-only subagents the agent may start (`--agents` entries besides its own). */
+  helpers?(): Record<string, ManagedDefinition> | undefined;
 }
 
 const id = () => randomUUID();
@@ -286,11 +288,13 @@ export class AgentHub {
     const { agent } = this.options;
     const extraPrompt = this.options.extraPrompt?.();
     const definition = this.options.definition?.();
+    const helpers = this.options.helpers?.();
     this.surface = definition ? definition.tools.join(",") : "";
     const paths = writeAgentConfig(projectDir, this.options.mcp(), {
       ...(agent ? { agent } : {}),
       ...(extraPrompt ? { extraPrompt } : {}),
       ...(definition ? { definition } : {}),
+      ...(helpers ? { helpers } : {}),
     });
     const resumeSessionId = readSessionId(projectDir, agent, this.surface);
     if (hasOutdatedSession(projectDir, agent, this.surface))

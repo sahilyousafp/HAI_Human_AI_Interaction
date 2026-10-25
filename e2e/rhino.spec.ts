@@ -377,6 +377,82 @@ test.describe("the agent sets the view", () => {
   });
 });
 
+test.describe("a Rhino script that goes outside its claim", () => {
+  test("the user is told what it touched and can undo the run in Rhino", async ({ page }) => {
+    await start(page, { agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-e2e-rhino-run-"))) });
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+    await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
+    const rhino = await connect();
+    await team().request("delegate architect[dome]: rhino run Oops");
+    const card = page.getByTestId("approval-card").last();
+    await expect(card).toHaveAttribute("data-outcome", "pending");
+    await card.getByRole("button", { name: "Allow", exact: true }).click();
+    // The script goes to Rhino with the agent, the title and the part its task works on.
+    const asked = await rhino.waitFor("rhino.python.run");
+    expect(asked.payload).toMatchObject({ agent: "architect", title: "Oops", part: "dome" });
+    // Rhino answers: it changed a wall that belongs to no part of the dome.
+    rhino.send("rhino.python.result", {
+      id: asked.payload.id,
+      ok: true,
+      stdout: "",
+      durationMs: 4,
+      changes: {
+        added: [],
+        changed: [
+          {
+            id: "wall-9",
+            name: "Garden wall",
+            tags: { "hai.part": "garden" },
+            bounds: { min: [0, 0, 0], max: [1000, 1000, 1000] },
+          },
+        ],
+        deleted: [],
+        truncated: false,
+      },
+    });
+    const report = page.getByTestId("run-report");
+    await expect(report).toContainText("Architect");
+    await expect(report).toContainText("Oops");
+    await expect(report.getByTestId("run-report-stray")).toContainText("changed");
+    await expect(report.getByTestId("run-report-stray")).toContainText("Garden wall");
+    await report.getByTestId("run-report-undo").click();
+    await rhino.waitFor("rhino.undo");
+    await expect(page.getByTestId("run-report")).toHaveCount(0);
+  });
+
+  test("a script that stays inside its claim leaves no report", async ({ page }) => {
+    await start(page, { agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-e2e-rhino-run-"))) });
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+    await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
+    const rhino = await connect();
+    await team().request("delegate architect[dome]: rhino run Fine");
+    const card = page.getByTestId("approval-card").last();
+    await card.getByRole("button", { name: "Allow", exact: true }).click();
+    const asked = await rhino.waitFor("rhino.python.run");
+    rhino.send("rhino.python.result", {
+      id: asked.payload.id,
+      ok: true,
+      stdout: "",
+      durationMs: 4,
+      changes: {
+        added: [
+          {
+            id: "s-1",
+            name: "Surface",
+            tags: { "hai.owner": "architect", "hai.part": "dome" },
+            bounds: { min: [0, 0, 0], max: [1000, 1000, 10] },
+          },
+        ],
+        changed: [],
+        deleted: [],
+        truncated: false,
+      },
+    });
+    await expect(page.getByText("Rhino ran:")).toBeVisible();
+    await expect(page.getByTestId("run-report")).toHaveCount(0);
+  });
+});
+
 test.describe("files the agent's Python wrote", () => {
   const box = join(import.meta.dirname, "..", "test-assets", "models", "metres-box.3dm");
   test.skip(!env, "needs a Python 3.10 or newer on this machine");
@@ -429,6 +505,21 @@ test.describe("files the agent's Python wrote", () => {
     const [box] = await imported();
     expect(box?.name).toBe("Box");
     expect(box?.bounds.max.map((v, k) => v - (box?.bounds.min[k] ?? 0))).toEqual([2000, 1000, 3000]);
+  });
+
+  test("the card names the files the script will write, and a file outside that declaration is a notice, not an offer", async ({
+    page,
+  }) => {
+    const card = await runPython(page, "python stray");
+    await expect(card.getByTestId("approval-outputs")).toContainText("declared.3dm");
+    await card.getByRole("button", { name: "Allow", exact: true }).click();
+    const files = page.getByTestId("written-files");
+    await expect(files.getByTestId("written-file")).toHaveCount(1);
+    await expect(files.getByTestId("written-file")).toContainText("declared.3dm");
+    await expect(files.getByTestId("written-outside")).toContainText("stray.3dm");
+    await expect(files.getByTestId("written-outside-note")).toContainText("outside what it declared");
+    // The notice has no Import button; only the declared file does.
+    await expect(files.getByTestId("written-import")).toHaveCount(1);
   });
 
   test("with Rhino connected the file can be opened there", async ({ page }) => {

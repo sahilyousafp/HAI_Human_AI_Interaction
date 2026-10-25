@@ -19,6 +19,12 @@ export interface PythonRunInput {
   timeoutMs?: number;
   /** The team agent that asked, for the script's header. */
   agent: string | null;
+  /**
+   * The `.3dm` files the script will write, relative to the project. They are reserved for the task while it runs,
+   * and the user is offered only these; any other `.3dm` that changed meanwhile is reported as outside the
+   * declaration. Absent: every `.3dm` that changed is offered, as before.
+   */
+  outputs?: string[];
   /** Aborted when the user presses Stop. */
   signal?: AbortSignal;
 }
@@ -39,13 +45,20 @@ export interface PythonRunOutput {
   /** The kept script, relative to the project folder. */
   script: string;
   written: WrittenFile[];
+  /** With declared outputs: `.3dm` files that changed during the run without being declared (maybe another run's). */
+  undeclared?: WrittenFile[];
   stopped?: boolean;
   timedOut?: boolean;
 }
 
+/** What reserving a run's output files answered; `release` gives them back when the run is over. */
+export type OutputReservation = { ok: true; release(): void } | { ok: false; error: string };
+
 export interface PythonWorkbenchOptions {
   env: PythonEnv;
   projectDir(): string | null;
+  /** Reserves the declared output files for the asking agent's task; absent: nothing is reserved. */
+  reserve?(agent: string | null, title: string, paths: string[]): OutputReservation;
   /** The folder holding `hai_run.py` and `hai_3dm.py`. */
   helperDir: string;
   now?: () => Date;
@@ -73,6 +86,21 @@ export function capOutput(text: string, limit = OUTPUT_LIMIT): string {
   if (text.length <= limit) return text;
   const half = Math.floor(limit / 2);
   return `${text.slice(0, half)}\n[... ${text.length - limit} characters left out ...]\n${text.slice(-half)}`;
+}
+
+/** A declared output as a path relative to the project, or null when it is not a `.3dm` file inside the project. */
+export function outputPath(declared: string): string | null {
+  const path = declared.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!path.toLowerCase().endsWith(".3dm") || path.startsWith("/") || /^[a-z]:/i.test(path)) return null;
+  if (path.split("/").some((part) => part === ".." || part === "")) return null;
+  return path;
+}
+
+/** A file stem that no earlier run in this folder has used, so runs in the same second never share a kept script. */
+function freshStem(dir: string, stem: string): string {
+  let candidate = stem;
+  for (let n = 2; existsSync(join(dir, `${candidate}.py`)); n++) candidate = `${stem}-${n}`;
+  return candidate;
 }
 
 const slug = (title: string) =>
@@ -162,7 +190,7 @@ export class PythonWorkbench {
       writeFileSync(join(project, ".hai", ".gitignore"), "*\n");
     const path = join(
       dir,
-      `${stamp.replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}-${slug(input.title)}.py`,
+      `${freshStem(dir, `${stamp.replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}-${slug(input.title)}`)}.py`,
     );
     const outcome = result.stopped ? "stopped" : result.timedOut ? "timed out" : result.ok ? "ok" : "error";
     writeFileSync(
@@ -197,7 +225,31 @@ export class PythonWorkbench {
     if (!project) return fail("Open a project first.");
     const bad = input.packages.find((spec) => !isPackageSpec(spec));
     if (bad) return fail(`"${bad}" is not a package name pip can install.`);
+    const declared: string[] | undefined = input.outputs?.map((p) => outputPath(p) ?? "");
+    const invalid = declared?.indexOf("");
+    if (declared && invalid !== undefined && invalid >= 0)
+      return fail(
+        `"${input.outputs?.[invalid]}" is not a .3dm file inside the project folder (a relative path).`,
+      );
+    let release = () => {};
+    if (declared && declared.length > 0) {
+      const reserved = this.options.reserve?.(input.agent, input.title, declared);
+      if (reserved && !reserved.ok) return fail(reserved.error);
+      if (reserved) release = reserved.release;
+    }
+    try {
+      return await this.runReserved(input, project, declared, fail);
+    } finally {
+      release();
+    }
+  }
 
+  private async runReserved(
+    input: PythonRunInput,
+    project: string,
+    declared: string[] | undefined,
+    fail: (error: string, extra?: Partial<PythonRunOutput>) => PythonRunOutput,
+  ): Promise<PythonRunOutput> {
     const ensured = await this.options.env.ensure(input.packages);
     if (!ensured.ok) return fail(ensured.error);
 
@@ -207,7 +259,10 @@ export class PythonWorkbench {
     mkdirSync(dir, { recursive: true });
     if (!existsSync(join(project, ".hai", ".gitignore")))
       writeFileSync(join(project, ".hai", ".gitignore"), "*\n");
-    const base = `${stamp.replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}-${slug(input.title)}`;
+    const base = freshStem(
+      dir,
+      `${stamp.replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}-${slug(input.title)}`,
+    );
     const scriptPath = join(dir, `${base}.py`);
     const outcomePath = join(dir, `${base}.outcome.json`);
     const scriptRelative = relative(project, scriptPath).replace(/\\/g, "/");
@@ -226,12 +281,16 @@ export class PythonWorkbench {
     rmSync(outcomePath, { force: true });
 
     const after = snapshotThreeDm(project);
-    const written: WrittenFile[] = [...after]
+    const changed: WrittenFile[] = [...after]
       .filter(([path, info]) => {
         const old = before.get(path);
         return !old || old.mtime !== info.mtime || old.size !== info.size;
       })
       .map(([path, info]) => ({ path, size: info.size }));
+    // With declared outputs the user is offered those; anything else that changed is reported, not offered.
+    const mine = declared ? new Set(declared.map((p) => p.toLowerCase())) : null;
+    const written = mine ? changed.filter((f) => mine.has(f.path.toLowerCase())) : changed;
+    const undeclared = mine ? changed.filter((f) => !mine.has(f.path.toLowerCase())) : [];
 
     const outcome = output.stopped ? "stopped" : output.timedOut ? "timed out" : output.ok ? "ok" : "error";
     writeFileSync(
@@ -243,7 +302,7 @@ export class PythonWorkbench {
         ...(output.stdout ? ["output:", ...output.stdout.split(/\r?\n/).map((l) => `  ${l}`)] : []),
       ])}${input.code}\n`,
     );
-    return { ...output, script: scriptRelative, written };
+    return { ...output, script: scriptRelative, written, ...(undeclared.length ? { undeclared } : {}) };
   }
 
   private execute(

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { rmSync } from "node:fs";
 import type { AgentProvider, Detection } from "@hai/agent-core";
 import type {
   AgentDefinitionInput,
@@ -8,24 +9,35 @@ import type {
   ApprovalRequest,
   Message,
   RequestContext,
+  SceneDocument,
+  SceneOp,
+  TaskScope,
+  TeamClaim,
   TeamTask,
 } from "@hai/protocol";
+import { elementsInScope, scopeWithin } from "@hai/scene";
 import { type Logger, silentLogger } from "../log.ts";
 import type { AgentTokens } from "../mcp/agent-tokens.ts";
-import type { TeamTools } from "../mcp/scene-tools.ts";
-import { HAI_SERVER, migrateSessionToLead } from "./agent-config.ts";
+import type { ClaimTools, TeamTools, WorkerTools } from "../mcp/scene-tools.ts";
+import { agentDir, HAI_SERVER, migrateSessionToLead } from "./agent-config.ts";
+import type { AgentEyes } from "./agent-eyes.ts";
 import { AgentHub, type TurnHooks } from "./agent-hub.ts";
+import { ClaimTable, describeScope } from "./claims.ts";
+import { reservedTagRefusal, stampOps } from "./ownership.ts";
 import type { PanelClosure } from "./panels.ts";
 import {
   allowedHaiTools,
   defaultRoster,
   ensureDefaultAgents,
+  helperDefinitions,
   managedDefinition,
   memberInfo,
   readRoster,
   rosterText,
   saveDefinition,
   type TeamMember,
+  workerDefinition,
+  workerHaiTools,
 } from "./roster.ts";
 
 type Send = (message: Message) => void;
@@ -34,6 +46,10 @@ type Send = (message: Message) => void;
 export const TEAM = {
   /** How many specialists work at the same time, unless set otherwise. Mochi is always available on top. */
   maxRunning: 3,
+  /** How many agent sessions (Mochi, the running specialists and their workers) run at once, unless the user set otherwise. */
+  maxSessions: 6,
+  /** How long a stopped task's workers have to end before they are ended for it, in milliseconds. */
+  workerStopMs: 3000,
   /** Finished tasks kept on the board (and in status answers). */
   finishedKept: 30,
   /** A specialist's final reply is shortened to this for the board, status and Mochi's report. */
@@ -48,7 +64,10 @@ const FINISHED: ReadonlySet<TeamTask["status"]> = new Set(["done", "failed", "st
 const ACTIVE: ReadonlySet<TeamTask["status"]> = new Set(["running", "waiting"]);
 
 /** How an agent's name is shown and spoken: "architect" becomes "Architect". */
-export const displayName = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
+export const displayName = (name: string) => {
+  const spoken = name.replace(".", " ");
+  return spoken.charAt(0).toUpperCase() + spoken.slice(1);
+};
 
 const shorten = (text: string, max: number) =>
   text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
@@ -93,7 +112,7 @@ export interface TeamOptions {
   mcpUrl(): string;
   tokens: AgentTokens;
   /** The scene's undo grouping: one group per writing task. */
-  scene: { beginTurn(label: string): void; endTurn(): void };
+  scene: { beginTurn(agent: string, label: string): void; endTurn(agent: string): void };
   approvals: { readonly waiting: ApprovalRequest[]; denyAll(message: string, agent?: string): void };
   /** Generated panels: an agent's turn ended or was stopped, so an offer it left unanswered is over. */
   panels?: { turnEnded(agent: string): void };
@@ -101,6 +120,16 @@ export interface TeamOptions {
   initialized?(event: Extract<AgentEvent, { type: "init" }>): void;
   idleMs?: number;
   maxRunning?: number;
+  /** How many sessions may run at once (the user's setting, read each time). */
+  maxSessions?(): number;
+  /** The claims of the running tasks; the scene tools check changes against the same table. */
+  claims?: ClaimTable;
+  /** The scene, to resolve element ids and parts when claims are compared. */
+  doc?(): SceneDocument;
+  /** Whether Parallel modelling is on: writers with scopes that do not overlap work at the same time. */
+  parallel?(): boolean;
+  /** The agents' own cameras and last pictures: on the snapshot, and gone with the task that placed them. */
+  eyes?: Pick<AgentEyes, "snapshot" | "clear">;
   log?: Logger;
 }
 
@@ -109,8 +138,9 @@ export interface TeamOptions {
  * and the task board with its scheduler for the work Mochi hands to the specialists.
  *
  * - Up to `maxRunning` specialists work at once, each on one task at a time; later tasks queue.
- * - Only one agent that changes the model works at a time, so each writing task is one undo step, labelled
- *   "<Agent>: <title>". Agents that only read run alongside.
+ * - Agents that change the model work at the same time only when their tasks' scopes do not overlap (a task with no
+ *   scope overlaps everything), and with Parallel modelling off only one does. Each writing task is one undo step,
+ *   labelled "<Agent>: <title>". Agents that only read run alongside.
  * - When every task Mochi handed out in one turn has finished, Mochi gets a digest turn and reports.
  */
 export class Team {
@@ -134,8 +164,22 @@ export class Team {
   private readonly noteRuns = new Set<Promise<unknown>>();
   /** Mochi's report turn in progress (a user request waits for it). */
   private digestRunning: Promise<unknown> | null = null;
-  /** The agent whose writing task holds the scene's undo group. */
-  private groupOwner: string | null = null;
+  /** The agents whose writing turn has an open undo group in the scene. */
+  private readonly openGroups = new Set<string>();
+  /** Which part of the model each running writing task may change. */
+  readonly claims: ClaimTable;
+  /** The shared brief of the tasks one of Mochi's turns handed out. */
+  private readonly briefs = new Map<string, string>();
+  /** A worker's name, and the specialist it was started from (its definition, tools and colour are that agent's). */
+  private readonly workerBase = new Map<string, string>();
+  /** How many workers each specialist has started, so a name is never used twice. */
+  private readonly workerCounts = new Map<string, number>();
+  /** What a specialist is to be told about its workers that ended, by the parent's task id. */
+  private readonly workerNotes = new Map<string, string[]>();
+  /** A parent task waiting for its workers, woken when one ends. */
+  private readonly workerWaiters = new Map<string, () => void>();
+  /** Who waits for a task to end. */
+  private readonly endWaiters = new Map<string, Array<() => void>>();
   /** What each agent's running process was started with, to restart it after its definition changes. */
   private readonly startedWith = new Map<string, string>();
   private lastDetection: Detection | null = null;
@@ -147,11 +191,22 @@ export class Team {
     private readonly options: TeamOptions,
     private readonly broadcast: Send,
   ) {
+    this.claims = options.claims ?? new ClaimTable();
     this.ready = this.hub(DEFAULT_LEAD).ready;
   }
 
   get maxRunning(): number {
     return this.options.maxRunning ?? TEAM.maxRunning;
+  }
+
+  /** How many agent sessions may run at once. */
+  get maxSessions(): number {
+    return this.options.maxSessions?.() ?? TEAM.maxSessions;
+  }
+
+  /** The sessions running now: Mochi, every specialist with a task and every worker. */
+  get sessions(): number {
+    return 1 + this.tasks.filter((t) => ACTIVE.has(t.status)).length;
   }
 
   /** The lead's name: the project's lead, or Mochi. */
@@ -178,18 +233,25 @@ export class Team {
         mcp: () => {
           this.startedWith.set(name, this.fingerprint(name));
           const member = this.member(name);
+          const base = this.workerBase.has(name) ? this.memberOf(name) : undefined;
           return {
             url: this.options.mcpUrl(),
             token: this.options.tokens.issue({
               agent: name,
-              tools: member ? allowedHaiTools(member) : new Set<string>(),
+              tools: base ? workerHaiTools(base) : member ? allowedHaiTools(member) : new Set<string>(),
             }),
           };
         },
         extraPrompt: () => (name === this.lead ? rosterText(this.members) : undefined),
         definition: () => {
+          const base = this.workerBase.has(name) ? this.memberOf(name) : undefined;
+          if (base) return workerDefinition(base);
           const member = this.member(name);
           return member ? managedDefinition(member) : undefined;
+        },
+        helpers: () => {
+          const base = this.memberOf(name);
+          return base ? helperDefinitions(base, this.members) : undefined;
         },
         pending: () => this.options.approvals.waiting.filter((a) => a.agent === name),
         hooks: this.hooksFor(name),
@@ -264,19 +326,177 @@ export class Team {
     }
   }
 
+  /** A specialist's tool for starting a worker on a part of its own task. */
+  readonly workerTools: WorkerTools = {
+    spawn: (agent, input) => this.spawnWorker(agent, input),
+  };
+
   /** The lead's tools on the MCP endpoint. */
   readonly tools: TeamTools = {
+    has: (name) => this.member(name) !== undefined && !this.member(name)?.lead,
     delegate: (task) => this.delegate(task),
     status: () => this.status(),
     cancel: (taskId) => this.cancel(taskId),
   };
+
+  /**
+   * Checks an agent's change to the model and puts its name on it. The agent's own tags may not use the system's
+   * names; what it creates is stamped with its name (and its task's part); and, with Parallel modelling on, the whole
+   * batch is refused unless it lies inside the agent's claim and clear of everyone else's.
+   */
+  vet(agent: string | null, ops: SceneOp[]): { ok: true; ops: SceneOp[] } | { ok: false; error: string } {
+    const doc = this.options.doc?.();
+    if (!agent || !doc) return { ok: true, ops };
+    const refused = reservedTagRefusal(ops, doc);
+    if (refused) return { ok: false, error: refused };
+    const claim = this.claims.forAgent(agent);
+    const stamped = stampOps(ops, doc, agent, claim?.scope?.part);
+    if (!this.options.parallel?.()) return { ok: true, ops: stamped };
+    if (!claim) {
+      if (this.memberOf(agent) && agent !== this.lead) {
+        return {
+          ok: false,
+          error:
+            "You have no running task, so you cannot change the model now. Nothing was changed. If the user asked for something, say so in your reply.",
+        };
+      }
+      const working = [...new Set(this.claims.all.map((c) => displayName(c.agent)))];
+      if (working.length > 0) {
+        return {
+          ok: false,
+          error: `${working.join(" and ")} ${working.length > 1 ? "are" : "is"} working on the model right now. Nothing was changed. Hand the work to a specialist with delegate instead.`,
+        };
+      }
+      return { ok: true, ops: stamped };
+    }
+    const checked = this.claims.check(claim, stamped, doc);
+    // What the claim holds changes as the agent adds elements: the panel's counts follow (throttled).
+    if (checked.ok) this.publishSoon();
+    return checked.ok ? { ok: true, ops: stamped } : checked;
+  }
+
+  /** The claim tools of the agents (see scene-tools.ts). */
+  readonly claimTools: ClaimTools = {
+    list: (agent) => this.listClaims(agent),
+    request: (agent, scope) => this.requestClaim(agent, scope),
+    release: (agent, release) => this.releaseClaim(agent, release),
+    userChanges: (agent, ids) => {
+      const claim = this.claims.forAgent(agent);
+      return claim ? this.claims.takeUserChanges(claim.taskId, ids) : new Set<string>();
+    },
+  };
+
+  private listClaims(agent: string): unknown {
+    const doc = this.options.doc?.();
+    const own = this.claims.forAgent(agent);
+    const task = (id: string) => this.tasks.find((t) => t.id === id);
+    const held = (scope: TaskScope | null) =>
+      doc ? Object.values(doc.elements).filter((e) => this.claims.covers({ scope }, e, doc)).length : 0;
+    const brief = (own && task(own.taskId)?.brief) || this.tasks.findLast((t) => t.brief)?.brief;
+    return {
+      ...(brief ? { brief } : {}),
+      claims: this.claims.all.map((c) => ({
+        agent: c.agent,
+        task: c.title,
+        scope: describeScope(c.scope),
+        elements: held(c.scope),
+        you: c.agent === agent,
+      })),
+      waiting: this.tasks
+        .filter((t) => t.status === "queued" && t.waitingFor)
+        .map((t) => {
+          const blocker = task(t.waitingFor as string);
+          return {
+            agent: t.agent,
+            task: t.title,
+            waitsFor: blocker ? `${blocker.agent}'s task "${blocker.title}"` : "another task",
+          };
+        }),
+    };
+  }
+
+  private requestClaim(
+    agent: string,
+    scope: TaskScope,
+  ): { ok: true; scope: string } | { ok: false; error: string } {
+    const doc = this.options.doc?.();
+    const claim = this.claims.forAgent(agent);
+    const task = claim ? this.tasks.find((t) => t.id === claim.taskId) : undefined;
+    if (!claim || !task || !doc) return { ok: false, error: "You have no running task to add to." };
+    if (!claim.scope) return { ok: false, error: "Your task already has the whole model." };
+    if (scope.part !== undefined && claim.scope.part !== undefined && scope.part !== claim.scope.part)
+      return {
+        ok: false,
+        error: `Your claim already has the part "${claim.scope.part}"; a claim has one part. Ask for ids or a region instead.`,
+      };
+    if (scope.region && claim.scope.region)
+      return { ok: false, error: "Your claim already has a region; a claim has one. Ask for ids instead." };
+    // A worker's claim is cut from its parent's: what it asks for must lie inside that, and the parent's own claim
+    // is not in its way.
+    const parentClaim = claim.parent ? this.claims.all.find((c) => c.taskId === claim.parent) : undefined;
+    if (parentClaim) {
+      const within = scopeWithin(scope, parentClaim.scope, doc);
+      if (!within.ok) return { ok: false, error: `Not granted: ${within.reason}.` };
+    }
+    for (const other of this.claims.all) {
+      if (other.taskId === claim.taskId || this.claims.isBelow(claim, other.taskId)) continue;
+      if (!this.claims.overlap(scope, other.scope, doc)) continue;
+      return {
+        ok: false,
+        error: `Not granted: ${describeScope(scope)} is claimed by ${other.agent}'s task "${other.title}" (${describeScope(other.scope)}). Leave it to them, or tell the user.`,
+      };
+    }
+    const ids = [...new Set([...(claim.scope.ids ?? []), ...(scope.ids ?? [])])];
+    const merged: TaskScope = {
+      ...(ids.length ? { ids } : {}),
+      ...((scope.part ?? claim.scope.part) !== undefined
+        ? { part: (scope.part ?? claim.scope.part) as string }
+        : {}),
+      ...((scope.region ?? claim.scope.region)
+        ? { region: (scope.region ?? claim.scope.region) as never }
+        : {}),
+    };
+    this.claims.rescope(claim.taskId, merged);
+    task.scope = merged;
+    this.publish();
+    return { ok: true, scope: describeScope(merged) };
+  }
+
+  private releaseClaim(
+    agent: string,
+    release: { ids?: string[] | undefined; part?: boolean | undefined; region?: boolean | undefined },
+  ): { ok: true; scope: string } | { ok: false; error: string } {
+    const claim = this.claims.forAgent(agent);
+    const task = claim ? this.tasks.find((t) => t.id === claim.taskId) : undefined;
+    if (!claim || !task) return { ok: false, error: "You have no running task." };
+    if (!claim.scope)
+      return { ok: false, error: "Your task has the whole model; there is nothing to give back." };
+    let next: TaskScope | undefined = ClaimTable.withoutIds(claim.scope, release.ids ?? []);
+    if (next && release.part) {
+      const { part: _part, ...rest } = next;
+      next = Object.keys(rest).length ? (rest as TaskScope) : undefined;
+    }
+    if (next && release.region) {
+      const { region: _region, ...rest } = next;
+      next = Object.keys(rest).length ? (rest as TaskScope) : undefined;
+    }
+    if (!next)
+      return { ok: false, error: "That would leave your task with nothing. Finish the task instead." };
+    this.claims.rescope(claim.taskId, next);
+    task.scope = next;
+    this.schedule();
+    this.publish();
+    return { ok: true, scope: describeScope(next) };
+  }
 
   /** Hands a task to a specialist: queued at once, started when the scheduler allows. */
   delegate(task: {
     agent: string;
     title: string;
     instruction: string;
-  }): { ok: true; taskId: string; status: string } | { ok: false; error: string } {
+    scope?: TaskScope | undefined;
+    brief?: string | undefined;
+  }): { ok: true; taskId: string; status: string; note?: string } | { ok: false; error: string } {
     this.refreshRoster();
     const agent = task.agent.trim().toLowerCase();
     const member = this.member(agent);
@@ -289,6 +509,13 @@ export class Team {
     }
     if (member.lead) return { ok: false, error: "Hand tasks to the specialists, not to yourself." };
     const fromTurn = this.hub(this.lead).runningTurn?.id;
+    // One brief per request: the latest one Mochi gives applies to every task of the request, started or not.
+    const brief = task.brief?.trim();
+    if (brief && fromTurn) {
+      this.briefs.set(fromTurn, brief);
+      for (const other of this.tasks) if (other.fromTurn === fromTurn) other.brief = brief;
+    }
+    const shared = brief || (fromTurn ? this.briefs.get(fromTurn) : undefined);
     const record: TeamTask = {
       id: randomUUID(),
       agent,
@@ -297,12 +524,15 @@ export class Team {
       status: "queued",
       createdAt: Date.now(),
       ...(fromTurn ? { fromTurn } : {}),
+      ...(task.scope ? { scope: task.scope } : {}),
+      ...(shared ? { brief: shared } : {}),
     };
+    const note = member.writes ? this.overlapNote(record) : undefined;
     this.tasks.push(record);
     this.log.info("task handed out", { agent });
     this.schedule();
     this.publish();
-    return { ok: true, taskId: record.id, status: record.status };
+    return { ok: true, taskId: record.id, status: record.status, ...(note ? { note } : {}) };
   }
 
   /** What everyone is doing, for the lead's team_status tool. */
@@ -331,10 +561,17 @@ export class Team {
                 }
               : {}),
             queued: queued.map(brief),
+            ...(current && this.children(current).some((w) => !FINISHED.has(w.status))
+              ? {
+                  workers: this.children(current)
+                    .filter((w) => !FINISHED.has(w.status))
+                    .map(brief),
+                }
+              : {}),
           };
         }),
       recentlyFinished: this.tasks
-        .filter((t) => FINISHED.has(t.status))
+        .filter((t) => FINISHED.has(t.status) && t.kind !== "worker")
         .slice(-5)
         .map((t) => ({ ...brief(t), agent: t.agent, summary: t.summary ?? "" })),
     };
@@ -345,6 +582,8 @@ export class Team {
     const task = this.tasks.find((t) => t.id === taskId);
     if (!task) return { ok: false, error: `No task ${taskId}.` };
     if (FINISHED.has(task.status)) return { ok: true, status: task.status };
+    // Stopping a task stops its workers.
+    for (const worker of this.children(task)) if (!FINISHED.has(worker.status)) this.cancel(worker.id);
     if (task.status === "queued") {
       this.finish(task, "stopped");
       return { ok: true, status: "stopped" };
@@ -416,6 +655,17 @@ export class Team {
     return this.members.find((m) => m.name === name);
   }
 
+  /** The member whose definition an agent runs with: itself, or for a worker the specialist it was started from. */
+  private memberOf(name: string): TeamMember | undefined {
+    const base = this.workerBase.get(name);
+    return base ? this.member(base) : this.member(name);
+  }
+
+  /** The workers a task has started (finished ones too, while they stay on the board). */
+  private children(task: TeamTask): TeamTask[] {
+    return this.tasks.filter((t) => t.parent === task.id);
+  }
+
   /** Reads the open project's team, creating the default agents the first time, and moving an old session to the lead. */
   private ensureProject(): void {
     const projectDir = this.options.projectDir();
@@ -424,7 +674,14 @@ export class Team {
       if (this.project) {
         // Another project: its own team and board.
         void this.stopAll();
+        for (const name of [...this.workerBase.keys()]) void this.retire(name);
+        this.workerBase.clear();
+        this.workerCounts.clear();
+        this.workerNotes.clear();
         this.tasks = [];
+        this.claims.clear();
+        this.briefs.clear();
+        this.options.eyes?.clear();
       }
       const created = ensureDefaultAgents(projectDir);
       if (created.length) this.log.info("default agents created", { agents: created.join(", ") });
@@ -486,9 +743,10 @@ export class Team {
     return {
       started: () => {
         const task = this.activeTask.get(name);
-        if (task && this.member(name)?.writes) {
-          this.options.scene.beginTurn(`${displayName(name)}: ${task.title}`);
-          this.groupOwner = name;
+        // A task is one undo step: its note turns (a specialist hearing from its workers) go into the same group.
+        if (task && this.memberOf(name)?.writes && !this.openGroups.has(name)) {
+          this.options.scene.beginTurn(name, `${displayName(name)}: ${task.title}`);
+          this.openGroups.add(name);
         }
       },
       stopping: () => {
@@ -498,10 +756,8 @@ export class Team {
       ended: () => {
         this.options.approvals.denyAll("The request ended before the user answered.", name);
         this.options.panels?.turnEnded(name);
-        if (this.groupOwner === name) {
-          this.groupOwner = null;
-          this.options.scene.endTurn();
-        }
+        // The task closes its own group when it ends; a turn of the task is not the end.
+        if (!this.activeTask.has(name) && this.openGroups.delete(name)) this.options.scene.endTurn(name);
       },
       initialized: (event) => this.options.initialized?.(event),
     };
@@ -531,21 +787,193 @@ export class Team {
 
   /** Starts the queued tasks the limits allow, oldest first. */
   private schedule(): void {
-    const active = this.tasks.filter((t) => ACTIVE.has(t.status));
-    for (const task of this.tasks.filter((t) => t.status === "queued")) {
-      if (active.length >= this.maxRunning) break;
+    const active = this.tasks.filter((t) => ACTIVE.has(t.status) && t.kind !== "worker");
+    // Queued writers that could not start: a later task that overlaps one waits for it, so a task that needs the
+    // whole model is not starved by smaller tasks that keep starting.
+    const waiting: TeamTask[] = [];
+    let changed = false;
+    for (const task of this.tasks.filter((t) => t.status === "queued" && t.kind !== "worker")) {
+      const blocker = this.writes(task) ? this.writerBlocking(task, active, waiting) : undefined;
+      if (blocker?.id !== task.waitingFor) {
+        if (blocker) task.waitingFor = blocker.id;
+        else delete task.waitingFor;
+        changed = true;
+      }
+      if (active.length >= this.maxRunning) continue;
       if (active.some((t) => t.agent === task.agent)) continue; // one task per agent at a time
-      const writes = this.member(task.agent)?.writes ?? true;
-      if (writes && active.some((t) => this.member(t.agent)?.writes ?? true)) continue; // one writer
+      if (blocker) {
+        waiting.push(task);
+        continue;
+      }
+      if (this.sessions >= this.maxSessions) {
+        changed = this.markWaitingForSession(task) || changed;
+        continue;
+      }
+      delete task.waitingForSession;
       active.push(task);
+      if (this.writes(task)) {
+        this.claims.grant({
+          taskId: task.id,
+          agent: task.agent,
+          title: task.title,
+          scope: task.scope ?? null,
+        });
+      }
       void this.run(task);
     }
+    if (this.startWorkers()) changed = true;
+    if (changed) this.publishSoon();
+  }
+
+  /** A task or worker that waits for a free session rather than for a claim. Returns whether that is news. */
+  private markWaitingForSession(task: TeamTask): boolean {
+    if (task.waitingForSession) return false;
+    task.waitingForSession = true;
+    return true;
+  }
+
+  /**
+   * Starts the queued workers the session limit allows, oldest first, each under a claim cut from its parent's. A
+   * worker whose parent has ended is not started. Returns whether anything changed.
+   */
+  private startWorkers(): boolean {
+    let changed = false;
+    for (const worker of this.tasks.filter((t) => t.kind === "worker" && t.status === "queued")) {
+      const parent = this.claims.all.find((c) => c.taskId === worker.parent);
+      if (!parent) {
+        this.finish(worker, "stopped", "Its task ended before it could start.");
+        changed = true;
+        continue;
+      }
+      if (this.sessions >= this.maxSessions) {
+        changed = this.markWaitingForSession(worker) || changed;
+        continue;
+      }
+      delete worker.waitingForSession;
+      this.claims.grant({
+        taskId: worker.id,
+        agent: worker.agent,
+        title: worker.title,
+        scope: worker.scope ?? null,
+        ...(worker.parent ? { parent: worker.parent } : {}),
+      });
+      void this.run(worker);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /**
+   * Starts a worker for a part of the calling specialist's own task. The part lies inside the specialist's claim and
+   * clear of its other workers; the worker is its own session, started from the specialist's definition under the name
+   * `<agent>.<n>`, and its claim is cut from the specialist's, so the specialist leaves that part alone while it runs.
+   */
+  spawnWorker(
+    agent: string,
+    input: { title: string; instruction: string; scope: TaskScope },
+  ):
+    | { ok: true; worker: string; taskId: string; status: "running" | "queued"; note?: string }
+    | { ok: false; error: string } {
+    const refuse = (error: string) => ({ ok: false as const, error });
+    if (this.workerBase.has(agent))
+      return refuse(
+        "Workers cannot start workers. Do your part yourself, and say in your summary if it needs splitting further.",
+      );
+    if (!this.options.parallel?.())
+      return refuse(
+        "Parallel modelling is off, so workers cannot be started. Do the work yourself, or ask the user to switch it on in Settings > Features.",
+      );
+    const member = this.member(agent);
+    if (!member || member.lead || !member.writes)
+      return refuse("Only a specialist that changes the model can start workers.");
+    const doc = this.options.doc?.();
+    const claim = this.claims.forAgent(agent);
+    const parent = claim ? this.tasks.find((t) => t.id === claim.taskId) : undefined;
+    if (!claim || !parent || !doc) return refuse("You have no running task, so you cannot start workers.");
+    const within = scopeWithin(input.scope, claim.scope, doc);
+    if (!within.ok) return refuse(`Not started: ${within.reason}. Nothing was started.`);
+    for (const sibling of this.children(parent)) {
+      if (FINISHED.has(sibling.status)) continue;
+      if (this.claims.overlap(input.scope, sibling.scope ?? null, doc))
+        return refuse(
+          `Not started: ${describeScope(input.scope)} overlaps ${displayName(sibling.agent)}'s part "${sibling.title}" (${describeScope(sibling.scope ?? null)}). Give each worker its own part. Nothing was started.`,
+        );
+    }
+    const n = (this.workerCounts.get(agent) ?? 1) + 1;
+    this.workerCounts.set(agent, n);
+    const name = `${agent}.${n}`;
+    this.workerBase.set(name, agent);
+    const record: TeamTask = {
+      id: randomUUID(),
+      agent: name,
+      title: shorten(input.title.trim(), 80),
+      instruction: input.instruction.trim(),
+      status: "queued",
+      createdAt: Date.now(),
+      parent: parent.id,
+      kind: "worker",
+      scope: input.scope,
+      ...(parent.brief ? { brief: parent.brief } : {}),
+    };
+    this.tasks.push(record);
+    this.log.info("worker handed out", { agent: name });
+    this.schedule();
+    this.publish();
+    const queued = record.status === "queued";
+    return {
+      ok: true,
+      worker: name,
+      taskId: record.id,
+      status: queued ? "queued" : "running",
+      ...(queued
+        ? {
+            note: `It waits for a free session (${this.sessions} of ${this.maxSessions} are running) and starts when one ends.`,
+          }
+        : {}),
+    };
+  }
+
+  private writes(task: TeamTask): boolean {
+    return this.memberOf(task.agent)?.writes ?? true;
+  }
+
+  /** The running or earlier-queued writing task this one has to wait for, if any. */
+  private writerBlocking(task: TeamTask, active: TeamTask[], waiting: TeamTask[]): TeamTask | undefined {
+    const writers = active.filter((t) => this.writes(t));
+    if (!this.options.parallel?.()) return writers[0]; // one writer at a time
+    const doc = this.options.doc?.();
+    const overlaps = (other: TeamTask) =>
+      !doc || this.claims.overlap(task.scope ?? null, other.scope ?? null, doc);
+    return [...writers, ...waiting].find(overlaps);
+  }
+
+  /** Said to Mochi when a new task's scope overlaps another writing task's, so it can split better. */
+  private overlapNote(task: TeamTask): string | undefined {
+    const doc = this.options.doc?.();
+    if (!this.options.parallel?.() || !doc) return undefined;
+    const other = this.tasks.find(
+      (t) =>
+        !FINISHED.has(t.status) &&
+        this.writes(t) &&
+        this.claims.overlap(task.scope ?? null, t.scope ?? null, doc),
+    );
+    if (!other) return undefined;
+    const why =
+      !task.scope || !other.scope ? "a task without a scope takes the whole model" : "their scopes overlap";
+    return `This task overlaps ${displayName(other.agent)}'s "${other.title}" (${why}), so it waits for it instead of running at the same time. Give each task its own part, ids or region to work in parallel.`;
   }
 
   private async run(task: TeamTask): Promise<void> {
     task.status = "running";
     task.startedAt = Date.now();
     this.activeTask.set(task.agent, task);
+    this.log.info("session started", {
+      agent: task.agent,
+      kind: task.kind ?? "task",
+      waitedMs: task.startedAt - task.createdAt,
+      sessions: this.sessions,
+      limit: this.maxSessions,
+    });
     this.publish();
     let outcome: TeamTask["status"] = "failed";
     let summary: string | undefined;
@@ -555,20 +983,92 @@ export class Team {
       const turn = await this.hub(task.agent).request(task.instruction, undefined, {
         kind: "task",
         taskId: task.id,
-        preface: `[task] "${task.title}", from ${displayName(this.lead)}`,
+        preface: this.prefaceFor(task),
       });
       const end = turn.events.findLast((e) => e.type === "turn.end");
       const error = turn.events.findLast((e) => e.type === "error");
       const reason = end?.type === "turn.end" ? end.reason : undefined;
       outcome = reason === "done" || reason === "stopped" ? reason : "failed";
       summary = replyOf(turn.events) || (error?.type === "error" ? error.message : undefined);
+      // A task ends after its workers have, and hears from each of them on the way.
+      if (task.kind !== "worker") ({ outcome, summary } = await this.awaitWorkers(task, outcome, summary));
     } catch (error) {
       summary = (error as Error).message;
+      await this.cancelWorkers(task);
     }
     if (this.stopping.has(task.id)) outcome = "stopped";
     this.activeTask.delete(task.agent);
     this.finish(task, outcome, summary);
     this.pumpNotes(task.agent);
+  }
+
+  /**
+   * Keeps a specialist's task running until its workers have ended, giving it each worker's outcome and summary as a
+   * turn so it can fix a part or report. A task that was stopped, or whose own turn failed, stops its workers instead.
+   */
+  private async awaitWorkers(
+    task: TeamTask,
+    first: TeamTask["status"],
+    firstSummary: string | undefined,
+  ): Promise<{ outcome: TeamTask["status"]; summary: string | undefined }> {
+    const hub = this.hub(task.agent);
+    let outcome = first;
+    let summary = firstSummary;
+    for (;;) {
+      if (this.stopping.has(task.id) || outcome !== "done") {
+        await this.cancelWorkers(task);
+        return { outcome, summary };
+      }
+      const notes = this.workerNotes.get(task.id)?.splice(0) ?? [];
+      if (notes.length > 0) {
+        const turn = await hub.request(notes.join("\n"), undefined, { kind: "digest" });
+        const end = turn.events.findLast((e) => e.type === "turn.end");
+        const reason = end?.type === "turn.end" ? end.reason : undefined;
+        outcome = reason === "done" || reason === "stopped" ? reason : "failed";
+        summary = replyOf(turn.events) || summary;
+        continue;
+      }
+      if (this.children(task).every((w) => FINISHED.has(w.status))) return { outcome, summary };
+      await new Promise<void>((resolve) => this.workerWaiters.set(task.id, resolve));
+    }
+  }
+
+  /** Stops a task's workers and waits for them to end, ending them itself after a few seconds. */
+  private async cancelWorkers(task: TeamTask): Promise<void> {
+    const open = this.children(task).filter((w) => !FINISHED.has(w.status));
+    if (open.length === 0) return;
+    for (const worker of open) this.cancel(worker.id);
+    const ended = Promise.all(open.map((w) => this.ended(w)));
+    const timeout = new Promise<void>((resolve) => setTimeout(resolve, TEAM.workerStopMs));
+    await Promise.race([ended, timeout]);
+    for (const worker of open) if (!FINISHED.has(worker.status)) this.finish(worker, "stopped");
+  }
+
+  /** Resolves when the task has ended. */
+  private ended(task: TeamTask): Promise<void> {
+    if (FINISHED.has(task.status)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const waiting = this.endWaiters.get(task.id) ?? [];
+      waiting.push(resolve);
+      this.endWaiters.set(task.id, waiting);
+    });
+  }
+
+  /** What a specialist is told at the start of a task: the title, the shared brief and the part it may change. */
+  private prefaceFor(task: TeamTask): string {
+    const parent = task.kind === "worker" ? this.tasks.find((t) => t.id === task.parent) : undefined;
+    const lines = [
+      parent
+        ? `[worker] "${task.title}", a part of ${displayName(parent.agent)}'s task "${parent.title}". Do only this part, then end with a short summary of what you made. You cannot start workers.`
+        : `[task] "${task.title}", from ${displayName(this.lead)}`,
+    ];
+    if (task.brief) lines.push(`[brief] ${task.brief}`);
+    if (this.writes(task) && task.scope && this.options.parallel?.()) {
+      lines.push(
+        `[scope] You may change ${describeScope(task.scope)}; other agents work on the rest at the same time. A change outside it is refused. See get_claims, and request_claim to ask for more.`,
+      );
+    }
+    return lines.join("\n");
   }
 
   /** Tells an agent what became of the panels it opened, once it has no turn running. */
@@ -589,17 +1089,29 @@ export class Team {
   }
 
   private finish(task: TeamTask, status: TeamTask["status"], summary?: string): void {
+    if (FINISHED.has(task.status)) return; // ended already (a stopped task's worker that was ended for it)
     task.status = status;
     task.finishedAt = Date.now();
     delete task.lastActivity;
+    delete task.waitingFor;
+    delete task.waitingForSession;
+    // The task's undo step closes, then the claim goes before the scheduler runs, so the task waiting on it starts in
+    // the same pass.
+    if (this.openGroups.delete(task.agent)) this.options.scene.endTurn(task.agent);
+    this.claims.release(task.id);
+    this.options.eyes?.clear(task.agent);
     if (summary) task.summary = shorten(summary, TEAM.summaryChars);
     this.replies.delete(task.id);
     this.stopping.delete(task.id);
-    this.log.info("task finished", {
+    this.log.info("session ended", {
       agent: task.agent,
+      kind: task.kind ?? "task",
       status,
       durationMs: task.finishedAt - (task.startedAt ?? task.finishedAt),
     });
+    for (const resolve of this.endWaiters.get(task.id) ?? []) resolve();
+    this.endWaiters.delete(task.id);
+    if (task.kind === "worker") this.workerEnded(task);
     const finished = this.tasks.filter((t) => FINISHED.has(t.status));
     if (finished.length > TEAM.finishedKept) {
       const drop = new Set(finished.slice(0, finished.length - TEAM.finishedKept));
@@ -609,6 +1121,36 @@ export class Team {
     this.checkBatches();
     this.pumpDigests();
     this.publish();
+  }
+
+  /** A worker ended: its parent hears how (unless the parent is the one stopping), and its process is closed. */
+  private workerEnded(worker: TeamTask): void {
+    const parent = this.tasks.find((t) => t.id === worker.parent);
+    if (parent && !FINISHED.has(parent.status) && !this.stopping.has(parent.id)) {
+      const notes = this.workerNotes.get(parent.id) ?? [];
+      notes.push(
+        `[worker report] ${displayName(worker.agent)} "${worker.title}" ${worker.status}.${worker.summary ? ` ${worker.summary}` : ""}`,
+      );
+      this.workerNotes.set(parent.id, notes);
+    }
+    const wake = this.workerWaiters.get(worker.parent ?? "");
+    this.workerWaiters.delete(worker.parent ?? "");
+    wake?.();
+    void this.retire(worker.agent);
+  }
+
+  /** Closes a worker's process, forgets its token and removes its files: it never comes back. */
+  private async retire(name: string): Promise<void> {
+    const hub = this.hubs.get(name);
+    this.hubs.delete(name);
+    this.options.tokens.revoke(name);
+    try {
+      await hub?.close();
+    } catch (error) {
+      this.log.info("worker did not close cleanly", { reason: (error as Error).message });
+    }
+    const projectDir = this.options.projectDir();
+    if (projectDir) rmSync(agentDir(projectDir, name), { recursive: true, force: true });
   }
 
   /** Queues a report for each of Mochi's finished turns whose hand-offs have all finished. */
@@ -690,14 +1232,46 @@ export class Team {
     return {
       type: "team.snapshot",
       id: randomUUID(),
-      payload: { members: this.members.map(memberInfo), tasks: this.board, maxRunning: this.maxRunning },
+      payload: {
+        members: this.members.map(memberInfo),
+        tasks: this.board,
+        claims: this.claimsSnapshot(),
+        maxRunning: this.maxRunning,
+        maxSessions: this.maxSessions,
+        sessions: this.sessions,
+        ...(this.options.eyes?.snapshot() ?? { shots: [], cameras: [] }),
+      },
     };
+  }
+
+  /** What each running writing task holds, with how many elements that is now. */
+  private claimsSnapshot(): TeamClaim[] {
+    const doc = this.options.doc?.();
+    return this.claims.all.map((c) => ({
+      taskId: c.taskId,
+      agent: c.agent,
+      title: c.title,
+      scope: c.scope,
+      elements: doc ? elementsInScope(c.scope, doc).length : 0,
+      ...(c.parent ? { parent: c.parent } : {}),
+    }));
   }
 
   private publish(): void {
     if (this.snapshotTimer) clearTimeout(this.snapshotTimer);
     this.snapshotTimer = null;
     this.broadcast(this.snapshot());
+  }
+
+  /** The user changed the limit on sessions: queued tasks and workers may start now, and the strip shows it. */
+  limitsChanged(): void {
+    this.schedule();
+    this.publish();
+  }
+
+  /** An agent placed or deleted a camera, or took a picture: the strip shows it. */
+  eyesChanged(): void {
+    this.publishSoon();
   }
 
   private publishSoon(): void {

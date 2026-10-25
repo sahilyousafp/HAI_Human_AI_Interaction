@@ -113,6 +113,33 @@ export const ViewRequest = z
   );
 export type ViewRequest = z.infer<typeof ViewRequest>;
 
+const RhinoBounds = z
+  .strictObject({ min: Point3Mm, max: Point3Mm })
+  .refine(({ min, max }) => min.every((v, i) => v <= (max[i] ?? v)), "min must not exceed max");
+
+/** One object a script added, changed or deleted, as far as the bridge needs it to compare with a claim. */
+export const RhinoChange = z.strictObject({
+  id: ElementId,
+  name: z.string().max(200),
+  /** Its `hai.*` user strings (a deleted object's as they were). */
+  tags: z
+    .record(z.string().max(64), z.string().max(200))
+    .refine((t) => Object.keys(t).length <= 20, "at most 20 tags"),
+  /** Where it is (a deleted object's as it was); null when it has none. */
+  bounds: RhinoBounds.nullable(),
+});
+export type RhinoChange = z.infer<typeof RhinoChange>;
+
+/** What a script did to the document, found by comparing every object before and after the run. */
+export const RhinoRunChanges = z.strictObject({
+  added: z.array(RhinoChange).max(500),
+  changed: z.array(RhinoChange).max(500),
+  deleted: z.array(RhinoChange).max(500),
+  /** More objects changed than are listed. */
+  truncated: z.boolean(),
+});
+export type RhinoRunChanges = z.infer<typeof RhinoRunChanges>;
+
 /** The result of a Python run in Rhino. Output is capped by the plugin. */
 export const RhinoPythonResult = z.strictObject({
   id: z.string().min(1).max(64),
@@ -123,6 +150,8 @@ export const RhinoPythonResult = z.strictObject({
   /** The error message and the last lines of the traceback. */
   error: z.string().max(10_000).optional(),
   durationMs: z.number().nonnegative(),
+  /** What the run added, changed and deleted; absent when the plugin could not compare the document. */
+  changes: RhinoRunChanges.optional(),
 });
 export type RhinoPythonResult = z.infer<typeof RhinoPythonResult>;
 

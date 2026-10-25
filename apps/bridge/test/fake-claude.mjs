@@ -15,6 +15,7 @@
 //   "panel update HTML"  replaces the open panel's document, then replies
 //   "panel close"  closes the open panel
 //   "view JSON"   sets the user's view (set_view) with JSON as its input, e.g. view {"azimuth":225}
+//   "python stray"  declares declared.3dm as its output but also writes stray.3dm
 //   "python write FILE"  runs a Python script (python_run) that copies the .3dm FILE into the project, as a model
 //                        that wrote a file would; "python box" builds a 2 x 1 x 3 m box with rhino3dm and saves it
 //                        through hai_3dm; "python packages A" runs a long script that asks to install A
@@ -23,8 +24,21 @@
 //   "stream"     a reply in five pieces, 150 ms apart (to watch it stream)
 //   "work N"     streams for N ms, then replies "Finished work N" (stoppable, like slow)
 //   anything     replies "agent=<--agent> pid=<pid> turn=<n> previous=<the previous request>" in three pieces
+//   "columns N every MS"  the same, MS milliseconds apart (so several agents' work can be seen to overlap)
+//   "rhino run TITLE"  runs a script in Rhino (rhino_run_python) with that title and replies with the outcome
+//   "touch ID"   renames the element ID with update_elements and replies "Touched ID", or "Refused: <why>"
+//   "claims"     reads get_claims and replies with its JSON
+//   "request ID" asks for the element ID with request_claim; "release ID" gives it back (release_claim)
+//   "tag ID k=v" sets a tag with set_tags and replies "Tagged ID" or "Refused: <why>"
+//   "preface"    replies with the lines the task arrived with ("[task] ...", "[brief] ...", "[scope] ...", "[worker] ...")
+//   "spawn T[part]: X ;; U(x0,y0,x1,y1): Y"  starts a worker for each part (spawn_worker) with instruction X or Y, then
+//                replies "Spawned: <name> <status>, ..." (T<ids> scopes by ids); "[worker report] ..." turns reply "Heard: ..."
 // As Mochi, the team lead, it uses the app's team tools the way the real model is told to:
 //   "delegate A: X | B: Y"  hands task X to A and Y to B (delegate), then replies "Handed out: ..."
+//   "delegate A[part]: X"   the same with the scope {part}; "A<id1,id2>: X" scopes it to ids, "A(x0,y0,x1,y1): X" to a region
+//   "delegate ... | brief TEXT"  sets the shared brief for the request
+//   "plan A[part]: T ;; B[part]: U"  shows the user the plan (confirm_plan), then hands out only the parts it returns
+//                (each doing "work 200") and replies "Plan <outcome>: <agent> <status>, ..."
 //   "ask A to X"            hands X to A
 //   "[for: A]" first line   hands the rest of the request to A
 //   "status"     calls team_status and replies "<agent>: <task title> (<state>)" for each busy agent, or "All idle."
@@ -38,6 +52,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+const NEWLINE = String.fromCharCode(10);
 const args = process.argv.slice(2);
 const flag = (name) => {
   const i = args.indexOf(name);
@@ -219,16 +234,71 @@ function asLead(text, forAgent) {
     say(`Report: ${text.split("\n").slice(1).join(" ")}`);
     return true;
   }
+  if (text.startsWith("plan ")) {
+    (async () => {
+      const parts = text
+        .slice("plan ".length)
+        .split(" ;; ")
+        .map((segment) => {
+          const colon = segment.indexOf(":");
+          const spec = /^([^[<(]+?)(?:\[([^\]]+)\]|<([^>]+)>|\(([^)]+)\))?$/.exec(
+            segment.slice(0, colon).trim(),
+          );
+          const box = spec?.[4]?.split(",").map(Number);
+          const scope = spec?.[2]
+            ? { part: spec[2] }
+            : spec?.[3]
+              ? { ids: spec[3].split(",") }
+              : box
+                ? { region: { min: [box[0], box[1]], max: [box[2], box[3]] } }
+                : undefined;
+          return {
+            agent: (spec?.[1] ?? "").trim(),
+            title: segment.slice(colon + 1).trim(),
+            ...(scope ? { scope } : {}),
+          };
+        });
+      const answer = await appTool("confirm_plan", { parts });
+      if (answer.error) return say(`Plan refused: ${answer.error}`);
+      const handed = [];
+      for (const part of answer.parts ?? []) {
+        const out = await appTool("delegate", {
+          agent: part.agent,
+          title: part.title,
+          instruction: "work 200",
+          ...(part.scope ? { scope: part.scope } : {}),
+        });
+        handed.push(`${part.agent} ${out.error ? `failed (${out.error})` : out.status}`);
+      }
+      say(`Plan ${answer.outcome}: ${handed.join(", ") || "nothing handed out"}`);
+    })();
+    return true;
+  }
   const askTo = /^ask(?:ed)? (\S+) to (.+)$/i.exec(text); // as heard: "asked climate to ..."
   let handOffs = null;
+  let brief;
   if (text.startsWith("delegate ")) {
-    handOffs = text
-      .slice("delegate ".length)
-      .split(" | ")
-      .map((part) => ({
-        agent: part.split(":")[0].trim(),
-        instruction: part.split(":").slice(1).join(":").trim(),
-      }));
+    const segments = text.slice("delegate ".length).split(" | ");
+    const briefSegment = segments.find((part) => part.startsWith("brief "));
+    brief = briefSegment?.slice("brief ".length);
+    handOffs = segments
+      .filter((part) => part !== briefSegment)
+      .map((part) => {
+        const spec = /^([^[<(]+?)(?:\[([^\]]+)\]|<([^>]+)>|\(([^)]+)\))?$/.exec(part.split(":")[0].trim());
+        const box = spec?.[4]?.split(",").map(Number);
+        const scope = spec?.[2]
+          ? { part: spec[2] }
+          : spec?.[3]
+            ? { ids: spec[3].split(",") }
+            : box
+              ? { region: { min: [box[0], box[1]], max: [box[2], box[3]] } }
+              : undefined;
+        return {
+          agent: (spec?.[1] ?? "").trim(),
+          scope,
+          instruction: part.split(":").slice(1).join(":").trim(),
+        };
+      });
   } else if (askTo) {
     handOffs = [{ agent: askTo[1].toLowerCase(), instruction: askTo[2] }];
   } else if (forAgent) {
@@ -237,9 +307,19 @@ function asLead(text, forAgent) {
   if (handOffs) {
     (async () => {
       const outcomes = [];
-      for (const { agent, instruction } of handOffs) {
-        const handed = await appTool("delegate", { agent, title: instruction.slice(0, 40), instruction });
-        outcomes.push(handed.error ? `${agent} failed (${handed.error})` : `${agent} ${handed.status}`);
+      for (const { agent, instruction, scope } of handOffs) {
+        const handed = await appTool("delegate", {
+          agent,
+          title: instruction.slice(0, 40),
+          instruction,
+          ...(scope ? { scope } : {}),
+          ...(brief ? { brief } : {}),
+        });
+        outcomes.push(
+          handed.error
+            ? `${agent} failed (${handed.error})`
+            : `${agent} ${handed.status}${handed.note ? ` (${handed.note})` : ""}`,
+        );
       }
       say(`Handed out: ${outcomes.join(", ")}`);
     })();
@@ -353,6 +433,7 @@ async function pythonRequest(rest) {
     rest === "box"
       ? {
           title: "A box",
+          outputs: ["box.3dm"],
           code: [
             "import rhino3dm as r",
             "import hai_3dm",
@@ -363,19 +444,60 @@ async function pythonRequest(rest) {
             "",
           ].join("\n"),
         }
-      : write
+      : rest === "stray"
         ? {
-            title: "Write a box",
-            code: `import shutil\nshutil.copy(${JSON.stringify(write[1])}, "written-box.3dm")\nprint("written")\n`,
+            // Declares one file and writes two: the second is reported as outside the declaration.
+            title: "A stray file",
+            outputs: ["declared.3dm"],
+            code: [
+              'open("declared.3dm", "wb").write(b"x")',
+              'open("stray.3dm", "wb").write(b"y")',
+              'print("two files")',
+              "",
+            ].join("\n"),
           }
-        : {
-            title: "Ladybug study",
-            // Long enough that the approval card has to scroll.
-            code: `import ladybug\n${Array.from({ length: 60 }, (_, i) => `# study step ${i + 1}`).join("\n")}\nprint(ladybug.__name__)\n`,
-            packages: (packages?.[1] ?? "").split(","),
-          };
+        : write
+          ? {
+              title: "Write a box",
+              outputs: ["written-box.3dm"],
+              code: `import shutil\nshutil.copy(${JSON.stringify(write[1])}, "written-box.3dm")\nprint("written")\n`,
+            }
+          : {
+              title: "Ladybug study",
+              // Long enough that the approval card has to scroll.
+              code: `import ladybug\n${Array.from({ length: 60 }, (_, i) => `# study step ${i + 1}`).join("\n")}\nprint(ladybug.__name__)\n`,
+              packages: (packages?.[1] ?? "").split(","),
+            };
   const ran = await appTool("python_run", input);
   delta(ran.error ? `Python refused: ${ran.error}` : `Python ${ran.ok ? "ran" : "failed"}.`);
+  result();
+}
+
+/** "T[part]: X ;; U(x0,y0,x1,y1): Y": starts a worker for each part, then replies with how each went. */
+async function spawnRequest(spec) {
+  const outcomes = [];
+  for (const segment of spec.split(" ;; ")) {
+    const head = /^([^[<(:]+?)(?:\[([^\]]+)\]|<([^>]+)>|\(([^)]+)\))?: (.*)$/s.exec(segment.trim());
+    if (!head) {
+      outcomes.push(`not understood (${segment})`);
+      continue;
+    }
+    const box = head[4]?.split(",").map(Number);
+    const scope = head[2]
+      ? { part: head[2] }
+      : head[3]
+        ? { ids: head[3].split(",") }
+        : box
+          ? { region: { min: [box[0], box[1]], max: [box[2], box[3]] } }
+          : undefined;
+    const started = await appTool("spawn_worker", {
+      title: head[1].trim(),
+      instruction: head[5],
+      ...(scope ? { scope } : {}),
+    });
+    outcomes.push(started.error ? `refused (${started.error})` : `${started.worker} ${started.status}`);
+  }
+  delta(`Spawned: ${outcomes.join(", ")}`);
   result();
 }
 
@@ -383,7 +505,24 @@ function onRequest(raw) {
   init();
   let text = raw;
   let forAgent = null;
-  if (text.startsWith("[task] ")) text = text.slice(text.indexOf("\n") + 1);
+  const preface = [];
+  if (text.startsWith("[worker report]")) {
+    init();
+    history.push(text);
+    writeFileSync(historyFile, JSON.stringify(history));
+    delta(
+      `Heard: ${text
+        .split(NEWLINE)
+        .map((line) => line.replace("[worker report] ", ""))
+        .join(" / ")}`,
+    );
+    result();
+    return;
+  }
+  while (/^\[(task|brief|scope|worker)\] /.test(text)) {
+    preface.push(text.slice(0, text.indexOf("\n")));
+    text = text.slice(text.indexOf("\n") + 1);
+  }
   const target = /^\[for: ([^\]]+)\]\n/.exec(text);
   if (target) {
     forAgent = target[1];
@@ -401,6 +540,10 @@ function onRequest(raw) {
   }
   if (text.startsWith("view ")) {
     void viewRequest(text.slice("view ".length));
+    return;
+  }
+  if (text.startsWith("spawn ")) {
+    void spawnRequest(text.slice("spawn ".length));
     return;
   }
   if (text.startsWith("python ")) {
@@ -436,10 +579,59 @@ function onRequest(raw) {
     });
     return;
   }
-  const columns = /^columns (\d+)$/.exec(text);
+  if (text === "preface") {
+    delta(preface.join(" | "));
+    result();
+    return;
+  }
+  const rhinoRun = /^rhino run (.+)$/.exec(text);
+  if (rhinoRun) {
+    appTool("rhino_run_python", { title: rhinoRun[1], code: "result = 1\n" }).then((out) => {
+      delta(out.error ? `Rhino refused: ${out.error}` : `Rhino ran: ${JSON.stringify(out)}`);
+      result();
+    });
+    return;
+  }
+  const touch = /^touch (\S+)$/.exec(text);
+  if (touch) {
+    appTool("update_elements", { updates: [{ id: touch[1], patch: { name: "Touched" } }] }).then((out) => {
+      delta(out.error ? `Refused: ${out.error}` : `Touched ${touch[1]}`);
+      result();
+    });
+    return;
+  }
+  const tag = /^tag (\S+) (\S+)=(.*)$/.exec(text);
+  if (tag) {
+    appTool("set_tags", { ids: [tag[1]], tags: { [tag[2]]: tag[3] } }).then((out) => {
+      delta(out.error ? `Refused: ${out.error}` : `Tagged ${tag[1]}`);
+      result();
+    });
+    return;
+  }
+  if (text === "claims") {
+    appTool("get_claims", {}).then((out) => {
+      delta(JSON.stringify(out));
+      result();
+    });
+    return;
+  }
+  const claim = /^(request|release) (\S+)$/.exec(text);
+  if (claim) {
+    const call =
+      claim[1] === "request"
+        ? appTool("request_claim", { scope: { ids: [claim[2]] } })
+        : appTool("release_claim", { ids: [claim[2]] });
+    call.then((out) => {
+      delta(out.error ? `Refused: ${out.error}` : `${claim[1]}d ${claim[2]}`);
+      result();
+    });
+    return;
+  }
+  const columns = /^columns (\d+)(?: every (\d+))?$/.exec(text);
   if (columns) {
     (async () => {
       for (let i = 0; i < Number(columns[1]); i++) {
+        if (i > 0 && columns[2]) await new Promise((resolve) => setTimeout(resolve, Number(columns[2])));
         const element = {
           type: "column",
           name: `Fake column ${i + 1}`,

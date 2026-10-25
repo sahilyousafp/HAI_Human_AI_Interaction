@@ -75,6 +75,12 @@ export const FEATURES = [
     description: "The agent can offer a small panel for a task, such as a tolerance, and a nod opens it.",
   },
   {
+    id: "parallelModelling",
+    label: "Parallel modelling",
+    description:
+      "Agents given separate parts of the model work at the same time, each in its own undo step. Off: one agent changes the model at a time.",
+  },
+  {
     id: "latencyReadout",
     label: "Latency readout",
     description: "Gesture to render time in the status bar.",

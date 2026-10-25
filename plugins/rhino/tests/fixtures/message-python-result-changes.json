@@ -1,0 +1,53 @@
+{
+  "type": "rhino.python.result",
+  "id": "message-1",
+  "payload": {
+    "id": "run-3",
+    "ok": true,
+    "stdout": "",
+    "durationMs": 7.0,
+    "changes": {
+      "added": [
+        {
+          "id": "a-1",
+          "name": "Surface 1",
+          "tags": {
+            "hai.owner": "architect",
+            "hai.part": "dome"
+          },
+          "bounds": {
+            "min": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "max": [
+              1000.0,
+              1000.0,
+              10.0
+            ]
+          }
+        }
+      ],
+      "changed": [
+        {
+          "id": "c-1",
+          "name": "Dome",
+          "tags": {
+            "hai.part": "dome"
+          },
+          "bounds": null
+        }
+      ],
+      "deleted": [
+        {
+          "id": "d-1",
+          "name": "Old wall",
+          "tags": {},
+          "bounds": null
+        }
+      ],
+      "truncated": false
+    }
+  }
+}

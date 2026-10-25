@@ -23,6 +23,7 @@ describe("what the plugin sends", () => {
       "message-hello.json",
       "message-objects.json",
       "message-python-error.json",
+      "message-python-result-changes.json",
       "message-python-result.json",
       "message-selection.json",
       "message-status.json",
@@ -47,6 +48,19 @@ describe("what the plugin sends", () => {
     });
   });
 
+  it("a run's result carries what it added, changed and deleted, with their tags", () => {
+    const parsed = parseMessage(readFileSync(join(fixtures, "message-python-result-changes.json"), "utf8"));
+    expect(parsed.ok && parsed.message.type === "rhino.python.result").toBe(true);
+    if (!parsed.ok || parsed.message.type !== "rhino.python.result") return;
+    const { changes } = parsed.message.payload;
+    expect(changes?.added[0]).toMatchObject({
+      id: "a-1",
+      tags: { "hai.owner": "architect", "hai.part": "dome" },
+    });
+    expect(changes?.changed[0]?.bounds).toBeNull();
+    expect(changes?.deleted.map((c) => c.id)).toEqual(["d-1"]);
+  });
+
   it("a batch names an object with no colour and no mesh the way the viewer expects", () => {
     const parsed = parseMessage(readFileSync(join(fixtures, "message-objects.json"), "utf8"));
     expect(parsed.ok && parsed.message.type === "rhino.objects").toBe(true);
@@ -65,9 +79,11 @@ describe("what the bridge sends the plugin", () => {
   it("has the requests the plugin answers", () => {
     expect(files).toEqual([
       "bridge-open.json",
+      "bridge-python-run-claimed.json",
       "bridge-python-run.json",
       "bridge-select-clear.json",
       "bridge-select.json",
+      "bridge-undo.json",
     ]);
   });
 
@@ -77,6 +93,20 @@ describe("what the bridge sends the plugin", () => {
       expect(parsed.ok, parsed.ok ? "" : JSON.stringify(parsed.error)).toBe(true);
     });
   }
+});
+
+describe("a run request that names its agent and claim", () => {
+  it("is read with the agent, the title, the part and the claim", () => {
+    const parsed = parseMessage(readFileSync(join(fixtures, "bridge-python-run-claimed.json"), "utf8"));
+    expect(parsed.ok && parsed.message.type === "rhino.python.run").toBe(true);
+    if (!parsed.ok || parsed.message.type !== "rhino.python.run") return;
+    expect(parsed.message.payload).toMatchObject({
+      agent: "architect",
+      title: "Add the dome",
+      part: "dome",
+      claim: { part: "dome", region: { min: [0, 0], max: [20000, 20000] } },
+    });
+  });
 });
 
 describe("the mesh asset the plugin writes", () => {

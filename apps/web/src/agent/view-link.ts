@@ -1,4 +1,5 @@
 import type { Message, Point3Mm, SunSetting, ViewCamera, ViewRequest } from "@hai/protocol";
+import { rememberShot, type Shot, type ShotRequest } from "../viewer/agent-shot.ts";
 
 /** Captured views are scaled down so their longest side is at most this many pixels. */
 export const CAPTURE_MAX_SIDE = 1280;
@@ -32,6 +33,7 @@ const round = (value: number, step: number) => Math.round(value / step) * step;
  */
 export class ViewLink {
   private capturer: (() => Promise<string>) | null = null;
+  private shooter: ((request: ShotRequest) => Promise<Shot[]>) | null = null;
   private grounder: (() => Point3Mm | null) | null = null;
   private readonly pointedListeners = new Set<(id: string | null) => void>();
   private pointed: string | null = null;
@@ -52,6 +54,14 @@ export class ViewLink {
     this.capturer = capture;
     return () => {
       if (this.capturer === capture) this.capturer = null;
+    };
+  }
+
+  /** Registers how to take pictures from an agent's cameras; returns a function that unregisters it. */
+  attachShots(shoot: (request: ShotRequest) => Promise<Shot[]>): () => void {
+    this.shooter = shoot;
+    return () => {
+      if (this.shooter === shoot) this.shooter = null;
     };
   }
 
@@ -126,6 +136,18 @@ export class ViewLink {
       return true;
     }
     if (message.type !== "view.capture") return false;
+    const { cameras, size, options, sun } = message.payload;
+    if (cameras) {
+      // An agent's own cameras: drawn off to the side, and the user's light and view are not involved.
+      void this.answerShots(message.payload.requestId, message.payload.agent, {
+        cameras,
+        size: size ?? CAPTURE_MAX_SIDE,
+        section: options?.section ?? false,
+        selection: options?.selection ?? false,
+        sun,
+      });
+      return true;
+    }
     if (message.payload.sun) this.setSun(message.payload.sun); // the light moves before the picture is taken
     void this.answer(message.payload.requestId);
     return true;
@@ -142,6 +164,27 @@ export class ViewLink {
   dispose(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+  }
+
+  private async answerShots(
+    requestId: string,
+    agent: string | undefined,
+    request: ShotRequest,
+  ): Promise<void> {
+    const reply = (payload: { shots: Shot[] } | { error: string }) =>
+      this.send({ type: "view.captured", id: crypto.randomUUID(), payload: { requestId, ...payload } });
+    if (!this.shooter) {
+      reply({ error: "The viewer is still starting, so the view cannot be captured yet." });
+      return;
+    }
+    try {
+      const shots = await this.shooter(request);
+      const last = shots.at(-1);
+      if (agent && last) rememberShot(agent, last);
+      reply({ shots });
+    } catch (error) {
+      reply({ error: error instanceof Error ? error.message : "The viewer could not take the pictures." });
+    }
   }
 
   private async answer(requestId: string): Promise<void> {

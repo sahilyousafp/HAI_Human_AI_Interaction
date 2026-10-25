@@ -15,9 +15,13 @@ import {
   WS_PROTOCOL,
 } from "@hai/protocol";
 import { type WebSocket, WebSocketServer } from "ws";
+import { AgentEyes } from "./agent/agent-eyes.ts";
 import { ApprovalBroker } from "./agent/approvals.ts";
+import { ClaimTable } from "./agent/claims.ts";
 import { ExtensionHub } from "./agent/extensions.ts";
 import { PanelBroker } from "./agent/panels.ts";
+import { PlanBroker } from "./agent/plans.ts";
+import { findStrays, strayNote } from "./agent/rhino-run-check.ts";
 import { Team } from "./agent/team.ts";
 import { ViewContext } from "./agent/view-context.ts";
 import {
@@ -81,6 +85,8 @@ export interface Bridge {
   readonly extensions: ExtensionHub;
   /** The running agents' MCP tokens (the session token is for browsers only). */
   readonly agentTokens: AgentTokens;
+  /** The agents' own cameras and the last picture each took. */
+  readonly eyes: AgentEyes;
   readonly log: Logger;
   start(): Promise<AddressInfo>;
   stop(): Promise<void>;
@@ -144,6 +150,8 @@ export function createBridge(options: BridgeOptions): Bridge {
   const broadcastStatus = () => broadcast(statusMessage());
   // The open project's always-allow list goes out again when another project opens (set once approvals exist).
   let projectOpened = () => {};
+  // Which part of the model each running task may change; the team grants and releases, the scene tools check.
+  const claims = new ClaimTable();
   const scene = new SceneHub(
     {
       ...options.scene,
@@ -151,6 +159,7 @@ export function createBridge(options: BridgeOptions): Bridge {
         options.scene?.onProjectOpened?.(project);
         projectOpened();
       },
+      onUserChange: (ids, before, after) => claims.noteUserChange(ids, before, after),
     },
     broadcast,
   );
@@ -161,6 +170,15 @@ export function createBridge(options: BridgeOptions): Bridge {
     if (feature === "generatedPanels") panelsChanged(on);
   });
   const view = new ViewContext(() => clients.size, broadcast);
+  // The agents' own cameras and last pictures; the team publishes them on its snapshot (set once the team exists).
+  let eyesChanged = () => {};
+  const eyes = new AgentEyes({
+    doc: () => scene.scene.doc,
+    rhinoBounds: () =>
+      rhino.mirroredObjects.flatMap((o) => (o.bounds ? [{ id: o.id, bounds: o.bounds }] : [])),
+    shoot: (request) => view.shoot(request),
+    changed: () => eyesChanged(),
+  });
   let port = options.port;
   const agentTokens = new AgentTokens();
   const log = options.log ? createLogger(options.log, () => [token, ...agentTokens.current]) : silentLogger;
@@ -175,6 +193,15 @@ export function createBridge(options: BridgeOptions): Bridge {
     projectDir: () => scene.projectDir,
     helperDir:
       options.pythonHelperDir ?? process.env.HAI_PYTHON_HELPERS ?? join(import.meta.dirname, "..", "python"),
+    // The files a script will write are reserved for the agent's task until it ends; an agent with no task (a reader
+    // or the lead) holds them for the one run.
+    reserve: (agent, title, paths) => {
+      const claim = agent ? claims.forAgent(agent) : undefined;
+      const owner = claim ?? { taskId: `run-${randomUUID()}`, agent: agent ?? "an agent", title };
+      const reserved = claims.reserve(owner, paths);
+      if (!reserved.ok) return reserved;
+      return { ok: true, release: () => (claim ? undefined : claims.release(owner.taskId)) };
+    },
   });
   const approvals = new ApprovalBroker(
     {
@@ -209,6 +236,7 @@ export function createBridge(options: BridgeOptions): Bridge {
     },
     broadcast,
   );
+  const plans = new PlanBroker({ log }, broadcast);
   const panels = new PanelBroker({ log, closed: (closure) => agent?.panelClosed(closure) }, broadcast);
   panelsChanged = (on) => {
     if (!on) panels.switchedOff();
@@ -228,8 +256,18 @@ export function createBridge(options: BridgeOptions): Bridge {
           tokens: agentTokens,
           scene,
           approvals,
-          panels,
+          panels: {
+            turnEnded: (name) => {
+              panels.turnEnded(name);
+              plans.turnEnded(name);
+            },
+          },
           initialized: (event) => extensions.initialized(event),
+          claims,
+          doc: () => scene.scene.doc,
+          parallel: () => settings.featureOn("parallelModelling"),
+          maxSessions: () => settings.maxSessions,
+          eyes,
           ...(options.agent.idleMs ? { idleMs: options.agent.idleMs } : {}),
           ...(options.agent.maxRunning ? { maxRunning: options.agent.maxRunning } : {}),
           log,
@@ -237,6 +275,7 @@ export function createBridge(options: BridgeOptions): Bridge {
         broadcast,
       )
     : null;
+  eyesChanged = () => agent?.eyesChanged();
   const extensions = new ExtensionHub(
     {
       projectDir: () => scene.projectDir,
@@ -256,22 +295,32 @@ export function createBridge(options: BridgeOptions): Bridge {
           requestSignal: closed,
           doc: () => scene.scene.doc,
           selection: () => scene.scene.selection,
-          apply: (ops) => scene.applyFromAgent(ops),
+          apply: (ops, by) => {
+            // The team checks the change against the claims and puts the agent's name on what it makes.
+            const vetted = agent ? agent.vet(by, ops) : { ok: true as const, ops };
+            return vetted.ok ? scene.applyFromAgent(vetted.ops, by) : vetted;
+          },
           approve: (tool, input, toolUseId, agent) => approvals.decide(tool, input, toolUseId, agent),
           setSelection: (ids) => scene.select(ids),
           userContext: () => view.current,
           captureView: (sun) => view.capture(sun),
+          eyes,
           setView: (request) => view.setView(request),
           python: {
             run: async (input, signal) => {
-              const out = await python.run({ ...input, signal });
+              const out = await python.run({
+                ...input,
+                ...(input.outputs ? { outputs: input.outputs } : {}),
+                signal,
+              });
               // A run that wrote .3dm files lets the pages offer to import them or open them in Rhino.
-              if (out.written.length > 0) {
+              if (out.written.length > 0 || out.undeclared?.length) {
                 broadcast({
                   type: "python.written",
                   id: randomUUID(),
                   payload: {
                     files: out.written,
+                    ...(out.undeclared?.length ? { outside: out.undeclared } : {}),
                     script: out.script,
                     ...(input.agent ? { agent: input.agent } : {}),
                   },
@@ -286,13 +335,29 @@ export function createBridge(options: BridgeOptions): Bridge {
                   run: async (input, signal) => {
                     const requirements = requirementPackages(input.code).packages;
                     try {
-                      const pending = rhino.runPython(input.code, input.timeoutMs);
-                      const stopped = new Promise<never>((_resolve, reject) =>
-                        signal.addEventListener("abort", () => reject(new Error("The run was stopped.")), {
-                          once: true,
-                        }),
+                      const claim = input.agent ? claims.forAgent(input.agent) : undefined;
+                      const out = await rhino.runPython(
+                        input.code,
+                        input.timeoutMs,
+                        {
+                          ...(input.agent ? { agent: input.agent } : {}),
+                          title: input.title,
+                          ...(claim?.scope?.part ? { part: claim.scope.part } : {}),
+                          ...(claim?.scope ? { claim: claim.scope } : {}),
+                        },
+                        signal,
                       );
-                      const out = await Promise.race([pending, stopped]);
+                      // The script is not sandboxed: what it did outside the claim is found afterwards and reported.
+                      const { strays, truncated } = out.changes
+                        ? findStrays(out.changes, claim, claims)
+                        : { strays: [], truncated: false };
+                      if (strays.length > 0) {
+                        broadcast({
+                          type: "rhino.run.report",
+                          id: randomUUID(),
+                          payload: { agent: input.agent, title: input.title, strays, truncated },
+                        });
+                      }
                       const script = python.record(
                         { ...input, packages: requirements },
                         {
@@ -308,6 +373,7 @@ export function createBridge(options: BridgeOptions): Bridge {
                         ...(out.error ? { error: out.error } : {}),
                         durationMs: out.durationMs,
                         script,
+                        ...(strays.length > 0 ? { outsideClaim: strayNote(strays, truncated) } : {}),
                       };
                     } catch (error) {
                       const message = (error as Error).message;
@@ -326,13 +392,12 @@ export function createBridge(options: BridgeOptions): Bridge {
                   },
                   document: async (signal) => {
                     try {
-                      const pending = rhino.runPython(RHINO_DOCUMENT_SCRIPT, 15_000);
-                      const stopped = new Promise<never>((_resolve, reject) =>
-                        signal.addEventListener("abort", () => reject(new Error("The read was stopped.")), {
-                          once: true,
-                        }),
+                      const out = await rhino.runPython(
+                        RHINO_DOCUMENT_SCRIPT,
+                        15_000,
+                        { title: "Read the document" },
+                        signal,
                       );
-                      const out = await Promise.race([pending, stopped]);
                       return out.ok && out.result
                         ? { ok: true as const, json: out.result }
                         : { ok: false as const, error: out.error ?? "Rhino did not answer." };
@@ -344,9 +409,16 @@ export function createBridge(options: BridgeOptions): Bridge {
               }
             : {}),
           ...(rhino.mirrored
-            ? { rhino: { object: (id) => rhino.object(id), selection: () => rhino.selection } }
+            ? {
+                rhino: {
+                  object: (id) => rhino.object(id),
+                  objects: () => rhino.mirroredObjects,
+                  selection: () => rhino.selection,
+                },
+              }
             : {}),
-          ...(agent ? { team: agent.tools } : {}),
+          ...(agent ? { team: agent.tools, claims: agent.claimTools, workers: agent.workerTools } : {}),
+          plans: { ask: (parts) => plans.ask(caller.agent, parts) },
           ...(settings.featureOn("generatedPanels")
             ? {
                 panels: {
@@ -432,6 +504,8 @@ export function createBridge(options: BridgeOptions): Bridge {
     /** Set when this connection is the Rhino plugin. */
     let rhinoConnection: { send(m: Message): void; close(): void; hello: RhinoHello } | null = null;
     const send = (message: Message) => ws.send(JSON.stringify(message));
+    const page = { send };
+    let removePage = () => {};
     ws.on("message", (data) => {
       const result = parseMessage(data.toString());
       if (!result.ok) {
@@ -460,11 +534,13 @@ export function createBridge(options: BridgeOptions): Bridge {
           return;
         }
         clients.add(ws);
+        removePage = view.addPage(page);
         broadcastStatus();
         scene.greet(send);
         settings.greet(send);
         approvals.announce(send);
         panels.greet(send);
+        plans.greet(send);
         rhino.greet(send);
         extensions.greet(send);
         if (agent) agent.greet(send);
@@ -476,9 +552,15 @@ export function createBridge(options: BridgeOptions): Bridge {
         ws.close(1008, "Say hello first");
         return;
       }
+      view.activate(page);
       if (rhinoConnection) {
         // The plugin may report on Rhino and answer its runs, and nothing else.
         if (!rhino.handleFromRhino(message)) ws.close(1008, "Not a message for the Rhino client");
+        return;
+      }
+      if (message.type === "settings.set" && message.payload.maxSessions !== undefined) {
+        settings.handle(message);
+        agent?.limitsChanged();
         return;
       }
       if (message.type === "settings.set" && message.payload.modelling !== undefined) {
@@ -500,14 +582,24 @@ export function createBridge(options: BridgeOptions): Bridge {
       }
       if (rhino.handleFromWeb(message)) return;
       if (scene.handle(message, send) || settings.handle(message) || view.handle(message)) return;
-      if (approvals.handle(message) || panels.handle(message) || extensions.handle(message, send)) return;
+      if (
+        approvals.handle(message) ||
+        plans.handle(message) ||
+        panels.handle(message) ||
+        extensions.handle(message, send)
+      )
+        return;
       agent?.handle(message, send);
     });
     ws.on("close", () => {
       if (rhinoConnection) rhino.detach(rhinoConnection);
+      removePage();
       if (clients.delete(ws)) broadcastStatus();
       // With no page left, nothing can show or answer a panel: an open one closes and drops its preview.
-      if (clients.size === 0) panels.clientsGone();
+      if (clients.size === 0) {
+        panels.clientsGone();
+        plans.clientsGone();
+      }
     });
   });
 
@@ -523,6 +615,7 @@ export function createBridge(options: BridgeOptions): Bridge {
     panels,
     extensions,
     agentTokens,
+    eyes,
     log,
     start: () =>
       new Promise((resolve, reject) => {
@@ -540,6 +633,8 @@ export function createBridge(options: BridgeOptions): Bridge {
         for (const client of wss.clients) client.terminate();
         wss.close();
         server.close(() => resolve());
+        // An agent's MCP stream can sit open after its process is gone; stopping must not wait for it to time out.
+        server.closeAllConnections();
       });
     },
   };

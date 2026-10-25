@@ -18,7 +18,7 @@ The team is written into the project the first time you send a request: one Clau
 
 - **Each agent is its own Claude Code session.** The bridge starts `claude -p --agent <name>` for each agent when it first has work, in the project folder, with your own Claude Code setup (see [agent.md](agent.md) for the exact command). Each keeps its own conversation (`.hai/agent/<name>/session.json`), so Architect remembers its earlier tasks, and each resumes after a crash, an idle close or a restart.
 - **Mochi hands out tasks.** It calls `delegate` with a specialist's name, a short title and a complete instruction. That returns at once, so Mochi's turn ends and Mochi is free for your next question while the specialist works.
-- **Each agent only has its own tools.** Every session gets its own random token for the app's tool server. From the token the bridge knows which agent is calling and offers it only the `hai` tools its definition lists. Reviewer has no tool that changes the model at all, and an agent marked as not changing the model never gets those tools, whatever its file lists. Every agent that does change the model also gets the four panel tools (`offer_panel`, `open_panel`, `update_panel`, `close_panel`), `python_run` and `rhino_run_python` whatever its file lists, and every agent gets `set_view`, so older projects get them too. This holds for what the model can see as well as what the bridge allows: HAI starts each agent with its definition as the app wants it (`--agents`, see [agent.md](agent.md)), taking the app's tools from the agent's role and everything else (prompt, model, your own tools such as `Read`) from the file, because Claude Code hides any tool the file's `tools:` line does not list. Mochi hands a panel task to Architect or Product, which offers it ([agent.md](agent.md#generated-panels)). Changing an agent's tools starts it in a new conversation, since an agent resuming an old one keeps to what it said it could not do.
+- **Each agent only has its own tools.** Every session gets its own random token for the app's tool server. From the token the bridge knows which agent is calling and offers it only the `hai` tools its definition lists. Reviewer has no tool that changes the model at all, and an agent marked as not changing the model never gets those tools, whatever its file lists. Every agent that does change the model also gets `spawn_worker` (see [Workers](#workers)) and the four panel tools (`offer_panel`, `open_panel`, `update_panel`, `close_panel`), `python_run` and `rhino_run_python` whatever its file lists, and every agent gets `set_view` and its four camera tools, so older projects get them too. This holds for what the model can see as well as what the bridge allows: HAI starts each agent with its definition as the app wants it (`--agents`, see [agent.md](agent.md)), taking the app's tools from the agent's role and everything else (prompt, model, your own tools such as `Read`) from the file, because Claude Code hides any tool the file's `tools:` line does not list. Mochi hands a panel task to Architect or Product, which offers it ([agent.md](agent.md#generated-panels)). Changing an agent's tools starts it in a new conversation, since an agent resuming an old one keeps to what it said it could not do.
 - **Mochi reports.** When every task Mochi handed out in one turn has finished, the bridge sends Mochi a short report (each task's agent, outcome and the specialist's summary) and Mochi tells you what was done. A report waits while you are talking to Mochi.
 
 The first time you used HAI in a project before the team existed, that one conversation becomes Mochi's, so nothing is lost.
@@ -48,6 +48,8 @@ Names are matched forgivingly, because speech recognition mishears them. The fir
 | Limit | Value | Meaning |
 |---|---|---|
 | `maxRunning` | 3 | Specialists working at the same time; later tasks queue. Mochi is always available on top |
+| `maxSessions` | 6 | Agent sessions working at once: Mochi, every running specialist and every worker. The user's setting (Settings > Modelling > Agents working together); a worker over the limit waits for a free session |
+| `workerStopMs` | 3000 | How long a stopped task's workers have to end before they are ended for it |
 | `finishedKept` | 30 | Finished tasks kept on the board and in status answers |
 | `summaryChars` | 600 | A specialist's final reply is shortened to this for the board, status and Mochi's report |
 | `activityThrottleMs` | 250 | Streaming text updates the board at most this often |
@@ -55,8 +57,8 @@ Names are matched forgivingly, because speech recognition mishears them. The fir
 These values live in `apps/bridge/src/agent/team.ts`; a unit test checks that this table matches it.
 
 - **One task per agent at a time.** A second task for a busy agent waits for the first.
-- **One agent changes the model at a time.** A task for an agent that changes the model waits while another such task runs. Agents that only read (Reviewer, Climate) work alongside. This keeps every change attributable and undoable.
-- **One undo per specialist task.** Everything a specialist changes in one task is a single undo step, labelled with the agent and the task, for example "Architect: Stair core".
+- **Writers with separate scopes work at the same time.** While Parallel modelling is on (the default), tasks that change the model run together when their scopes do not overlap; a task whose scope overlaps a running task's, or that has no scope (it claims the whole model), waits and says whose claim it waits for. With the feature off, one agent changes the model at a time. Agents that only read (Reviewer, Climate) work alongside either way. See [parallel.md](parallel.md): scopes, the shared brief, what a refusal says, owners and tags, scripts.
+- **One undo per specialist task.** Everything a specialist changes in one task is a single undo step, labelled with the agent and the task, for example "Architect: Stair core", also when other tasks run at the same time: undoing one leaves the others' elements as they are.
 
 ## Stopping
 
@@ -88,6 +90,42 @@ The **Agents** tab lists the team from the project's files, with each agent's mo
 
 A change applies from that agent's next task: its session restarts with the new definition and resumes its conversation. A new agent is in Mochi's team list from Mochi's next request. You can also edit the files directly; HAI reads them again before every request and task.
 
+## Workers
+
+A specialist that changes the model can split its **own** task into parts that are made at the same time. Asked for a pavilion, Architect starts a worker for the dome and one for the minarets (`spawn_worker`: a title, an instruction and a scope) and does the rest itself.
+
+- **A worker is another session of the same agent**, started by the app under its own name (`architect.2`, `architect.3`, shown as "Architect 2"), with its own token and its own conversation. It gets the instruction it was given, the shared brief and its scope, and the tools of its specialist without `spawn_worker` and `delegate`: workers cannot start workers or hand tasks to other agents.
+- **Its scope is cut from its specialist's claim.** It must lie inside what the specialist holds and must not overlap another worker's. When the specialist holds a part, a worker's part is a sub-part, written `<part>/<name>` (`pavilion/dome`); a part outside the claim, or a name that is not a sub-part, is refused and says how to write one. While a worker runs, its specialist cannot change that part (the refusal names the worker), and the part returns to the specialist when the worker ends.
+- **Each worker is its own undo step**, labelled "Architect 2: Dome", and what it creates is owned by `architect.2` and shows in its specialist's colour.
+- **The specialist's task ends after its workers.** It is told how each ended, with its summary, as a short turn of its own, so it can fix a part or report. Stopping the task, a failure or a crash stops its workers, and every claim is released within 3 seconds; Stop all and a project switch do the same, and a worker waiting for a free session is taken off the queue.
+- **Cost.** Every worker is a model session of your own Claude Code, with its own cost: a run with workers uses several times the tokens of one agent. Settings > Modelling > **Sessions at once** (6 by default; `maxSessions`) limits Mochi, the specialists working and their workers together; a worker over the limit waits for a free session and says so.
+- **Workers need Parallel modelling** ([parallel.md](parallel.md)); with it off, `spawn_worker` is refused and says so.
+
+In the agent panel a specialist's workers are nested under its chip in its colour, each with its title, state and scope; a worker's approval card names the worker and waits under that chip, which shows as waiting too; the Parts list indents their claims.
+
+### Subagents that only look
+
+Every agent can also start Claude Code's own subagents, for reading, researching and reviewing. They are not a way to change the model: a subagent calls the app's tools with its parent's token, so the app cannot tell it apart, and changing the model with help goes through a worker instead. So every subagent HAI makes available has only the tools that read the model and the view (and `Read`, `Glob`, `Grep`): one for each other member of the team, named after it and with its way of looking at things (`product`, `climate`, `reviewer`, `mochi`), and two generic ones, `scout` (also searches the web) and `checker`. A project file for an agent of the same name cannot give a subagent more: HAI's definition is the one that runs.
+
+### Panels with several agents
+
+One panel is shown at a time, but an offer made while another agent's panel or offer is showing is no longer refused: it waits its turn (at most two wait, at most a minute each), the agent is told how long it waited, and it is shown to you when the first ends. An offer card and a panel name the agent that made them.
+
+### Mochi's plan
+
+For a request with three or more parts, or a split you may want to change, Mochi can show you the plan first (`confirm_plan`): one line per part with the agent that would do it, its title and its scope. Remove the parts you do not want and **Confirm**, or **Skip**; Mochi hands out only the parts you kept, and nothing is handed out before you answer (an unanswered plan expires after two minutes and hands nothing out).
+
+## Agents' own cameras
+
+To check what it made, an agent does not borrow your view. Each agent places **cameras of its own** (`camera_set`), takes pictures from them (`camera_capture`, or a preset: `iso` four corners, `top`, `front`, `left`, `orbit-sheet` eight views around the model) and deletes them (`camera_delete`). A picture is drawn by the viewer's own renderer in one step the browser never paints in between, so your camera, selection and light are the same before and after, and you can keep orbiting with your hands while it is taken. It shows the model as it is, owners' tints included, and leaves out your hover, selection, deletion marks, section cut, tool marks, claim boxes and the camera markers (ask with `selection` or `section` and they are shown). `capture_view` and `set_view` stay for what you see: the first photographs your view, the second moves your camera, and agents use it only to show you something.
+
+- Cameras are private to the agent that placed them (at most 8 each) and go when its task ends.
+- A picture is taken by one viewer window, the one you used last, not by all of them.
+- **You see what they looked at:** each agent's last picture is a thumbnail in the team strip with the camera's name (click for it larger, Escape to close), and stays after its task ends until it takes another. In the model each camera is a small cone in the agent's colour with a line to what it looks at; Settings > Modelling > **Show cameras** turns the markers off.
+- A sun study takes its pictures in the sun's light for those pictures only; your own light does not change.
+
+A set of four 1024-pixel pictures takes about 0.2 s and eight about 0.3 s on a laptop with a GPU, with no gap longer than a frame or two in your own view.
+
 ## Climate's sun studies
 
 Climate's `sun_study` tool takes a date, a local time and a place (latitude and longitude). It works out where the sun is with NOAA's solar position algorithm, moves the viewer's light there (north is +Y, as in Rhino) and returns the sun's altitude and azimuth with a picture of the view. The ground catches the shadows, so a winter study shows how far they reach. A **Sun study** badge at the top right of the model says what is shown; press **Escape**, its **×** or another tool to return to the normal light.
@@ -107,7 +145,7 @@ Mochi's replies and reports are spoken, sentence by sentence as they arrive, so 
 
 ## Usage
 
-Every agent is your own Claude Code, on your own plan: up to four sessions can work at once (Mochi and three specialists). Lower `maxRunning` if you want fewer; the panel always shows how many are working. See [PROVIDERS.md](../PROVIDERS.md).
+Every agent is your own Claude Code, on your own plan: up to four sessions can work at once (Mochi and three specialists), and with workers up to the session limit (6 by default). Lower `maxRunning` or the session limit if you want fewer; the panel always shows how many are working. See [PROVIDERS.md](../PROVIDERS.md).
 
 ## Troubleshooting
 

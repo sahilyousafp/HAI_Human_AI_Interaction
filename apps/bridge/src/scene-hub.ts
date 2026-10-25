@@ -14,6 +14,8 @@ export interface SceneHubOptions {
   saveDelayMs?: number;
   /** Called after a project folder is opened successfully (used to remember it). */
   onProjectOpened?: (project: ProjectInfo) => void;
+  /** The user changed these elements (an edit, an undo or a redo): the scene before and after. */
+  onUserChange?: (ids: string[], before: SceneDocument, after: SceneDocument) => void;
 }
 
 const id = () => randomUUID();
@@ -51,21 +53,21 @@ export class SceneHub {
     return this.project?.path ?? null;
   }
 
-  /** An agent turn begins: its changes become one undo step, labelled with the request. */
-  beginTurn(request: string): void {
+  /** An agent's turn begins: its changes become one undo step, labelled with the request. */
+  beginTurn(agent: string, request: string): void {
     const label = request.length > 60 ? `${request.slice(0, 59).trimEnd()}…` : request;
-    this.store.beginGroup(label);
+    this.store.beginGroup(agent, label);
   }
 
-  /** The agent turn ended (done, stopped or failed): record it as one undo step and tell clients. */
-  endTurn(): void {
-    const result = this.store.endGroup();
+  /** The agent's turn ended (done, stopped or failed): record it as one undo step and tell clients. */
+  endTurn(agent: string): void {
+    const result = this.store.endGroup(agent);
     if (result?.ok) this.broadcast({ type: "scene.patch", id: id(), payload: result.patch });
   }
 
-  /** Applies an agent change now, into the running turn, and broadcasts it. A batch that fails changes nothing. */
-  applyFromAgent(ops: SceneOp[]): { ok: true } | { ok: false; error: string } {
-    const result = this.store.applyInGroup(ops);
+  /** Applies an agent change now, into that agent's running turn, and broadcasts it. A batch that fails changes nothing. */
+  applyFromAgent(ops: SceneOp[], agent: string | null): { ok: true } | { ok: false; error: string } {
+    const result = this.store.applyInGroup(ops, agent);
     if (!result.ok) return result;
     this.broadcast({ type: "scene.patch", id: id(), payload: result.patch });
     if (result.selectionChanged) this.broadcastSelection();
@@ -87,13 +89,13 @@ export class SceneHub {
   handle(message: Message, send: Send): boolean {
     switch (message.type) {
       case "scene.apply":
-        this.publish(this.store.apply(message.payload.label, message.payload.ops), message, send);
+        this.publishUser(() => this.store.apply(message.payload.label, message.payload.ops), message, send);
         return true;
       case "scene.undo":
-        this.publish(this.store.undo(), message, send);
+        this.publishUser(() => this.store.undo(), message, send);
         return true;
       case "scene.redo":
-        this.publish(this.store.redo(), message, send);
+        this.publishUser(() => this.store.redo(), message, send);
         return true;
       case "scene.resync":
         send(this.snapshot());
@@ -157,6 +159,16 @@ export class SceneHub {
     this.detach = this.store.onChange((doc) => autosaver.schedule(doc));
     this.options.onProjectOpened?.(result.project);
     return null;
+  }
+
+  /** Runs the user's change, publishes it, and lets the agents holding those elements hear about it. */
+  private publishUser(change: () => StoreResult, request: Message, send: Send): void {
+    const before = this.store.doc;
+    const result = change();
+    this.publish(result, request, send);
+    if (!result.ok) return;
+    const ids = result.patch.ops.map((op) => (op.op === "create" ? op.element.id : op.id));
+    if (ids.length > 0) this.options.onUserChange?.(ids, before, this.store.doc);
   }
 
   private publish(result: StoreResult, request: Message, send: Send): void {

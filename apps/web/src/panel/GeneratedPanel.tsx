@@ -5,6 +5,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { displayName } from "../agent/agent-client.ts";
 import { FRAME_CSP, FRAME_SANDBOX, frameDocument, readTheme } from "./frame-document.ts";
 import type { PanelClient, PanelScene, PanelView } from "./panel-client.ts";
 import { PANEL_LOAD_TIMEOUT_MS, PanelHost } from "./panel-host.ts";
@@ -180,6 +181,11 @@ function PanelShell({ panel, client, scene }: { panel: PanelView; client: PanelC
         <strong className="panel-title" data-testid="panel-title">
           {title}
         </strong>
+        {panel.agent && (
+          <span className="panel-agent" data-testid="panel-agent" title="The agent that opened this panel">
+            {displayName(panel.agent)}
+          </span>
+        )}
         {failed && (
           <span className="panel-badge" data-testid="panel-failed" role="alert">
             Failed

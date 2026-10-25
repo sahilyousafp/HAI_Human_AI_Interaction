@@ -313,3 +313,130 @@ describe("running scripts in a real environment", async () => {
     120_000,
   );
 });
+
+describe("declared outputs", async () => {
+  const env = await sharedPythonEnv().catch(() => null);
+  const real = env !== null;
+  let project = "";
+  let bench: PythonWorkbench;
+  const reserved: Array<{ agent: string | null; title: string; paths: string[] }> = [];
+  let released = 0;
+  let refuse: string | null = null;
+
+  beforeAll(() => {
+    project = temp("hai-py-out-");
+    if (env)
+      bench = new PythonWorkbench({
+        env,
+        projectDir: () => project,
+        helperDir: HELPER_DIR,
+        reserve: (agent, title, paths) => {
+          if (refuse) return { ok: false, error: refuse };
+          reserved.push({ agent, title, paths });
+          return { ok: true, release: () => void released++ };
+        },
+      });
+  }, 300_000);
+
+  const writeBox = (name: string) =>
+    [
+      "import rhino3dm as r",
+      "model = r.File3dm()",
+      "model.Objects.AddBrep(r.Brep.CreateFromBox(r.Box(r.BoundingBox(r.Point3d(0,0,0), r.Point3d(1000,1000,1000)))))",
+      `model.Write('${name}', 8)`,
+    ].join("\n");
+
+  it.skipIf(!real)(
+    "reserves the declared files for the run, offers only them, and reports another .3dm that changed",
+    async () => {
+      const code = `${writeBox("hall.3dm")}\n${writeBox("extra.3dm")}`;
+      const out = await bench.run({
+        code,
+        title: "Hall",
+        packages: [],
+        agent: "architect",
+        outputs: ["hall.3dm"],
+      });
+      expect(out.ok).toBe(true);
+      expect(reserved).toEqual([{ agent: "architect", title: "Hall", paths: ["hall.3dm"] }]);
+      expect(released).toBe(1);
+      expect(out.written.map((f) => f.path)).toEqual(["hall.3dm"]);
+      expect(out.undeclared?.map((f) => f.path)).toEqual(["extra.3dm"]);
+    },
+    120_000,
+  );
+
+  it.skipIf(!real)(
+    "a name that is reserved by another task refuses the run before the script starts",
+    async () => {
+      refuse = `"canopy.3dm" is reserved by architect's task "Canopy", which will write it.`;
+      const out = await bench.run({
+        code: writeBox("canopy.3dm"),
+        title: "Canopy again",
+        packages: [],
+        agent: "product",
+        outputs: ["canopy.3dm"],
+      });
+      refuse = null;
+      expect(out).toMatchObject({
+        ok: false,
+        error: expect.stringContaining("reserved by architect's task"),
+      });
+      expect(existsSync(join(project, "canopy.3dm"))).toBe(false);
+    },
+    120_000,
+  );
+
+  it.skipIf(!real)(
+    "a declared output must be a .3dm inside the project",
+    async () => {
+      for (const bad of ["../out.3dm", "/tmp/out.3dm", "C:out.3dm", "notes.txt", "a//b.3dm"]) {
+        const out = await bench.run({
+          code: "result = 1",
+          title: "Bad",
+          packages: [],
+          agent: "a",
+          outputs: [bad],
+        });
+        expect(out.ok, bad).toBe(false);
+        expect(out.error, bad).toContain("is not a .3dm file inside the project folder");
+      }
+    },
+    120_000,
+  );
+
+  it.skipIf(!real)(
+    "without declared outputs every changed .3dm is offered, as before",
+    async () => {
+      const out = await bench.run({
+        code: writeBox("free.3dm"),
+        title: "Free",
+        packages: [],
+        agent: "architect",
+      });
+      expect(out.written.map((f) => f.path)).toEqual(["free.3dm"]);
+      expect(out.undeclared).toBeUndefined();
+    },
+    120_000,
+  );
+
+  it.skipIf(!real)(
+    "two runs with the same title in the same second keep separate scripts",
+    async () => {
+      const fixed = new PythonWorkbench({
+        env: env as NonNullable<typeof env>,
+        projectDir: () => project,
+        helperDir: HELPER_DIR,
+        now: () => new Date("2026-05-01T10:00:00Z"),
+      });
+      const [a, b] = await Promise.all([
+        fixed.run({ code: "result = 'first'", title: "Same title", packages: [], agent: "architect" }),
+        fixed.run({ code: "result = 'second'", title: "Same title", packages: [], agent: "product" }),
+      ]);
+      expect(a.script).not.toBe(b.script);
+      expect(readFileSync(join(project, a.script), "utf8")).toContain("result = 'first'");
+      expect(readFileSync(join(project, b.script), "utf8")).toContain("result = 'second'");
+    },
+    120_000,
+  );
+});

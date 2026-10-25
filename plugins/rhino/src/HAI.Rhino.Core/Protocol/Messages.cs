@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace HAI.Rhino.Core.Protocol
 {
@@ -19,6 +20,7 @@ namespace HAI.Rhino.Core.Protocol
         public const string PythonRun = "rhino.python.run";
         public const string Select = "rhino.select";
         public const string Open = "rhino.open";
+        public const string Undo = "rhino.undo";
     }
 
     /// <summary>Whether Rhino can run Python 3 for the agent: ready, or unavailable with the reason.</summary>
@@ -153,6 +155,34 @@ namespace HAI.Rhino.Core.Protocol
         public string? Error { get; set; }
 
         [JsonProperty("durationMs")] public double DurationMs { get; set; }
+
+        /// <summary>What the run added, changed and deleted; absent when the document could not be compared.</summary>
+        [JsonProperty("changes", NullValueHandling = NullValueHandling.Ignore)]
+        public RunChanges? Changes { get; set; }
+    }
+
+    /// <summary>One object a script added, changed or deleted, as far as the bridge needs it to compare with a claim.</summary>
+    public sealed class ObjectChange
+    {
+        [JsonProperty("id")] public string Id { get; set; } = "";
+        [JsonProperty("name")] public string Name { get; set; } = "";
+
+        /// <summary>The object's "hai." user strings (a deleted object's as they were).</summary>
+        [JsonProperty("tags")] public Dictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
+
+        /// <summary>Where it is (a deleted object's as it was); null when it has no box.</summary>
+        [JsonProperty("bounds")] public Bounds? Bounds { get; set; }
+    }
+
+    /// <summary>What a script did to the document, found by comparing every object before and after the run.</summary>
+    public sealed class RunChanges
+    {
+        [JsonProperty("added")] public List<ObjectChange> Added { get; set; } = new List<ObjectChange>();
+        [JsonProperty("changed")] public List<ObjectChange> Changed { get; set; } = new List<ObjectChange>();
+        [JsonProperty("deleted")] public List<ObjectChange> Deleted { get; set; } = new List<ObjectChange>();
+
+        /// <summary>More objects changed than are listed.</summary>
+        [JsonProperty("truncated")] public bool Truncated { get; set; }
     }
 
     /// <summary>Bridge to Rhino: run a Python script in the open document.</summary>
@@ -161,6 +191,17 @@ namespace HAI.Rhino.Core.Protocol
         [JsonProperty("id")] public string Id { get; set; } = "";
         [JsonProperty("code")] public string Code { get; set; } = "";
         [JsonProperty("timeoutMs")] public int TimeoutMs { get; set; }
+
+        /// <summary>The agent that asked and the run's title: they name the undo step.</summary>
+        [JsonProperty("agent", NullValueHandling = NullValueHandling.Ignore)] public string? Agent { get; set; }
+
+        [JsonProperty("title", NullValueHandling = NullValueHandling.Ignore)] public string? Title { get; set; }
+
+        /// <summary>The part the agent's task works on: objects the run adds are stamped "hai.part" with it.</summary>
+        [JsonProperty("part", NullValueHandling = NullValueHandling.Ignore)] public string? Part { get; set; }
+
+        /// <summary>What the agent's task may change, as the bridge sent it; the plugin does not interpret it.</summary>
+        [JsonProperty("claim", NullValueHandling = NullValueHandling.Ignore)] public JToken? Claim { get; set; }
     }
 
     /// <summary>Bridge to Rhino: select these objects (a pick in the viewer). Empty clears the selection.</summary>

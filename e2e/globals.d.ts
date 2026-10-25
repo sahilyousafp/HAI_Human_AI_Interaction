@@ -11,6 +11,9 @@ interface Window {
     pick(x: number, y: number): string | null;
     latencyP90(): number | null;
     hovered?(): string | null;
+    wear?(id: string): { color: string; outline: string | null; glow: string | null } | null;
+    claimBoxes?(): string[];
+    cameraMarkers?(): string[];
     renders(): number;
     project(point: [number, number, number]): [number, number];
     overSection(x: number, y: number): boolean;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ElementId, Point3Mm, PointMm } from "./scene.ts";
 
 /** An MCP server as the agent session loaded it. */
 export const AgentMcpServer = z.strictObject({
@@ -101,6 +102,26 @@ export type AgentTurn = z.infer<typeof AgentTurn>;
 export const TaskStatus = z.enum(["queued", "running", "waiting", "done", "failed", "stopped"]);
 export type TaskStatus = z.infer<typeof TaskStatus>;
 
+/**
+ * The part of the model a task may change. Any mix of element ids, a part (the value of the `hai.part` tag) and a
+ * region (a box in millimetres; without a z it spans every height) makes up the claim. A task with no scope claims
+ * the whole model.
+ */
+export const TaskScope = z
+  .strictObject({
+    ids: z.array(ElementId).min(1).max(500).optional(),
+    part: z.string().trim().min(1).max(64).optional(),
+    region: z
+      .strictObject({ min: z.union([Point3Mm, PointMm]), max: z.union([Point3Mm, PointMm]) })
+      .refine(
+        ({ min, max }) => min.every((v, i) => v <= (max[i] ?? v)) && min.length === max.length,
+        "min must not exceed max, and both need the same number of coordinates",
+      )
+      .optional(),
+  })
+  .refine((s) => s.ids !== undefined || s.part !== undefined || s.region !== undefined, "an empty scope");
+export type TaskScope = z.infer<typeof TaskScope>;
+
 /** A task on the team's board. Times are epoch ms. */
 export const TeamTask = z.strictObject({
   id: z.string(),
@@ -119,8 +140,47 @@ export const TeamTask = z.strictObject({
   turnId: z.string().optional(),
   /** Mochi's turn that handed it out. */
   fromTurn: z.string().optional(),
+  /** What it may change; absent means the whole model. */
+  scope: TaskScope.optional(),
+  /** Shared decisions (datum, grid, colours) Mochi gave every task of the same request. */
+  brief: z.string().optional(),
+  /** While queued behind another task's claim: that task's id. */
+  waitingFor: z.string().optional(),
+  /** While queued because the limit on sessions is reached (not because of a claim). */
+  waitingForSession: z.boolean().optional(),
+  /** A worker's task: the task of the specialist that started it. */
+  parent: z.string().optional(),
+  /** `worker` for a part of a specialist's own task, which runs as its own session named `<agent>.<n>`. */
+  kind: z.enum(["task", "worker"]).optional(),
 });
 export type TeamTask = z.infer<typeof TeamTask>;
+
+/** What a running task holds, as the panel and the viewer show it. */
+export const TeamClaim = z.strictObject({
+  taskId: z.string(),
+  agent: z.string(),
+  title: z.string(),
+  /** Null is the whole model. */
+  scope: TaskScope.nullable(),
+  /** How many elements of the scene it takes in now. */
+  elements: z.number().int().nonnegative(),
+  /** A worker's claim is cut from its parent's: the parent task's id. */
+  parent: z.string().optional(),
+});
+export type TeamClaim = z.infer<typeof TeamClaim>;
+
+/** One part of a plan Mochi shows the user before it hands the work out: who does it, what it is, where. */
+export const PlanPart = z.strictObject({
+  id: z.string(),
+  agent: z.string().min(1).max(64),
+  title: z.string().min(1).max(80),
+  scope: TaskScope.optional(),
+});
+export type PlanPart = z.infer<typeof PlanPart>;
+export const PlanOutcome = z.enum(["confirmed", "skipped", "expired"]);
+export type PlanOutcome = z.infer<typeof PlanOutcome>;
+/** The parts of a plan wait this long for the user before the plan expires. */
+export const PLAN_TIMEOUT_MS = 120_000;
 
 /** An agent of the team, as the panel shows it. */
 export const TeamMemberInfo = z.strictObject({
@@ -141,10 +201,18 @@ export const HAI_TOOLS = {
   write: ["create_elements", "update_elements", "delete_elements", "set_selection"],
   /** Offering and showing a generated panel; granted to every agent that changes the model. */
   panel: ["offer_panel", "open_panel", "update_panel", "close_panel"],
-  team: ["delegate", "team_status", "cancel_task"],
+  team: ["delegate", "team_status", "cancel_task", "confirm_plan"],
   climate: ["sun_study"],
   /** Moves the viewer's camera and nothing else, so every agent has it. */
   view: ["set_view"],
+  /** The agent's own cameras: private, and pictures from them never touch the user's view; every agent has them. */
+  cameras: ["camera_set", "camera_list", "camera_capture", "camera_delete"],
+  /** Who holds which part of the model, and asking for or giving back scope; every agent has them. */
+  claims: ["get_claims", "request_claim", "release_claim"],
+  /** Changing an element's own tags; granted to every agent that changes the model. */
+  tags: ["set_tags"],
+  /** Starting a worker for a part of the agent's own task; granted to the specialists that change the model. */
+  workers: ["spawn_worker"],
   /** Runs Python in the managed environment; granted to the agents that change the model, and to any agent whose file lists it. */
   python: ["python_run"],
   /** Runs Python inside the open Rhino document; granted to the agents that change the model. */

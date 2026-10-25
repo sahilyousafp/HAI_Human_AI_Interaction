@@ -34,21 +34,29 @@ The `hai` MCP server gives each agent the tools its definition lists, from these
 
 | Tool | What it does |
 |---|---|
-| `get_scene_summary` | Levels, element counts by type and the bounding box, in millimetres |
-| `get_elements` | Full details by id, or by type and level |
+| `get_scene_summary` | Levels, element counts by type, how many elements each owner and part holds, and the bounding box, in millimetres |
+| `get_elements` | Full details, with tags, by id, or by type, level, owner, part or tag. An element you changed by hand since the agent last read it is marked `changedByUser` |
 | `get_user_context` | The selection, the element under your hand pointer, and the camera |
 | `create_elements`, `update_elements`, `delete_elements` | Change the scene. Each batch is checked as a whole: if one element is invalid, nothing changes and the error names it |
+| `set_tags` | Sets or removes the agent's own tags on elements. Names starting with `hai.` (`hai.owner`, `hai.part`, `hai.source`) belong to the system and are refused (every agent that changes the model) |
 | `set_selection` | Select elements for everyone |
+| `confirm_plan` | Shows the user how the lead means to split a request (agent, title and scope of each part) before it hands anything out; the user removes parts and confirms, or skips, and the lead hands out only the confirmed parts (the lead only; see [agents.md](agents.md#workers)) |
+| `spawn_worker` | Starts a worker for one part of the agent's own task (title, instruction, scope inside its claim): another session of the same agent, with its own undo step; the task ends after its workers (the specialists that change the model; see [Workers](agents.md#workers)) |
+| `get_claims`, `request_claim`, `release_claim` | See who is working on which part of the model, ask for more scope for the running task, give some back (every agent; see [Parallel modelling](parallel.md)) |
 | `capture_view` | A PNG of what you see in the viewer, at most 1280 px on its longest side |
 | `python_run` | Runs a Python script in an environment HAI manages in the project (no Rhino needed). You see the whole script and the packages it would install first; every run is kept in `.hai/scripts`; a `.3dm` it writes can be imported into the viewer with one click (Architect, Product, Climate) |
 | `rhino_run_python` | Runs a Python script inside your open Rhino 8 with all of RhinoCommon, as one undo step, after you have seen it. Only offered while Rhino is connected and the mode is not Python only (Architect, Product) |
 | `rhino_get_document` | Reads Rhino's units, layers, object counts, selection and active view (every agent, while Rhino is connected) |
 | `set_view` | Moves your camera: turn, tilt, nearer or further, look at a point, or frame elements. It changes nothing in the model (every agent) |
+| `camera_set` | Places or moves one of your own cameras by name (direction, distance, target or elements to frame); it is private to you and never moves the user's view |
+| `camera_list` | Lists your own cameras |
+| `camera_capture` | Pictures from your own cameras or a preset (`iso`, `top`, `front`, `left`, `orbit-sheet`), taken off-screen without the user's hover, selection or section |
+| `camera_delete` | Deletes one of your cameras, or all of them |
 | `sun_study` | Sets the viewer's sun for a date, time and place and returns its altitude and azimuth with a picture (Climate) |
 | `offer_panel`, `open_panel`, `update_panel`, `close_panel` | Offer you a small panel for a task, show it once you accept, replace it, close it (every agent that changes the model; see [Generated panels](#generated-panels)) |
 | `delegate`, `team_status`, `cancel_task` | Hand a task to a specialist, see what everyone is doing, stop a task (Mochi) |
 
-**One task is one undo step.** Everything a specialist changes in one task is a single transaction labelled with the agent and the task, for example "Architect: Stair core". You watch the model change as it works, and one Undo reverts the whole task. Only one agent changes the model at a time.
+**One task is one undo step.** Everything a specialist changes in one task is a single transaction labelled with the agent and the task, for example "Architect: Stair core". You watch the model change as it works, and one Undo reverts the whole task. Agents given separate parts of the model work at the same time, each in its own undo step; a task with no scope takes the whole model and runs alone ([parallel.md](parallel.md)).
 
 ## Generated panels
 

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type AgentDefinitionInput, HAI_TOOLS, type TeamMemberInfo } from "@hai/protocol";
-import { builderCapabilities, HAI_SERVER, type ManagedDefinition } from "./agent-config.ts";
+import { builderCapabilities, HAI_SERVER, type ManagedDefinition, splitGuidance } from "./agent-config.ts";
 import { listField, parseFrontmatter } from "./frontmatter.ts";
 
 const hai = (names: readonly string[]) => names.map((n) => `mcp__${HAI_SERVER}__${n}`);
@@ -47,7 +47,12 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
   mochi: {
     description:
       "The team lead. Takes every request, hands work to the specialists and reports what everyone is doing.",
-    tools: [...hai(HAI_TOOLS.team), ...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.view)],
+    tools: [
+      ...hai(HAI_TOOLS.team),
+      ...hai(HAI_TOOLS.read),
+      ...hai(HAI_TOOLS.view),
+      ...hai(HAI_TOOLS.cameras),
+    ],
     model: "sonnet",
     prompt: `You are Mochi, the lead of a small design team working on a shared 3D model in HAI.
 
@@ -73,6 +78,7 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
       ...hai(HAI_TOOLS.write),
       ...hai(HAI_TOOLS.panel),
       ...hai(HAI_TOOLS.view),
+      ...hai(HAI_TOOLS.cameras),
       ...hai(HAI_TOOLS.python),
       ...hai(HAI_TOOLS.rhino),
       ...hai(HAI_TOOLS.rhinoRead),
@@ -89,6 +95,7 @@ columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIAL
       ...hai(HAI_TOOLS.write),
       ...hai(HAI_TOOLS.panel),
       ...hai(HAI_TOOLS.view),
+      ...hai(HAI_TOOLS.cameras),
       ...hai(HAI_TOOLS.python),
       ...hai(HAI_TOOLS.rhino),
       ...hai(HAI_TOOLS.rhinoRead),
@@ -105,6 +112,7 @@ scale, with attention to ergonomics, materials and how they are made. Model simp
       ...hai(HAI_TOOLS.read),
       ...hai(HAI_TOOLS.climate),
       ...hai(HAI_TOOLS.view),
+      ...hai(HAI_TOOLS.cameras),
       ...hai(HAI_TOOLS.python),
       ...hai(HAI_TOOLS.rhinoRead),
     ],
@@ -117,7 +125,12 @@ and describe what the shadows mean for the design. You do not change the model.\
   reviewer: {
     description:
       "Checks the model against the brief and rules (heights, counts, clearances) and reports issues. Never edits.",
-    tools: [...hai(HAI_TOOLS.read), ...hai(HAI_TOOLS.view), ...hai(HAI_TOOLS.rhinoRead)],
+    tools: [
+      ...hai(HAI_TOOLS.read),
+      ...hai(HAI_TOOLS.view),
+      ...hai(HAI_TOOLS.cameras),
+      ...hai(HAI_TOOLS.rhinoRead),
+    ],
     model: "sonnet",
     prompt: `You are Reviewer. You check the model against the brief and common rules (heights, counts, clearances,
 overlaps) and report issues clearly with element names. You never change the model.\n\n${SPECIALIST_CLOSE}`,
@@ -251,17 +264,29 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
   const prefix = `mcp__${HAI_SERVER}__`;
   const writeTools: readonly string[] = member.writes
     ? []
-    : [...HAI_TOOLS.write, ...HAI_TOOLS.panel, ...HAI_TOOLS.rhino];
+    : [...HAI_TOOLS.write, ...HAI_TOOLS.tags, ...HAI_TOOLS.panel, ...HAI_TOOLS.rhino, ...HAI_TOOLS.workers];
   const tools = new Set(
     member.tools
       .filter((t) => t.startsWith(prefix))
       .map((t) => t.slice(prefix.length))
       .filter((t) => !writeTools.includes(t)),
   );
+  // Starting a worker for a part of its own task is for the specialists that change the model.
   if (member.writes)
-    for (const tool of [...HAI_TOOLS.panel, ...HAI_TOOLS.python, ...HAI_TOOLS.rhino]) tools.add(tool);
-  // Looking around changes no element, so every agent may do it, whatever its definition lists.
-  for (const tool of [...HAI_TOOLS.view, ...HAI_TOOLS.rhinoRead]) tools.add(tool);
+    for (const tool of [
+      ...HAI_TOOLS.tags,
+      ...HAI_TOOLS.panel,
+      ...HAI_TOOLS.python,
+      ...HAI_TOOLS.rhino,
+      ...HAI_TOOLS.workers,
+    ])
+      tools.add(tool);
+  // The lead may show the user its plan before handing work out, whatever its file lists (older files do not).
+  if (member.lead) for (const tool of HAI_TOOLS.team) tools.add(tool);
+  // Looking around changes no element, so every agent may do it, whatever its definition lists. Claims are the same:
+  // reading them is harmless, and asking for more only works for the agent's own running task.
+  for (const tool of [...HAI_TOOLS.view, ...HAI_TOOLS.cameras, ...HAI_TOOLS.claims, ...HAI_TOOLS.rhinoRead])
+    tools.add(tool);
   return tools;
 }
 
@@ -274,13 +299,80 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
  */
 export function managedDefinition(member: TeamMember): ManagedDefinition {
   const prefix = `mcp__${HAI_SERVER}__`;
-  const others = member.tools.filter((t) => !t.startsWith(prefix));
+  const others = member.tools.filter((t) => !t.startsWith(prefix) && !SUBAGENT_TOOLS.includes(t));
   const own = [...allowedHaiTools(member)].sort().map((t) => `${prefix}${t}`);
   return {
     description: member.description,
     prompt: member.prompt,
-    tools: [...others, ...own],
+    // Every agent may start Claude Code's own subagents, for reading and reviewing (see `helperDefinitions`).
+    tools: [...others, ...SUBAGENT_TOOLS, ...own],
     ...(member.model ? { model: member.model } : {}),
+  };
+}
+
+/** Claude Code's tool for starting a subagent (named `Task` in older versions, `Agent` in newer ones). */
+const SUBAGENT_TOOLS = ["Task", "Agent"];
+/** What a helper may do outside the model: look at files. */
+const FILE_TOOLS = ["Read", "Glob", "Grep"];
+
+/**
+ * The subagents an agent may start with Claude Code's own tool, as `--agents` entries. A subagent calls the app's tool
+ * server with its parent's token, so the app cannot tell it from its parent: every one of them is read-only, whatever
+ * a project's file for the same name says (a CLI definition wins over the file). There is one for each other member of
+ * the team (named after it, with its way of looking at things, and only the tools that read the model and the view),
+ * and two generic ones: `scout` (reads, and searches the web) and `checker` (reads). Changing the model with help goes
+ * through a worker instead, which has its own identity.
+ */
+export function helperDefinitions(member: TeamMember, team: TeamMember[]): Record<string, ManagedDefinition> {
+  const prefix = `mcp__${HAI_SERVER}__`;
+  const looks = [...FILE_TOOLS, ...[...HAI_TOOLS.read, ...HAI_TOOLS.rhinoRead].map((t) => `${prefix}${t}`)];
+  const note =
+    "You are helping another agent. You only look and report back: you cannot change the model or run scripts.";
+  const helpers: Record<string, ManagedDefinition> = {};
+  for (const other of team) {
+    if (other.name === member.name) continue;
+    helpers[other.name] = {
+      description: `${other.description} (as a read-only helper: it looks and reports, and changes nothing)`,
+      prompt: `${other.prompt}\n\n${note}`,
+      tools: looks,
+      ...(other.model ? { model: other.model } : {}),
+    };
+  }
+  helpers.scout = {
+    description:
+      "Looks things up for you: reads the model, the project's files and the web, and reports what it found. Changes nothing.",
+    prompt: `You look things up and report briefly what you found, with where you found it. ${note}`,
+    tools: [...looks, "WebSearch", "WebFetch"],
+  };
+  helpers.checker = {
+    description:
+      "Reads the model and checks a draft or a claim against it (sizes, overlaps, missing parts), and reports. Changes nothing.",
+    prompt: `You check what you are asked to check against the model and report the problems you find, naming elements. ${note}`,
+    tools: looks,
+  };
+  return helpers;
+}
+
+/** What a worker of this agent may not do: start workers, or hand tasks to other agents. */
+const WORKER_REFUSED: ReadonlySet<string> = new Set(["spawn_worker", "delegate"]);
+
+/** The `hai` tools of a worker started from this agent: the agent's own, without the means to start more work. */
+export function workerHaiTools(member: TeamMember): Set<string> {
+  return new Set([...allowedHaiTools(member)].filter((t) => !WORKER_REFUSED.has(t)));
+}
+
+/**
+ * The definition a worker of this agent starts with (`--agents`): the agent's own, narrowed: a worker cannot start
+ * workers or hand tasks to other agents. It has no file in `.claude/agents`, so it never appears in the Agents tab.
+ */
+export function workerDefinition(member: TeamMember): ManagedDefinition {
+  const definition = managedDefinition(member);
+  const prefix = `mcp__${HAI_SERVER}__`;
+  return {
+    ...definition,
+    tools: definition.tools.filter(
+      (t) => !(t.startsWith(prefix) && WORKER_REFUSED.has(t.slice(prefix.length))),
+    ),
   };
 }
 
@@ -299,5 +391,5 @@ export function rosterText(team: TeamMember[]): string {
   if (builders.length === 0) return list;
   // What the specialists can do beyond the scene's own element types. The lead has no modelling tools, so without
   // this it only knows the descriptions above and tells the user that curves and smooth forms are impossible.
-  return `${list}\n\n${builderCapabilities(builders)}`;
+  return `${list}\n\n${builderCapabilities(builders)}\n\n${splitGuidance()}`;
 }

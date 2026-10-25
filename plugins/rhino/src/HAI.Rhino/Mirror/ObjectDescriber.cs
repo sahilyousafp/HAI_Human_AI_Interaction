@@ -59,8 +59,6 @@ namespace HAI.Rhino.Mirror
 
         public static RhinoObjectInfo Describe(RhinoDoc doc, RhinoObject obj, Guid? asset, int triangles)
         {
-            var scale = RhinoMath.UnitScale(doc.ModelUnitSystem, UnitSystem.Millimeters);
-            var box = obj.Geometry.GetBoundingBox(true);
             var colour = obj.Attributes.DrawColor(doc);
             return new RhinoObjectInfo
             {
@@ -70,19 +68,27 @@ namespace HAI.Rhino.Mirror
                 Layer = LayerPath(doc, obj),
                 // The colour as Rhino draws it (the object's own, else its layer's), so the viewer needs no layer table.
                 Color = colour.IsEmpty ? null : $"#{colour.R:x2}{colour.G:x2}{colour.B:x2}",
-                Bounds = new Bounds
-                {
-                    Min = new[] { box.Min.X * scale, box.Min.Y * scale, box.Min.Z * scale },
-                    Max = new[] { box.Max.X * scale, box.Max.Y * scale, box.Max.Z * scale },
-                },
+                Bounds = BoundsMm(doc, obj),
                 Asset = asset?.ToString("D"),
                 Triangles = triangles,
                 Tags = Tags(obj),
             };
         }
 
+        /// <summary>The object's bounding box in millimetres.</summary>
+        public static Bounds BoundsMm(RhinoDoc doc, RhinoObject obj)
+        {
+            var scale = RhinoMath.UnitScale(doc.ModelUnitSystem, UnitSystem.Millimeters);
+            var box = obj.Geometry.GetBoundingBox(true);
+            return new Bounds
+            {
+                Min = new[] { box.Min.X * scale, box.Min.Y * scale, box.Min.Z * scale },
+                Max = new[] { box.Max.X * scale, box.Max.Y * scale, box.Max.Z * scale },
+            };
+        }
+
         /// <summary>The object's user strings whose key starts with "hai.": how parts are named for the agents.</summary>
-        private static Dictionary<string, string> Tags(RhinoObject obj)
+        public static Dictionary<string, string> Tags(RhinoObject obj)
         {
             var tags = new Dictionary<string, string>();
             var strings = obj.Attributes.GetUserStrings();

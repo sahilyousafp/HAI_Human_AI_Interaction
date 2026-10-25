@@ -16,7 +16,7 @@ export interface SceneState {
   /** Why the last Open or New project request was refused, if it was. */
   projectMessage: string | null;
   /** The most recent change to the scene: what kind, its label, and when it arrived (ms). */
-  lastChange: { kind: "apply" | "undo" | "redo"; label: string; at: number } | null;
+  lastChange: { kind: "apply" | "undo" | "redo"; label: string; by: string; at: number } | null;
 }
 
 const INITIAL: SceneState = {
@@ -61,7 +61,7 @@ export class SceneClient {
         return true;
       }
       case "scene.patch": {
-        const { seq, ops, canUndo, canRedo, kind, label } = message.payload;
+        const { seq, ops, canUndo, canRedo, kind, label, by } = message.payload;
         if (!this.state.doc || seq !== this.state.seq + 1) {
           this.resync();
           return true;
@@ -71,7 +71,13 @@ export class SceneClient {
           this.resync();
           return true;
         }
-        this.update({ doc: result.doc, seq, canUndo, canRedo, lastChange: { kind, label, at: Date.now() } });
+        this.update({
+          doc: result.doc,
+          seq,
+          canUndo,
+          canRedo,
+          lastChange: { kind, label, by, at: Date.now() },
+        });
         return true;
       }
       case "selection.changed":

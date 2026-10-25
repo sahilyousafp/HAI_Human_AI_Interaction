@@ -1,0 +1,25 @@
+{
+  "type": "rhino.python.run",
+  "id": "bridge-2",
+  "payload": {
+    "id": "run-2",
+    "code": "result = 1\n",
+    "timeoutMs": 30000,
+    "agent": "architect",
+    "title": "Add the dome",
+    "part": "dome",
+    "claim": {
+      "part": "dome",
+      "region": {
+        "min": [
+          0,
+          0
+        ],
+        "max": [
+          20000,
+          20000
+        ]
+      }
+    }
+  }
+}

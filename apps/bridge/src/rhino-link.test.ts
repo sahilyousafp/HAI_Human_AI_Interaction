@@ -440,6 +440,101 @@ describe("running Python in Rhino", () => {
   });
 });
 
+describe("scripts take turns", () => {
+  const result = (id: string, text: string) => ({ id, ok: true, stdout: "", result: text, durationMs: 1 });
+
+  it("the second script waits until Rhino has answered the first, and each goes out in the order asked", async () => {
+    await start();
+    const rhino = await rhinoClient();
+    const first = bridge?.rhino.runPython("1", 5000, { agent: "architect", title: "First" });
+    const second = bridge?.rhino.runPython("2", 5000, { agent: "product", title: "Second" });
+    const asked = await rhino.waitFor("rhino.python.run");
+    expect(asked.payload).toMatchObject({ code: "1", agent: "architect", title: "First" });
+    // Nothing else has been sent while the first one runs.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(rhino.received.filter((m) => m.type === "rhino.python.run")).toHaveLength(1);
+    rhino.send("rhino.python.result", result(asked.payload.id, "one"));
+    expect(await first).toMatchObject({ result: "one" });
+    const next = await rhino.waitFor("rhino.python.run", (m) => m.payload.code === "2");
+    expect(next.payload).toMatchObject({ agent: "product", title: "Second" });
+    rhino.send("rhino.python.result", result(next.payload.id, "two"));
+    expect(await second).toMatchObject({ result: "two" });
+  });
+
+  it("the part and the claim go with the script", async () => {
+    await start();
+    const rhino = await rhinoClient();
+    const run = bridge?.rhino.runPython("1", 5000, {
+      agent: "architect",
+      title: "Dome",
+      part: "dome",
+      claim: { part: "dome", ids: ["a"] },
+    });
+    const asked = await rhino.waitFor("rhino.python.run");
+    expect(asked.payload).toMatchObject({ part: "dome", claim: { part: "dome", ids: ["a"] } });
+    rhino.send("rhino.python.result", result(asked.payload.id, "ok"));
+    await run;
+  });
+
+  it("a script stopped while it waits never goes to Rhino, and the one behind it still runs", async () => {
+    await start();
+    const rhino = await rhinoClient();
+    const stop = new AbortController();
+    const first = bridge?.rhino.runPython("1", 5000);
+    const waiting = bridge?.rhino.runPython("2", 5000, {}, stop.signal);
+    const third = bridge?.rhino.runPython("3", 5000);
+    const asked = await rhino.waitFor("rhino.python.run");
+    stop.abort();
+    await expect(waiting).rejects.toThrow(/stopped/);
+    rhino.send("rhino.python.result", result(asked.payload.id, "one"));
+    await first;
+    const next = await rhino.waitFor("rhino.python.run", (m) => m.payload.code === "3");
+    rhino.send("rhino.python.result", result(next.payload.id, "three"));
+    await third;
+    expect(rhino.received.filter((m) => m.type === "rhino.python.run").map((m) => m.payload.code)).toEqual([
+      "1",
+      "3",
+    ]);
+  });
+
+  it("the time limit starts when Rhino gets the script, not while it waits", async () => {
+    await start();
+    const rhino = await rhinoClient();
+    const first = bridge?.rhino.runPython("1", 5000);
+    const second = bridge?.rhino.runPython("2", 1000);
+    const asked = await rhino.waitFor("rhino.python.run");
+    // Longer than the second script's own limit plus the grace period would be if it had started counting.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    rhino.send("rhino.python.result", result(asked.payload.id, "one"));
+    await first;
+    const next = await rhino.waitFor("rhino.python.run", (m) => m.payload.code === "2");
+    rhino.send("rhino.python.result", result(next.payload.id, "two"));
+    expect(await second).toMatchObject({ result: "two" });
+  });
+
+  it("scripts still waiting fail when Rhino disconnects", async () => {
+    await start();
+    const rhino = await rhinoClient();
+    const first = bridge?.rhino.runPython("1", 5000);
+    const second = bridge?.rhino.runPython("2", 5000);
+    const failed = Promise.all([
+      expect(first).rejects.toThrow(/disconnected/),
+      expect(second).rejects.toThrow(/disconnected/),
+    ]);
+    await rhino.waitFor("rhino.python.run");
+    rhino.ws.close();
+    await failed;
+  });
+
+  it("a page can ask Rhino to undo the last run", async () => {
+    await start();
+    const rhino = await rhinoClient();
+    const browser = await page();
+    browser.send("rhino.undo", {});
+    await rhino.waitFor("rhino.undo");
+  });
+});
+
 describe("the discovery file is read by the plugin", () => {
   it("holds a token that works for the local connection", async () => {
     await start();

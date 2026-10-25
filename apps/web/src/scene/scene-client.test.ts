@@ -52,6 +52,15 @@ describe("SceneClient", () => {
     expect(client.getSnapshot().canUndo).toBe(true);
   });
 
+  it("keeps who made the last change, defaulting to the user", () => {
+    const { client } = setup();
+    client.handle({
+      ...patch(4, [{ op: "update", id: "c1", patch: { name: "Corner" } }]),
+      payload: { seq: 4, kind: "apply", label: "x", by: "architect", ops: [], canUndo: true, canRedo: false },
+    } as Message);
+    expect(client.getSnapshot().lastChange).toMatchObject({ by: "architect" });
+  });
+
   it("asks for a snapshot when a patch is missing, and ignores the out-of-order one", () => {
     const { client, sent } = setup();
     client.handle(patch(6, [{ op: "delete", id: "c1" }]));

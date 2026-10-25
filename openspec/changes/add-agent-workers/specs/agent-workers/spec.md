@@ -14,7 +14,7 @@ An agent that changes the model SHALL be able to start a worker for a part of it
 - **THEN** the request is refused and says that workers cannot start workers
 
 ### Requirement: A worker's scope is cut from its parent's claim
-A worker's scope SHALL lie inside its parent's claim, and SHALL NOT overlap another worker's scope. A request whose scope is outside the parent's claim, or overlaps a running worker's, SHALL be refused naming the reason and the holder. The parent SHALL keep the rest of its claim. While a worker runs, the parent SHALL NOT change the part the worker holds.
+A worker's scope SHALL lie inside its parent's claim, and SHALL NOT overlap another worker's scope. A part inside a part claim is a sub-part, written `<part>/<name>`. A request whose scope is outside the parent's claim, or overlaps a running worker's, SHALL be refused naming the reason and the holder. The parent SHALL keep the rest of its claim. While a worker runs, the parent SHALL NOT change the part the worker holds.
 
 #### Scenario: Scope outside the parent's claim
 - **GIVEN** Architect's claim is the part `pavilion`
@@ -83,13 +83,13 @@ Every agent SHALL be able to use Claude Code's own subagents for reading, resear
 - **THEN** the subagent can read the model and search, and returns what it found to Architect
 
 ### Requirement: Panels work with several agents
-While a panel is open, another agent's offer of a panel SHALL wait in a queue of at most two, instead of being refused, and the offering agent SHALL be told it is waiting; an offer that waits more than a minute SHALL expire. A panel SHALL show the name of the agent that opened it. Mochi SHALL be able to offer a plan panel that shows how a request is split into parts, with each part's agent and scope, and lets the user remove a part or confirm, before any worker starts.
+While a panel is open, another agent's offer of a panel SHALL wait in a queue of at most two, instead of being refused, and the offering agent SHALL be told it is waiting; an offer that waits more than a minute SHALL expire. A panel SHALL show the name of the agent that opened it. Mochi SHALL be able to show the user a plan card that lists how a request is split into parts, with each part's agent and scope, and lets the user remove a part, confirm or skip, and SHALL hand out only the parts the user kept; nothing SHALL be handed out before the user answers, and a plan that is not answered SHALL expire and hand nothing out.
 
 #### Scenario: Second offer waits
 - **GIVEN** a panel from Architect is open
 - **WHEN** Product offers a panel
 - **THEN** Product's offer waits, and shows when the first panel closes
 
-#### Scenario: Plan panel
-- **WHEN** Mochi offers a plan panel for a pavilion split into dome, minarets and garden
-- **THEN** the panel lists the three parts with their agents, the user removes "garden" and confirms, and only two workers start
+#### Scenario: Plan card
+- **WHEN** Mochi shows a plan for a pavilion split into dome, minarets and garden
+- **THEN** the card lists the three parts with their agents, the user removes "garden" and confirms, and only the two kept parts are handed out

@@ -12,6 +12,7 @@ import {
   type RhinoPythonStatus,
   type RhinoSelected,
   type RhinoSync,
+  type TaskScope,
 } from "@hai/protocol";
 import type { Logger } from "./log.ts";
 
@@ -35,6 +36,25 @@ export interface RhinoLinkOptions {
 
 /** How long past a script's own time limit the plugin may take to answer before the run is given up. */
 const ANSWER_GRACE_MS = 5000;
+
+/** Who asked for a run and what they may change, sent to the plugin with the script. */
+export interface RhinoRunMeta {
+  agent?: string;
+  title?: string;
+  /** The part the agent's task works on: the plugin stamps the objects the run adds with it. */
+  part?: string;
+  /** What the agent's task may change; absent means all of it. */
+  claim?: TaskScope;
+}
+
+/** A script waiting for its turn, or running. */
+interface RunJob {
+  code: string;
+  timeoutMs: number;
+  meta: RhinoRunMeta;
+  resolve(result: RhinoPythonResult): void;
+  reject(error: Error): void;
+}
 
 /** What the bridge keeps of a connected Rhino: where it stands, and the mirror of its objects. */
 interface Connection {
@@ -60,6 +80,10 @@ export class RhinoLink {
   private selected: RhinoSelected[] = [];
   /** What the agent's tools depend on, as of the last state sent. */
   private availability: string | null = null;
+  /** Scripts waiting for their turn: Rhino runs one script at a time, whatever the number of agents asking. */
+  private readonly queue: RunJob[] = [];
+  /** The script Rhino is running for us now. */
+  private active: RunJob | null = null;
   private readonly pending = new Map<
     string,
     {
@@ -100,6 +124,11 @@ export class RhinoLink {
     return this.objects.get(id);
   }
 
+  /** Every mirrored Rhino object (for listing them by owner, part or tag next to the scene's elements). */
+  get mirroredObjects(): RhinoObject[] {
+    return [...this.objects.values()];
+  }
+
   get selection(): RhinoSelected[] {
     return this.selected;
   }
@@ -122,6 +151,9 @@ export class RhinoLink {
     this.python = null;
     this.document = null;
     this.dropMirror();
+    // Waiting scripts first: ending the running one would otherwise send the next to a connection that is gone.
+    for (const job of this.queue.splice(0))
+      job.reject(new Error("Rhino disconnected before the script started."));
     for (const [id, p] of this.pending) {
       clearTimeout(p.timer);
       p.reject(new Error("Rhino disconnected before the script finished."));
@@ -172,6 +204,10 @@ export class RhinoLink {
 
   /** Handles a message from a page: a pick in the viewer selects in Rhino. Returns false for other messages. */
   handleFromWeb(message: Message): boolean {
+    if (message.type === "rhino.undo") {
+      this.undoRun();
+      return true;
+    }
     if (message.type !== "rhino.select") return false;
     this.connection?.send({ type: "rhino.select", id: randomUUID(), payload: message.payload });
     return true;
@@ -184,23 +220,95 @@ export class RhinoLink {
     return true;
   }
 
-  /** Runs a script in the open Rhino document; rejects if Rhino is not connected, goes away, or does not answer. */
-  runPython(code: string, timeoutMs: number): Promise<RhinoPythonResult> {
-    const connection = this.connection;
-    if (!connection) return Promise.reject(new Error("Rhino is not connected. Run HaiConnect in Rhino."));
-    if (this.python?.state !== "ready") {
-      const why =
-        this.python?.state === "unavailable" ? this.python.reason : "its Python status is not known";
-      return Promise.reject(new Error(`Python is not available in Rhino: ${why}`));
-    }
-    const id = randomUUID();
+  /** Asks Rhino to undo the last script (each run is one undo step). */
+  undoRun(): boolean {
+    if (!this.connection) return false;
+    this.connection.send({ type: "rhino.undo", id: randomUUID(), payload: {} });
+    return true;
+  }
+
+  /** Why a script cannot run now, or null. */
+  private unavailable(): string | null {
+    if (!this.connection) return "Rhino is not connected. Run HaiConnect in Rhino.";
+    if (this.python?.state === "ready") return null;
+    const why = this.python?.state === "unavailable" ? this.python.reason : "its Python status is not known";
+    return `Python is not available in Rhino: ${why}`;
+  }
+
+  /**
+   * Runs a script in the open Rhino document; rejects if Rhino is not connected, goes away, or does not answer.
+   * Scripts take their turns, in the order they were asked: the time limit starts when Rhino gets the script, not when
+   * it was asked for. `signal` ends the wait of a script that has not started yet; one already running keeps Rhino
+   * busy until it answers, so the next does not start on top of it.
+   */
+  runPython(
+    code: string,
+    timeoutMs: number,
+    meta: RhinoRunMeta = {},
+    signal?: AbortSignal,
+  ): Promise<RhinoPythonResult> {
+    const unavailable = this.unavailable();
+    if (unavailable) return Promise.reject(new Error(unavailable));
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error("Rhino did not answer. It may still be running the script."));
-      }, timeoutMs + ANSWER_GRACE_MS);
-      this.pending.set(id, { resolve, reject, timer });
-      connection.send({ type: "rhino.python.run", id: randomUUID(), payload: { id, code, timeoutMs } });
+      const job: RunJob = { code, timeoutMs, meta, resolve, reject };
+      const stopped = () => {
+        const queued = this.queue.indexOf(job);
+        if (queued >= 0) this.queue.splice(queued, 1);
+        reject(new Error("The run was stopped."));
+      };
+      if (signal?.aborted) return stopped();
+      signal?.addEventListener("abort", stopped, { once: true });
+      this.queue.push(job);
+      this.pump();
+    });
+  }
+
+  /** Sends the next waiting script when Rhino is free. */
+  private pump(): void {
+    if (this.active) return;
+    const job = this.queue.shift();
+    if (!job) return;
+    const connection = this.connection;
+    if (!connection) {
+      job.reject(new Error("Rhino is not connected. Run HaiConnect in Rhino."));
+      this.pump();
+      return;
+    }
+    this.active = job;
+    const id = randomUUID();
+    const done = () => {
+      this.active = null;
+      this.pump();
+    };
+    const timer = setTimeout(() => {
+      this.pending.delete(id);
+      job.reject(new Error("Rhino did not answer. It may still be running the script."));
+      done();
+    }, job.timeoutMs + ANSWER_GRACE_MS);
+    this.pending.set(id, {
+      resolve: (result) => {
+        job.resolve(result);
+        done();
+      },
+      reject: (error) => {
+        job.reject(error);
+        done();
+      },
+      timer,
+    });
+    const { agent, title, part, claim } = job.meta;
+    connection.send({
+      type: "rhino.python.run",
+      id: randomUUID(),
+      payload: {
+        id,
+        code: job.code,
+        timeoutMs: job.timeoutMs,
+        ...(agent ? { agent } : {}),
+        ...(title ? { title: title.slice(0, 80) } : {}),
+        ...(part ? { part } : {}),
+        ...(claim ? { claim } : {}),
+      },
     });
   }
 

@@ -68,7 +68,7 @@ describe("PanelBroker offers", () => {
     expect(broker.stateOf("architect")).toBe("none");
     const offer = broker.offer("architect", "Tolerance");
     answer("accepted");
-    expect(await offer).toEqual({ ok: true, answer: "accepted" });
+    expect(await offer).toMatchObject({ ok: true, answer: "accepted" });
     expect(broker.stateOf("architect")).toBe("accepted");
     expect(offerStates()).toEqual(["waiting", "accepted"]);
   });
@@ -77,7 +77,7 @@ describe("PanelBroker offers", () => {
     const { broker, answer, offerStates } = setup();
     const offer = broker.offer("architect", "Tolerance");
     answer("skipped");
-    expect(await offer).toEqual({ ok: true, answer: "skipped" });
+    expect(await offer).toMatchObject({ ok: true, answer: "skipped" });
     expect(broker.stateOf("architect")).toBe("none");
     expect(offerStates()).toEqual(["waiting", "skipped"]);
     expect(broker.active).toBe(false);
@@ -91,7 +91,7 @@ describe("PanelBroker offers", () => {
       vi.advanceTimersByTime(59_999);
       expect(broker.stateOf("architect")).toBe("waiting");
       vi.advanceTimersByTime(1);
-      expect(await offer).toEqual({ ok: true, answer: "expired" });
+      expect(await offer).toMatchObject({ ok: true, answer: "expired" });
       expect(offerStates()).toEqual(["waiting", "expired"]);
       expect(broker.active).toBe(false);
     } finally {
@@ -121,22 +121,92 @@ describe("PanelBroker offers", () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("an offer while another is waiting is refused, across agents", async () => {
-    const { broker } = setup();
-    void broker.offer("architect", "Tolerance");
-    const refused = await broker.offer("product", "Another");
-    expect(refused).toMatchObject({ ok: false });
-    expect(refused.ok === false && refused.error).toMatch(/already waiting/);
+  it("an offer made while another waits for the user waits its turn, and is shown when the first is answered", async () => {
+    const { broker, offerStates, sent, answer } = setup();
+    const first = broker.offer("architect", "Tolerance");
+    const second = broker.offer("product", "Another");
+    // Only the first is shown: the second waits behind it, unseen.
+    expect(sent.filter((m) => m.type === "panel.offer")).toHaveLength(1);
+    expect(broker.stateOf("product")).toBe("none");
+    answer("skipped");
+    expect(await first).toMatchObject({ ok: true, answer: "skipped" });
+    // Now the user sees Product's offer.
+    expect(broker.stateOf("product")).toBe("waiting");
+    expect(offerStates()).toEqual(["waiting", "skipped", "waiting"]);
+    answer("accepted");
+    expect(await second).toMatchObject({ ok: true, answer: "accepted" });
+  });
+
+  it("an offer made while a panel is open waits for it to close, and the agent is told how long it waited", async () => {
+    vi.useFakeTimers();
+    try {
+      const { broker, openPanel, closed, answer } = setup();
+      await openPanel();
+      const waiting = broker.offer("product", "Mine");
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(broker.stateOf("product")).toBe("none");
+      closed("kept");
+      expect(broker.stateOf("product")).toBe("waiting");
+      answer("accepted");
+      const result = await waiting;
+      expect(result).toMatchObject({ ok: true, answer: "accepted" });
+      expect(result.ok && result.waitedMs).toBeGreaterThanOrEqual(3000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("at most two offers wait, one per agent, and an agent with its own panel open cannot offer again", async () => {
+    const { broker, openPanel } = setup();
+    await openPanel("architect");
+    void broker.offer("product", "One");
+    void broker.offer("climate", "Two");
+    const third = await broker.offer("reviewer", "Three");
+    expect(third.ok === false && third.error).toMatch(/2 offers are already waiting/);
+    const again = await broker.offer("product", "One again");
+    expect(again.ok === false && again.error).toMatch(/already waiting for its turn/);
+    const own = await broker.offer("architect", "Mine again");
+    expect(own.ok === false && own.error).toMatch(/panel of yours is already open/);
+  });
+
+  it("a waiting offer expires after a minute, never shown, and the next one goes ahead", async () => {
+    vi.useFakeTimers();
+    try {
+      const { broker, openPanel, closed, offerStates } = setup();
+      await openPanel();
+      const waiting = broker.offer("product", "Mine");
+      await vi.advanceTimersByTimeAsync(60_001);
+      expect(await waiting).toMatchObject({ ok: true, answer: "expired" });
+      closed("kept");
+      // It was never shown to the user, and nothing is left waiting.
+      expect(offerStates().filter((s) => s === "waiting")).toHaveLength(1);
+      expect(broker.stateOf("product")).toBe("none");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a waiting offer of an agent whose turn ends is dropped", async () => {
+    const { broker, openPanel, closed } = setup();
+    await openPanel();
+    const waiting = broker.offer("product", "Mine");
+    broker.turnEnded("product");
+    expect(await waiting).toMatchObject({ ok: true, answer: "expired" });
+    closed("kept");
     expect(broker.stateOf("product")).toBe("none");
   });
 
-  it("offer while open is refused with an error that a panel is open", async () => {
-    const { broker, openPanel } = setup();
-    await openPanel();
-    const refused = await broker.offer("architect", "Again");
-    expect(refused.ok === false && refused.error).toMatch(/panel is already open/);
-    const other = await broker.offer("product", "Mine");
-    expect(other.ok === false && other.error).toMatch(/panel is already open/);
+  it("switching the feature off or losing every page ends the waiting offers too", async () => {
+    const off = setup();
+    await off.openPanel();
+    const one = off.broker.offer("product", "Mine");
+    off.broker.switchedOff();
+    expect(await one).toMatchObject({ ok: true, answer: "expired" });
+    const gone = setup();
+    await gone.openPanel();
+    const two = gone.broker.offer("product", "Mine");
+    gone.broker.clientsGone();
+    expect(await two).toMatchObject({ ok: true, answer: "expired" });
   });
 });
 
@@ -307,7 +377,7 @@ describe("PanelBroker closing", () => {
     const second = setup();
     const offer = second.broker.offer("architect", "Tolerance");
     second.broker.switchedOff();
-    expect(await offer).toEqual({ ok: true, answer: "expired" });
+    expect(await offer).toMatchObject({ ok: true, answer: "expired" });
     expect(second.offerStates()).toEqual(["waiting", "unused"]);
   });
 });
@@ -320,7 +390,7 @@ describe("PanelBroker turns", () => {
   it("a stopped turn ends a waiting offer: the card shows no panel was made", async () => {
     const offer = t.broker.offer("architect", "Tolerance");
     t.broker.turnEnded("architect");
-    expect(await offer).toEqual({ ok: true, answer: "expired" });
+    expect(await offer).toMatchObject({ ok: true, answer: "expired" });
     expect(t.offerStates()).toEqual(["waiting", "unused"]);
     expect(t.broker.active).toBe(false);
   });

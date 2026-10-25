@@ -350,24 +350,19 @@ test.describe("the team", () => {
 });
 
 test.describe("climate's sun study", () => {
-  test("winter shadows: Climate sets the viewer's sun low in the south, and Escape restores the light", async ({
+  test("winter shadows: Climate's picture is in the strip, in the sun's light, and the user's own light does not change", async ({
     page,
   }) => {
     const bridge = await startWithFakeAgent(page);
     try {
       await ask(page, "Climate, winter shadows");
-      const badge = page.getByTestId("sun-study");
-      await expect(badge).toContainText("Sun study 2026-12-21 12:00, 51.5 N 0 E");
-      await expect(badge).toContainText(/15° up, 180° from north/);
-      const sun = await page.evaluate(() => window.__HAI_VIEWER__?.sun());
-      expect(sun?.altitude).toBeCloseTo(15.2, 0);
-      expect(sun?.azimuth).toBeCloseTo(180, 0);
       await expect(page.getByTestId("handoff-chip")).toHaveAttribute("data-status", "done");
       await page.getByTestId("handoff-chip").click();
       await expect(page.getByTestId("task-transcript")).toContainText(/Sun at 15\.\d degrees from the S\./);
-      await page.keyboard.press("Escape");
-      await expect(badge).toHaveCount(0);
+      // The study was drawn in its own light for the picture: the user's light and view were never involved.
       expect(await page.evaluate(() => window.__HAI_VIEWER__?.sun())).toBeNull();
+      await expect(page.getByTestId("sun-study")).toHaveCount(0);
+      await expect(page.getByTestId("team-shot-climate")).toBeVisible();
     } finally {
       await bridge.stop();
     }

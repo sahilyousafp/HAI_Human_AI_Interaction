@@ -69,6 +69,8 @@ Rhino's own viewport is not driven: HAI's viewer is the one you look at. Where a
 
 Scripts run on Rhino's one user-interface thread, one at a time, and nothing is sandboxed: a script has all of RhinoCommon and your user's rights, which is why you see it before it runs.
 
+With several agents the bridge queues the scripts (they take turns, in the order asked, and a script's time limit starts when Rhino gets it), sends each the agent's name, the run's title and the task's claim, and has the plugin stamp every object the script adds with `hai.owner` and `hai.part`. After the run it compares the document before and after with the claim and reports what the script touched outside it, to the agent and to you with **Undo in Rhino**: this is checked afterwards, it cannot prevent anything ([parallel.md](parallel.md#scripts)). The plugin half (`RunScope`, `RunDiff`) is written and its comparison is tested; it needs the Python runner, and a real Rhino 8, to be checked end to end.
+
 ## Performance tips
 
 - A very dense mesh is capped; model the heavy parts as a few objects or let them show as boxes.

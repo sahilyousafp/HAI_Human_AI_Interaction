@@ -57,15 +57,30 @@ import type { PointerSource, ToolController } from "../tools/controller.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
 import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
 import type { Hit } from "../tools/types.ts";
+import { SUN_DISTANCE, takeShots, USER_ONLY } from "./agent-shot.ts";
+import { type CameraMarker, CameraMarkers } from "./camera-markers.tsx";
 import { elementGeometry, MM, modelGeometry, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
 import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
+import {
+  ClaimBoxes,
+  NO_OWNERS,
+  OWNER_TINT,
+  type OwnerDisplay,
+  OwnerDisplayContext,
+  tint,
+  useOwnerDisplay,
+  useWear,
+  type Wear,
+  wornBy,
+} from "./owner-display.tsx";
 import { nearestModel, type SnapCandidate, snapRadius } from "./snap-pick.ts";
 import { MeasureMarks, ReferenceMarkers, SectionClipping, SectionPlane, SnapMarker } from "./ToolScene.tsx";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 import { between, resolveView, VIEW_ANIMATION_MS } from "./view-request.ts";
 
 const FOV = 45;
+const NO_MARKERS: CameraMarker[] = [];
 /** The pan pointer's icon: arrows in the four directions. */
 const PAN_ICON = "M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3";
 /** Camera easing time constant: smooths hand jitter without adding visible lag. */
@@ -187,6 +202,12 @@ declare global {
       latencyP90(): number | null;
       /** The element lit up under the hand pointer now (a pinch there would select it), or null. */
       hovered(): string | null;
+      /** What an element or mirrored object is drawn with now: its colour, outline and highlight. */
+      wear(id: string): Wear | null;
+      /** The claims drawn as boxes. */
+      claimBoxes(): string[];
+      /** The agent cameras drawn as markers, as "agent/name". */
+      cameraMarkers(): string[];
       /** Frames rendered so far (the canvas renders on demand, so an idle view adds none). */
       renders(): number;
       /** Viewer position (0..1) of a scene point in millimetres. */
@@ -323,10 +344,19 @@ function ElementMesh({
   // Imported models have no edge lines: finding them costs time proportional to the triangles (a model of a million
   // triangles cannot afford it), and on a detailed model they clutter the surface. Their normals show the forms.
   const showEdges = (sectionMm === null || topMm <= sectionMm) && element.type !== "imported";
-  let color = element.type === "massing" ? colors.massing : (importedColor(element) ?? colors.element);
+  const { owner: ownerColor, glow } = useOwnerDisplay(element.id, element.tags);
+  const base = element.type === "massing" ? colors.massing : (importedColor(element) ?? colors.element);
+  const ownerAmount = element.type === "imported" ? 0.4 : OWNER_TINT;
+  // What an agent's picture shows: the owner's tint, without the user's hover, selection and deletion mark.
+  const clean = ownerColor ? tint(base, ownerColor, ownerAmount) : base;
+  let color = base;
+  // The owner's colour is a hint under the state colours: hover and selection replace it, the deletion mark too.
+  const owner = ownerColor && !selected && !marked ? ownerColor : null;
+  if (owner && !hovered) color = tint(color, owner, ownerAmount);
   if (hovered) color = colors.hover;
   if (selected) color = colors.selected;
   if (marked) color = colors.risk;
+  useWear(element.id, color, showEdges ? (glow ?? owner) : null, glow);
   const offset: [number, number, number] = offsetMm ? [offsetMm[0] * MM, offsetMm[1] * MM, 0] : [0, 0, 0];
   // A model sits at its translation, and its millimetres become metres by scale.
   const placed: [number, number, number] = translation
@@ -348,10 +378,16 @@ function ElementMesh({
       scale={scale}
       castShadow
       receiveShadow
-      userData={{ elementId: element.id }}
+      userData={{ elementId: element.id, cleanColor: clean }}
     >
-      <meshStandardMaterial color={color} roughness={0.9} metalness={0} flatShading={model !== null} />
-      {showEdges && <Edges threshold={20} color={colors.edge} />}
+      <meshStandardMaterial
+        color={color}
+        roughness={0.9}
+        metalness={0}
+        flatShading={model !== null}
+        {...(glow ? { emissive: glow, emissiveIntensity: 0.6 } : {})}
+      />
+      {showEdges && <Edges threshold={20} color={glow ?? owner ?? colors.edge} />}
     </mesh>
   );
 }
@@ -523,6 +559,11 @@ function CameraRig({
       }),
     [view, gl, scene, camera],
   );
+  // Pictures from the agents' own cameras: off to the side, the user's frame drawn again before anything paints.
+  useEffect(
+    () => view.attachShots((request) => takeShots({ gl, scene, camera, fov: FOV }, request)),
+    [view, gl, scene, camera],
+  );
 
   useFrame((_, delta) => {
     if (navInput.current.momentum) {
@@ -569,8 +610,6 @@ function CameraRig({
 /** The viewer's own light: from the south-west, high, as a default that reads the model's forms well. */
 const DEFAULT_LIGHT: [number, number, number] = [-40, -60, 90];
 const DEFAULT_INTENSITY = 1.6;
-/** How far away (metres) the sun's light is placed: beyond the model, inside the shadow camera's reach. */
-const SUN_DISTANCE = 120;
 
 /**
  * The directional light. During a sun study it comes from where the sun is (north is +Y); it is moved at once when a
@@ -631,6 +670,8 @@ export function Viewer({
   mirror,
   mirrorAssets,
   markers = [],
+  owners,
+  cameraMarkers = NO_MARKERS,
   children,
 }: {
   client: SceneClient;
@@ -662,6 +703,10 @@ export function Viewer({
   mirrorAssets: ModelAssets;
   /** Elements captured while the user speaks, numbered in this order. */
   markers?: string[];
+  /** Who owns which elements, and the claims to mark; absent: nothing is marked. */
+  owners?: OwnerDisplay;
+  /** The cameras agents placed, as small markers in the model (not in agents' own pictures). */
+  cameraMarkers?: CameraMarker[];
   /** HUD panels over the model (the agent panel); inside the viewer, so the hand can press their buttons. */
   children?: React.ReactNode;
 }) {
@@ -720,6 +765,10 @@ export function Viewer({
   const [hoverId, setHoverId] = useState<string | null>(null);
   const hoverIdRef = useRef<string | null>(null);
   hoverIdRef.current = hoverId;
+  const ownersRef = useRef<OwnerDisplay>(owners ?? NO_OWNERS);
+  ownersRef.current = owners ?? NO_OWNERS;
+  const markersRef = useRef<CameraMarker[]>(cameraMarkers);
+  markersRef.current = cameraMarkers;
   const [p90, setP90] = useState<number | null>(null);
   const [projectPath, setProjectPath] = useState("");
   /** The folder form under the project bar: for opening a project or for starting a new one. */
@@ -1282,6 +1331,9 @@ export function Viewer({
       pick: (x, y) => (overHud(wrapper.current, [x, y]) ? null : pickRef.current.id(x, y)),
       latencyP90: () => latency.p90(),
       hovered: () => hoverIdRef.current,
+      wear: (id) => wornBy(id),
+      claimBoxes: () => ownersRef.current.boxes.map((b) => b.key),
+      cameraMarkers: () => markersRef.current.map((m) => m.key),
       renders: () => rendersRef.current(),
       project: (point) => pickRef.current.project(point),
       sectionOutline: () => sectionOutlineOnScreen(),
@@ -1394,6 +1446,7 @@ export function Viewer({
         <hemisphereLight args={["#ffffff", "#b9b4a8", 1.1]} />
         <SunLight view={view} />
         <Grid
+          userData={{ grid: true }}
           rotation={[Math.PI / 2, 0, 0]}
           position={[0, 0, -0.31]}
           cellSize={1}
@@ -1410,54 +1463,64 @@ export function Viewer({
             <shadowMaterial opacity={0.22} />
           </mesh>
         )}
-        <MirrorLayer
-          mirror={mirror}
-          assets={mirrorAssets}
-          colors={{ element: colors.element, hover: colors.hover, selected: colors.selected }}
-          hoverId={hoverId}
-        />
-        <ModelAssetsContext.Provider value={modelAssets}>
-          {shownDoc &&
-            Object.values(shownDoc.elements).map((element) => (
-              <ElementMesh
-                key={element.id}
-                element={element}
-                doc={shownDoc as SceneDocument}
-                colors={colors}
-                selected={selection.has(element.id)}
-                hovered={hoverId === element.id}
-                marked={overlay.marked === element.id}
-                offsetMm={previewOffset(element)}
-                sectionMm={overlay.sectionMm}
-              />
-            ))}
-        </ModelAssetsContext.Provider>
-        {shownDoc && overlay.draft && (
-          <ElementMesh
-            key="draft"
-            element={overlay.draft}
-            doc={shownDoc}
-            colors={colors}
-            selected={false}
-            hovered={false}
-            marked={false}
-            offsetMm={null}
-            sectionMm={overlay.sectionMm}
-            draft
+        <OwnerDisplayContext.Provider value={owners ?? NO_OWNERS}>
+          <MirrorLayer
+            mirror={mirror}
+            assets={mirrorAssets}
+            colors={{ element: colors.element, hover: colors.hover, selected: colors.selected }}
+            hoverId={hoverId}
           />
+          <ModelAssetsContext.Provider value={modelAssets}>
+            {shownDoc &&
+              Object.values(shownDoc.elements).map((element) => (
+                <ElementMesh
+                  key={element.id}
+                  element={element}
+                  doc={shownDoc as SceneDocument}
+                  colors={colors}
+                  selected={selection.has(element.id)}
+                  hovered={hoverId === element.id}
+                  marked={overlay.marked === element.id}
+                  offsetMm={previewOffset(element)}
+                  sectionMm={overlay.sectionMm}
+                />
+              ))}
+          </ModelAssetsContext.Provider>
+          <group userData={USER_ONLY}>
+            <ClaimBoxes boxes={(owners ?? NO_OWNERS).boxes} />
+          </group>
+        </OwnerDisplayContext.Provider>
+        {shownDoc && overlay.draft && (
+          <group userData={USER_ONLY}>
+            <ElementMesh
+              key="draft"
+              element={overlay.draft}
+              doc={shownDoc}
+              colors={colors}
+              selected={false}
+              hovered={false}
+              marked={false}
+              offsetMm={null}
+              sectionMm={overlay.sectionMm}
+              draft
+            />
+          </group>
         )}
         <SectionClipping heightMm={overlay.sectionMm} version={clipVersion} />
-        {overlay.sectionMm !== null && (
-          <SectionPlane
-            heightMm={overlay.sectionMm}
-            bounds={boundsMm}
-            color={colors.selected}
-            hovered={overlay.sectionHover}
-          />
-        )}
-        {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
-        {overlay.snap && <SnapMarker point={overlay.snap.point} label={overlay.snap.label} />}
-        {markers.length > 0 && <ReferenceMarkers ids={markers} doc={shownDoc} />}
+        <group userData={USER_ONLY}>
+          {overlay.sectionMm !== null && (
+            <SectionPlane
+              heightMm={overlay.sectionMm}
+              bounds={boundsMm}
+              color={colors.selected}
+              hovered={overlay.sectionHover}
+            />
+          )}
+          {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
+          {overlay.snap && <SnapMarker point={overlay.snap.point} label={overlay.snap.label} />}
+          {markers.length > 0 && <ReferenceMarkers ids={markers} doc={shownDoc} />}
+        </group>
+        {cameraMarkers.length > 0 && <CameraMarkers markers={cameraMarkers} />}
         <CameraRig
           nav={nav}
           navInput={navInput}

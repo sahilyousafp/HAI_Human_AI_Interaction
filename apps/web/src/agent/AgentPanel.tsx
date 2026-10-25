@@ -3,6 +3,7 @@ import {
   PANEL_OFFER_TIMEOUT_MS,
   type PanelOfferState,
   type TeamMemberInfo,
+  type TeamShot,
   type TeamTask,
 } from "@hai/protocol";
 import {
@@ -14,8 +15,10 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 import type { OfferView, PanelClient } from "../panel/panel-client.ts";
 import { ToolIcon } from "../tools/ToolOverlays.tsx";
+import { rememberedShot } from "../viewer/agent-shot.ts";
 import type { Speaker } from "../voice/speaker.ts";
 import { MicButton, VoiceBar } from "../voice/VoiceBar.tsx";
 import type { VoiceInput } from "../voice/voice-input.ts";
@@ -24,6 +27,8 @@ import {
   type AgentClient,
   type ApprovalView,
   displayName,
+  type PlanView,
+  type RunReportView,
   type TeamView,
   type ToolOutcome,
   type TurnItem,
@@ -31,6 +36,7 @@ import {
   type WrittenFile,
 } from "./agent-client.ts";
 import { ExtensionsView } from "./ExtensionsView.tsx";
+import { baseAgent, scopeLabel } from "./owners.ts";
 
 const STATUS_LABEL: Record<AgentStatus["state"] | "connecting", string> = {
   connecting: "Connecting",
@@ -95,6 +101,13 @@ function codeOf(input: unknown): string | null {
   return typeof code === "string" && code.length > 0 ? code : null;
 }
 
+/** The `.3dm` files a Python run declared it will write, or none. */
+function outputsOf(input: unknown): string[] {
+  const outputs =
+    typeof input === "object" && input !== null ? (input as { outputs?: unknown }).outputs : undefined;
+  return Array.isArray(outputs) ? outputs.filter((o): o is string => typeof o === "string") : [];
+}
+
 const clip = (text: string) => (text.length > DETAIL_MAX ? `${text.slice(0, DETAIL_MAX - 1)}…` : text);
 
 const isActive = (task: TeamTask) => task.status === "running" || task.status === "waiting";
@@ -103,7 +116,12 @@ const isActive = (task: TeamTask) => task.status === "running" || task.status ==
 function memberTask(team: TeamView, name: string): { state: MemberState; task: TeamTask | undefined } {
   const tasks = team.tasks.filter((t) => t.agent === name);
   const current = tasks.find(isActive);
-  if (current) return { state: current.status === "waiting" ? "waiting" : "working", task: current };
+  if (current) {
+    const blocked =
+      current.status === "waiting" ||
+      team.tasks.some((t) => t.parent === current.id && t.status === "waiting");
+    return { state: blocked ? "waiting" : "working", task: current };
+  }
   const queued = tasks.find((t) => t.status === "queued");
   if (queued) return { state: "queued", task: queued };
   return { state: "idle", task: tasks.at(-1) };
@@ -140,6 +158,99 @@ function useSecondsLeft(expiresAt: number, active: boolean): number {
   return Math.max(0, Math.ceil((expiresAt - now) / 1000));
 }
 
+/** Mochi's plan for a request: the parts with who does each, the user removes what they do not want and confirms. */
+function PlanCard({ plan, team, client }: { plan: PlanView; team: TeamView | null; client: AgentClient }) {
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
+  const waiting = plan.outcome === undefined;
+  const seconds = useSecondsLeft(plan.expiresAt, waiting);
+  const kept = plan.parts.filter((p) => !removed.has(p.id));
+  const shown = waiting ? plan.parts : plan.parts.filter((p) => plan.keep?.includes(p.id));
+  const memberOf = (name: string) => team?.members.find((m) => m.name === baseAgent(name));
+  return (
+    <section
+      className="plan-card"
+      data-testid="plan-card"
+      data-outcome={plan.outcome ?? "pending"}
+      aria-label="Mochi's plan"
+    >
+      <div className="approval-head">
+        <strong>{waiting ? "Mochi's plan" : "The plan"}</strong>
+        <span className="muted">
+          {waiting
+            ? `${plan.parts.length} parts: remove what you do not want`
+            : plan.outcome === "confirmed"
+              ? `Confirmed: ${shown.length} of ${plan.parts.length} parts`
+              : plan.outcome === "skipped"
+                ? "Skipped: nothing was handed out"
+                : "Not answered: nothing was handed out"}
+        </span>
+      </div>
+      <ul className="plan-parts">
+        {shown.map((part) => (
+          <li
+            key={part.id}
+            className="plan-part"
+            data-testid="plan-part"
+            style={colorOf(memberOf(part.agent))}
+            data-removed={removed.has(part.id) ? "true" : undefined}
+          >
+            <span className="team-dot" aria-hidden="true" />
+            <span className="plan-part-agent">{displayName(part.agent)}</span>
+            <span className="plan-part-title">{part.title}</span>
+            <span className="plan-part-scope">{scopeLabel(part.scope ?? null)}</span>
+            {waiting && (
+              <button
+                type="button"
+                className="icon-button plan-part-remove"
+                data-testid="plan-part-remove"
+                data-hand-press
+                aria-label={`Remove ${part.title}`}
+                title={`Remove "${part.title}" from the plan`}
+                disabled={kept.length === 1 && !removed.has(part.id)}
+                onClick={() => setRemoved(new Set([...removed, part.id]))}
+              >
+                ×
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {waiting && (
+        <div className="approval-actions">
+          <button
+            type="button"
+            className="primary"
+            data-testid="plan-confirm"
+            data-hand-press
+            onClick={() =>
+              client.answerPlan(
+                plan.id,
+                kept.map((p) => p.id),
+              )
+            }
+          >
+            {kept.length === plan.parts.length ? "Confirm" : `Confirm ${kept.length} of ${plan.parts.length}`}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            data-testid="plan-skip"
+            data-hand-press
+            onClick={() => client.answerPlan(plan.id, null)}
+          >
+            Skip
+          </button>
+        </div>
+      )}
+      {waiting && (
+        <p className="approval-hint muted">
+          Nothing is handed out until you confirm. Skipped in {seconds} s if unanswered.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function ApprovalCard({
   approval,
   client,
@@ -154,6 +265,7 @@ function ApprovalCard({
   const label = toolLabel(request.tool);
   const seconds = useSecondsLeft(request.expiresAt, !outcome);
   const code = codeOf(request.input);
+  const outputs = outputsOf(request.input);
   return (
     <section
       className="approval-card"
@@ -180,6 +292,11 @@ function ApprovalCard({
             {code}
           </pre>
         </section>
+      )}
+      {outputs.length > 0 && (
+        <p className="approval-installs" data-testid="approval-outputs">
+          Will write: <code>{outputs.join(", ")}</code>
+        </p>
       )}
       {request.installs && request.installs.length > 0 && (
         <p className="approval-installs" data-testid="approval-installs">
@@ -314,23 +431,34 @@ function WrittenFiles({
   return (
     <ul className="written-files" data-testid="written-files" aria-label="Files the agent wrote">
       {files.map((file) => (
-        <li key={file.path} className="written-file" data-testid="written-file">
+        <li
+          key={file.path}
+          className="written-file"
+          data-testid={file.outside ? "written-outside" : "written-file"}
+        >
           <span className="written-name" title={`${file.script} wrote this`}>
             {file.path}
           </span>
-          <button
-            type="button"
-            className="primary"
-            data-testid="written-import"
-            data-hand-press
-            onClick={() => {
-              onImport(file.path);
-              onDismiss(file.path);
-            }}
-          >
-            Import into viewer
-          </button>
-          {rhinoConnected && (
+          {file.outside && (
+            <span className="muted" data-testid="written-outside-note">
+              changed during a run, outside what it declared
+            </span>
+          )}
+          {!file.outside && (
+            <button
+              type="button"
+              className="primary"
+              data-testid="written-import"
+              data-hand-press
+              onClick={() => {
+                onImport(file.path);
+                onDismiss(file.path);
+              }}
+            >
+              Import into viewer
+            </button>
+          )}
+          {rhinoConnected && !file.outside && (
             <button
               type="button"
               className="secondary"
@@ -354,6 +482,54 @@ function WrittenFiles({
           >
             ×
           </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * A Rhino script that touched objects outside its agent's claim. It was only found out after the run (a script cannot be
+ * stopped from doing it), so the card says what happened and offers the way back: the run is one undo step in Rhino.
+ */
+function RunReports({ reports, client }: { reports: RunReportView[]; client: AgentClient }) {
+  return (
+    <ul className="run-reports" data-testid="run-reports" aria-label="Scripts that went outside their claim">
+      {reports.map((report) => (
+        <li key={report.id} className="run-report" data-testid="run-report">
+          <p className="run-report-head">
+            <strong>{report.agent ? displayName(report.agent) : "A script"}</strong> touched objects outside
+            its claim while running <q>{report.title}</q>. This was found after the run.
+          </p>
+          <ul className="run-report-list">
+            {report.strays.slice(0, 5).map((stray) => (
+              <li key={`${stray.what}-${stray.id}`} data-testid="run-report-stray">
+                {stray.what} <code>{stray.name || stray.id}</code>
+                {stray.holder ? <span className="muted"> in {stray.holder}</span> : null}
+              </li>
+            ))}
+            {report.strays.length > 5 || report.truncated ? <li className="muted">and more</li> : null}
+          </ul>
+          <div className="run-report-actions">
+            <button
+              type="button"
+              className="primary"
+              data-testid="run-report-undo"
+              data-hand-press
+              onClick={() => client.undoRhinoRun(report.id)}
+            >
+              Undo in Rhino
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              data-testid="run-report-dismiss"
+              data-hand-press
+              onClick={() => client.dismissRunReport(report.id)}
+            >
+              Keep it
+            </button>
+          </div>
         </li>
       ))}
     </ul>
@@ -580,10 +756,15 @@ function TeamStrip({
   team,
   client,
   onOpenTask,
+  approvals,
+  onlyPendingId,
 }: {
   team: TeamView;
   client: AgentClient;
   onOpenTask: (taskId: string) => void;
+  /** The cards waiting for the user: a worker's waits under its specialist's chip. */
+  approvals: ApprovalView[];
+  onlyPendingId: string | null;
 }) {
   const specialists = team.members.filter((m) => !m.lead);
   const working = team.tasks.filter(isActive).length;
@@ -593,7 +774,8 @@ function TeamStrip({
   const chips = specialists.map((member) => {
     const { state, task } = memberTask(team, member.name);
     const shown = state === "idle" ? undefined : task;
-    return (
+    const workers = shown ? team.tasks.filter((t) => t.parent === shown.id) : [];
+    const chip = (
       <button
         key={member.name}
         type="button"
@@ -613,7 +795,29 @@ function TeamStrip({
         <span className="team-dot" aria-hidden="true" />
         <span className="team-chip-name">{displayName(member.name)}</span>
         {!idle && <span className="team-chip-state">{shown ? shown.title : MEMBER_STATE_LABEL[state]}</span>}
+        {!idle && shown && (shown.scope || shown.waitingFor) && (
+          <span className="team-chip-scope" data-testid={`team-chip-scope-${member.name}`}>
+            {state === "queued" && shown.waitingFor
+              ? `waits for ${waitsFor(team, shown.waitingFor)}`
+              : scopeLabel(shown.scope ?? null)}
+          </span>
+        )}
       </button>
+    );
+    return (
+      <div key={member.name} className="team-member" data-workers={workers.length}>
+        {chip}
+        {workers.length > 0 && (
+          <WorkerRows
+            workers={workers}
+            member={member}
+            onOpenTask={onOpenTask}
+            approvals={approvals}
+            client={client}
+            onlyPendingId={onlyPendingId}
+          />
+        )}
+      </div>
     );
   });
   return (
@@ -643,7 +847,185 @@ function TeamStrip({
         )}
       </div>
       {!idle && <div className="team-grid">{chips}</div>}
+      {team.shots.length > 0 && <ShotsStrip team={team} />}
+      {team.claims.length > 0 && <PartsList team={team} client={client} />}
     </div>
+  );
+}
+
+/** A specialist's workers, nested under its chip in its colour: title, state and what each holds. */
+function WorkerRows({
+  workers,
+  member,
+  onOpenTask,
+  approvals,
+  client,
+  onlyPendingId,
+}: {
+  workers: TeamTask[];
+  member: TeamMemberInfo;
+  onOpenTask: (taskId: string) => void;
+  approvals: ApprovalView[];
+  client: AgentClient;
+  onlyPendingId: string | null;
+}) {
+  return (
+    <ul className="team-workers" data-testid={`team-workers-${member.name}`} style={colorOf(member)}>
+      {workers.map((w) => (
+        <li key={w.id}>
+          <button
+            type="button"
+            className="team-worker"
+            data-testid={`team-worker-${w.agent}`}
+            data-state={w.status}
+            data-hand-press
+            title={`${displayName(w.agent)}: ${w.title} (${TASK_STATUS_LABEL[w.status]})`}
+            onClick={() => onOpenTask(w.id)}
+          >
+            <span className="team-dot" aria-hidden="true" />
+            <span className="team-worker-name">{displayName(w.agent)}</span>
+            <span className="team-worker-title">{w.title}</span>
+            <span className="team-worker-state" data-testid={`team-worker-state-${w.agent}`}>
+              {w.waitingForSession
+                ? "waits for a free session"
+                : w.status === "running" && w.scope
+                  ? scopeLabel(w.scope)
+                  : TASK_STATUS_LABEL[w.status]}
+            </span>
+          </button>
+          {approvals
+            .filter((a) => a.request.agent === w.agent)
+            .map((a) => (
+              <ApprovalCard
+                key={a.request.id}
+                approval={a}
+                client={client}
+                only={a.request.id === onlyPendingId}
+              />
+            ))}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** What each agent last looked at from one of its own cameras: a thumbnail each, and the picture larger on click. */
+function ShotsStrip({ team }: { team: TeamView }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const shot = team.shots.find((s) => s.agent === open);
+  const member = (name: string) => team.members.find((m) => m.name === name);
+  return (
+    <>
+      <div className="team-shots" data-testid="team-shots">
+        {team.shots.map((s) => (
+          <button
+            key={s.agent}
+            type="button"
+            className="team-shot"
+            data-testid={`team-shot-${s.agent}`}
+            data-hand-press
+            style={colorOf(member(s.agent))}
+            title={`${displayName(s.agent)} looked from ${s.camera}: click to enlarge`}
+            onClick={() => setOpen(s.agent)}
+          >
+            <img src={s.thumb} alt={`${displayName(s.agent)}'s view from ${s.camera}`} />
+            <span className="team-shot-caption">
+              {displayName(s.agent)} <span className="team-shot-camera">{s.camera}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      {shot && <ShotDialog shot={shot} color={colorOf(member(shot.agent))} onClose={() => setOpen(null)} />}
+    </>
+  );
+}
+
+/** An agent's last picture, larger: the full picture while this page still has it, else the thumbnail. */
+function ShotDialog({ shot, color, onClose }: { shot: TeamShot; color: CSSProperties; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const full = rememberedShot(shot.agent);
+  const src = full && full.camera === shot.camera ? `data:image/png;base64,${full.png}` : shot.thumb;
+  // Over the whole page: the agent panel is frosted glass, which would otherwise hold a fixed child inside itself.
+  return createPortal(
+    <div className="shot-dialog" role="dialog" aria-label={`${displayName(shot.agent)}'s view`} style={color}>
+      <button type="button" className="shot-dialog-backdrop" aria-label="Close" onClick={onClose} />
+      <figure className="shot-dialog-body" data-testid="shot-dialog">
+        <img src={src} alt={`${displayName(shot.agent)}'s view from ${shot.camera}`} />
+        <figcaption>
+          <span className="team-dot" aria-hidden="true" />
+          {displayName(shot.agent)} looked from <strong>{shot.camera}</strong>
+          <button type="button" className="shot-dialog-close" data-hand-press onClick={onClose}>
+            Close
+          </button>
+        </figcaption>
+      </figure>
+    </div>,
+    document.body,
+  );
+}
+
+/** Whose task a queued task waits for, as "Architect" (or "another task" when it has ended). */
+function waitsFor(team: TeamView, taskId: string): string {
+  const task = team.tasks.find((t) => t.id === taskId);
+  return task ? `${displayName(task.agent)}'s task` : "another task";
+}
+
+/**
+ * Who is working on which part of the model: one row per running claim, in the agent's colour. Pointing at a row lights
+ * its elements in the viewer.
+ */
+function PartsList({ team, client }: { team: TeamView; client: AgentClient }) {
+  return (
+    <ul className="parts-list" data-testid="parts-list" aria-label="Parts being worked on">
+      {team.claims.map((claim) => {
+        const member = team.members.find((m) => m.name === baseAgent(claim.agent));
+        return (
+          <li key={claim.taskId} className="part-row" data-worker={claim.parent ? "true" : undefined}>
+            <button
+              type="button"
+              className="part-button"
+              data-testid="part-row"
+              data-claim={claim.taskId}
+              data-hand-press
+              style={colorOf(member)}
+              onPointerEnter={() => client.highlightClaim(claim.taskId)}
+              onPointerLeave={() => client.highlightClaim(null)}
+              onFocus={() => client.highlightClaim(claim.taskId)}
+              onBlur={() => client.highlightClaim(null)}
+            >
+              <span className="team-dot" aria-hidden="true" />
+              <span className="part-agent">{displayName(claim.agent)}</span>
+              <span className="part-title">{claim.title}</span>
+              <span className="part-count">
+                {claim.elements} {claim.elements === 1 ? "element" : "elements"}
+              </span>
+              <span className="part-scope">{scopeLabel(claim.scope)}</span>
+            </button>
+          </li>
+        );
+      })}
+      {team.tasks
+        .filter((t) => t.status === "queued" && t.waitingFor)
+        .map((task) => (
+          <li key={task.id} className="part-waiting muted" data-testid="part-waiting">
+            {displayName(task.agent)} "{task.title}" waits for {waitsFor(team, task.waitingFor as string)}
+          </li>
+        ))}
+      {team.tasks
+        .filter((t) => t.status === "queued" && t.waitingForSession)
+        .map((task) => (
+          <li key={task.id} className="part-waiting muted" data-testid="part-waiting-session">
+            {displayName(task.agent)} "{task.title}" waits for a free session ({team.sessions} of{" "}
+            {team.maxSessions} are working)
+          </li>
+        ))}
+    </ul>
   );
 }
 
@@ -659,7 +1041,7 @@ function TaskHead({
   client: AgentClient;
   onBack: () => void;
 }) {
-  const member = team.members.find((m) => m.name === task.agent);
+  const member = team.members.find((m) => m.name === baseAgent(task.agent));
   const lead = displayName(client.lead);
   return (
     <div className="task-thread" data-testid="task-thread" style={colorOf(member)}>
@@ -877,7 +1259,23 @@ export function AgentPanel({
             </div>
           )}
           {team?.members.some((m) => !m.lead) && (
-            <TeamStrip team={team} client={client} onOpenTask={setOpenTask} />
+            <TeamStrip
+              team={team}
+              client={client}
+              onOpenTask={setOpenTask}
+              approvals={pending}
+              onlyPendingId={onlyPendingId}
+            />
+          )}
+          {team && !task && state.plans.length > 0 && (
+            <div className="plan-cards">
+              <PlanCard
+                key={state.plans.at(-1)?.id}
+                plan={state.plans.at(-1) as PlanView}
+                team={team}
+                client={client}
+              />
+            </div>
           )}
           {task && team && (
             <TaskHead task={task} team={team} client={client} onBack={() => setOpenTask(null)} />
@@ -949,6 +1347,7 @@ export function AgentPanel({
               onDismiss={(path) => client.dismissWritten(path)}
             />
           )}
+          {state.runReports.length > 0 && <RunReports reports={state.runReports} client={client} />}
           {voiceOn && <VoiceBar voice={voice} nameOf={nameOf} />}
           <form className="agent-input" onSubmit={submit}>
             {voiceOn && (

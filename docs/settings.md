@@ -37,6 +37,7 @@ Every feature can be switched off on its own, so a demo or a release shows exact
 | Snap to models | A hand pointer must be exactly on a model to select it, and no model lights up before the pinch |
 | Number what I point at | Off by default. When on, elements your hand rests on while you speak get numbered markers and count as what you mean |
 | Generated panels | The agent is not offered the panel tools, and an open panel closes and drops its preview |
+| Parallel modelling | One agent changes the model at a time, as before; scopes, owner tints, claim boxes and the Parts list highlight are off ([parallel.md](parallel.md)) |
 | Latency readout | The status bar does not show the gesture-to-render time |
 
 The list lives in `packages/protocol/src/features.ts`. To put a new feature behind a switch, add it there and check `features.on("<id>")` where the feature acts (a tool can name its feature in `Tool.feature` instead).
@@ -54,6 +55,12 @@ The agent can model in two ways, and you choose which in Settings > Modelling ([
 The page also says what is connected now: the mode in use, the Rhino document, whether Python runs inside Rhino (and what to do when it does not), the progress of a first sync of a large document, and what the viewer leaves out (curves, points, annotations, objects too heavy to draw in full). The top bar shows the same as a pill: **Rhino connected**, **Syncing 120 of 4000**, **Rhino not connected** (when you chose Rhino) or **Python only**, and next to it **Rhino to HAI 80 ms**, how long the last changes in Rhino took to be drawn here.
 
 The choice is kept in `.hai/settings.json` with the others, so it follows the workspace from a machine with Rhino to one without.
+
+The page also has **Show owners** (on by default): while agents work on separate parts, each element an agent owns is outlined and tinted in its colour and region claims are drawn as boxes. Off, the model is drawn plainly and the agent panel still lists who holds what ([parallel.md](parallel.md)).
+
+**Show cameras** (on by default) draws a small marker where an agent has placed a camera to check its work. Off, the markers go; the pictures in the agent panel stay ([agents.md](agents.md#agents-own-cameras)).
+
+**Sessions at once** (6 by default) is the most agent sessions that work together: Mochi, every specialist working and every worker. Each is a model session of your own Claude Code with its own cost, so this is your control over it; a worker over the limit waits for a free session ([agents.md](agents.md#workers)).
 
 ## Show my hands
 

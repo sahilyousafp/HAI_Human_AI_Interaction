@@ -1,9 +1,11 @@
 import type { FeatureId, Message, MessageOf, ModellingMode, ReplyVoice, SpeechMode } from "@hai/protocol";
+import { elementsInScope } from "@hai/scene";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
 import { addressOf } from "./agent/addressing.ts";
 import { AgentClient } from "./agent/agent-client.ts";
 import { answerYesNo } from "./agent/answer.ts";
+import { agentColors, claimBoxes } from "./agent/owners.ts";
 import { ViewLink } from "./agent/view-link.ts";
 import {
   type BridgeConnection,
@@ -42,7 +44,9 @@ import { DEFAULT_CREATE_LAYOUT } from "./tools/create.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { PaletteSettings, ToolIcon } from "./tools/ToolOverlays.tsx";
 import { ListGroup, ListRow, Switch } from "./ui/controls.tsx";
+import { cameraMarkers } from "./viewer/camera-markers.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
+import { NO_OWNERS, type OwnerDisplay } from "./viewer/owner-display.tsx";
 import { Viewer } from "./viewer/Viewer.tsx";
 import { voiceAvailability, voicePillText } from "./voice/availability.ts";
 import { listenInCloud, listenOnDevice } from "./voice/listeners.ts";
@@ -152,6 +156,40 @@ export function App() {
     [],
   );
   const rhinoState = useSyncExternalStore(mirror.subscribe, mirror.getStatus);
+  // Who owns what: tint and outline in the agents' colours, region claims as boxes, and the claim under the pointer in
+  // the panel lit. Only while Parallel modelling is on; the owner tint and boxes follow Show owners.
+  // Outline and tint what agents own, and draw their region claims (Settings > Modelling > Show owners).
+  const [showOwners, setShowOwners] = useState(true);
+  // A small marker in the model for each camera an agent placed (Settings > Modelling > Show cameras).
+  const [showCameras, setShowCameras] = useState(true);
+  const [maxSessions, setMaxSessions] = useState(6);
+  const agentState = useSyncExternalStore(agent.subscribe, agent.getSnapshot);
+  const sceneState = useSyncExternalStore(sceneClient.subscribe, sceneClient.getSnapshot);
+  const owners = useMemo<OwnerDisplay>(() => {
+    const team = agentState.team;
+    if (!team || !featureState.parallelModelling) return NO_OWNERS;
+    const lit = team.claims.find((c) => c.taskId === agentState.highlightedClaim);
+    return {
+      colors: showOwners ? agentColors(team.members) : NO_OWNERS.colors,
+      boxes: showOwners ? claimBoxes(team.claims, team.members, sceneState.doc) : [],
+      highlight:
+        lit && sceneState.doc
+          ? new Set(elementsInScope(lit.scope, sceneState.doc).map((e) => e.id))
+          : NO_OWNERS.highlight,
+      highlightColor: lit ? (team.members.find((m) => m.name === lit.agent)?.color ?? null) : null,
+    };
+  }, [
+    agentState.team,
+    agentState.highlightedClaim,
+    featureState.parallelModelling,
+    showOwners,
+    sceneState.doc,
+  ]);
+  const cameraMarkerList = useMemo(
+    () =>
+      showCameras && agentState.team ? cameraMarkers(agentState.team.cameras, agentState.team.members) : [],
+    [showCameras, agentState.team],
+  );
   // How long a change in Rhino takes to be drawn here, refreshed twice a second.
   const [rhinoMs, setRhinoMs] = useState<number | null>(null);
   useEffect(() => {
@@ -465,6 +503,9 @@ export function App() {
         features.load(message.payload.features);
         aids.load(message.payload.drawingAids);
         setShowHands(message.payload.showHands);
+        setShowOwners(message.payload.showOwners);
+        setShowCameras(message.payload.showCameras);
+        setMaxSessions(message.payload.maxSessions);
         setSpeakReplies(message.payload.speakReplies);
         speaker.setMuted(!message.payload.speakReplies);
         setReplyVoice(message.payload.replyVoice);
@@ -520,6 +561,18 @@ export function App() {
   const openWrittenInRhino = (path: string) => {
     connection.current?.send({ type: "rhino.open", id: crypto.randomUUID(), payload: { path } });
   };
+  const changeShowOwners = (on: boolean) => {
+    setShowOwners(on);
+    saveSetting({ showOwners: on });
+  };
+  const changeShowCameras = (on: boolean) => {
+    setShowCameras(on);
+    saveSetting({ showCameras: on });
+  };
+  const changeMaxSessions = (limit: number) => {
+    setMaxSessions(limit);
+    saveSetting({ maxSessions: limit });
+  };
   const changeShowHands = (on: boolean) => {
     setShowHands(on);
     saveSetting({ showHands: on });
@@ -561,7 +614,18 @@ export function App() {
       icon: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5",
       tint: "var(--tint-blue)",
       detail: rhinoState.inUse === "rhino" ? "Rhino" : "Python only",
-      render: () => <ModellingSettings mirror={mirror} onChange={changeModelling} />,
+      render: () => (
+        <ModellingSettings
+          mirror={mirror}
+          onChange={changeModelling}
+          showOwners={showOwners}
+          onShowOwners={changeShowOwners}
+          showCameras={showCameras}
+          onShowCameras={changeShowCameras}
+          maxSessions={maxSessions}
+          onMaxSessions={changeMaxSessions}
+        />
+      ),
     },
     {
       id: "drawing-aids",
@@ -750,6 +814,8 @@ export function App() {
             mirror={mirror}
             mirrorAssets={mirrorAssets}
             markers={markers}
+            owners={owners}
+            cameraMarkers={cameraMarkerList}
           >
             {featureState.agent && (
               <AgentPanel

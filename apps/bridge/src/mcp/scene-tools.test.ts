@@ -149,6 +149,10 @@ describe("MCP endpoint access", () => {
     expect(tools.map((t) => t.name).sort()).toEqual(
       [
         "approve_tool",
+        "camera_capture",
+        "camera_delete",
+        "camera_list",
+        "camera_set",
         "capture_view",
         "close_panel",
         "create_elements",
@@ -160,6 +164,7 @@ describe("MCP endpoint access", () => {
         "open_panel",
         "python_run",
         "set_selection",
+        "set_tags",
         "set_view",
         "sun_study",
         "update_elements",
@@ -271,10 +276,16 @@ describe("sun study", () => {
     const viewer = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
     const result = (await mcp(address, climate())).callTool({ name: "sun_study", arguments: winter });
     const request = await viewer.waitFor("view.capture");
+    // The pictures are taken off-screen from a camera of the agent's own, with the sun for that picture only.
+    expect(request.payload.cameras).toHaveLength(1);
+    expect(request.payload.agent).toBe("climate");
     expect(request.payload.sun).toMatchObject({ label: "2026-12-21 12:00, 51.5 N 0 E" });
     expect(request.payload.sun?.altitude).toBeCloseTo(15.2, 0);
     expect(request.payload.sun?.azimuth).toBeCloseTo(180, 0);
-    viewer.send("view.captured", { requestId: request.payload.requestId, png: "iVBORw0KGgoAAAA" });
+    viewer.send("view.captured", {
+      requestId: request.payload.requestId,
+      shots: [{ camera: "iso-se", png: "iVBORw0KGgoAAAA", thumb: "data:image/jpeg;base64,/9j/" }],
+    });
     const { content } = (await result) as { content: Array<{ type: string; text?: string; data?: string }> };
     expect(JSON.parse(content[0]?.text ?? "{}")).toMatchObject({
       from: "S",
@@ -363,9 +374,9 @@ describe("write tools", () => {
   it("undo a whole turn: four columns and a moved wall are reverted by one undo", async () => {
     const address = await start();
     const viewer = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
-    const agent = await mcp(address);
+    const agent = await mcp(address, agentToken({ agent: "architect", tools: null }));
     const wallBefore = structuredClone(bridge?.scene.scene.doc.elements["wall-s"]);
-    bridge?.scene.beginTurn("add four columns and move the south wall");
+    bridge?.scene.beginTurn("architect", "add four columns and move the south wall");
     for (const x of [0, 4000, 8000, 12_000]) {
       await agent.callTool({
         name: "create_elements",
@@ -386,7 +397,7 @@ describe("write tools", () => {
       name: "update_elements",
       arguments: { updates: [{ id: "wall-s", patch: { start: [4000, 3500], end: [20_000, 3500] } }] },
     });
-    bridge?.scene.endTurn();
+    bridge?.scene.endTurn("architect");
     // The viewer saw each change live...
     await viewer.waitFor("scene.patch", (m) => m.payload.ops.some((op) => op.op === "update"));
     // ...and one undo reverts the whole turn.
@@ -642,5 +653,106 @@ describe("the user context in Rhino", () => {
     const address = await start();
     const agent = await mcp(address);
     expect(json(await agent.callTool({ name: "get_user_context", arguments: {} })).rhino).toBeUndefined();
+  });
+});
+
+describe("reading the model by owner, part and tag", () => {
+  const column = (id: string, tags: Record<string, string>): Element => ({
+    id,
+    name: id,
+    type: "column",
+    properties: {},
+    position: [0, 0],
+    section: [400, 400],
+    height: 3000,
+    tags,
+  });
+  const seed = (): void => {
+    bridge?.scene.scene.apply("seed", [
+      { op: "create", element: column("g-1", { "hai.owner": "architect", "hai.part": "garden" }) },
+      {
+        op: "create",
+        element: column("g-2", { "hai.owner": "architect", "hai.part": "garden", mood: "calm" }),
+      },
+      { op: "create", element: column("h-1", { "hai.owner": "product", "hai.part": "hall" }) },
+      { op: "create", element: column("free-1", {}) },
+    ]);
+  };
+
+  it("filter by part, owner and tag returns only those elements, with their tags", async () => {
+    const address = await start();
+    seed();
+    const agent = await mcp(address);
+    const ids = async (arguments_: Record<string, unknown>) =>
+      (json(await agent.callTool({ name: "get_elements", arguments: arguments_ })).elements as Element[])
+        .map((e) => e.id)
+        .sort();
+    expect(await ids({ part: "garden" })).toEqual(["g-1", "g-2"]);
+    expect(await ids({ owner: "product" })).toEqual(["h-1"]);
+    expect(await ids({ tag: { name: "mood" } })).toEqual(["g-2"]);
+    expect(await ids({ tag: { name: "mood", value: "wild" } })).toEqual([]);
+    expect(await ids({ owner: "architect", part: "hall" })).toEqual([]);
+    const garden = json(await agent.callTool({ name: "get_elements", arguments: { part: "garden" } }));
+    expect(garden.elements[0].tags).toMatchObject({ "hai.part": "garden" });
+  });
+
+  it("the summary counts the elements each owner and part holds, and those with none", async () => {
+    const address = await start();
+    seed();
+    const summary = json(await (await mcp(address)).callTool({ name: "get_scene_summary", arguments: {} }));
+    expect(summary.owners).toEqual({ architect: 2, product: 1 });
+    expect(summary.parts).toEqual({ garden: 2, hall: 1 });
+    // The sample scene's own elements and the free column have no owner.
+    expect(summary.withoutOwner).toBeGreaterThanOrEqual(1);
+    expect(summary.rhino).toBeUndefined();
+  });
+
+  it("while Rhino is connected one question returns both the elements and the Rhino objects", async () => {
+    const { connectFakeRhino, rhinoBatch, rhinoObject } = await import("../../test/rhino-client.ts");
+    const address = await start();
+    seed();
+    const browser = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
+    const asset = await rhino.uploadMesh();
+    rhino.send(
+      "rhino.objects",
+      rhinoBatch({
+        reset: true,
+        changed: [
+          rhinoObject("r-1", asset, {
+            name: "Pond",
+            tags: { "hai.owner": "architect", "hai.part": "garden" },
+          }),
+          rhinoObject("r-2", asset, {
+            name: "Hall roof",
+            tags: { "hai.owner": "product", "hai.part": "hall" },
+          }),
+        ],
+      }),
+    );
+    await browser.waitFor("rhino.objects");
+    const agent = await mcp(address);
+    await expect
+      .poll(
+        async () => json(await agent.callTool({ name: "get_scene_summary", arguments: {} })).rhino?.objects,
+      )
+      .toBe(2);
+    const found = json(await agent.callTool({ name: "get_elements", arguments: { part: "garden" } }));
+    expect(found.elements.map((e: Element) => e.id).sort()).toEqual(["g-1", "g-2"]);
+    expect(found.rhinoObjects).toEqual([
+      {
+        id: "r-1",
+        name: "Pond",
+        type: "brep",
+        layer: "Default",
+        tags: { "hai.owner": "architect", "hai.part": "garden" },
+      },
+    ]);
+    const summary = json(await agent.callTool({ name: "get_scene_summary", arguments: {} }));
+    expect(summary.rhino).toEqual({
+      objects: 2,
+      owners: { architect: 1, product: 1 },
+      parts: { garden: 1, hall: 1 },
+    });
   });
 });

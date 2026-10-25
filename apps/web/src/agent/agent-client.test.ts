@@ -284,3 +284,104 @@ describe("the team in the client", () => {
     expect(client.getSnapshot().turns.map((t) => t.id)).toEqual(["t1"]);
   });
 });
+
+describe("files a Python run wrote", () => {
+  it("declared files are offered, files outside the declaration are kept as notices, and a file written again replaces its offer", () => {
+    const { client, receive } = setup();
+    receive("python.written", {
+      files: [{ path: "hall.3dm", size: 10 }],
+      outside: [{ path: "extra.3dm", size: 20 }],
+      script: ".hai/scripts/a.py",
+      agent: "architect",
+    });
+    expect(client.getSnapshot().written).toEqual([
+      { path: "hall.3dm", size: 10, script: ".hai/scripts/a.py", agent: "architect" },
+      { path: "extra.3dm", size: 20, script: ".hai/scripts/a.py", agent: "architect", outside: true },
+    ]);
+    receive("python.written", { files: [{ path: "hall.3dm", size: 30 }], script: ".hai/scripts/b.py" });
+    expect(client.getSnapshot().written.find((w) => w.path === "hall.3dm")).toMatchObject({
+      size: 30,
+      script: ".hai/scripts/b.py",
+    });
+  });
+});
+
+describe("claims", () => {
+  const snapshot = (claims: unknown[]) => ({
+    members: [],
+    tasks: [],
+    claims,
+    maxRunning: 3,
+  });
+
+  it("keeps the claims of the last team snapshot, and the one under the pointer in the panel", () => {
+    const { client, receive } = setup();
+    const claim = {
+      taskId: "t1",
+      agent: "architect",
+      title: "Dome",
+      scope: { part: "dome" },
+      elements: 4,
+    };
+    receive("team.snapshot", snapshot([claim]));
+    expect(client.getSnapshot().team?.claims).toEqual([claim]);
+    client.highlightClaim("t1");
+    expect(client.getSnapshot().highlightedClaim).toBe("t1");
+    client.highlightClaim(null);
+    expect(client.getSnapshot().highlightedClaim).toBeNull();
+    receive("team.snapshot", snapshot([]));
+    expect(client.getSnapshot().team?.claims).toEqual([]);
+  });
+
+  it("keeps each agent's last picture and the cameras they placed from the last team snapshot", () => {
+    const { client, receive } = setup();
+    const shot = { agent: "architect", camera: "south", at: 1, thumb: "data:image/jpeg;base64,/9j/" };
+    const placed = {
+      agent: "architect",
+      name: "south",
+      azimuth: 270,
+      elevation: 30,
+      distance: 20000,
+      target: [0, 0, 0],
+    };
+    receive("team.snapshot", { ...snapshot([]), shots: [shot], cameras: [placed] });
+    expect(client.getSnapshot().team?.shots).toEqual([shot]);
+    expect(client.getSnapshot().team?.cameras).toEqual([placed]);
+    receive("team.snapshot", { ...snapshot([]), shots: [shot], cameras: [] });
+    expect(client.getSnapshot().team?.cameras).toEqual([]);
+    expect(client.getSnapshot().team?.shots).toEqual([shot]);
+  });
+
+  it("keeps Mochi's plan until it is answered, and sends the user's answer", () => {
+    const { client, receive, sent } = setup();
+    const parts = [
+      { id: "p1", agent: "architect", title: "Dome", scope: { part: "dome" } },
+      { id: "p2", agent: "product", title: "Garden" },
+    ];
+    receive("plan.pending", { id: "plan-1", parts, agent: "mochi", expiresAt: Date.now() + 60_000 });
+    receive("plan.pending", { id: "plan-1", parts, expiresAt: Date.now() + 60_000 }); // the same plan, shown again
+    expect(client.getSnapshot().plans).toHaveLength(1);
+    expect(client.getSnapshot().plans[0]).toMatchObject({ id: "plan-1", agent: "mochi", parts });
+    client.answerPlan("plan-1", ["p1"]);
+    expect(sent.at(-1)).toMatchObject({ type: "plan.answer", payload: { id: "plan-1", keep: ["p1"] } });
+    client.answerPlan("plan-1", null);
+    expect(sent.at(-1)).toMatchObject({ payload: { keep: null } });
+    receive("plan.resolved", { id: "plan-1", outcome: "confirmed", keep: ["p1"] });
+    expect(client.getSnapshot().plans[0]).toMatchObject({ outcome: "confirmed", keep: ["p1"] });
+  });
+
+  it("a script that went outside its claim is kept until the user undoes it or keeps it", () => {
+    const { client, receive, sent } = setup();
+    receive("rhino.run.report", {
+      agent: "architect",
+      title: "Oops",
+      strays: [{ id: "w-1", name: "Wall", what: "changed" }],
+      truncated: false,
+    });
+    const [report] = client.getSnapshot().runReports;
+    expect(report).toMatchObject({ agent: "architect", title: "Oops" });
+    client.undoRhinoRun(report?.id as string);
+    expect(sent.at(-1)?.type).toBe("rhino.undo");
+    expect(client.getSnapshot().runReports).toEqual([]);
+  });
+});

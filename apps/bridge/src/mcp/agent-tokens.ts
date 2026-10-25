@@ -23,6 +23,11 @@ export class AgentTokens {
     return token;
   }
 
+  /** The token of an agent whose process has ended and will not come back (a worker). */
+  revoke(agent: string): void {
+    this.issued.delete(agent);
+  }
+
   /** The tokens now valid (for redacting logs). */
   get current(): string[] {
     return [...this.issued.values()].map(({ token }) => token.toString());

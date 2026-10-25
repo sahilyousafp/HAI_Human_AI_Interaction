@@ -9,8 +9,13 @@ import type {
   ExtensionsState,
   McpServerSpec,
   Message,
+  PlanOutcome,
+  PlanPart,
   RequestContext,
+  TeamCamera,
+  TeamClaim,
   TeamMemberInfo,
+  TeamShot,
   TeamTask,
 } from "@hai/protocol";
 import { addressOf } from "./addressing.ts";
@@ -55,7 +60,16 @@ export interface AgentThread {
 export interface TeamView {
   members: TeamMemberInfo[];
   tasks: TeamTask[];
+  /** What the running writing tasks hold. */
+  claims: TeamClaim[];
   maxRunning: number;
+  /** How many sessions may run at once (Mochi, specialists, workers), and how many do. */
+  maxSessions: number;
+  sessions: number;
+  /** The last picture each agent took from one of its cameras (a thumbnail). */
+  shots: TeamShot[];
+  /** The cameras agents have placed. */
+  cameras: TeamCamera[];
 }
 
 /** A `.3dm` file a Python run left in the project, offered for import into the viewer or to open in Rhino. */
@@ -67,6 +81,17 @@ export interface WrittenFile {
   script: string;
   /** The agent that ran it. */
   agent?: string;
+  /** Changed during the run without being declared: shown as a notice, not offered for import. */
+  outside?: boolean;
+}
+
+/** A Rhino script that touched objects outside its agent's claim, found after it ran. */
+export interface RunReportView {
+  id: string;
+  agent: string | null;
+  title: string;
+  strays: Array<{ id: string; name: string; what: "added" | "changed" | "deleted"; holder?: string }>;
+  truncated: boolean;
 }
 
 export interface ApprovalView {
@@ -75,6 +100,19 @@ export interface ApprovalView {
   turnId: string | null;
   /** Unset while the card waits for the user. */
   outcome?: ApprovalOutcome;
+}
+
+/** A plan Mochi showed the user: its parts, until the user confirms, skips or it expires. */
+export interface PlanView {
+  id: string;
+  /** The agent that made it (the lead). */
+  agent: string | null;
+  parts: PlanPart[];
+  expiresAt: number;
+  /** Unset while it waits for the user. */
+  outcome?: PlanOutcome;
+  /** The ids of the parts that were kept, once it is answered. */
+  keep?: string[];
 }
 
 export interface AgentState {
@@ -87,10 +125,16 @@ export interface AgentState {
   /** Null until the bridge has sent the team. */
   team: TeamView | null;
   approvals: ApprovalView[];
+  /** The plans Mochi showed (the newest last); one may wait for the user. */
+  plans: PlanView[];
   /** Tools the user chose "Always allow" for in the open project. */
   alwaysAllowed: string[];
   /** Files the agent's Python wrote, until the user imports, opens or dismisses them. */
   written: WrittenFile[];
+  /** Rhino scripts that went outside their claim, until the user undoes or dismisses them. */
+  runReports: RunReportView[];
+  /** The claim under the pointer in the panel (its task id): its elements are lit in the viewer. */
+  highlightedClaim: string | null;
   /** The last request the bridge refused (shown under the input). */
   error: string | null;
   /** Counts requests to show the panel (a voice request starting): it opens on the chat when this changes. */
@@ -115,8 +159,11 @@ const INITIAL: AgentState = {
   specialists: {},
   team: null,
   approvals: [],
+  plans: [],
   alwaysAllowed: [],
   written: [],
+  runReports: [],
+  highlightedClaim: null,
   error: null,
   openTick: 0,
   extensions: null,
@@ -190,7 +237,10 @@ const DEFAULT_LEAD = "mochi";
 const ACTIVE_TASK: ReadonlySet<TeamTask["status"]> = new Set(["running", "waiting", "queued"]);
 
 /** How an agent's name is shown: "architect" becomes "Architect". */
-export const displayName = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
+export const displayName = (name: string) => {
+  const spoken = name.replace(".", " ");
+  return spoken.charAt(0).toUpperCase() + spoken.slice(1);
+};
 
 /** The id of the turn still running in a conversation, if any. */
 const runningTurn = (turns: TurnView[]) => turns.findLast((t) => !t.ended)?.id ?? null;
@@ -316,6 +366,19 @@ export class AgentClient {
         this.update({ approvals: [...this.state.approvals, { request: message.payload, turnId: running }] });
         return true;
       }
+      case "plan.pending": {
+        const { id, parts, agent, expiresAt } = message.payload;
+        if (this.state.plans.some((p) => p.id === id)) return true;
+        this.update({
+          plans: [...this.state.plans, { id, agent: agent ?? null, parts, expiresAt }].slice(-5),
+        });
+        return true;
+      }
+      case "plan.resolved": {
+        const { id, outcome, keep } = message.payload;
+        this.update({ plans: this.state.plans.map((p) => (p.id === id ? { ...p, outcome, keep } : p)) });
+        return true;
+      }
       case "approval.resolved": {
         const { id, outcome } = message.payload;
         this.update({
@@ -324,13 +387,19 @@ export class AgentClient {
         return true;
       }
       case "python.written": {
-        const { files, script, agent } = message.payload;
-        const fresh = files.map((f) => ({ ...f, script, ...(agent ? { agent } : {}) }));
+        const { files, outside, script, agent } = message.payload;
+        const fresh = [
+          ...files.map((f) => ({ ...f, script, ...(agent ? { agent } : {}) })),
+          ...(outside ?? []).map((f) => ({ ...f, script, outside: true, ...(agent ? { agent } : {}) })),
+        ];
         const paths = new Set(fresh.map((f) => f.path));
         // A file written again replaces its earlier offer.
         this.update({ written: [...this.state.written.filter((w) => !paths.has(w.path)), ...fresh] });
         return true;
       }
+      case "rhino.run.report":
+        this.update({ runReports: [...this.state.runReports, { id: message.id, ...message.payload }] });
+        return true;
       case "approvals.allowed":
         this.update({ alwaysAllowed: message.payload.tools });
         return true;
@@ -447,6 +516,11 @@ export class AgentClient {
     this.send({ type: "task.stop", id: newId(), payload: { id: taskId } });
   }
 
+  /** Answers a plan: the ids of the parts to keep, or null to skip the plan. */
+  answerPlan(planId: string, keep: string[] | null): void {
+    this.send({ type: "plan.answer", id: newId(), payload: { id: planId, keep } });
+  }
+
   decide(approvalId: string, decision: "allow" | "deny" | "always"): void {
     this.send({ type: "approval.decide", id: newId(), payload: { id: approvalId, decision } });
   }
@@ -454,6 +528,21 @@ export class AgentClient {
   /** Takes a written file off the list (it was imported, opened or dismissed). */
   dismissWritten(path: string): void {
     this.update({ written: this.state.written.filter((w) => w.path !== path) });
+  }
+
+  /** Asks Rhino to undo the last script (each run is one undo step) and takes the report off the list. */
+  undoRhinoRun(id: string): void {
+    this.send({ type: "rhino.undo", id: newId(), payload: {} });
+    this.dismissRunReport(id);
+  }
+
+  /** The pointer is over a claim in the panel (or left it, with null). */
+  highlightClaim(taskId: string | null): void {
+    if (this.state.highlightedClaim !== taskId) this.update({ highlightedClaim: taskId });
+  }
+
+  dismissRunReport(id: string): void {
+    this.update({ runReports: this.state.runReports.filter((r) => r.id !== id) });
   }
 
   revoke(tool: string): void {

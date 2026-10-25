@@ -190,3 +190,34 @@ describe("ModelImporter", () => {
     expect(text).toMatch(/millimetres are assumed/);
   });
 });
+
+describe("hai.source", () => {
+  it("each element made from a file's object records the file and the object's id; merged ones record none", async () => {
+    const { importer, applied } = setup({
+      ok: true,
+      parts: [
+        part("Panel", 0, { objectId: "11111111-2222-3333-4444-555555555555" }),
+        part("Layer (40 objects)", 5000),
+      ],
+      report: report(2),
+    });
+    await importer.importFile(file("tower.3dm"));
+    const [first, second] = (applied[0]?.ops ?? []).map((op) => (op.op === "create" ? op.element : null));
+    expect(first?.tags).toEqual({ "hai.source": "tower.3dm#11111111-2222-3333-4444-555555555555" });
+    expect(second?.tags).toBeUndefined();
+  });
+
+  it("a long file name is cut so the tag stays within 200 characters", async () => {
+    const id = "11111111-2222-3333-4444-555555555555";
+    const { importer, applied } = setup({
+      ok: true,
+      parts: [part("Panel", 0, { objectId: id })],
+      report: report(1),
+    });
+    await importer.importFile(file(`${"long".repeat(100)}.3dm`));
+    const element = applied[0]?.ops[0];
+    const tag = element?.op === "create" ? element.element.tags?.["hai.source"] : undefined;
+    expect(tag?.length).toBeLessThanOrEqual(200);
+    expect(tag?.endsWith(`#${id}`)).toBe(true);
+  });
+});

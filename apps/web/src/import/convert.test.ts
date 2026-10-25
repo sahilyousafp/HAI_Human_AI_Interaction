@@ -5,6 +5,7 @@ import { partBounds } from "@hai/scene";
 import type { RhinoModule } from "rhino3dm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { convert3dm, describeSkips, IMPORT_LIMITS, totalSkipped } from "./convert.ts";
+import { ModelImporter } from "./importer.ts";
 
 const MODELS = join(import.meta.dirname, "..", "..", "..", "..", "test-assets", "models");
 const model = (name: string) => new Uint8Array(readFileSync(join(MODELS, name)));
@@ -205,5 +206,49 @@ describe("convert3dm", () => {
   it("refuses a file over the size limit before reading it", () => {
     const result = convert3dm(rhino, new Uint8Array(IMPORT_LIMITS.maxFileBytes + 1));
     expect(result).toEqual({ ok: false, error: expect.stringMatching(/500 MB/) });
+  });
+});
+
+describe("object ids", () => {
+  it("every part names its object in the file, and no two objects share one", () => {
+    const result = convert3dm(rhino, model("meshes-and-breps.3dm"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const ids = result.parts.map((p) => p.objectId);
+    for (const id of ids)
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("the parts of a block carry the id of the block instance placed in the model", () => {
+    const result = convert3dm(rhino, model("blocks.3dm"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parts.every((p) => typeof p.objectId === "string")).toBe(true);
+  });
+});
+
+describe("hai.source through the importer", () => {
+  it("a fixture's elements record the file name and each object's id", async () => {
+    const applied: Array<{ label: string; ops: import("@hai/protocol").SceneOp[] }> = [];
+    const importer = new ModelImporter({
+      convert: async (bytes) => convert3dm(rhino, new Uint8Array(bytes)),
+      upload: async () => {},
+      apply: (label, ops) => {
+        applied.push({ label, ops });
+        return true;
+      },
+    });
+    const bytes = model("meshes-and-breps.3dm");
+    await importer.importFile({
+      name: "meshes-and-breps.3dm",
+      arrayBuffer: async () =>
+        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    });
+    const elements = (applied[0]?.ops ?? []).flatMap((op) => (op.op === "create" ? [op.element] : []));
+    expect(elements).toHaveLength(5);
+    const sources = elements.map((e) => e.tags?.["hai.source"]);
+    for (const source of sources) expect(source).toMatch(/^meshes-and-breps\.3dm#[0-9a-f-]{36}$/);
+    expect(new Set(sources).size).toBe(5);
   });
 });

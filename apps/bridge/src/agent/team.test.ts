@@ -485,7 +485,7 @@ describe("the close note for a generated panel", () => {
     const offered = (bridge as Bridge).panels.offer("architect", "Set the clearance");
     await viewer.waitFor("panel.offer", (m) => m.payload.state === "waiting");
     await team.settled();
-    expect(await offered).toEqual({ ok: true, answer: "expired" });
+    expect(await offered).toMatchObject({ ok: true, answer: "expired" });
     await viewer.waitFor("panel.offer", (m) => m.payload.state === "unused");
     expect((bridge as Bridge).panels.active).toBe(false);
   });

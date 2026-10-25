@@ -5,6 +5,8 @@ export interface ScenePatch {
   seq: number;
   kind: "apply" | "undo" | "redo";
   label: string;
+  /** Who made the change: "user", or the agent's name. */
+  by: string;
   ops: SceneOp[];
   canUndo: boolean;
   canRedo: boolean;
@@ -14,6 +16,14 @@ export type StoreResult =
   | { ok: true; patch: ScenePatch; selectionChanged: boolean }
   | { ok: false; error: string };
 
+const USER = "user";
+
+interface Group {
+  label: string;
+  ops: SceneOp[];
+  inverse: SceneOp[];
+}
+
 /**
  * The authoritative scene: every change is a labelled transaction with a sequence number,
  * so clients can apply patches in order and ask for a snapshot if they miss one.
@@ -22,8 +32,11 @@ export class SceneStore {
   private seq = 0;
   private selectionIds: string[] = [];
   private readonly history = new History();
-  /** An agent turn in progress: its changes are applied as they come but undone as one step. */
-  private group: { label: string; ops: SceneOp[]; inverse: SceneOp[] } | null = null;
+  /**
+   * The turns in progress, one per agent: changes are applied as they come but each agent's are undone as one step.
+   * Map order is order of last activity (a group is re-inserted when it changes), which is the order undo records them.
+   */
+  private readonly groups = new Map<string, Group>();
   private readonly listeners = new Set<(doc: SceneDocument) => void>();
 
   constructor(private current: SceneDocument) {}
@@ -54,62 +67,68 @@ export class SceneStore {
     return () => this.listeners.delete(listener);
   }
 
-  apply(label: string, ops: SceneOp[]): StoreResult {
+  apply(label: string, ops: SceneOp[], by = USER): StoreResult {
     const result = applyTransaction(this.current, ops);
     if (!result.ok) return result;
     this.history.record({ label, ops, inverse: result.inverse });
-    return this.commit(result.doc, "apply", label, ops);
+    return this.commit(result.doc, "apply", label, by, ops);
   }
 
-  /** Starts grouping agent changes: everything applied with `applyInGroup` until `endGroup` is one undo step. */
-  beginGroup(label: string): void {
-    this.group = { label, ops: [], inverse: [] };
+  /** Starts grouping an agent's changes: everything applied with `applyInGroup` until `endGroup` is one undo step. */
+  beginGroup(agent: string, label: string): void {
+    this.groups.set(agent, { label, ops: [], inverse: [] });
   }
 
   /**
-   * Applies an agent change now (clients see it at once) without its own undo step; it joins the open group.
+   * Applies an agent change now (clients see it at once) without its own undo step; it joins that agent's open group.
    * Without a group it is an ordinary transaction. A batch that fails validation changes nothing.
    */
-  applyInGroup(ops: SceneOp[], label = "Agent"): StoreResult {
-    if (!this.group) return this.apply(label, ops);
+  applyInGroup(ops: SceneOp[], agent: string | null, label = "Agent"): StoreResult {
+    const group = agent ? this.groups.get(agent) : undefined;
+    if (!agent || !group) return this.apply(label, ops, agent ?? "agent");
     const result = applyTransaction(this.current, ops);
     if (!result.ok) return result;
-    this.group.ops.push(...ops);
-    this.group.inverse = [...result.inverse, ...this.group.inverse];
-    return this.commit(result.doc, "apply", this.group.label, ops);
+    group.ops.push(...ops);
+    group.inverse = [...result.inverse, ...group.inverse];
+    // Re-inserted so the map stays in order of last activity.
+    this.groups.delete(agent);
+    this.groups.set(agent, group);
+    return this.commit(result.doc, "apply", group.label, agent, ops);
   }
 
   /**
-   * Closes the group and records it as one undo step. Returns a patch with no ops (so clients learn they can now
-   * undo it), or null when the group changed nothing.
+   * Closes an agent's group and records it as one undo step. Returns a patch with no ops (so clients learn they can
+   * now undo it), or null when the group changed nothing.
    */
-  endGroup(): StoreResult | null {
-    const group = this.group;
-    this.group = null;
-    return group ? this.recordGroup(group) : null;
+  endGroup(agent: string): StoreResult | null {
+    const group = this.groups.get(agent);
+    this.groups.delete(agent);
+    return group ? this.recordGroup(agent, group) : null;
   }
 
   undo(): StoreResult {
-    // Undo during an agent turn undoes the turn so far; the turn's later changes start a new step.
-    if (this.group?.ops.length) {
-      this.recordGroup(this.group);
-      this.group = { label: this.group.label, ops: [], inverse: [] };
+    // Undo during agent work records what each agent has done so far as a step, and each carries on in a new one;
+    // the newest step (the agent that was active last) is the one undone.
+    for (const [agent, group] of [...this.groups]) {
+      if (group.ops.length === 0) continue;
+      this.recordGroup(agent, group);
+      this.groups.set(agent, { label: group.label, ops: [], inverse: [] });
     }
     const step = this.history.undo(this.current);
     if (!step.ok) return step;
-    return this.commit(step.doc, "undo", step.label, step.ops);
+    return this.commit(step.doc, "undo", step.label, USER, step.ops);
   }
 
   redo(): StoreResult {
     const step = this.history.redo(this.current);
     if (!step.ok) return step;
-    return this.commit(step.doc, "redo", step.label, step.ops);
+    return this.commit(step.doc, "redo", step.label, USER, step.ops);
   }
 
-  private recordGroup(group: { label: string; ops: SceneOp[]; inverse: SceneOp[] }): StoreResult | null {
+  private recordGroup(agent: string, group: Group): StoreResult | null {
     if (group.ops.length === 0) return null;
     this.history.record({ label: group.label, ops: group.ops, inverse: group.inverse });
-    return this.commit(this.current, "apply", group.label, []);
+    return this.commit(this.current, "apply", group.label, agent, []);
   }
 
   /** Sets the selection to the given ids that exist in the scene; returns true if it changed. */
@@ -121,7 +140,13 @@ export class SceneStore {
     return changed;
   }
 
-  private commit(doc: SceneDocument, kind: ScenePatch["kind"], label: string, ops: SceneOp[]): StoreResult {
+  private commit(
+    doc: SceneDocument,
+    kind: ScenePatch["kind"],
+    label: string,
+    by: string,
+    ops: SceneOp[],
+  ): StoreResult {
     this.current = doc;
     this.seq += 1;
     // Deleted elements drop out of the selection.
@@ -130,7 +155,7 @@ export class SceneStore {
     for (const listener of this.listeners) listener(doc);
     return {
       ok: true,
-      patch: { seq: this.seq, kind, label, ops, canUndo: this.canUndo, canRedo: this.canRedo },
+      patch: { seq: this.seq, kind, label, by, ops, canUndo: this.canUndo, canRedo: this.canRedo },
       selectionChanged: this.selectionIds.length !== before,
     };
   }

@@ -18,6 +18,11 @@ import {
 
 type Send = (message: Message) => void;
 
+/** The session limit as stored: a whole number from 2 to 12, else the default of 6. */
+function parseSessions(stored: unknown): number {
+  return typeof stored === "number" && Number.isInteger(stored) && stored >= 2 && stored <= 12 ? stored : 6;
+}
+
 /** The settings file as a plain object; missing or unreadable reads as empty. */
 export function readSettingsFile(file: string): Record<string, unknown> {
   try {
@@ -70,6 +75,9 @@ export class SettingsHub {
       drawingAids: drawingAids.success ? drawingAids.data : null,
       showHands: stored.showHands === true,
       modelling: modelling.success ? modelling.data : "auto",
+      showOwners: stored.showOwners !== false,
+      showCameras: stored.showCameras !== false,
+      maxSessions: parseSessions(stored.maxSessions),
     };
   }
 
@@ -78,6 +86,11 @@ export class SettingsHub {
   }
 
   /** How the user chose the agent to model (Settings > Modelling). */
+  /** How many agent sessions (Mochi, specialists, workers) may run at once. */
+  get maxSessions(): number {
+    return this.settings.maxSessions;
+  }
+
   get modelling(): ModellingMode {
     return this.settings.modelling;
   }
@@ -102,6 +115,9 @@ export class SettingsHub {
       drawingAids,
       showHands,
       modelling,
+      showOwners,
+      showCameras,
+      maxSessions,
     } = message.payload;
     const patch: Partial<Settings> = {
       ...(palette ? { palette } : {}),
@@ -117,6 +133,9 @@ export class SettingsHub {
       ...(drawingAids ? { drawingAids: { ...this.settings.drawingAids, ...drawingAids } } : {}),
       ...(showHands !== undefined ? { showHands } : {}),
       ...(modelling ? { modelling } : {}),
+      ...(showOwners !== undefined ? { showOwners } : {}),
+      ...(showCameras !== undefined ? { showCameras } : {}),
+      ...(maxSessions !== undefined ? { maxSessions } : {}),
     };
     const before = resolveFeatures(this.settings.features);
     this.settings = { ...this.settings, ...patch };

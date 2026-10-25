@@ -21,11 +21,26 @@ export const Level = z.strictObject({
 });
 export type Level = z.infer<typeof Level>;
 
+/** Name 64 characters, value 200, at most 20 per element: the limits of a Rhino object's tags, so one path serves both. */
+export const MAX_TAGS = 20;
+export const Tags = z
+  .record(z.string().min(1).max(64), z.string().max(200))
+  .refine((t) => Object.keys(t).length <= MAX_TAGS, `at most ${MAX_TAGS} tags`);
+export type Tags = z.infer<typeof Tags>;
+
+/** Names starting with this belong to the system (`hai.owner`, `hai.part`, `hai.source`); agents cannot set them. */
+export const RESERVED_TAG_PREFIX = "hai.";
+export const TAG_OWNER = "hai.owner";
+export const TAG_PART = "hai.part";
+export const TAG_SOURCE = "hai.source";
+
 const common = {
   id: ElementId,
   name: z.string().min(1),
   /** Level id the element sits on; its base is at that level's elevation. */
   level: ElementId.optional(),
+  /** Free-form labels; `hai.*` names are set by the system (owner, part, source). Absent on files from before tags. */
+  tags: Tags.optional(),
   properties: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 };
 

@@ -1,4 +1,4 @@
-import type { Element, SceneOp } from "@hai/protocol";
+import { type Element, type SceneOp, TAG_SOURCE } from "@hai/protocol";
 import { encodeMeshAsset, partBounds } from "@hai/scene";
 import {
   type ConvertResult,
@@ -35,6 +35,10 @@ export interface ImportFile {
 }
 
 const newAssetId = (): string => crypto.randomUUID();
+
+/** `hai.source`: the file and the object's id in it, kept within a tag value's 200 characters. */
+const sourceTag = (file: string, objectId: string): string =>
+  `${file.slice(0, 199 - objectId.length)}#${objectId}`;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -154,6 +158,7 @@ export class ModelImporter {
           translation: [0, 0, 0],
           ...(part.layer ? { layer: part.layer } : {}),
           ...(part.color ? { color: part.color } : {}),
+          ...(part.objectId ? { tags: { [TAG_SOURCE]: sourceTag(name, part.objectId) } } : {}),
         };
         return { op: "create", element };
       });

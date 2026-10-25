@@ -15,6 +15,10 @@ export type OfferAnswer = "accepted" | "skipped" | "expired";
 
 export type PanelResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
+/** How many offers may wait behind the open panel or offer, and for how long each waits for its turn. */
+export const PANEL_QUEUE_MAX = 2;
+export const PANEL_QUEUE_WAIT_MS = 60_000;
+
 /** A panel that ended: who opened it, what it was called and whether its result was kept. */
 export interface PanelClosure {
   agent: string | null;
@@ -29,6 +33,8 @@ export const PANEL_LOAD_TIMEOUT_MS = 10_000;
 
 export interface PanelBrokerOptions {
   timeoutMs?: number;
+  /** How long an offer may wait for the open panel to close before it expires. */
+  queueWaitMs?: number;
   loadTimeoutMs?: number;
   /** A panel ended; the bridge tells the agent that opened it. */
   closed?(closure: PanelClosure): void;
@@ -52,13 +58,25 @@ interface Slot {
   loadTimer?: ReturnType<typeof setTimeout>;
 }
 
+/** An offer waiting for the open panel or offer to end: only one agent's at a time is shown to the user. */
+interface Queued {
+  agent: string | null;
+  purpose: string;
+  queuedAt: number;
+  /** Settles the agent's offer_panel call. */
+  resolve(result: PanelResult<{ answer: OfferAnswer; waitedMs: number }>): void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 /**
  * Decides when a generated panel may exist. The agent offers, the user answers, and only an accepted offer allows
- * one panel to be supplied; one offer or panel exists at a time across all agents. The state of each agent is
+ * one panel to be supplied; one offer or panel is shown at a time, and an offer made meanwhile waits its turn (at most two wait, for at most a
+ * minute each; the offering agent's call returns when it is answered or has expired). The state of each agent is
  * `none -> waiting -> accepted -> open -> none`, and every refusal says what to do instead.
  */
 export class PanelBroker {
   private slot: Slot | null = null;
+  private queue: Queued[] = [];
 
   constructor(
     private readonly options: PanelBrokerOptions,
@@ -75,32 +93,98 @@ export class PanelBroker {
     return this.slot !== null;
   }
 
-  /** The agent offers a panel: resolves when the user answers, or after a minute. */
-  offer(agent: string | null, purpose: string): Promise<PanelResult<{ answer: OfferAnswer }>> {
+  /**
+   * The agent offers a panel: resolves when the user answers, or after a minute. While another panel or offer is
+   * shown, the offer waits behind it (the agent's call waits too, and is told how long it waited); a third waiting
+   * offer, or a second one from the same agent, is refused.
+   */
+  offer(
+    agent: string | null,
+    purpose: string,
+  ): Promise<PanelResult<{ answer: OfferAnswer; waitedMs: number }>> {
     const busy = this.slot;
     if (busy) {
-      return Promise.resolve({
-        ok: false,
-        error:
-          busy.state === "open"
-            ? "A panel is already open. Wait until the user closes it, or close it yourself with close_panel."
-            : "Another panel offer is already waiting for the user's answer. Carry on in chat instead.",
+      if (busy.agent === agent) {
+        return Promise.resolve({
+          ok: false,
+          error:
+            busy.state === "open"
+              ? "A panel of yours is already open. Replace it with update_panel, or close it first."
+              : "Your offer is already waiting for the user's answer.",
+        });
+      }
+      if (this.queue.some((q) => q.agent === agent)) {
+        return Promise.resolve({
+          ok: false,
+          error: "An offer of yours is already waiting for its turn. Carry on in chat meanwhile.",
+        });
+      }
+      if (this.queue.length >= PANEL_QUEUE_MAX) {
+        return Promise.resolve({
+          ok: false,
+          error: `${PANEL_QUEUE_MAX} offers are already waiting behind the open panel. Carry on in chat instead.`,
+        });
+      }
+      return new Promise((resolve) => {
+        const entry: Queued = {
+          agent,
+          purpose,
+          queuedAt: Date.now(),
+          resolve,
+          timer: setTimeout(() => this.expireQueued(entry), this.options.queueWaitMs ?? PANEL_QUEUE_WAIT_MS),
+        };
+        entry.timer.unref?.();
+        this.queue.push(entry);
+        this.options.log?.info("panel offer waits", {
+          ...(agent ? { agent } : {}),
+          waiting: this.queue.length,
+        });
       });
     }
+    return new Promise((resolve) => this.show(agent, purpose, 0, resolve));
+  }
+
+  /** Shows an offer to the user: it is the one offer or panel now. */
+  private show(
+    agent: string | null,
+    purpose: string,
+    waitedMs: number,
+    resolve: (result: PanelResult<{ answer: OfferAnswer; waitedMs: number }>) => void,
+  ): void {
     const timeoutMs = this.options.timeoutMs ?? PANEL_OFFER_TIMEOUT_MS;
-    return new Promise((resolve) => {
-      const slot: Slot = {
-        agent,
-        offerId: randomUUID(),
-        purpose,
-        state: "waiting",
-        answer: (answer) => resolve({ ok: true, answer }),
-      };
-      slot.timer = setTimeout(() => this.answerOffer(slot, "expired"), timeoutMs);
-      slot.timer.unref?.();
-      this.slot = slot;
-      this.sendOffer(slot, "waiting");
-    });
+    const slot: Slot = {
+      agent,
+      offerId: randomUUID(),
+      purpose,
+      state: "waiting",
+      answer: (answer) => resolve({ ok: true, answer, waitedMs }),
+    };
+    slot.timer = setTimeout(() => this.answerOffer(slot, "expired"), timeoutMs);
+    slot.timer.unref?.();
+    this.slot = slot;
+    this.sendOffer(slot, "waiting");
+  }
+
+  /** The offer or panel in the way has ended: the next waiting offer is shown. */
+  private promote(): void {
+    if (this.slot) return;
+    const next = this.queue.shift();
+    if (!next) return;
+    clearTimeout(next.timer);
+    this.show(next.agent, next.purpose, Date.now() - next.queuedAt, next.resolve);
+  }
+
+  /** A waiting offer ran out of patience: its agent is told it expired, and the user never saw it. */
+  private expireQueued(entry: Queued): void {
+    this.queue = this.queue.filter((q) => q !== entry);
+    clearTimeout(entry.timer);
+    entry.resolve({ ok: true, answer: "expired", waitedMs: Date.now() - entry.queuedAt });
+  }
+
+  /** Every waiting offer (of one agent, or of all) is over without having been shown. */
+  private dropQueued(agent?: string | null): void {
+    for (const entry of this.queue.filter((q) => agent === undefined || q.agent === agent))
+      this.expireQueued(entry);
   }
 
   /**
@@ -206,6 +290,7 @@ export class PanelBroker {
    * used, is over. An open panel stays: it outlives the turn that made it.
    */
   turnEnded(agent: string | null): void {
+    this.dropQueued(agent);
     const slot = this.slot;
     if (!slot || slot.agent !== agent || slot.state === "open") return;
     if (slot.state === "waiting") this.answerOffer(slot, "expired", "unused");
@@ -214,6 +299,7 @@ export class PanelBroker {
 
   /** The Generated panels feature was switched off: an open panel closes, an offer is withdrawn. */
   switchedOff(): void {
+    this.dropQueued();
     const slot = this.slot;
     if (!slot) return;
     if (slot.state === "open" && slot.panelId) {
@@ -229,6 +315,7 @@ export class PanelBroker {
 
   /** Every page is gone: nothing can show or answer a panel, so the offer or panel is over. */
   clientsGone(): void {
+    this.dropQueued();
     const slot = this.slot;
     if (!slot) return;
     if (slot.state === "open") this.finish(slot, "discarded", "system");
@@ -274,6 +361,7 @@ export class PanelBroker {
     clearTimeout(slot.timer);
     this.slot = null;
     this.sendOffer(slot, shown);
+    this.promote();
   }
 
   private finish(slot: Slot, outcome: PanelOutcome, by: PanelClosure["by"]): void {
@@ -282,6 +370,7 @@ export class PanelBroker {
     this.settleLoad(slot, { ok: false, error: "The panel was closed before it loaded." });
     this.options.log?.info("panel closed", { outcome, by, ...(slot.agent ? { agent: slot.agent } : {}) });
     this.options.closed?.({ agent: slot.agent, title: slot.document?.title ?? slot.purpose, outcome, by });
+    this.promote();
   }
 
   private awaitLoad(slot: Slot): Promise<PanelResult> {

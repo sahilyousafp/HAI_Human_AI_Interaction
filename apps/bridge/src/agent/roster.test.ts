@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { SYSTEM_PROMPT } from "./agent-config.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
 import {
   agentsDir,
@@ -69,6 +70,25 @@ describe("the team", () => {
     expect(text).toMatch(/never tell the user these things cannot be done/);
     // Without anyone who can model there is nothing to promise.
     expect(rosterText(team.filter((m) => !m.writes))).not.toContain("python_run");
+  });
+
+  it("the lead is told to split a request into non-overlapping scopes with one brief", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    const team = readRoster(dir);
+    const text = rosterText(team);
+    expect(text).toMatch(/one task per part/);
+    expect(text).toMatch(/scope .* that does not overlap/);
+    expect(text).toMatch(/one brief for all of them/);
+    expect(text).toMatch(/never give two tasks the same part/);
+    expect(rosterText(team.filter((m) => !m.writes))).not.toContain("Splitting work");
+  });
+
+  it("every agent's base instructions explain the scope, the brief and the claim tools", () => {
+    expect(SYSTEM_PROMPT).toContain("[scope]");
+    expect(SYSTEM_PROMPT).toContain("[brief]");
+    for (const tool of ["get_claims", "request_claim", "release_claim", "set_tags"])
+      expect(SYSTEM_PROMPT).toContain(tool);
   });
 
   describe("the definition the agent is run with", () => {
@@ -175,10 +195,17 @@ describe("the team", () => {
       return allowedHaiTools(member);
     };
     expect([...tools("reviewer")].sort()).toEqual([
+      "camera_capture",
+      "camera_delete",
+      "camera_list",
+      "camera_set",
       "capture_view",
+      "get_claims",
       "get_elements",
       "get_scene_summary",
       "get_user_context",
+      "release_claim",
+      "request_claim",
       "rhino_get_document",
       "set_view",
     ]);
@@ -197,17 +224,37 @@ describe("the team", () => {
     );
     const climate = readRoster(dir).find((m) => m.name === "climate");
     if (!climate) throw new Error("no climate");
-    expect([...allowedHaiTools(climate)].sort()).toEqual(["get_elements", "rhino_get_document", "set_view"]);
+    expect([...allowedHaiTools(climate)].sort()).toEqual([
+      "camera_capture",
+      "camera_delete",
+      "camera_list",
+      "camera_set",
+      "get_claims",
+      "get_elements",
+      "release_claim",
+      "request_claim",
+      "rhino_get_document",
+      "set_view",
+    ]);
     expect([...allowedHaiTools({ ...climate, writes: true })].sort()).toEqual([
+      "camera_capture",
+      "camera_delete",
+      "camera_list",
+      "camera_set",
       "close_panel",
       "create_elements",
+      "get_claims",
       "get_elements",
       "offer_panel",
       "open_panel",
       "python_run",
+      "release_claim",
+      "request_claim",
       "rhino_get_document",
       "rhino_run_python",
+      "set_tags",
       "set_view",
+      "spawn_worker",
       "update_panel",
     ]);
   });
@@ -223,7 +270,17 @@ describe("the team", () => {
       "---\nname: reviewer\ndescription: Checks.\ntools: Read\n---\n\nYou review.\n",
     );
     const reviewer = readRoster(dir).find((m) => m.name === "reviewer");
-    expect([...allowedHaiTools(reviewer as never)].sort()).toEqual(["rhino_get_document", "set_view"]);
+    expect([...allowedHaiTools(reviewer as never)].sort()).toEqual([
+      "camera_capture",
+      "camera_delete",
+      "camera_list",
+      "camera_set",
+      "get_claims",
+      "release_claim",
+      "request_claim",
+      "rhino_get_document",
+      "set_view",
+    ]);
   });
 
   describe("Python and Rhino tools", () => {
@@ -317,7 +374,18 @@ describe("the team", () => {
         join(agentsDir(dir), "reviewer.md"),
         "---\nname: reviewer\ndescription: Checks.\ntools: mcp__hai__get_elements, mcp__hai__offer_panel, mcp__hai__open_panel\n---\n\nYou review.\n",
       );
-      expect(toolsOf(dir, "reviewer").sort()).toEqual(["get_elements", "rhino_get_document", "set_view"]);
+      expect(toolsOf(dir, "reviewer").sort()).toEqual([
+        "camera_capture",
+        "camera_delete",
+        "camera_list",
+        "camera_set",
+        "get_claims",
+        "get_elements",
+        "release_claim",
+        "request_claim",
+        "rhino_get_document",
+        "set_view",
+      ]);
     });
   });
 

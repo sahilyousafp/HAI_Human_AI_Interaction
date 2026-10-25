@@ -131,3 +131,30 @@ describe("base height", () => {
     expect(parseScene(scene({ "w-top": { ...wall, id: "w-top", base: "high" } })).ok).toBe(false);
   });
 });
+
+describe("tags", () => {
+  it("an element's tags survive parsing, and an element without tags still loads", () => {
+    const tagged = { ...wall, tags: { "hai.owner": "architect", "hai.part": "dome", mood: "calm" } };
+    const result = parseScene(scene({ "w-north": tagged }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.doc.elements["w-north"]?.tags).toEqual(tagged.tags);
+
+    const old = parseScene(scene({ "w-north": wall }));
+    expect(old.ok).toBe(true);
+    if (old.ok) expect(old.doc.elements["w-north"]?.tags).toBeUndefined();
+  });
+
+  it("names the element and the tag when a value is too long", () => {
+    const result = parseScene(scene({ "w-north": { ...wall, tags: { note: "x".repeat(201) } } }));
+    expect(result).toEqual({ ok: false, error: expect.stringMatching(/Element "w-north": tags\.note/) });
+  });
+
+  it("rejects an over-long name, an empty name and more than 20 tags", () => {
+    expect(parseScene(scene({ "w-north": { ...wall, tags: { ["n".repeat(65)]: "a" } } })).ok).toBe(false);
+    expect(parseScene(scene({ "w-north": { ...wall, tags: { "": "a" } } })).ok).toBe(false);
+    const many = Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`t${i}`, "v"]));
+    expect(parseScene(scene({ "w-north": { ...wall, tags: many } })).ok).toBe(false);
+    const twenty = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`t${i}`, "v"]));
+    expect(parseScene(scene({ "w-north": { ...wall, tags: twenty } })).ok).toBe(true);
+  });
+});

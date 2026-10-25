@@ -139,6 +139,49 @@ namespace HAI.Rhino.Core.Tests
         }
 
         [Fact]
+        public void ReadsARunRequestThatNamesTheAgentItsPartAndItsClaim()
+        {
+            var incoming = Codec.Read(Golden.Read("bridge-python-run-claimed.json"));
+            Assert.NotNull(incoming);
+            var run = incoming!.As<PythonRunRequest>()!;
+            Assert.Equal("architect", run.Agent);
+            Assert.Equal("Add the dome", run.Title);
+            Assert.Equal("dome", run.Part);
+            Assert.Equal("dome", (string?)run.Claim!["part"]);
+            // A request that says nothing of this reads as before.
+            var plain = Codec.Read(Golden.Read("bridge-python-run.json"))!.As<PythonRunRequest>()!;
+            Assert.Null(plain.Agent);
+            Assert.Null(plain.Claim);
+        }
+
+        [Fact]
+        public void ReadsAnUndoRequest()
+        {
+            var incoming = Codec.Read(Golden.Read("bridge-undo.json"));
+            Assert.NotNull(incoming);
+            Assert.Equal(Wire.Undo, incoming!.Type);
+        }
+
+        [Fact]
+        public void WritesWhatARunChangedWithTheResult()
+        {
+            var changes = new RunChanges
+            {
+                Added = { new ObjectChange { Id = "a-1", Name = "Surface 1", Tags = { ["hai.owner"] = "architect", ["hai.part"] = "dome" }, Bounds = new Bounds { Min = new double[] { 0, 0, 0 }, Max = new double[] { 1000, 1000, 10 } } } },
+                Changed = { new ObjectChange { Id = "c-1", Name = "Dome", Tags = { ["hai.part"] = "dome" } } },
+                Deleted = { new ObjectChange { Id = "d-1", Name = "Old wall" } },
+            };
+            var json = Codec.Write(
+                Wire.PythonResult,
+                new PythonResult { Id = "run-3", Ok = true, Stdout = "", DurationMs = 7, Changes = changes },
+                Id);
+            Golden.Json("message-python-result-changes.json", json);
+            // A result with no comparison leaves the field out.
+            var plain = JObject.Parse(Codec.Write(Wire.PythonResult, new PythonResult { Id = "run-4", Ok = true, DurationMs = 1 }, Id));
+            Assert.False(((JObject)plain["payload"]!).ContainsKey("changes"));
+        }
+
+        [Fact]
         public void ReadsSelectAndOpenRequests()
         {
             var select = Codec.Read(Golden.Read("bridge-select.json"))!;
