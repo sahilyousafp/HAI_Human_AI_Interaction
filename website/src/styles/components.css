@@ -204,3 +204,29 @@
     opacity: 1;
   }
 }
+
+/* Not live yet: same shape as the control it stands in for, but inert. */
+.btn.is-soon,
+.btn.is-soon:hover,
+.btn.is-soon:active {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+  color: var(--graphite);
+  border-color: var(--hairline-2);
+}
+.btn.primary.is-soon,
+.btn.primary.is-soon:hover {
+  color: var(--film);
+  border-color: var(--graphite);
+}
+.btn.is-soon::before { display: none; }
+.soon-tag {
+  font-size: 0.78em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+.btn .soon-tag::before,
+.nav .soon-tag::before { content: "· "; }
+.foot-soon { opacity: 0.6; cursor: default; }

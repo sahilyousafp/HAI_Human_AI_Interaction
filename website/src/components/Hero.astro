@@ -1,5 +1,4 @@
 ---
-import { site } from "../data/site";
 import HandSvg from "./HandSvg.astro";
 
 interface Props {
@@ -25,7 +24,7 @@ const letters = "HAI".split("");
         <p class="hero-line">Hands, face and voice for AEC agents. Point at a wall, say "make it 300 thick", nod to accept. All from a normal laptop webcam.</p>
         <div class="hero-cta">
           <a class="btn primary" href="#stages">Watch the stages</a>
-          <a class="btn" href={site.github} target="_blank" rel="noopener">Code on GitHub <span class="arrow" aria-hidden="true">↗</span></a>
+          <span class="btn is-soon" role="link" aria-disabled="true">Code on GitHub <span class="soon-tag">Coming soon</span></span>
         </div>
       </div>
     </div>

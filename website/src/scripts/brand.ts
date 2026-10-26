@@ -30,7 +30,7 @@ export function initBrand() {
   const svg = root?.querySelector<SVGSVGElement>("[data-hand]");
   if (!link || !root || !svg) return null;
 
-  // On a phone the full name would push the header's GitHub link off screen.
+  // On a phone the full name would push the header's nav off screen.
   const roomy = matchMedia("(width > 560px)");
   const calm = reducedMotion();
   let open = false;

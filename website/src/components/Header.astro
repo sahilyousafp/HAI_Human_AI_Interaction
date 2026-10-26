@@ -24,11 +24,22 @@ import HandSvg from "./HandSvg.astro";
       <ul>
         {
           nav.map((n) => {
-            const external = n.href.startsWith("http");
+            if (n.soon) {
+              return (
+                <li class={`nav-${n.id}`}>
+                  <span class="soon" role="link" aria-disabled="true">
+                    {n.label}
+                    <span class="soon-tag">Coming soon</span>
+                  </span>
+                </li>
+              );
+            }
+            const href = n.href ?? "#";
+            const external = href.startsWith("http");
             return (
               <li class={`nav-${n.id}`}>
                 <a
-                  href={n.href}
+                  href={href}
                   data-nav={n.id}
                   {...(external ? { target: "_blank", rel: "noopener" } : {})}
                 >
@@ -147,6 +158,19 @@ import HandSvg from "./HandSvg.astro";
   }
   .nav a:global(.active) { color: var(--graphite); }
   .nav a:global(.active)::after { transform: scaleX(1); }
+  .nav .soon {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 13px;
+    border-radius: 999px;
+    color: var(--graphite-2);
+    font-size: 15px;
+    opacity: 0.6;
+    cursor: default;
+    user-select: none;
+  }
   .ext { font-size: 13px; transition: transform 0.5s var(--ease); }
   .nav a:hover .ext { transform: translate(2px, -2px); }
 
@@ -187,6 +211,6 @@ import HandSvg from "./HandSvg.astro";
 
   @media (width <= 560px) {
     .nav-stages, .nav-about { display: none; }
-    .nav a { border: 1px solid var(--hairline-2); }
+    .nav a, .nav .soon { border: 1px solid var(--hairline-2); }
   }
 </style>
