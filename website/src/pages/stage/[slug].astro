@@ -20,6 +20,7 @@ const { stage, prev, next } = Astro.props;
   description={stage.data.summary}
   path={`/stage/${stage.id}/`}
   image={`/media/${stage.id}.jpg`}
+  imageAlt={`${stage.data.week} of HAI: ${stage.data.title}`}
 >
   <div class="wrap page">
     <a class="back meta link-quiet" href="/#stages">← All stages</a>
