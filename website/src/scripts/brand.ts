@@ -1,4 +1,4 @@
-// "HAI" in the header unfolds into "Human AI Interaction": a tiny hand appears on the end of the word,
+// "HAI" in the header unfolds into "Human AI Interface": a tiny hand appears on the end of the word,
 // pinches it, and drags right while each letter's tail slides out; it folds back the same way. It follows the
 // logo flip, and hovering the brand opens it and holds it open.
 

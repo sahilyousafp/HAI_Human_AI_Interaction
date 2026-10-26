@@ -62,7 +62,7 @@ Slate installs and builds the app itself (see `.catalyst/slate-config.toml`, man
 - **Hero hand** (`scripts/hero-hand.ts`, `lib/rig.ts`): a 3D rig of the 21 hand landmarks, projected onto an SVG drawn like HAI's tracking overlay. It waves "Hi" on load, turns towards the pointer and pinches while the mouse is held. Clicking it, or 7 quiet seconds, plays a random gesture.
 - **Point cloud** (`scripts/pointcloud.ts`): spairl.si's contour landscape, drawn as a point cloud. The pointer lifts it and a click sends a ripple across it.
 - **Cursor** (`scripts/cursor.ts`): a solid hand whose index fingertip is the hotspot. It only appears with a mouse and without reduced motion.
-- **"HAI" in the header** (`scripts/brand.ts`): unfolds into "Human AI Interaction" when the logo flips and on hover.
+- **"HAI" in the header** (`scripts/brand.ts`): unfolds into "Human AI Interface" when the logo flips and on hover.
 - **Light and dark** (`scripts/theme.ts`): follows the system setting until the header switch is used, then remembers the choice.
 
 Everything that moves stays still with `prefers-reduced-motion`.
