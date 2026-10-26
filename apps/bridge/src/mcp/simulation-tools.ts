@@ -7,7 +7,7 @@ import { envelope } from "../open-data/envelope.ts";
 import { NO_SITE_MESSAGE } from "../open-data/place.ts";
 import { type MirroredBox, simulationGeometry } from "../open-data/simulation-geometry.ts";
 import { fetchSurfaceTemperature, MAX_SURFACE_RADIUS_M } from "../open-data/surface-temperature.ts";
-import { failure, text } from "./tool-results.ts";
+import { failure, openDataFailure, text } from "./tool-results.ts";
 
 /** What `simulation_geometry` needs: the model, the site, the city context and Rhino's mirrored boxes. */
 export interface SimulationTools {
@@ -109,8 +109,9 @@ export function registerSurfaceTemperature(register: McpServer["registerTool"], 
         );
       } catch (error) {
         if (error instanceof OpenDataError)
-          return failure(
-            `${error.message} (${error.code})${error.code === "off" ? " Tell the user Open data is switched off in Settings > Open data, and do not state a temperature you did not read." : ""}`,
+          return openDataFailure(
+            error,
+            "Tell the user Open data is switched off in Settings > Open data, and do not state a temperature you did not read.",
           );
         throw error;
       }

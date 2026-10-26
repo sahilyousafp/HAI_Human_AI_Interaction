@@ -5,7 +5,7 @@ import { type OpenDataClient, OpenDataError } from "../open-data/client.ts";
 import { envelope } from "../open-data/envelope.ts";
 import { placeFor } from "../open-data/place.ts";
 import { climateNormals, weatherForecast, weatherNow, weatherOrder } from "../open-data/weather.ts";
-import { failure, text } from "./tool-results.ts";
+import { failure, openDataFailure, text } from "./tool-results.ts";
 
 /** What the weather tools need: the way out to open data, the site and which sources may be used now. */
 export interface WeatherTools {
@@ -40,13 +40,11 @@ async function guarded(body: () => Promise<ReturnType<typeof text>>) {
   try {
     return await body();
   } catch (error) {
-    if (error instanceof OpenDataError) {
-      const advice =
-        error.code === "off"
-          ? " Tell the user Open data (or the weather source) is switched off in Settings > Open data, and do not state weather you did not read."
-          : "";
-      return failure(`${error.message} (${error.code})${advice}`);
-    }
+    if (error instanceof OpenDataError)
+      return openDataFailure(
+        error,
+        "Tell the user Open data (or the weather source) is switched off in Settings > Open data, and do not state weather you did not read.",
+      );
     throw error;
   }
 }

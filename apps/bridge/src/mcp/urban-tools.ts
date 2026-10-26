@@ -21,7 +21,7 @@ import {
   MAX_VEGETATION_RADIUS_M,
   savedLandCover,
 } from "../open-data/vegetation.ts";
-import { failure, text } from "./tool-results.ts";
+import { failure, openDataFailure, text } from "./tool-results.ts";
 
 /** What Urban's tools need: the way out to open data, the site, the portals and the layer they fill. */
 export interface UrbanTools {
@@ -37,13 +37,11 @@ async function guarded(body: () => Promise<ReturnType<typeof text>>) {
   try {
     return await body();
   } catch (error) {
-    if (error instanceof OpenDataError) {
-      const advice =
-        error.code === "off"
-          ? " Tell the user Open data is switched off (Settings > Open data) and do not guess the data."
-          : "";
-      return failure(`${error.message} (${error.code})${advice}`);
-    }
+    if (error instanceof OpenDataError)
+      return openDataFailure(
+        error,
+        "Tell the user Open data is switched off (Settings > Open data) and do not guess the data.",
+      );
     throw error;
   }
 }

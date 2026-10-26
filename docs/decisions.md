@@ -238,3 +238,11 @@ Both produced the same text, "Make this wall 300 thick". WebGPU has to unpack in
 **Measured** (local stand-in server, so network time is excluded): 500 buildings from the tool call to the layer in 39 ms, a repeated question about the same place in 12 to 20 ms, a layer of 2000 buildings built in 106 ms with a frame gap of 17 ms in the viewer.
 
 **Not verified.** Real sources (`HAI_LIVE_OPEN_DATA=1`) and real Claude Code runs of the new agents are still to do; the terms of MET Norway and NASA POWER are still to be re-read.
+
+**Live runs with the real Claude Code** (`e2e/urban-simulation-live.spec.ts`, manual, 2026-10-26, central Amsterdam as the site; each a plain question typed to the agent):
+- **Climate** answered in 35 s: 12.2 °C, cloudy, 65 % humidity, wind 5.5 m/s from the WSW, from MET Norway with its licence and attribution, and said the reading was 9 minutes old. Only `api.met.no` was contacted.
+- **Simulation** answered in 45 s: the ground was 16.1 to 18.9 °C (mean 17.9 °C) in a Landsat 9 scene of 12 October, 14 days old, said it was the temperature of the surface and not of the air, and said it could not tell how much shade the neighbours cast because no neighbours were loaded (it suggested Urban fetch them) instead of inventing a figure.
+- **Simulation without Ladybug** said no daylight simulation was run, that no result was made up, how to install Ladybug Tools MCP from the Extensions tab, and what it would do once connected.
+- **Mochi** opened an information panel of its own after a nod: the panel was named for Mochi and had Close and no Done.
+- **Urban** fetched 190 buildings (158 with a measured height, 10 inferred, 22 default), 35 trees and a greenness raster, but its own task ended while it waited for a helper subagent ("I'm waiting for its answer"), so Mochi rebuilt the answer from the context layer and said the specialist's report was cut off. The first Urban run (before the fix below) got three 50 s timeouts from the public Overpass server and said so honestly, with no invented numbers. An aborted Overpass query keeps running on the server, so a tool error for a timeout or a 5xx now tells the agent not to ask again at once and to offer to try later.
+- **Not verified:** how often Urban finishes its own report before a helper answers; the demo checklist in `demos/19-urban-and-simulation.md` is still to write.
