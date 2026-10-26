@@ -39,6 +39,8 @@ It is a standalone npm project, separate from the pnpm workspace.
 | `week-02-tracking` | `brave_VFgF7mx8EO.mp4` | 40 s | 37 s, 8 s long |
 | `week-03-orbit` | `brave_4m5KBDEUKl.mp4` | 20 s | 104 s, 8 s long |
 
+The site's own link preview, `public/brand/hai-card.jpg` (1200x630, committed), is a render of the hero with the header and buttons hidden. Re-render it if the hero changes.
+
 ## Run it locally
 
 ```sh

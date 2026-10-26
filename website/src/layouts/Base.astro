@@ -12,15 +12,17 @@ interface Props {
   title?: string;
   description?: string;
   path?: string;
-  /** Absolute path of a social preview image, e.g. a stage's poster. */
+  /** Absolute path of a 1200x630 social preview image, e.g. a stage's poster. */
   image?: string;
+  imageAlt?: string;
 }
 
 const {
   title = site.title,
   description = site.description,
   path = "/",
-  image = "/brand/mark.jpg",
+  image = "/brand/hai-card.jpg",
+  imageAlt = "HAI, Human AI Interface: a hand traced by its 21 landmarks over a point-cloud landscape",
 } = Astro.props;
 const canonical = new URL(path, site.url).href;
 const ogImage = new URL(image, site.url).href;
@@ -45,6 +47,9 @@ const ogImage = new URL(image, site.url).href;
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={imageAlt} />
     <meta name="twitter:card" content="summary_large_image" />
 
     <script is:inline>

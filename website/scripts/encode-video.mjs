@@ -1,5 +1,6 @@
 // Encode a screen recording for the web: H.264 MP4 with the index up front (so it starts and seeks before it
-// has downloaded), plus a poster frame in JPG and WebP. Prints the duration for the stage's frontmatter.
+// has downloaded), a WebP poster frame for the player, and a 1200x630 JPG of the same frame for link
+// previews. Prints the duration for the stage's frontmatter.
 //
 //   node scripts/encode-video.mjs <source.mp4> <slug> [poster-seconds]
 //
@@ -46,7 +47,20 @@ run([
   "2",
   mp4,
 ]);
-run(["-ss", posterAt, "-i", mp4, "-frames:v", "1", "-q:v", "3", join(out, `${slug}.jpg`)]);
+// Link previews (WhatsApp, LinkedIn) expect 1200x630; fill it, trimming the sides.
+run([
+  "-ss",
+  posterAt,
+  "-i",
+  mp4,
+  "-frames:v",
+  "1",
+  "-vf",
+  "scale=1200:630:force_original_aspect_ratio=increase,crop=1200:630",
+  "-q:v",
+  "3",
+  join(out, `${slug}.jpg`),
+]);
 run([
   "-ss",
   posterAt,
