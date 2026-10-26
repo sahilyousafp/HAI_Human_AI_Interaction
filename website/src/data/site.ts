@@ -3,8 +3,8 @@ export const site = {
   url: "https://hai.spairl.si",
   title: "HAI - Human AI Interface, built in public",
   description:
-    "HAI is an open-source interaction layer that lets an architect work with an AI agent and their design software using hands, face and voice from a normal laptop webcam. Follow the build, stage by stage.",
-  spairl: "https://spairl.si",
+    "HAI is an open-source interaction layer that lets AEC professionals work with an AI agent and their design software using hands, face and voice from a normal laptop webcam. Follow the build, stage by stage.",
+  spairl: "https://www.spairl.si",
   github: "https://github.com/sahilyousafp/HAI_Human_AI_Interaction",
   linkedin: "https://www.linkedin.com/in/sahil-yousaf-882a0b132/",
   email: "management@spairl.si",

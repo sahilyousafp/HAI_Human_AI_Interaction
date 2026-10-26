@@ -27,6 +27,6 @@ linkedin:
   hook: "I'm teaching my Rhino model to read my hands."
 ---
 
-The plan: an open-source tool that lets an architect work with an AI agent using hand and head gestures from a normal laptop webcam. Point at a wall, say "make it 300 thick", nod to accept.
+The plan: an open-source tool that lets AEC professionals work with an AI agent using hand and head gestures from a normal laptop webcam. Point at a wall, say "make it 300 thick", nod to accept.
 
 So the rule for this project is to build the hands, not the modeler. HAI owns the interaction layer in the browser, and Rhino does the precise work.
