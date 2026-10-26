@@ -93,6 +93,8 @@ export class ClaudeCliSession implements AgentSession {
     child.stdout?.on("data", (chunk: Buffer) => split(chunk.toString()));
     // stderr is not logged: it can carry account details. It is drained so the process never blocks on it.
     child.stderr?.resume();
+    // A write to a process that has just ended (Stop racing its exit) fails with EPIPE; the exit handler ends the turn.
+    child.stdin?.on("error", () => {});
     child.on("exit", () => this.handleExit());
     child.on("error", () => this.handleExit());
   }

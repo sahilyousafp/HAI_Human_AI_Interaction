@@ -326,15 +326,17 @@ function ApprovalCard({
             >
               Deny
             </button>
-            <button
-              type="button"
-              className="secondary"
-              data-hand-press
-              title="Allow this tool from now on in this project (revoke it in Agent permissions)"
-              onClick={() => client.decide(request.id, "always")}
-            >
-              Always allow
-            </button>
+            {!request.once && (
+              <button
+                type="button"
+                className="secondary"
+                data-hand-press
+                title="Allow this tool from now on in this project (revoke it in Agent permissions)"
+                onClick={() => client.decide(request.id, "always")}
+              >
+                Always allow
+              </button>
+            )}
           </div>
           <p className="approval-hint muted">
             {only ? "Nod to allow, shake to deny. " : ""}Denied in {seconds} s if unanswered.

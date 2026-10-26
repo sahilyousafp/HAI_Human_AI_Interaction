@@ -19,7 +19,7 @@ AI agents can already drive design tools, but talking to them still means typing
 ## Privacy
 
 - Camera video is processed on your machine, inside the browser. It is never recorded or uploaded.
-- Everything runs on `127.0.0.1`. See [SECURITY.md](SECURITY.md).
+- Everything runs on `127.0.0.1`, except the open-data requests you switch on (Settings > Open data, off by default), which carry a place and never your work. See [SECURITY.md](SECURITY.md) and [docs/open-data.md](docs/open-data.md).
 - HAI uses your own installed and signed-in Claude Code and never touches your credentials. See [PROVIDERS.md](PROVIDERS.md).
 
 ## Code signing policy

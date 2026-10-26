@@ -24,6 +24,36 @@ const CAPABILITIES = [
     hint: "sets the sun for a date, time and place",
     tools: hai(HAI_TOOLS.climate),
   },
+  {
+    key: "context",
+    label: "Read the city context",
+    hint: "the buildings, trees and ground data fetched around the site",
+    tools: hai(HAI_TOOLS.context),
+  },
+  {
+    key: "openData",
+    label: "Open data",
+    hint: "which sources are on, proposing the site; only while Open data is on",
+    tools: hai(HAI_TOOLS.openData),
+  },
+  {
+    key: "urban",
+    label: "Urban open data",
+    hint: "portals, buildings, vegetation and urban metrics; only while Open data is on",
+    tools: hai(HAI_TOOLS.urban),
+  },
+  {
+    key: "weather",
+    label: "Weather and climate data",
+    hint: "the weather now, the forecast and the climate normals of the site; only while Open data is on",
+    tools: hai(HAI_TOOLS.weather),
+  },
+  {
+    key: "simulation",
+    label: "Simulation inputs",
+    hint: "the ground's surface temperature from satellite data (only while Open data is on) and the model as a simulation description",
+    tools: hai(HAI_TOOLS.simulation),
+  },
 ] as const;
 const TEAM_TOOLS = hai(HAI_TOOLS.team);
 const HAI_TOOL_NAMES: ReadonlySet<string> = new Set([...CAPABILITIES.flatMap((c) => c.tools), ...TEAM_TOOLS]);
@@ -61,6 +91,11 @@ function draftOf(agent: AgentDefinition | null, index: number): Draft {
       read: agent ? has(hai(HAI_TOOLS.read)) : true,
       write: agent ? has(hai(HAI_TOOLS.write)) : false,
       climate: agent ? has(hai(HAI_TOOLS.climate)) : false,
+      context: agent ? has(hai(HAI_TOOLS.context)) : false,
+      openData: agent ? has(hai(HAI_TOOLS.openData)) : false,
+      urban: agent ? has(hai(HAI_TOOLS.urban)) : false,
+      weather: agent ? has(hai(HAI_TOOLS.weather)) : false,
+      simulation: agent ? has(hai(HAI_TOOLS.simulation)) : false,
     },
     otherTools: agent?.tools.filter((t) => !HAI_TOOL_NAMES.has(t)).join(", ") ?? "",
     prompt: agent?.prompt ?? "",
@@ -302,8 +337,8 @@ export function AgentsView({ client }: { client: AgentClient }) {
             </ul>
           ) : (
             <p className="muted">
-              The team is created with the first request: Mochi, Architect, Product, Climate and Reviewer, as
-              Claude Code agent files in .claude/agents.
+              The team is created with the first request: Mochi, Architect, Product, Climate, Urban,
+              Simulation and Reviewer, as Claude Code agent files in .claude/agents.
             </p>
           )}
           <button

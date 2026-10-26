@@ -82,6 +82,8 @@ describe("the team with the fake Claude Code CLI", () => {
       "mochi.md",
       "product.md",
       "reviewer.md",
+      "simulation.md",
+      "urban.md",
     ]);
     expect(replyOf(transcript(team, "mochi")[0])).toContain("agent=mochi");
     expect(starts()[0]?.args).toContain("--agent");
@@ -180,13 +182,16 @@ describe("the team with the fake Claude Code CLI", () => {
     );
   });
 
-  it("delegate returns in under 50 ms", async () => {
+  it("delegate returns while the task is still to be done", async () => {
     const { team } = await start();
     await team.request("hello"); // the team is read
-    const before = performance.now();
-    const handed = team.delegate({ agent: "reviewer", title: "Check heights", instruction: "work 100" });
-    expect(performance.now() - before).toBeLessThan(50);
+    // No clock: a long task is still queued or running when the call returns, so the call did not wait for it.
+    const handed = team.delegate({ agent: "reviewer", title: "Check heights", instruction: "work 400" });
     expect(handed).toMatchObject({ ok: true });
+    const reviewer = (team.status() as { agents: Array<{ name: string; state: string }> }).agents.find(
+      (a) => a.name === "reviewer",
+    );
+    expect(["queued", "working"]).toContain(reviewer?.state);
     await team.settled();
   });
 
@@ -195,7 +200,8 @@ describe("the team with the fake Claude Code CLI", () => {
     await team.request("hello");
     expect(team.delegate({ agent: "plumber", title: "x", instruction: "y" })).toEqual({
       ok: false,
-      error: "There is no specialist called plumber. The team: architect, climate, product, reviewer.",
+      error:
+        "There is no specialist called plumber. The team: architect, climate, product, reviewer, simulation, urban.",
     });
     expect(team.delegate({ agent: "mochi", title: "x", instruction: "y" })).toMatchObject({ ok: false });
   });
@@ -453,6 +459,26 @@ describe("the close note for a generated panel", () => {
     viewer.send("panel.closed", { panelId, outcome: "discarded" });
     await vi.waitFor(() => expect(notes(team, "architect")).toHaveLength(1));
     expect(notes(team, "architect")[0]?.request).toContain("discarded the result");
+  });
+
+  it("Mochi's information panel: on close it hears the model is unchanged, and that a change was refused", async () => {
+    const { team, viewer } = await start();
+    await team.request("hello");
+    const panels = (bridge as Bridge).panels;
+    const offered = panels.offer("mochi", "Show the status");
+    const offer = await viewer.waitFor("panel.offer", (m) => m.payload.state === "waiting");
+    viewer.send("panel.offer.answer", { offerId: offer.payload.offerId, answer: "accepted" });
+    await offered;
+    const opened = panels.open("mochi", document, true);
+    const panelId = (await viewer.waitFor("panel.open")).payload.panelId;
+    viewer.send("panel.status", { panelId, state: "ready" });
+    await opened;
+    viewer.send("panel.refused", { panelId, attempt: "commit" });
+    viewer.send("panel.closed", { panelId, outcome: "discarded" });
+    await vi.waitFor(() => expect(notes(team, "mochi")).toHaveLength(1));
+    expect(notes(team, "mochi")[0]?.request).toContain("information panel");
+    expect(notes(team, "mochi")[0]?.request).toContain("the model is unchanged");
+    expect(notes(team, "mochi")[0]?.request).toContain("tried to change the model");
   });
 
   it("an agent that closes its own panel is not told about it", async () => {

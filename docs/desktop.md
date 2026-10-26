@@ -12,7 +12,7 @@ This page covers using it, building it from the repository, and how it is releas
 - Keeps the window inside the app. A link to the web opens in your own browser; the page cannot reach Node or your files beyond what a browser page can.
 - Grants the camera and the microphone to the app's own page, and refuses every other permission (location, notifications, clipboard and the rest).
 - Runs one copy at a time. Starting it again brings the running window forward and exits.
-- Sends nothing anywhere. Camera frames stay in the perception worker, as in the browser, and the app itself makes no network request other than to the bridge on `127.0.0.1`.
+- Sends nothing anywhere, unless you switch on Open data (Settings, off by default): then the bridge asks the open-data hosts listed there for the weather, buildings and the like around the project's site, and those requests carry a place and never your work (see [open-data.md](open-data.md)). Camera frames stay in the perception worker, as in the browser, and the app itself makes no network request other than to the bridge on `127.0.0.1`.
 
 ## Run it from the repository
 

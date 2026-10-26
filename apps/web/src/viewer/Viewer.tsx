@@ -28,6 +28,9 @@ import {
 import { createPortal } from "react-dom";
 import * as THREE from "three";
 import { canvasToPng, type ViewLink } from "../agent/view-link.ts";
+import { ContextLayer } from "../context/ContextLayer.tsx";
+import type { ContextState } from "../context/context-client.ts";
+import { contextExtent } from "../context/context-geometry.ts";
 import { ExportReport, SaveAs3dmButton } from "../export/ExportControls.tsx";
 import type { ProjectExporter } from "../export/exporter.ts";
 import { isSoftwareRenderer } from "../gpu.ts";
@@ -81,6 +84,7 @@ import { between, resolveView, VIEW_ANIMATION_MS } from "./view-request.ts";
 
 const FOV = 45;
 const NO_MARKERS: CameraMarker[] = [];
+const NO_CONTEXT: ContextState = { items: [], stale: false, credits: [] };
 /** The pan pointer's icon: arrows in the four directions. */
 const PAN_ICON = "M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3";
 /** Camera easing time constant: smooths hand jitter without adding visible lag. */
@@ -208,6 +212,8 @@ declare global {
       claimBoxes(): string[];
       /** The agent cameras drawn as markers, as "agent/name". */
       cameraMarkers(): string[];
+      /** The city context: how many items it holds by kind, and whether the user's view shows it. */
+      context(): { buildings: number; trees: number; rasters: number; visible: boolean; stale: boolean };
       /** Frames rendered so far (the canvas renders on demand, so an idle view adds none). */
       renders(): number;
       /** Viewer position (0..1) of a scene point in millimetres. */
@@ -615,9 +621,26 @@ const DEFAULT_INTENSITY = 1.6;
  * The directional light. During a sun study it comes from where the sun is (north is +Y); it is moved at once when a
  * study sets it, so a capture taken right after already has its shadows.
  */
-function SunLight({ view }: { view: ViewLink }) {
+function SunLight({ view, extent }: { view: ViewLink; extent: number }) {
   const light = useRef<THREE.DirectionalLight>(null);
   const { invalidate } = useThree();
+  // The shadow map covers the model; with city context around it, enough to take in the neighbours' shadows too.
+  const half = Math.min(300, Math.max(60, extent * 1.2));
+  useEffect(() => {
+    const current = light.current;
+    if (!current) return;
+    const camera = current.shadow.camera;
+    camera.left = -half;
+    camera.right = half;
+    camera.top = half;
+    camera.bottom = -half;
+    camera.far = Math.max(300, half * 2.5);
+    camera.updateProjectionMatrix();
+    current.shadow.mapSize.set(half > 100 ? 4096 : 2048, half > 100 ? 4096 : 2048);
+    current.shadow.map?.dispose();
+    current.shadow.map = null;
+    invalidate();
+  }, [half, invalidate]);
   useEffect(() => {
     const apply = () => {
       const current = light.current;
@@ -643,12 +666,12 @@ function SunLight({ view }: { view: ViewLink }) {
       position={DEFAULT_LIGHT}
       intensity={DEFAULT_INTENSITY}
       castShadow
-      shadow-mapSize={[2048, 2048]}
-      shadow-camera-left={-60}
-      shadow-camera-right={60}
-      shadow-camera-top={60}
-      shadow-camera-bottom={-60}
-      shadow-camera-far={300}
+      shadow-mapSize={half > 100 ? [4096, 4096] : [2048, 2048]}
+      shadow-camera-left={-half}
+      shadow-camera-right={half}
+      shadow-camera-top={half}
+      shadow-camera-bottom={-half}
+      shadow-camera-far={Math.max(300, half * 2.5)}
     />
   );
 }
@@ -672,6 +695,8 @@ export function Viewer({
   markers = [],
   owners,
   cameraMarkers = NO_MARKERS,
+  context = NO_CONTEXT,
+  showContext = true,
   children,
 }: {
   client: SceneClient;
@@ -707,6 +732,10 @@ export function Viewer({
   owners?: OwnerDisplay;
   /** The cameras agents placed, as small markers in the model (not in agents' own pictures). */
   cameraMarkers?: CameraMarker[];
+  /** The city context (buildings, trees, ground data), drawn read-only beside the model. */
+  context?: ContextState;
+  /** Whether the user's view shows the context (agents' own pictures always do). */
+  showContext?: boolean;
   /** HUD panels over the model (the agent panel); inside the viewer, so the hand can press their buttons. */
   children?: React.ReactNode;
 }) {
@@ -769,6 +798,8 @@ export function Viewer({
   ownersRef.current = owners ?? NO_OWNERS;
   const markersRef = useRef<CameraMarker[]>(cameraMarkers);
   markersRef.current = cameraMarkers;
+  const contextRef = useRef({ context, showContext });
+  contextRef.current = { context, showContext };
   const [p90, setP90] = useState<number | null>(null);
   const [projectPath, setProjectPath] = useState("");
   /** The folder form under the project bar: for opening a project or for starting a new one. */
@@ -1334,6 +1365,17 @@ export function Viewer({
       wear: (id) => wornBy(id),
       claimBoxes: () => ownersRef.current.boxes.map((b) => b.key),
       cameraMarkers: () => markersRef.current.map((m) => m.key),
+      context: () => {
+        const { context: held, showContext: shown } = contextRef.current;
+        const count = (kind: string) => held.items.filter((i) => i.kind === kind).length;
+        return {
+          buildings: count("building"),
+          trees: count("tree"),
+          rasters: count("raster"),
+          visible: shown,
+          stale: held.stale,
+        };
+      },
       renders: () => rendersRef.current(),
       project: (point) => pickRef.current.project(point),
       sectionOutline: () => sectionOutlineOnScreen(),
@@ -1444,7 +1486,7 @@ export function Viewer({
       >
         <color attach="background" args={[colors.background]} />
         <hemisphereLight args={["#ffffff", "#b9b4a8", 1.1]} />
-        <SunLight view={view} />
+        <SunLight view={view} extent={contextExtent(context.items)} />
         <Grid
           userData={{ grid: true }}
           rotation={[Math.PI / 2, 0, 0]}
@@ -1463,6 +1505,11 @@ export function Viewer({
             <shadowMaterial opacity={0.22} />
           </mesh>
         )}
+        <ContextLayer
+          state={context}
+          colors={{ element: colors.element, background: colors.background }}
+          visible={showContext}
+        />
         <OwnerDisplayContext.Provider value={owners ?? NO_OWNERS}>
           <MirrorLayer
             mirror={mirror}

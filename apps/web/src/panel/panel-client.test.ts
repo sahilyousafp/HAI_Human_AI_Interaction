@@ -423,3 +423,60 @@ describe("PanelClient commit, Done and Close", () => {
     expect(t.applied).toEqual([]);
   });
 });
+
+describe("PanelClient information panels", () => {
+  /** An accepted offer whose panel the bridge marked read-only (its agent does not change the model). */
+  function openInfoPanel() {
+    const t = setup();
+    t.offer();
+    t.client.answer("o1", true);
+    t.bridge("panel.open", { panelId: "p1", offerId: "o1", agent: "climate", readOnly: true, ...document });
+    t.client.loaded("p1", true);
+    return t;
+  }
+
+  it("is read-only when the bridge says so", () => {
+    const t = openInfoPanel();
+    expect(t.client.getSnapshot().panel).toMatchObject({ readOnly: true, agent: "climate" });
+  });
+
+  it("refuses a preview: the model is not previewed, the script is told and the bridge hears", () => {
+    const t = openInfoPanel();
+    t.client.setPreview([moveColumn(200)]);
+    t.draw();
+    expect(t.columnX(t.shown())).toBe(0);
+    expect(t.client.previewing).toBe(false);
+    expect(t.problems).toEqual([expect.stringContaining("information only")]);
+    expect(t.sentOfType("panel.refused")).toEqual([{ panelId: "p1", attempt: "preview" }]);
+  });
+
+  it("refuses a commit and applies nothing", () => {
+    const t = openInfoPanel();
+    expect(t.client.commit()).toBe(false);
+    expect(t.applied).toEqual([]);
+    expect(t.sentOfType("panel.refused")).toEqual([{ panelId: "p1", attempt: "commit" }]);
+  });
+
+  it("clearing the preview is allowed (it changes nothing)", () => {
+    const t = openInfoPanel();
+    t.client.setPreview([]);
+    expect(t.problems).toEqual([]);
+    expect(t.sentOfType("panel.refused")).toEqual([]);
+  });
+
+  it("Done only closes it: nothing is applied and the outcome is discarded", () => {
+    const t = openInfoPanel();
+    t.client.done();
+    expect(t.applied).toEqual([]);
+    expect(t.sentOfType("panel.closed")).toEqual([{ panelId: "p1", outcome: "discarded" }]);
+    expect(t.client.getSnapshot().panel).toBeNull();
+  });
+
+  it("a writer's panel is not read-only and still previews and commits", () => {
+    const t = openPanel();
+    expect(t.client.getSnapshot().panel?.readOnly).toBeUndefined();
+    t.client.setPreview([moveColumn(200)]);
+    t.draw();
+    expect(t.client.commit()).toBe(true);
+  });
+});

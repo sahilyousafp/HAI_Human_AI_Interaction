@@ -27,6 +27,12 @@
 //   "columns N every MS"  the same, MS milliseconds apart (so several agents' work can be seen to overlap)
 //   "rhino run TITLE"  runs a script in Rhino (rhino_run_python) with that title and replies with the outcome
 //   "touch ID"   renames the element ID with update_elements and replies "Touched ID", or "Refused: <why>"
+//   "tool NAME JSON"  calls the app's tool NAME with JSON as its input (asking the permission prompt tool first) and
+//                replies with its output, or "Refused: <why>" (for tools that need no script of their own, like site_set)
+//   "mcp SERVER TOOL JSON"  calls a tool of an extension the user added (mcp__SERVER__TOOL), asking the permission prompt
+//                tool first, and replies "Ran: <server> ran <tool>" or "Not run: <why>"
+//   "mcp SERVER TOOL JSON"  calls a tool of an extension the user added (mcp__SERVER__TOOL), asking the permission prompt
+//                tool first, and replies "Ran: <server> ran <tool>" or "Not run: <why>"
 //   "claims"     reads get_claims and replies with its JSON
 //   "request ID" asks for the element ID with request_claim; "release ID" gives it back (release_claim)
 //   "tag ID k=v" sets a tag with set_tags and replies "Tagged ID" or "Refused: <why>"
@@ -598,6 +604,37 @@ function onRequest(raw) {
       delta(out.error ? `Refused: ${out.error}` : `Touched ${touch[1]}`);
       result();
     });
+    return;
+  }
+  const generic = /^tool (\w+) ?(.*)$/.exec(text);
+  if (generic) {
+    let input = {};
+    try {
+      input = generic[2] ? JSON.parse(generic[2]) : {};
+    } catch {
+      // not JSON: the call goes out empty and the tool says what is missing
+    }
+    appTool(generic[1], input).then((out) => {
+      delta(out.error ? `Refused: ${out.error}` : JSON.stringify(out));
+      result();
+    });
+    return;
+  }
+  const foreign = /^mcp (\w+) (\w+) ?(.*)$/.exec(text);
+  if (foreign) {
+    // A tool of an extension the user added (not the app's): Claude Code asks the permission prompt tool, then runs it.
+    let input = {};
+    try {
+      input = foreign[3] ? JSON.parse(foreign[3]) : {};
+    } catch {
+      // not JSON: the call goes out empty
+    }
+    toolCall(`mcp__${foreign[1]}__${foreign[2]}`, input, async () => `${foreign[1]} ran ${foreign[2]}`).then(
+      ({ allowed, output }) => {
+        delta(allowed ? `Ran: ${output}` : `Not run: ${output}`);
+        result();
+      },
+    );
     return;
   }
   const tag = /^tag (\S+) (\S+)=(.*)$/.exec(text);

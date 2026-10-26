@@ -54,7 +54,16 @@ describe("subagents that only look", () => {
 
   it("there is one for every other team name, plus scout and checker, and none named after the agent itself", () => {
     const names = Object.keys(helperDefinitions(member("architect"), team)).sort();
-    expect(names).toEqual(["checker", "climate", "mochi", "product", "reviewer", "scout"]);
+    expect(names).toEqual([
+      "checker",
+      "climate",
+      "mochi",
+      "product",
+      "reviewer",
+      "scout",
+      "simulation",
+      "urban",
+    ]);
   });
 
   it("a helper named after a teammate has the teammate's way of looking, not its modelling tools", () => {
@@ -100,6 +109,8 @@ describe("subagents that only look", () => {
       "product",
       "reviewer",
       "scout",
+      "simulation",
+      "urban",
     ]);
     expect(written.architect?.tools).toContain("mcp__hai__create_elements");
   });

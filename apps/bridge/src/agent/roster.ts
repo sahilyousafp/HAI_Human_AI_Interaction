@@ -16,6 +16,11 @@ export interface AgentMeta {
   writes: boolean;
   /** The lead: every request goes to it, and it hands work to the others. */
   lead: boolean;
+  /**
+   * Groups of the app's read-only tools it has by role (names of `HAI_TOOLS` groups: the open-data tools of Urban,
+   * the weather tools of Climate), whatever its definition file lists: existing projects keep the files they have.
+   */
+  grants: string[];
 }
 
 /** An agent of the team: its Claude Code definition (`.claude/agents/<name>.md`) and HAI's metadata. */
@@ -59,7 +64,9 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
 - Hand work to the specialists with the delegate tool: one task per specialist, with a short title and a clear
   instruction that includes what the user pointed at or selected (get_user_context) and any sizes in millimetres.
   When a request names a specialist ("[for: architect]"), give it to that specialist.
-- You do not change the model yourself. Answer questions about the model with the read tools.
+- You do not change the model yourself. Answer questions about the model with the read tools, and when the user asks
+  to see information (the team's status, a summary, a comparison), you may show it in a panel of your own: it is
+  information only.
 - When asked for status, call team_status and say who is doing what, in a sentence or two.
 - When a "[team]" message reports finished work, tell the user what was done, briefly.
 - Your replies are read aloud: start with one short spoken sentence, then any detail.`,
@@ -68,6 +75,7 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
       color: "#d98fb6",
       writes: false,
       lead: true,
+      grants: ["openData"],
     },
   },
   architect: {
@@ -86,7 +94,7 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
     model: "sonnet",
     prompt: `You are Architect, the team's architectural designer. You plan and model massing, levels, walls, slabs,
 columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIALIST_CLOSE}`,
-    meta: { aliases: ["architects", "archie"], color: "#52bcc6", writes: true, lead: false },
+    meta: { aliases: ["architects", "archie"], color: "#52bcc6", writes: true, lead: false, grants: [] },
   },
   product: {
     description: "Product design: furniture, fixtures and components at product scale.",
@@ -104,13 +112,16 @@ columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIAL
     prompt: `You are Product, the team's product designer. You design furniture, fixtures and components at product
 scale, with attention to ergonomics, materials and how they are made. Model simple shapes with the scene elements
 (massing for blocks, columns for legs and posts) and anything curved or detailed with Python (python_run).\n\n${SPECIALIST_CLOSE}`,
-    meta: { aliases: ["products", "producer"], color: "#e2ab4f", writes: true, lead: false },
+    meta: { aliases: ["products", "producer"], color: "#e2ab4f", writes: true, lead: false, grants: [] },
   },
   climate: {
-    description: "Environmental simulation: sun path, shadows, orientation and daylight studies.",
+    description:
+      "Climate: sun path, shadows, orientation and daylight studies, and the weather and climate of the site from open data (now, the forecast, normals).",
     tools: [
       ...hai(HAI_TOOLS.read),
       ...hai(HAI_TOOLS.climate),
+      ...hai(HAI_TOOLS.openData),
+      ...hai(HAI_TOOLS.weather),
       ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.cameras),
       ...hai(HAI_TOOLS.python),
@@ -119,8 +130,100 @@ scale, with attention to ergonomics, materials and how they are made. Model simp
     model: "sonnet",
     prompt: `You are Climate, the team's environmental analyst. You study sun path, shadows, orientation and
 daylight. Use sun_study for a date, time and location (ask Mochi if the location is unknown; London is 51.5, -0.1)
-and describe what the shadows mean for the design. You do not change the model.\n\n${SPECIALIST_CLOSE}`,
-    meta: { aliases: ["climates", "climat"], color: "#62c48f", writes: false, lead: false },
+and describe what the shadows mean for the design. You do not change the model.
+
+You can also read the weather and climate of the site from open data (weather_now, weather_forecast, climate_normals).
+The project's site is used when you name no place; if it has none, ask the user where the project stands and propose it
+with site_set (the user decides). Always say the source and how old the data is: every result carries its source,
+licence, attribution, observation time and age in minutes. If open data is off you have no weather tools: say so and that
+the user can switch it on in Settings > Open data; never state weather you did not read. Without data, keep to what you
+can compute, such as the sun's position.\n\n${SPECIALIST_CLOSE}`,
+    meta: {
+      aliases: ["climates", "climat"],
+      color: "#62c48f",
+      writes: false,
+      lead: false,
+      grants: ["openData", "weather"],
+    },
+  },
+  urban: {
+    description:
+      "Urban context: what open data says about the place around the project (neighbouring buildings and their heights, trees, vegetation cover, urban metrics, open-data portals). Reads, never changes the model.",
+    tools: [
+      ...hai(HAI_TOOLS.read),
+      ...hai(HAI_TOOLS.view),
+      ...hai(HAI_TOOLS.cameras),
+      ...hai(HAI_TOOLS.context),
+      ...hai(HAI_TOOLS.openData),
+      ...hai(HAI_TOOLS.urban),
+      ...hai(HAI_TOOLS.rhinoRead),
+    ],
+    model: "sonnet",
+    prompt: `You are Urban, the team's urban analyst. You find out what the place around the project is like from open data: the
+neighbouring buildings and their heights, the trees, the vegetation cover, simple urban metrics (building coverage,
+mean and tallest height, green share, tree count) and what the open-data portals publish. You do not change the model.
+
+- The project needs a site (open_data_sources says whether it has one). If it has none, ask Mochi or the user where the
+  project stands and propose it with site_set: the user decides, and nothing is saved until they allow it.
+- Fetch with urban_buildings and urban_vegetation: they fill the model's context layer, which the user and everyone's pictures
+  show. Read it with context_list and context_get, and compute with urban_metrics. Search portals with open_data_search
+  and read tables with open_data_get.
+- Always say where a number came from and how old it is: every result carries its source, licence, attribution, the
+  time it was observed and its age. Say when a height is worked out (three metres a level) or a default, when an area is
+  only partly covered, and that the land cover is a 2021 map and the greenness a scene from days or weeks ago.
+- If open data is off you have no data tools: say so and that the user can switch it on in Settings > Open data. Never
+  state numbers you did not read. A metric reported as missing means it was not fetched: fetch it, or say it is missing.
+- When a table or a comparison is easier to see than to read, show it in an information panel (it only shows).
+\n\n${SPECIALIST_CLOSE}`,
+    meta: {
+      aliases: ["urbanist", "planner", "urbans", "urbane"],
+      color: "#d9774f",
+      writes: false,
+      lead: false,
+      grants: ["openData", "urban"],
+    },
+  },
+  simulation: {
+    description:
+      "Performance simulation: sun and shadow, the ground's surface temperature from open satellite data, and (when the user installed Ladybug Tools MCP) daylight and energy studies. Reports method, data and age, never a compliance verdict. Reads, never changes the model.",
+    tools: [
+      ...hai(HAI_TOOLS.read),
+      ...hai(HAI_TOOLS.climate),
+      ...hai(HAI_TOOLS.view),
+      ...hai(HAI_TOOLS.cameras),
+      ...hai(HAI_TOOLS.context),
+      ...hai(HAI_TOOLS.openData),
+      ...hai(HAI_TOOLS.weather),
+      ...hai(HAI_TOOLS.simulation),
+      ...hai(HAI_TOOLS.rhinoRead),
+      "mcp__ladybug__*",
+    ],
+    model: "sonnet",
+    prompt: `You are Simulation, the team's performance analyst. You study how the design behaves: sun and shadow
+(sun_study), the temperature of the ground around it (surface_temperature), the weather of the site, and, when the
+user has installed Ladybug Tools MCP (its tools start with mcp__ladybug__), daylight, energy and radiation studies
+through it. You do not change the model.
+
+- Get the model for a simulation with simulation_geometry (metres, +Z up, with what it simplified; include_context adds
+  the neighbouring buildings as shading). The Ladybug server builds its own model: rebuild a simplified one from that
+  description through its tools, say what you left out, and use weather for the site (weather_now, climate_normals, or
+  the weather file its tools can fetch). Ask for the site with site_set if the project has none.
+- If Ladybug Tools MCP is not installed, say so and how to add it (the Extensions tab, Ladybug Tools MCP, which shows
+  its licence and the command to run), and offer what you can do without it: sun studies, shadows from the context
+  layer, the ground temperature and the weather. Say plainly that these are not a daylight or energy simulation.
+- surface_temperature is the temperature of the ground and roofs seen from a satellite (not the air) at the moment of a
+  scene that is days to weeks old: say its date and age every time. If no scene qualifies you get no values: say so.
+- Report method, data and age: the weather file or data and its age, the settings and the engine used, ranges where
+  the method gives them, and what was not modelled. Never call a result compliant or certified.
+- When a comparison or a table is easier to see than to read, show it in an information panel (it only shows).
+\n\n${SPECIALIST_CLOSE}`,
+    meta: {
+      aliases: ["simulator", "sim", "ladybug", "simulations", "simulate"],
+      color: "#c26ad6",
+      writes: false,
+      lead: false,
+      grants: ["openData", "weather", "simulation"],
+    },
   },
   reviewer: {
     description:
@@ -134,7 +237,13 @@ and describe what the shadows mean for the design. You do not change the model.\
     model: "sonnet",
     prompt: `You are Reviewer. You check the model against the brief and common rules (heights, counts, clearances,
 overlaps) and report issues clearly with element names. You never change the model.\n\n${SPECIALIST_CLOSE}`,
-    meta: { aliases: ["review or", "reviewers", "review"], color: "#8f9bff", writes: false, lead: false },
+    meta: {
+      aliases: ["review or", "reviewers", "review"],
+      color: "#8f9bff",
+      writes: false,
+      lead: false,
+      grants: [],
+    },
   },
 };
 
@@ -247,24 +356,40 @@ export function readRoster(projectDir: string): TeamMember[] {
           color: own.color ?? defaults?.color ?? (FALLBACK_COLORS[i % FALLBACK_COLORS.length] as string),
           writes: own.writes ?? defaults?.writes ?? true,
           lead: own.lead ?? defaults?.lead ?? false,
+          grants: own.grants ?? defaults?.grants ?? [],
         },
       ];
     });
   return members.sort(byLeadThenName);
 }
 
+/** The `HAI_TOOLS` groups a role may grant: the ones that read or ask and change nothing. */
+const GRANTABLE: ReadonlySet<string> = new Set(["openData", "urban", "weather", "simulation"]);
+
+/** Whether an agent with these `hai` tools may change the model (no list means every tool, as for a single session). */
+export function changesModel(tools: ReadonlySet<string> | null): boolean {
+  return tools === null || HAI_TOOLS.write.some((t) => tools.has(t));
+}
+
 /**
  * The `hai` tools an agent may call, by their short names: those its definition lists, without the model-changing
  * ones unless it is marked as writing (the scheduler lets only one writing agent run at a time, so an agent it treats
- * as read-only must not write). Panel tools change the model through the user, so they go to every writing agent
- * whatever its definition lists: HAI never overwrites a definition the user edited, and existing projects would
- * otherwise never see them. Whether the Generated panels feature is on is decided when a tool is called.
+ * as read-only must not write). Panel tools go to every agent whatever its definition lists, because HAI never
+ * overwrites a definition the user edited and existing projects would otherwise never see them; the panel of an agent
+ * that does not change the model is information only (the bridge marks it, the page enforces it). Whether the
+ * Generated panels feature is on is decided when a tool is called.
  */
 export function allowedHaiTools(member: TeamMember): Set<string> {
   const prefix = `mcp__${HAI_SERVER}__`;
   const writeTools: readonly string[] = member.writes
     ? []
-    : [...HAI_TOOLS.write, ...HAI_TOOLS.tags, ...HAI_TOOLS.panel, ...HAI_TOOLS.rhino, ...HAI_TOOLS.workers];
+    : [
+        ...HAI_TOOLS.write,
+        ...HAI_TOOLS.tags,
+        ...HAI_TOOLS.rhino,
+        ...HAI_TOOLS.workers,
+        ...HAI_TOOLS.contextWrite,
+      ];
   const tools = new Set(
     member.tools
       .filter((t) => t.startsWith(prefix))
@@ -275,17 +400,28 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
   if (member.writes)
     for (const tool of [
       ...HAI_TOOLS.tags,
-      ...HAI_TOOLS.panel,
       ...HAI_TOOLS.python,
       ...HAI_TOOLS.rhino,
       ...HAI_TOOLS.workers,
+      ...HAI_TOOLS.contextWrite,
     ])
       tools.add(tool);
   // The lead may show the user its plan before handing work out, whatever its file lists (older files do not).
   if (member.lead) for (const tool of HAI_TOOLS.team) tools.add(tool);
+  // The read-only tools its role grants (open data, weather...): only groups that change nothing can be granted.
+  for (const group of member.grants)
+    if (GRANTABLE.has(group)) for (const tool of HAI_TOOLS[group as keyof typeof HAI_TOOLS]) tools.add(tool);
   // Looking around changes no element, so every agent may do it, whatever its definition lists. Claims are the same:
-  // reading them is harmless, and asking for more only works for the agent's own running task.
-  for (const tool of [...HAI_TOOLS.view, ...HAI_TOOLS.cameras, ...HAI_TOOLS.claims, ...HAI_TOOLS.rhinoRead])
+  // reading them is harmless, and asking for more only works for the agent's own running task. Panels are for every
+  // agent: a reader's panel can only show.
+  for (const tool of [
+    ...HAI_TOOLS.view,
+    ...HAI_TOOLS.cameras,
+    ...HAI_TOOLS.claims,
+    ...HAI_TOOLS.rhinoRead,
+    ...HAI_TOOLS.panel,
+    ...HAI_TOOLS.context,
+  ])
     tools.add(tool);
   return tools;
 }
@@ -378,15 +514,28 @@ export function workerDefinition(member: TeamMember): ManagedDefinition {
 
 /** An agent as the panel shows it (everything but its instructions). */
 export function memberInfo(member: TeamMember): TeamMemberInfo {
-  const { prompt: _prompt, ...info } = member;
+  const { prompt: _prompt, grants: _grants, ...info } = member;
   return info;
 }
 
 /** The lead's roster of the others, for its instructions: who can do what. */
+/** Which specialist a kind of request belongs to, for the specialists that are in the team. */
+function routing(others: TeamMember[]): string {
+  const has = (name: string) => others.some((m) => m.name === name);
+  const lines = [
+    has("urban") &&
+      "- Where the project stands, the buildings and trees around it, vegetation cover, urban metrics and what open-data portals publish go to urban.",
+    has("climate") && "- The weather now, forecasts, climate data, sun and shadow go to climate.",
+    has("simulation") &&
+      "- Surface (ground) temperature and building performance simulations (daylight, energy) go to simulation.",
+  ].filter((line): line is string => typeof line === "string");
+  return lines.length === 0 ? "" : `\n\nWho handles what:\n${lines.join("\n")}`;
+}
+
 export function rosterText(team: TeamMember[]): string {
   const others = team.filter((m) => !m.lead);
   if (others.length === 0) return "There are no specialists in this project yet.";
-  const list = `Your team (use the name with delegate):\n${others.map((m) => `- ${m.name}: ${m.description}`).join("\n")}`;
+  const list = `Your team (use the name with delegate):\n${others.map((m) => `- ${m.name}: ${m.description}`).join("\n")}${routing(others)}`;
   const builders = others.filter((m) => m.writes).map((m) => m.name);
   if (builders.length === 0) return list;
   // What the specialists can do beyond the scene's own element types. The lead has no modelling tools, so without

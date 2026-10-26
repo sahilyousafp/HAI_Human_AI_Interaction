@@ -75,6 +75,23 @@ describe("ApprovalBroker", () => {
     expect(broker.waiting).toEqual([]);
   });
 
+  it("every call to the user's Ladybug Tools server raises a card naming it, and is never allowed at once", async () => {
+    const { broker, sent, outcome, decide } = setup();
+    const cards = () => sent.filter((m) => m.type === "approval.pending");
+    const first = broker.decide("mcp__ladybug__LB_SunPath", { latitude: 52.37 });
+    expect(cards()).toHaveLength(1);
+    expect(cards()[0]?.payload).toMatchObject({ tool: "mcp__ladybug__LB_SunPath", source: "ladybug" });
+    decide(cards()[0]?.payload.id ?? "", "allow");
+    expect(await first).toMatchObject({ behavior: "allow" });
+    expect(outcome()).toMatchObject({ outcome: "allowed" });
+
+    // Allowing one call does not allow the next: it asks again.
+    const second = broker.decide("mcp__ladybug__LB_SunPath", { latitude: 52.37 });
+    expect(cards()).toHaveLength(2);
+    decide(cards()[1]?.payload.id ?? "", "deny");
+    expect(await second).toEqual({ behavior: "deny", message: "The user declined this tool call." });
+  });
+
   describe("with fake timers", () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());

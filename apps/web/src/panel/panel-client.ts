@@ -39,6 +39,8 @@ export interface PanelView {
   panelId: string | null;
   offerId: string;
   agent?: string;
+  /** An information panel (its agent does not change the model): it shows, and cannot preview or commit. */
+  readOnly?: boolean;
   document: PanelDocument | null;
   status: "loading" | "ready" | "failed";
   reason?: string;
@@ -180,7 +182,7 @@ export class PanelClient {
         return true;
       }
       case "panel.open": {
-        const { panelId, offerId, agent, title, width, height, html } = message.payload;
+        const { panelId, offerId, agent, readOnly, title, width, height, html } = message.payload;
         if (this.dismissed.delete(offerId)) {
           // The user closed the loading frame: the document never shows.
           this.options.send({
@@ -200,6 +202,7 @@ export class PanelClient {
             status: "loading",
             revision: (previous?.revision ?? 0) + 1,
             ...(agent ? { agent } : {}),
+            ...(readOnly ? { readOnly: true } : {}),
           },
         });
         return true;
@@ -277,7 +280,12 @@ export class PanelClient {
 
   /** Replaces the preview with these operations (empty clears it); the viewer redraws once per frame. */
   setPreview(ops: SceneOp[]): void {
-    if (!this.state.panel?.panelId) return;
+    const panel = this.state.panel;
+    if (!panel?.panelId) return;
+    if (panel.readOnly && ops.length > 0) {
+      this.refuse(panel.panelId, "preview");
+      return;
+    }
     this.ops = ops;
     this.committed = false;
     if (this.frameQueued) return;
@@ -291,7 +299,12 @@ export class PanelClient {
 
   /** Keeps the preview as one undo step labelled with the panel's title, and leaves the panel open. */
   commit(): boolean {
-    const title = this.state.panel?.document?.title;
+    const panel = this.state.panel;
+    if (panel?.readOnly) {
+      if (panel.panelId) this.refuse(panel.panelId, "commit");
+      return false;
+    }
+    const title = panel?.document?.title;
     if (!title || this.ops.length === 0) return false;
     const sent = this.options.scene.apply(title.slice(0, 120), this.ops);
     // The preview stays until the committed change arrives, so the model does not flick back meanwhile.
@@ -299,10 +312,21 @@ export class PanelClient {
     return sent;
   }
 
-  /** Done: keeps the result as one undo step and closes the panel. */
+  /** Done: keeps the result as one undo step and closes the panel (an information panel only closes). */
   done(): void {
+    if (this.state.panel?.readOnly) {
+      this.close();
+      return;
+    }
     this.commit();
     this.finish("kept");
+  }
+
+  /** An information panel tried to change the model: nothing happens, its script is told, the agent hears at close. */
+  private refuse(panelId: string, attempt: "preview" | "commit"): void {
+    this.options.send({ type: "panel.refused", id: newId(), payload: { panelId, attempt } });
+    for (const listener of this.problemListeners)
+      listener("This panel is information only: it cannot change the model, so nothing was changed.");
   }
 
   /** Close: puts the model back as it was at the panel's last commit. */

@@ -1,12 +1,13 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Duplex } from "node:stream";
 import type { AgentProvider } from "@hai/agent-core";
 import {
   type BridgeStatusMessage,
   type Message,
+  OPEN_DATA_SOURCES,
   PROTOCOL_VERSION,
   parseMessage,
   type RhinoHello,
@@ -22,6 +23,7 @@ import { ExtensionHub } from "./agent/extensions.ts";
 import { PanelBroker } from "./agent/panels.ts";
 import { PlanBroker } from "./agent/plans.ts";
 import { findStrays, strayNote } from "./agent/rhino-run-check.ts";
+import { changesModel } from "./agent/roster.ts";
 import { Team } from "./agent/team.ts";
 import { ViewContext } from "./agent/view-context.ts";
 import {
@@ -37,8 +39,14 @@ import { assertLoopback } from "./config.ts";
 import { createLogger, type Logger, silentLogger } from "./log.ts";
 import { AgentTokens } from "./mcp/agent-tokens.ts";
 import { createMcpHandler, MCP_PATH } from "./mcp/mcp-endpoint.ts";
+import { describeSources } from "./mcp/open-data-tools.ts";
 import { RHINO_DOCUMENT_SCRIPT, requirementPackages } from "./mcp/rhino-tools.ts";
 import { createSceneMcpServer } from "./mcp/scene-tools.ts";
+import { OpenDataClient, type Transport } from "./open-data/client.ts";
+import { ContextStore } from "./open-data/context-store.ts";
+import { OpenDataRecord } from "./open-data/record.ts";
+import { SiteStore } from "./open-data/site-store.ts";
+import { openDataUserAgent, sourceHosts } from "./open-data/sources.ts";
 import { PythonEnv } from "./python/python-env.ts";
 import { PythonWorkbench } from "./python/python-run.ts";
 import { RhinoLink } from "./rhino-link.ts";
@@ -66,6 +74,8 @@ export interface BridgeOptions {
   mirrorDir?: string;
   /** Writes one log line (redacted: never secrets or the session token); without it, nothing is logged. */
   log?: (line: string) => void;
+  /** Tests give their own way to reach the open-data hosts (a local fake server); the app uses HTTPS. */
+  openData?: { transport?: Transport; gapMs?: number };
 }
 
 export interface Bridge {
@@ -87,6 +97,12 @@ export interface Bridge {
   readonly agentTokens: AgentTokens;
   /** The agents' own cameras and the last picture each took. */
   readonly eyes: AgentEyes;
+  /** The project's site. */
+  readonly site: SiteStore;
+  /** The city context layer (buildings, trees, ground data), outside the model. */
+  readonly context: ContextStore;
+  /** The only way out to open data, and the record of what it contacted. */
+  readonly openData: { client: OpenDataClient; record: OpenDataRecord };
   readonly log: Logger;
   start(): Promise<AddressInfo>;
   stop(): Promise<void>;
@@ -165,11 +181,43 @@ export function createBridge(options: BridgeOptions): Bridge {
   );
   // Set once the panels exist: the Generated panels switch closes an open panel.
   let panelsChanged = (_on: boolean) => {};
+  // Set once the team exists: the Open data switch ends requests in flight and restarts the agents.
+  let openDataChanged = (_on: boolean) => {};
   const mirrorAssets = new AssetStore(() => options.mirrorDir ?? null);
   const settings = new SettingsHub(options.settingsFile ?? null, broadcast, (feature, on) => {
     if (feature === "generatedPanels") panelsChanged(on);
+    if (feature === "openData") openDataChanged(on);
   });
   const view = new ViewContext(() => clients.size, broadcast);
+  // The city context follows the site: a layer built for another site is marked out of date.
+  let siteChanged = () => {};
+  const site = new SiteStore(
+    () => scene.projectDir,
+    broadcast,
+    () => siteChanged(),
+  );
+  const context = new ContextStore(
+    () => scene.projectDir,
+    () => site.site,
+    broadcast,
+  );
+  siteChanged = () => context.refresh();
+  const openDataRecord = new OpenDataRecord(() => broadcast(openDataRecordMessage()));
+  const openDataRecordMessage = (): Message => ({
+    type: "opendata.record",
+    id: randomUUID(),
+    payload: { entries: [...openDataRecord.entries] },
+  });
+  const openDataClient = new OpenDataClient({
+    allows: (id) => settings.openDataAllows(id),
+    hosts: (id) => sourceHosts(id, settings.portalHosts),
+    // The cache lives with the workspace (beside the settings), not in the project.
+    cacheDir: () => (options.settingsFile ? join(dirname(options.settingsFile), "open-data") : null),
+    userAgent: openDataUserAgent(options.version),
+    record: openDataRecord,
+    ...(options.openData?.transport ? { transport: options.openData.transport } : {}),
+    ...(options.openData?.gapMs !== undefined ? { gapMs: options.openData.gapMs } : {}),
+  });
   // The agents' own cameras and last pictures; the team publishes them on its snapshot (set once the team exists).
   let eyesChanged = () => {};
   const eyes = new AgentEyes({
@@ -243,9 +291,16 @@ export function createBridge(options: BridgeOptions): Bridge {
     // Agents list their tools when their process starts: restart them so the panel tools appear or go.
     void agent?.restart();
   };
+  openDataChanged = (on) => {
+    // Switched off: a request in flight ends at once and the agents are told Open data is off.
+    if (!on) openDataClient.cancelAll();
+    // Agents list their tools when their process starts: restart them so the open-data tools appear or go.
+    void agent?.restart();
+  };
   projectOpened = () => {
     approvals.announce();
     extensions.projectChanged();
+    site.projectChanged();
   };
   const agent: Team | null = options.agent
     ? new Team(
@@ -419,11 +474,50 @@ export function createBridge(options: BridgeOptions): Bridge {
             : {}),
           ...(agent ? { team: agent.tools, claims: agent.claimTools, workers: agent.workerTools } : {}),
           plans: { ask: (parts) => plans.ask(caller.agent, parts) },
+          simulation: {
+            doc: () => scene.scene.doc,
+            site: () => site.site,
+            context: () => context.items,
+            rhino: () =>
+              rhino.mirroredObjects.flatMap((o) =>
+                o.bounds ? [{ id: o.id, name: o.name ?? o.id, bounds: o.bounds }] : [],
+              ),
+          },
+          context: {
+            summary: () => context.summary(),
+            nearest: (near, o) => context.nearest(near, o),
+            byId: (id) => context.byId(id),
+            sourceName: (sourceId) =>
+              OPEN_DATA_SOURCES.find((s) => s.id === sourceId)?.attribution ?? sourceId,
+            taken: () => new Set(Object.keys(scene.scene.doc.elements)),
+          },
+          ...(settings.featureOn("openData")
+            ? {
+                openData: {
+                  sources: () => describeSources((id) => settings.openDataAllows(id), settings.portalHosts),
+                  site: () => site.site,
+                  setSite: (next) => site.set(next),
+                },
+                surface: { client: openDataClient, site: () => site.site, contextStore: context },
+                weather: {
+                  client: openDataClient,
+                  site: () => site.site,
+                  allows: (id) => settings.openDataAllows(id),
+                },
+                urban: {
+                  client: openDataClient,
+                  site: () => site.site,
+                  portalHosts: () => settings.portalHosts,
+                  context,
+                },
+              }
+            : {}),
           ...(settings.featureOn("generatedPanels")
             ? {
                 panels: {
                   offer: (purpose) => panels.offer(caller.agent, purpose),
-                  open: (document) => panels.open(caller.agent, document),
+                  // An agent that cannot change the model gets an information panel (the host enforces it).
+                  open: (document) => panels.open(caller.agent, document, !changesModel(caller.tools)),
                   update: (patch) => panels.update(caller.agent, patch),
                   close: () => panels.close(caller.agent),
                 },
@@ -538,6 +632,9 @@ export function createBridge(options: BridgeOptions): Bridge {
         broadcastStatus();
         scene.greet(send);
         settings.greet(send);
+        site.greet(send);
+        context.greet(send);
+        send(openDataRecordMessage());
         approvals.announce(send);
         panels.greet(send);
         plans.greet(send);
@@ -581,7 +678,17 @@ export function createBridge(options: BridgeOptions): Bridge {
         return;
       }
       if (rhino.handleFromWeb(message)) return;
-      if (scene.handle(message, send) || settings.handle(message) || view.handle(message)) return;
+      if (message.type === "opendata.clear") {
+        openDataRecord.clear();
+        return;
+      }
+      if (
+        scene.handle(message, send) ||
+        settings.handle(message) ||
+        site.handle(message) ||
+        view.handle(message)
+      )
+        return;
       if (
         approvals.handle(message) ||
         plans.handle(message) ||
@@ -616,6 +723,9 @@ export function createBridge(options: BridgeOptions): Bridge {
     extensions,
     agentTokens,
     eyes,
+    site,
+    context,
+    openData: { client: openDataClient, record: openDataRecord },
     log,
     start: () =>
       new Promise((resolve, reject) => {

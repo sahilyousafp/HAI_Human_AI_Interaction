@@ -25,9 +25,20 @@ import type { PermissionDecision } from "../agent/approvals.ts";
 import { countByTag } from "../agent/ownership.ts";
 import type { PanelResult } from "../agent/panels.ts";
 import type { Caller } from "./agent-tokens.ts";
+import { type ContextTools, registerContextTools } from "./context-tools.ts";
+import { type OpenDataTools, registerOpenDataTools } from "./open-data-tools.ts";
 import { openPanelDescription } from "./panel-api.ts";
 import { pythonRunDescription } from "./python-api.ts";
 import { RHINO_DOCUMENT_DESCRIPTION, RHINO_RUN_DESCRIPTION, requirementPackages } from "./rhino-tools.ts";
+import {
+  registerSimulationGeometry,
+  registerSurfaceTemperature,
+  type SimulationTools,
+  type SurfaceTools,
+} from "./simulation-tools.ts";
+import { failure, text } from "./tool-results.ts";
+import { registerUrbanTools, type UrbanTools } from "./urban-tools.ts";
+import { registerWeatherTools, type WeatherTools } from "./weather-tools.ts";
 
 /** At most this many elements come back from one get_elements call. */
 const MAX_ELEMENTS = 200;
@@ -64,6 +75,18 @@ export interface SceneToolDeps {
   setView(request: ViewRequest): { ok: true } | { ok: false; error: string };
   /** Generated panels; absent while the Generated panels feature is switched off. */
   panels?: PanelTools;
+  /** Open data (the sources and the project's site); absent while the Open data switch is off. */
+  openData?: OpenDataTools;
+  /** The city context layer (read-only, outside the model). */
+  context?: ContextTools;
+  /** Urban's open-data tools (portals, buildings, vegetation, metrics); absent while Open data is off. */
+  urban?: UrbanTools;
+  /** The weather and climate tools; absent while Open data is off. */
+  weather?: WeatherTools;
+  /** The model as a simulation description (reads the model only). */
+  simulation?: SimulationTools;
+  /** The ground's surface temperature (open data); absent while Open data is off. */
+  surface?: SurfaceTools;
   /** Claude Code's permission prompt: whether a tool call may run (resolves when decided). */
   approve(
     tool: string,
@@ -189,12 +212,6 @@ export interface TeamTools {
 const stopSignal = (...signals: Array<AbortSignal | undefined>): AbortSignal =>
   AbortSignal.any(signals.filter((s): s is AbortSignal => s !== undefined));
 
-const text = (value: unknown) => ({
-  content: [
-    { type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) },
-  ],
-});
-const failure = (message: string) => ({ content: [{ type: "text" as const, text: message }], isError: true });
 const brief = (e: Element) => ({
   id: e.id,
   name: e.name,
@@ -692,7 +709,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       "offer_panel",
       {
         description:
-          'Asks the user whether they want a small panel for this task (for example sliders for a clearance and its tolerance). Offer one when the request is about tolerances, ranges or parameters the user will want to feel out, or when they say they want to tune, adjust or try values themselves, and do so before you change the model for them; do not offer for one-off edits. The user answers with a nod, a click or a shake, and this call waits for the answer (at most a minute): "accepted" (now call open_panel), "skipped" (carry on in chat) or "expired". If another agent\'s panel or offer is showing, your offer waits behind it (at most two wait, and at most a minute) and you are told how long you waited; you cannot have two offers at once, nor offer while a panel of yours is open.',
+          'Asks the user whether they want a small panel for this task (for example sliders for a clearance and its tolerance). Offer one when the request is about tolerances, ranges or parameters the user will want to feel out, or when they say they want to tune, adjust or try values themselves, and do so before you change the model for them; do not offer for one-off edits. The user answers with a nod, a click or a shake, and this call waits for the answer (at most a minute): "accepted" (now call open_panel), "skipped" (carry on in chat) or "expired". If another agent\'s panel or offer is showing, your offer waits behind it (at most two wait, and at most a minute) and you are told how long you waited; you cannot have two offers at once, nor offer while a panel of yours is open. Every agent may offer a panel; if you cannot change the model, yours is information only (a table, a chart, a comparison, a summary the user reads at a glance).',
         inputSchema: z.object({
           purpose: z
             .string()
@@ -776,6 +793,13 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       },
     );
   }
+
+  if (deps.openData) registerOpenDataTools(register, deps.openData);
+  if (deps.urban) registerUrbanTools(register, deps.urban);
+  if (deps.weather) registerWeatherTools(register, deps.weather);
+  if (deps.simulation) registerSimulationGeometry(register, deps.simulation);
+  if (deps.surface) registerSurfaceTemperature(register, deps.surface);
+  if (deps.context) registerContextTools(register, deps.context, (ops) => deps.apply(ops, caller.agent));
 
   const { python, rhinoPython } = deps;
   if (python) {

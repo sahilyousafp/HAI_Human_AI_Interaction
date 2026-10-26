@@ -19,7 +19,9 @@ context: |
   `rhino_run_python` runs Python 3 inside the open Rhino 8 document through our plugin. Both show the code and the
   packages for approval and are not sandboxed. McNeel's RhinoAI MCP server is not required, wrapped or detected. Our
   own Rhino plugin adds camera sync, selection sync, the Python runner, and ghost previews.
-  Everything runs on localhost: servers bind to 127.0.0.1 only and require a random per-session token.
+  Everything runs on localhost: servers bind to 127.0.0.1 only and require a random per-session token. The one
+  exception is open data: when the user switches it on (off by default) the bridge asks a fixed list of open-data hosts
+  over HTTPS, and a request carries a place, an area, a time or a search text, never the user's work.
   Privacy: camera frames never leave the perception Web Worker; only landmarks, gestures and intents cross it.
   No emotion inference; face blendshapes are only explicit control switches.
   Latency: gesture navigation and selection must never wait on the LLM.

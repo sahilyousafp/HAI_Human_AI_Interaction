@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import { parseFrontmatter } from "./frontmatter.ts";
 import {
   agentsDir,
   allowedHaiTools,
+  changesModel,
   ensureDefaultAgents,
   managedDefinition,
   readRoster,
@@ -16,12 +17,28 @@ import {
 const project = () => mkdtempSync(join(tmpdir(), "hai-roster-"));
 
 describe("the team", () => {
-  it("defaults created once: mochi on Sonnet and four specialists, as Claude Code agent files", () => {
+  it("defaults created once: mochi on Sonnet and the specialists, as Claude Code agent files", () => {
     const dir = project();
-    expect(ensureDefaultAgents(dir).sort()).toEqual(["architect", "climate", "mochi", "product", "reviewer"]);
+    expect(ensureDefaultAgents(dir).sort()).toEqual([
+      "architect",
+      "climate",
+      "mochi",
+      "product",
+      "reviewer",
+      "simulation",
+      "urban",
+    ]);
     expect(ensureDefaultAgents(dir)).toEqual([]); // nothing to write the second time
     const team = readRoster(dir);
-    expect(team.map((m) => m.name)).toEqual(["mochi", "architect", "climate", "product", "reviewer"]);
+    expect(team.map((m) => m.name)).toEqual([
+      "mochi",
+      "architect",
+      "climate",
+      "product",
+      "reviewer",
+      "simulation",
+      "urban",
+    ]);
     const mochi = team[0];
     expect(mochi).toMatchObject({ lead: true, model: "sonnet", writes: false });
     expect(parseFrontmatter(readFileSync(join(agentsDir(dir), "mochi.md"), "utf8"))?.fields.model).toBe(
@@ -160,9 +177,11 @@ describe("the team", () => {
         file("reviewer", "mcp__hai__create_elements, mcp__hai__offer_panel, mcp__hai__get_elements"),
       );
       const reviewer = names(dir, "reviewer");
-      for (const banned of ["create_elements", "offer_panel", "rhino_run_python", "python_run"])
+      for (const banned of ["create_elements", "rhino_run_python", "python_run"])
         expect(reviewer).not.toContain(`mcp__hai__${banned}`);
       expect(reviewer).toContain("mcp__hai__get_elements");
+      // Panels are for every agent: a reader's panel is information only.
+      expect(reviewer).toContain("mcp__hai__offer_panel");
       expect(names(dir, "climate")).toContain("mcp__hai__python_run");
       expect(names(dir, "climate")).not.toContain("mcp__hai__create_elements");
     });
@@ -200,14 +219,20 @@ describe("the team", () => {
       "camera_list",
       "camera_set",
       "capture_view",
+      "close_panel",
+      "context_get",
+      "context_list",
       "get_claims",
       "get_elements",
       "get_scene_summary",
       "get_user_context",
+      "offer_panel",
+      "open_panel",
       "release_claim",
       "request_claim",
       "rhino_get_document",
       "set_view",
+      "update_panel",
     ]);
     expect(tools("architect").has("create_elements")).toBe(true);
     expect(tools("mochi").has("delegate")).toBe(true);
@@ -229,23 +254,39 @@ describe("the team", () => {
       "camera_delete",
       "camera_list",
       "camera_set",
+      "climate_normals",
+      "close_panel",
+      "context_get",
+      "context_list",
       "get_claims",
       "get_elements",
+      "offer_panel",
+      "open_data_sources",
+      "open_panel",
       "release_claim",
       "request_claim",
       "rhino_get_document",
       "set_view",
+      "site_set",
+      "update_panel",
+      "weather_forecast",
+      "weather_now",
     ]);
     expect([...allowedHaiTools({ ...climate, writes: true })].sort()).toEqual([
       "camera_capture",
       "camera_delete",
       "camera_list",
       "camera_set",
+      "climate_normals",
       "close_panel",
+      "context_adopt",
+      "context_get",
+      "context_list",
       "create_elements",
       "get_claims",
       "get_elements",
       "offer_panel",
+      "open_data_sources",
       "open_panel",
       "python_run",
       "release_claim",
@@ -254,8 +295,11 @@ describe("the team", () => {
       "rhino_run_python",
       "set_tags",
       "set_view",
+      "site_set",
       "spawn_worker",
       "update_panel",
+      "weather_forecast",
+      "weather_now",
     ]);
   });
 
@@ -275,11 +319,17 @@ describe("the team", () => {
       "camera_delete",
       "camera_list",
       "camera_set",
+      "close_panel",
+      "context_get",
+      "context_list",
       "get_claims",
+      "offer_panel",
+      "open_panel",
       "release_claim",
       "request_claim",
       "rhino_get_document",
       "set_view",
+      "update_panel",
     ]);
   });
 
@@ -359,33 +409,37 @@ describe("the team", () => {
       expect(toolsOf(dir, "architect")).toEqual(expect.arrayContaining(PANEL));
     });
 
-    it("Reviewer cannot offer, and neither can Mochi or Climate", () => {
+    it("every agent gets them, Reviewer, Mochi and Climate included (theirs are information panels)", () => {
       const dir = project();
       ensureDefaultAgents(dir);
       for (const name of ["reviewer", "mochi", "climate"]) {
-        expect(toolsOf(dir, name).filter((t) => PANEL.includes(t))).toEqual([]);
+        expect(toolsOf(dir, name)).toEqual(expect.arrayContaining(PANEL));
       }
     });
 
-    it("an agent that is not a writer gets none even if its definition lists them", () => {
+    it("an agent that is not a writer gets them even if its definition lists none, and still no model-changing tool", () => {
       const dir = project();
       ensureDefaultAgents(dir);
       writeFileSync(
         join(agentsDir(dir), "reviewer.md"),
-        "---\nname: reviewer\ndescription: Checks.\ntools: mcp__hai__get_elements, mcp__hai__offer_panel, mcp__hai__open_panel\n---\n\nYou review.\n",
+        "---\nname: reviewer\ndescription: Checks.\ntools: mcp__hai__get_elements, mcp__hai__create_elements\n---\n\nYou review.\n",
       );
-      expect(toolsOf(dir, "reviewer").sort()).toEqual([
-        "camera_capture",
-        "camera_delete",
-        "camera_list",
-        "camera_set",
-        "get_claims",
-        "get_elements",
-        "release_claim",
-        "request_claim",
-        "rhino_get_document",
-        "set_view",
-      ]);
+      const tools = toolsOf(dir, "reviewer");
+      expect(tools).toEqual(expect.arrayContaining(PANEL));
+      expect(tools).not.toContain("create_elements");
+    });
+
+    it("a panel is information only exactly for an agent that cannot change the model", () => {
+      const dir = project();
+      ensureDefaultAgents(dir);
+      const may = (name: string) => {
+        const member = readRoster(dir).find((m) => m.name === name);
+        if (!member) throw new Error(`no ${name}`);
+        return changesModel(allowedHaiTools(member));
+      };
+      expect(may("architect")).toBe(true);
+      for (const name of ["mochi", "climate", "reviewer"]) expect(may(name)).toBe(false);
+      expect(changesModel(null)).toBe(true);
     });
   });
 
@@ -410,5 +464,228 @@ describe("the team", () => {
     writeFileSync(join(agentsDir(dir), "half.md"), "---\nname: half\n---\n");
     expect(readRoster(dir)).toEqual([]);
     expect(readdirSync(agentsDir(dir))).toHaveLength(2);
+  });
+});
+
+describe("Urban", () => {
+  const toolsOf = (dir: string, name: string) => {
+    const member = readRoster(dir).find((m) => m.name === name);
+    if (!member) throw new Error(`no ${name}`);
+    return allowedHaiTools(member);
+  };
+  const URBAN = ["open_data_search", "open_data_get", "urban_buildings", "urban_vegetation", "urban_metrics"];
+
+  it("is in the default team, reads only, with its own colour, speech names and the urban tools", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    const urban = readRoster(dir).find((m) => m.name === "urban");
+    expect(urban).toMatchObject({ writes: false, lead: false });
+    expect(urban?.aliases).toEqual(expect.arrayContaining(["urbanist", "planner"]));
+    const tools = toolsOf(dir, "urban");
+    for (const tool of [
+      ...URBAN,
+      "open_data_sources",
+      "site_set",
+      "context_list",
+      "context_get",
+      "offer_panel",
+    ])
+      expect(tools.has(tool), tool).toBe(true);
+    for (const tool of ["create_elements", "update_elements", "context_adopt", "python_run", "spawn_worker"])
+      expect(tools.has(tool), tool).toBe(false);
+  });
+
+  it("cannot change the model, whatever its file lists", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    writeFileSync(
+      join(agentsDir(dir), "urban.md"),
+      "---\nname: urban\ndescription: Urban.\ntools: mcp__hai__create_elements, mcp__hai__context_adopt, mcp__hai__urban_buildings\n---\n\nUrban.\n",
+    );
+    const tools = toolsOf(dir, "urban");
+    expect(tools.has("create_elements")).toBe(false);
+    expect(tools.has("context_adopt")).toBe(false);
+    // The role's own tools come from the role, not from an older file that never listed them.
+    expect(tools.has("urban_metrics")).toBe(true);
+  });
+
+  it("a project with the earlier five agents gains Urban only, and edits are kept", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    rmSync(join(agentsDir(dir), "urban.md"));
+    const edited = "---\nname: architect\ndescription: Mine.\ntools: Read\n---\n\nMine.\n";
+    writeFileSync(join(agentsDir(dir), "architect.md"), edited);
+    expect(ensureDefaultAgents(dir)).toEqual(["urban"]);
+    expect(readFileSync(join(agentsDir(dir), "architect.md"), "utf8")).toBe(edited);
+  });
+
+  it("the urban tools are Urban's alone: Mochi has the open-data pair, Reviewer and the writers have none", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    for (const name of ["mochi", "reviewer", "architect", "product", "climate"])
+      for (const tool of URBAN) expect(toolsOf(dir, name).has(tool), `${name} ${tool}`).toBe(false);
+    expect(toolsOf(dir, "mochi").has("open_data_sources")).toBe(true);
+    expect(toolsOf(dir, "reviewer").has("open_data_sources")).toBe(false);
+  });
+
+  it("every default agent has its own colour, clearly apart from the others", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    const rgb = (hex: string) => [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+    const team = readRoster(dir);
+    for (const a of team)
+      for (const b of team) {
+        if (a.name >= b.name) continue;
+        const [r1, g1, b1] = rgb(a.color) as number[];
+        const [r2, g2, b2] = rgb(b.color) as number[];
+        const distance = Math.hypot(
+          (r1 as number) - (r2 as number),
+          (g1 as number) - (g2 as number),
+          (b1 as number) - (b2 as number),
+        );
+        expect(distance, `${a.name} and ${b.name}`).toBeGreaterThan(50);
+      }
+  });
+
+  it("Mochi is told who handles what, with the specialists that are on the team", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    const text = rosterText(readRoster(dir));
+    expect(text).toContain("Who handles what");
+    expect(text).toContain("go to urban");
+    expect(text).toContain("go to climate");
+    expect(text).toContain("go to simulation");
+  });
+});
+
+describe("Climate with live data", () => {
+  const toolsOf = (dir: string, name: string) => {
+    const member = readRoster(dir).find((m) => m.name === name);
+    if (!member) throw new Error(`no ${name}`);
+    return allowedHaiTools(member);
+  };
+
+  it("has the weather tools and the open-data pair, keeps sun_study, and still cannot change the model", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    const tools = toolsOf(dir, "climate");
+    for (const tool of [
+      "weather_now",
+      "weather_forecast",
+      "climate_normals",
+      "open_data_sources",
+      "site_set",
+      "sun_study",
+    ])
+      expect(tools.has(tool), tool).toBe(true);
+    for (const tool of ["create_elements", "context_adopt", "urban_buildings"])
+      expect(tools.has(tool), tool).toBe(false);
+  });
+
+  it("an existing project's Climate file, written before the weather tools, still gets them (the role grants them)", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    writeFileSync(
+      join(agentsDir(dir), "climate.md"),
+      "---\nname: climate\ndescription: Sun.\ntools: mcp__hai__get_elements, mcp__hai__sun_study\n---\n\nSun.\n",
+    );
+    const tools = toolsOf(dir, "climate");
+    expect(tools.has("weather_now")).toBe(true);
+    expect(tools.has("sun_study")).toBe(true);
+  });
+
+  it("the weather tools are Climate's: Mochi, Reviewer and Urban have none", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    for (const name of ["mochi", "reviewer", "urban", "architect"])
+      for (const tool of ["weather_now", "weather_forecast", "climate_normals"])
+        expect(toolsOf(dir, name).has(tool), `${name} ${tool}`).toBe(false);
+  });
+});
+
+describe("Simulation", () => {
+  const member = (dir: string) => {
+    const found = readRoster(dir).find((m) => m.name === "simulation");
+    if (!found) throw new Error("no simulation");
+    return found;
+  };
+
+  it("is in the default team, reads only, with its own speech names", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    const simulation = member(dir);
+    expect(simulation).toMatchObject({ writes: false, lead: false });
+    expect(simulation.aliases).toEqual(expect.arrayContaining(["simulator", "sim", "ladybug"]));
+  });
+
+  it("has the simulation, weather and open-data tools and still cannot change the model", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    const tools = allowedHaiTools(member(dir));
+    for (const tool of [
+      "surface_temperature",
+      "simulation_geometry",
+      "weather_now",
+      "climate_normals",
+      "open_data_sources",
+      "site_set",
+      "sun_study",
+      "context_get",
+      "offer_panel",
+    ])
+      expect(tools.has(tool), tool).toBe(true);
+    for (const tool of ["create_elements", "context_adopt", "urban_buildings", "python_run", "spawn_worker"])
+      expect(tools.has(tool), tool).toBe(false);
+  });
+
+  it("is given its tools by its role even when its file lists nothing of the app's", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    writeFileSync(
+      join(agentsDir(dir), "simulation.md"),
+      "---\nname: simulation\ndescription: Sim.\ntools: Read, mcp__hai__create_elements\n---\n\nSim.\n",
+    );
+    const tools = allowedHaiTools(member(dir));
+    expect(tools.has("surface_temperature")).toBe(true);
+    expect(tools.has("create_elements")).toBe(false);
+  });
+
+  it("keeps the Ladybug tools of the user's own MCP server in its Claude Code definition", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    const { tools } = managedDefinition(member(dir));
+    expect(tools).toContain("mcp__ladybug__*");
+    expect(tools).toContain("mcp__hai__surface_temperature");
+    expect(tools).not.toContain("mcp__hai__create_elements");
+  });
+
+  it("the simulation tools are Simulation's alone", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    for (const name of ["mochi", "reviewer", "architect", "product", "climate", "urban"]) {
+      const found = readRoster(dir).find((m) => m.name === name) as ReturnType<typeof member>;
+      const tools = allowedHaiTools(found);
+      for (const tool of ["surface_temperature", "simulation_geometry"])
+        expect(tools.has(tool), `${name} ${tool}`).toBe(false);
+    }
+  });
+
+  it("a project from before Simulation gains it and keeps every edit", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    rmSync(join(agentsDir(dir), "simulation.md"));
+    const edited = "---\nname: urban\ndescription: Mine.\ntools: Read\n---\n\nMine.\n";
+    writeFileSync(join(agentsDir(dir), "urban.md"), edited);
+    expect(ensureDefaultAgents(dir)).toEqual(["simulation"]);
+    expect(readFileSync(join(agentsDir(dir), "urban.md"), "utf8")).toBe(edited);
+  });
+
+  it("says what it cannot do without Ladybug and never calls a result compliant", () => {
+    const dir = project();
+    ensureDefaultAgents(dir);
+    const { prompt } = member(dir);
+    expect(prompt).toContain("not installed");
+    expect(prompt).toContain("Never call a result compliant");
+    expect(prompt).toContain("(not the air)");
   });
 });

@@ -218,25 +218,27 @@ function PanelShell({ panel, client, scene }: { panel: PanelView; client: PanelC
       <footer className="panel-foot">
         <button
           type="button"
-          className="secondary"
+          className={panel.readOnly ? "primary" : "secondary"}
           data-testid="panel-close"
           data-hand-press
-          title="Close and put the model back (Escape)"
+          title={panel.readOnly ? "Close the panel (Escape)" : "Close and put the model back (Escape)"}
           onClick={() => client.close()}
         >
           Close
         </button>
-        <button
-          type="button"
-          className="primary"
-          data-testid="panel-done"
-          data-hand-press
-          disabled={!panel.panelId}
-          title="Keep the result as one undo step and close"
-          onClick={() => client.done()}
-        >
-          Done
-        </button>
+        {!panel.readOnly && (
+          <button
+            type="button"
+            className="primary"
+            data-testid="panel-done"
+            data-hand-press
+            disabled={!panel.panelId}
+            title="Keep the result as one undo step and close"
+            onClick={() => client.done()}
+          >
+            Done
+          </button>
+        )}
       </footer>
     </section>
   );

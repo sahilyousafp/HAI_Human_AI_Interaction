@@ -15,6 +15,7 @@
     "@hai/scene": "workspace:*",
     "@modelcontextprotocol/node": "2.1.1",
     "@modelcontextprotocol/server": "2.3.1",
+    "geotiff": "3.0.5",
     "ws": "8.22.0",
     "zod": "4.6.7"
   },

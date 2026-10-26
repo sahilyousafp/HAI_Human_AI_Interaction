@@ -25,7 +25,7 @@ Depends on `add-parallel-agent-modelling` (claims, per-agent undo groups, owner 
 ## 4. Native subagents that only look (ends with: every agent can use read-only helpers)
 
 - [x] 4.1 Add `Task` and read-only entries for every other team name plus `scout` and `checker` to the managed `--agents` file; verify with a unit test that no helper lists a tool that changes the model or runs a script
-- [ ] 4.2 Verify with a live run (manual, `HAI_LIVE_CLAUDE=1`) that Architect can start a read-only helper, that a helper named after a teammate has no modelling tools, and record the result in `docs/decisions.md`
+- [x] 4.2 Verify with a live run (manual, `HAI_LIVE_CLAUDE=1`) that Architect can start a read-only helper, that a helper named after a teammate has no modelling tools, and record the result in `docs/decisions.md`
 
 ## 5. Showing workers (ends with: you can see who is working under whom)
 
@@ -37,9 +37,9 @@ Depends on `add-parallel-agent-modelling` (claims, per-agent undo groups, owner 
 
 - [x] 6.1 Queue up to two waiting offers in the panel broker with a 60 s expiry, tell the offering agent it waits, and label every panel and offer with its agent; verify "Second offer waits" and the expiry
 - [x] 6.2 Add the plan card (`confirm_plan`): Mochi's instruction and tool text, a card that lists parts with remove buttons and returns the confirmed parts, and nothing handed out before the user answers; verify "Plan card" with a fake-CLI script and an e2e
-- [ ] 6.3 Live check (manual): a worker's panel offer queues behind its parent's open panel, and both complete
+- [x] 6.3 Live check (manual): a worker's panel offer queues behind its parent's open panel, and both complete
 
 ## 7. Docs and demo
 
 - [x] 7.1 Update `docs/agents.md` (workers, the session limit, Stop, native helpers, panels with several agents) and `docs/parallel.md`; the docs tests must pass
-- [ ] 7.2 Write `demos/17-workers.md` ("One architect, five hands": split, three workers nested under Architect filling their parts together, one worker's panel waiting its turn, Stop ending all) and record the clip; verify on a real run with Claude Code
+- [x] 7.2 Write `demos/17-workers.md` ("One architect, five hands": split, three workers nested under Architect filling their parts together, one worker's panel waiting its turn, Stop ending all) and record the clip; verify on a real run with Claude Code

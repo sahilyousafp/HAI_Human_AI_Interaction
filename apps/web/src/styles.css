@@ -3508,3 +3508,137 @@ kbd {
   padding: 6px 12px;
   font-size: 13px;
 }
+
+/* Settings > Open data: the site form, the portal list and the notes that go with a source. */
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px 12px;
+  align-items: end;
+}
+.settings-field {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.settings-input {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+.settings-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.settings-actions .settings-input {
+  flex: 1 1 180px;
+}
+.settings-status {
+  font-size: 13px;
+  color: var(--muted);
+}
+.settings-limit {
+  color: var(--risk);
+}
+.list-row .secondary,
+.list-row .primary {
+  white-space: nowrap;
+}
+
+/* The ground overlay's legend and the credits of the context layer. */
+.context-legend {
+  position: absolute;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: grid;
+  gap: 8px;
+  max-width: min(520px, 60%);
+  padding: 8px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--glass, var(--bg));
+  backdrop-filter: blur(14px);
+  font-size: 12px;
+  color: var(--ink);
+  pointer-events: none;
+}
+.context-raster {
+  display: grid;
+  gap: 3px;
+}
+.context-scale {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+}
+.context-range {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.context-stale {
+  margin: 0;
+  color: var(--risk);
+  font-weight: 500;
+}
+.context-credits {
+  margin: 0;
+}
+
+/* A curated extension's card in the Extensions tab. */
+.curated-card {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 12px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--fill, transparent);
+  font-size: 13px;
+}
+.curated-card header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.curated-card p {
+  margin: 0;
+}
+.curated-licence {
+  color: var(--ink);
+}
+.curated-command {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--r-s);
+  background: var(--bg);
+  border: 0.5px solid var(--line);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.curated-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3px;
+}
+.curated-warning {
+  color: var(--risk);
+}

@@ -1,6 +1,7 @@
 import type { McpServerSpec } from "@hai/protocol";
 import { type FormEvent, useState, useSyncExternalStore } from "react";
 import type { AgentClient } from "./agent-client.ts";
+import { type CuratedExtension, LADYBUG } from "./curated-extensions.ts";
 
 type Pair = { key: string; value: string };
 const STATUS_TONE: Record<string, "ok" | "risk" | "warn"> = {
@@ -77,13 +78,22 @@ function SecretRows({
 const toRecord = (rows: Pair[]) =>
   Object.fromEntries(rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value]));
 
-function AddServerForm({ client, busy }: { client: AgentClient; busy: boolean }) {
-  const [name, setName] = useState("");
+function AddServerForm({
+  client,
+  busy,
+  preset,
+}: {
+  client: AgentClient;
+  busy: boolean;
+  /** A curated extension to start the form from (its name, arguments and variable names; nothing is added yet). */
+  preset?: CuratedExtension | null;
+}) {
+  const [name, setName] = useState(preset?.name ?? "");
   const [transport, setTransport] = useState<"stdio" | "http">("stdio");
   const [command, setCommand] = useState("");
-  const [args, setArgs] = useState("");
+  const [args, setArgs] = useState(preset?.args.join("\n") ?? "");
   const [url, setUrl] = useState("");
-  const [secrets, setSecrets] = useState<Pair[]>([]);
+  const [secrets, setSecrets] = useState<Pair[]>(preset?.envKeys.map((key) => ({ key, value: "" })) ?? []);
   const ready = name.trim() !== "" && (transport === "stdio" ? command.trim() !== "" : url.trim() !== "");
 
   const submit = (e: FormEvent) => {
@@ -177,6 +187,59 @@ function AddServerForm({ client, busy }: { client: AgentClient; busy: boolean })
 }
 
 /**
+ * A curated extension the user may add: what it is, its licence, what it needs, the command that installs it (run by
+ * the user in a terminal, never by the app) and a button that fills the form below. Nothing is installed or added until
+ * the user presses Add server.
+ */
+function CuratedCard({
+  extension,
+  installed,
+  onSetUp,
+}: {
+  extension: CuratedExtension;
+  installed: boolean;
+  onSetUp: () => void;
+}) {
+  const id = extension.name;
+  return (
+    <article className="curated-card" data-testid={`curated-${id}`}>
+      <header>
+        <strong>{extension.title}</strong>
+        <span className="extension-scope" data-testid={`curated-${id}-licence`}>
+          {extension.licence}
+        </span>
+        {installed && (
+          <span className="extension-status" data-tone="ok" data-testid={`curated-${id}-installed`}>
+            added to this project
+          </span>
+        )}
+      </header>
+      <p>{extension.summary}</p>
+      <p className="curated-licence" data-testid={`curated-${id}-note`}>
+        {extension.licenceNote}
+      </p>
+      <p className="muted">Install it yourself in a terminal; this prints the settings to use below:</p>
+      <code className="curated-command" data-testid={`curated-${id}-command`}>
+        {extension.installCommand}
+      </code>
+      <ul className="curated-list">
+        {extension.requirements.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+        {extension.warnings.map((line) => (
+          <li key={line} className="curated-warning">
+            {line}
+          </li>
+        ))}
+      </ul>
+      <button type="button" className="secondary" data-testid={`curated-${id}-setup`} onClick={onSetUp}>
+        {installed ? "Change its settings" : "Fill in the form below"}
+      </button>
+    </article>
+  );
+}
+
+/**
  * The agent's extensions: the MCP servers and skills the session loaded (with status), and the open project's own
  * servers and skills, which can be added and removed. Secret values are typed into password fields and never shown.
  */
@@ -192,6 +255,8 @@ export function ExtensionsView({ client }: { client: AgentClient }) {
     if (source.trim() && !busy && client.installSkill(source.trim())) setSource("");
   };
   const loaded = extensions?.loaded ?? null;
+  const [preset, setPreset] = useState<CuratedExtension | null>(null);
+  const [setups, setSetups] = useState(0);
 
   return (
     <div className="extensions-view" data-testid="extensions-view">
@@ -267,9 +332,17 @@ export function ExtensionsView({ client }: { client: AgentClient }) {
             None yet. Servers added here go in the project's .mcp.json, so Claude Code uses them too.
           </p>
         )}
-        <details className="extension-add">
+        <CuratedCard
+          extension={LADYBUG}
+          installed={extensions?.projectServers.some((s) => s.name === LADYBUG.name) ?? false}
+          onSetUp={() => {
+            setPreset(LADYBUG);
+            setSetups((n) => n + 1);
+          }}
+        />
+        <details className="extension-add" open={setups > 0 || undefined}>
           <summary>Add a server</summary>
-          <AddServerForm client={client} busy={busy} />
+          <AddServerForm key={setups} client={client} busy={busy} preset={preset} />
         </details>
       </section>
 

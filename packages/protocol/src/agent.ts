@@ -199,8 +199,20 @@ export type TeamMemberInfo = z.infer<typeof TeamMemberInfo>;
 export const HAI_TOOLS = {
   read: ["get_scene_summary", "get_elements", "get_user_context", "capture_view"],
   write: ["create_elements", "update_elements", "delete_elements", "set_selection"],
-  /** Offering and showing a generated panel; granted to every agent that changes the model. */
+  /** Offering and showing a generated panel; granted to every agent (a reader's panel is information only). */
   panel: ["offer_panel", "open_panel", "update_panel", "close_panel"],
+  /** What the city context layer holds, and its items near a point; every agent (reading changes nothing). */
+  context: ["context_list", "context_get"],
+  /** Bringing items of the context layer into the model; agents that change the model. */
+  contextWrite: ["context_adopt"],
+  /** Searching open-data portals, buildings, vegetation and urban metrics around the site; Urban (only while Open data is on). */
+  urban: ["open_data_search", "open_data_get", "urban_buildings", "urban_vegetation", "urban_metrics"],
+  /** The weather now and forecast, and climate normals, for the site; Climate and Simulation (only while Open data is on). */
+  weather: ["weather_now", "weather_forecast", "climate_normals"],
+  /** The ground's surface temperature around the site (open data) and the model as a simulation description; Simulation. */
+  simulation: ["surface_temperature", "simulation_geometry"],
+  /** Which open-data sources are on, and proposing the project's site (the user decides); only while Open data is on. */
+  openData: ["open_data_sources", "site_set"],
   team: ["delegate", "team_status", "cancel_task", "confirm_plan"],
   climate: ["sun_study"],
   /** Moves the viewer's camera and nothing else, so every agent has it. */
@@ -267,6 +279,8 @@ export const ApprovalRequest = z.strictObject({
   expiresAt: z.number(),
   /** The packages a Python run would install on the user's machine, shown on its card. */
   installs: z.array(z.string()).optional(),
+  /** Set when the app asks every time: the card has no "Always allow". */
+  once: z.boolean().optional(),
 });
 export type ApprovalRequest = z.infer<typeof ApprovalRequest>;
 

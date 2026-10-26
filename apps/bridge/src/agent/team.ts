@@ -88,11 +88,17 @@ const refusal = (requestId: string, message: string): Message => ({
 
 /** What an agent is told when the panel it opened was closed. */
 function panelNote(closure: PanelClosure): string {
+  const who = closure.by === "user" ? "The user closed" : "The app closed";
+  if (closure.readOnly) {
+    const refused = closure.refused
+      ? " It tried to change the model, which an information panel cannot do: nothing was changed."
+      : "";
+    return `[panel] ${who} your information panel "${closure.title}"; the model is unchanged.${refused} Reply in chat if it helps, and do not reopen it unless asked.`;
+  }
   const outcome =
     closure.outcome === "kept"
       ? "kept the result: it is in the model as one undo step"
       : "discarded the result: the model is as it was";
-  const who = closure.by === "user" ? "The user closed" : "The app closed";
   return `[panel] ${who} the panel "${closure.title}" and ${outcome}. Reply in chat if it helps, and do not reopen it unless asked.`;
 }
 
@@ -1224,7 +1230,10 @@ export class Team {
     return {
       type: "agents.snapshot",
       id: randomUUID(),
-      payload: { definitions: this.members.map((m) => ({ ...m })), ...(saved ? { saved } : {}) },
+      payload: {
+        definitions: this.members.map(({ grants: _grants, ...m }) => m),
+        ...(saved ? { saved } : {}),
+      },
     };
   }
 

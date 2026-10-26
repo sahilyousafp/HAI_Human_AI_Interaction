@@ -132,6 +132,13 @@ function shootOne(rig: ShotRig, request: ShotRequest, spec: AgentCamera): ShotIm
           object.visible = true;
         });
       }
+      // The city context is shown in every picture, even when the user has hidden it from their own view.
+      if (object.userData.contextLayer === true && !object.visible) {
+        object.visible = true;
+        undo.push(() => {
+          object.visible = false;
+        });
+      }
       const mesh = object as THREE.Mesh;
       const clean = object.userData.cleanColor as string | undefined;
       if (!request.selection && clean && mesh.isMesh && mesh.material instanceof THREE.MeshStandardMaterial) {

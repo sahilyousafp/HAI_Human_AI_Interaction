@@ -70,6 +70,10 @@ describe("SettingsHub", () => {
           showOwners: true,
           showCameras: true,
           maxSessions: 6,
+          showContext: true,
+          openDataSources: {},
+          openDataAcknowledged: [],
+          portalHosts: [],
           modelling: "auto",
         },
       }),
@@ -148,6 +152,10 @@ describe("SettingsHub", () => {
           showOwners: true,
           showCameras: true,
           maxSessions: 6,
+          showContext: true,
+          openDataSources: {},
+          openDataAcknowledged: [],
+          portalHosts: [],
           modelling: "auto",
         },
       }),
@@ -197,5 +205,91 @@ describe("SettingsHub", () => {
     const parsed = parseMessage(JSON.stringify({ type: "scene.undo", id: "m2", payload: {} }));
     if (!parsed.ok) throw new Error(parsed.error);
     expect(hub.handle(parsed.message)).toBe(false);
+  });
+});
+
+describe("SettingsHub open data", () => {
+  const featureOn = (on: boolean) => setSettings({ features: { openData: on } });
+
+  it("is off by default: no source is allowed and nothing is fetched", () => {
+    const hub = new SettingsHub(null, () => {});
+    expect(hub.featureOn("openData")).toBe(false);
+    for (const id of ["met-norway", "overpass", "portals"]) expect(hub.openDataAllows(id)).toBe(false);
+  });
+
+  it("switched on, every source is allowed except one with a limit, which waits for the user's acknowledgement", () => {
+    const hub = new SettingsHub(null, () => {});
+    hub.handle(featureOn(true));
+    expect(hub.openDataAllows("met-norway")).toBe(true);
+    expect(hub.openDataAllows("open-meteo")).toBe(false);
+    hub.handle(setSettings({ openDataAcknowledged: ["open-meteo"] }));
+    expect(hub.openDataAllows("open-meteo")).toBe(true);
+  });
+
+  it("a source can be switched off on its own, and the other choices are kept", () => {
+    const hub = new SettingsHub(null, () => {});
+    hub.handle(featureOn(true));
+    hub.handle(setSettings({ openDataSources: { overpass: false } }));
+    hub.handle(setSettings({ openDataSources: { nws: false } }));
+    expect(hub.openDataAllows("overpass")).toBe(false);
+    expect(hub.openDataAllows("nws")).toBe(false);
+    expect(hub.openDataAllows("met-norway")).toBe(true);
+    hub.handle(setSettings({ openDataSources: { overpass: true } }));
+    expect(hub.openDataAllows("overpass")).toBe(true);
+    expect(hub.openDataAllows("nws")).toBe(false);
+  });
+
+  it("switching Open data off stops every source at once", () => {
+    const hub = new SettingsHub(null, () => {});
+    hub.handle(featureOn(true));
+    expect(hub.openDataAllows("overpass")).toBe(true);
+    hub.handle(featureOn(false));
+    expect(hub.openDataAllows("overpass")).toBe(false);
+  });
+
+  it("an unknown source is never allowed", () => {
+    const hub = new SettingsHub(null, () => {});
+    hub.handle(featureOn(true));
+    expect(hub.openDataAllows("somewhere-else")).toBe(false);
+  });
+
+  it("keeps the choices in the file and drops what it does not understand", () => {
+    const file = settingsFile(tempRoot());
+    const hub = new SettingsHub(file, () => {});
+    hub.handle(
+      setSettings({
+        features: { openData: true },
+        openDataSources: { overpass: false },
+        openDataAcknowledged: ["open-meteo"],
+        portalHosts: ["data.example.org"],
+        showContext: false,
+      }),
+    );
+    const again = new SettingsHub(file, () => {});
+    expect(again.openDataAllows("overpass")).toBe(false);
+    expect(again.openDataAllows("open-meteo")).toBe(true);
+    expect(again.portalHosts).toEqual(["data.example.org"]);
+    expect(again.showContext).toBe(false);
+    writeFileSync(
+      file,
+      JSON.stringify({
+        features: { openData: true },
+        openDataSources: { overpass: "no", bogus: false },
+        openDataAcknowledged: [3, "bogus"],
+        portalHosts: ["https://x/y", "data.example.org", 7],
+      }),
+    );
+    const broken = new SettingsHub(file, () => {});
+    expect(broken.openDataAllows("overpass")).toBe(true);
+    expect(broken.portalHosts).toEqual(["data.example.org"]);
+    expect(broken.showContext).toBe(true);
+  });
+
+  it("refuses a portal host that is not a host name", () => {
+    expect(
+      parseMessage(
+        JSON.stringify({ type: "settings.set", id: "m", payload: { portalHosts: ["http://127.0.0.1/x"] } }),
+      ).ok,
+    ).toBe(false);
   });
 });

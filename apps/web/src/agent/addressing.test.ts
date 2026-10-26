@@ -7,10 +7,26 @@ const team = [
   { name: "product", aliases: ["products", "producer"] },
   { name: "climate", aliases: ["climates", "climat"] },
   { name: "reviewer", aliases: ["review or", "reviewers", "review"] },
+  { name: "urban", aliases: ["urbanist", "planner", "urbans", "urbane"] },
 ];
 const address = (text: string) => addressOf(text, team);
 
 describe("addressing an agent by name", () => {
+  it("Urban is addressed by its own name and by the names it is heard as", () => {
+    expect(address("Urbanist, what is around the site?")).toEqual({
+      agent: "urban",
+      text: "what is around the site?",
+    });
+    expect(address("Planner, how green is it here")).toEqual({
+      agent: "urban",
+      text: "how green is it here",
+    });
+    expect(address("Urban, list the buildings within 300 metres")).toEqual({
+      agent: "urban",
+      text: "list the buildings within 300 metres",
+    });
+  });
+
   it("spoken specialist name: the name picks Architect and leaves the request", () => {
     expect(address("Architect, add a stair core here")).toEqual({
       agent: "architect",

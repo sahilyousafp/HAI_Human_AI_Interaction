@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { expect, type Page, test } from "@playwright/test";
+import type { Team } from "../apps/bridge/src/agent/team.ts";
 import {
   askForPanel,
   current,
@@ -247,5 +248,24 @@ test.describe("a hostile panel", () => {
       probe.closeAllConnections();
       await new Promise((resolve) => probe.close(resolve));
     }
+  });
+});
+
+test.describe("an information panel", () => {
+  test("cannot preview or commit a change: a reader's hostile panel moves nothing and is told", async ({
+    page,
+  }) => {
+    await start(page);
+    const before = await sceneOf(page);
+    // The hostile panel's attempt, named like the others in this file: attempt("informationOnly", preview and commit).
+    // One line: the fake agent takes the first line of a delegated task as its title.
+    const doc = `<p id="out">waiting</p><script>hai.on("problem", (m) => { document.getElementById("out").textContent = m; }); hai.scene.get({ ids: ["wall-n"] }).then(({ elements }) => { hai.preview([{ op: "update", id: elements[0].id, patch: { height: 9000 } }]); hai.commit(); });</script>`;
+    // Climate does not change the model, so its panel is information only.
+    await (current().agent as Team).request(`delegate climate: panel ${doc}`);
+    await expect(offerCard(page)).toBeVisible();
+    await page.getByTestId("offer-open").click();
+    await expect(frame(page).locator("#out")).toContainText("information only");
+    expect(await sceneOf(page)).toEqual(before);
+    await expect(shell(page).getByTestId("panel-done")).toHaveCount(0);
   });
 });

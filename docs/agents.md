@@ -9,7 +9,9 @@ HAI gives you a small design team made of your own Claude. **Mochi** leads it: e
 | **Mochi** | Takes every request, hands work to the specialists, reports what everyone is doing. Runs on Claude Sonnet. | No |
 | **Architect** | Massing, levels, walls, slabs, columns, cores and stairs | Yes |
 | **Product** | Furniture, fixtures and components at product scale | Yes |
-| **Climate** | Sun path, shadows, orientation and daylight (sun studies) | No |
+| **Climate** | Sun path, shadows, orientation and daylight (sun studies), and with Open data on the weather now, the forecast and the climate normals of the site | No |
+| **Urban** | The place around the project: the neighbouring buildings and trees, green cover, urban metrics and the datasets of open-data portals (needs Open data on) | No |
+| **Simulation** | Performance: the ground's surface temperature from open satellite data, sun and shade, and daylight and energy studies when you have installed Ladybug Tools MCP. Reports method, data and age, never a verdict | No |
 | **Reviewer** | Checks the model against the brief and common rules, and reports issues. Never edits. | No |
 
 The team is written into the project the first time you send a request: one Claude Code agent file per agent in `.claude/agents/`. HAI never overwrites a file you have changed. Because they are Claude Code's own agent files, the same agents also work when you run `claude --agent architect` in a terminal.
@@ -18,7 +20,7 @@ The team is written into the project the first time you send a request: one Clau
 
 - **Each agent is its own Claude Code session.** The bridge starts `claude -p --agent <name>` for each agent when it first has work, in the project folder, with your own Claude Code setup (see [agent.md](agent.md) for the exact command). Each keeps its own conversation (`.hai/agent/<name>/session.json`), so Architect remembers its earlier tasks, and each resumes after a crash, an idle close or a restart.
 - **Mochi hands out tasks.** It calls `delegate` with a specialist's name, a short title and a complete instruction. That returns at once, so Mochi's turn ends and Mochi is free for your next question while the specialist works.
-- **Each agent only has its own tools.** Every session gets its own random token for the app's tool server. From the token the bridge knows which agent is calling and offers it only the `hai` tools its definition lists. Reviewer has no tool that changes the model at all, and an agent marked as not changing the model never gets those tools, whatever its file lists. Every agent that does change the model also gets `spawn_worker` (see [Workers](#workers)) and the four panel tools (`offer_panel`, `open_panel`, `update_panel`, `close_panel`), `python_run` and `rhino_run_python` whatever its file lists, and every agent gets `set_view` and its four camera tools, so older projects get them too. This holds for what the model can see as well as what the bridge allows: HAI starts each agent with its definition as the app wants it (`--agents`, see [agent.md](agent.md)), taking the app's tools from the agent's role and everything else (prompt, model, your own tools such as `Read`) from the file, because Claude Code hides any tool the file's `tools:` line does not list. Mochi hands a panel task to Architect or Product, which offers it ([agent.md](agent.md#generated-panels)). Changing an agent's tools starts it in a new conversation, since an agent resuming an old one keeps to what it said it could not do.
+- **Each agent only has its own tools.** Every session gets its own random token for the app's tool server. From the token the bridge knows which agent is calling and offers it only the `hai` tools its definition lists. Reviewer has no tool that changes the model at all, and an agent marked as not changing the model never gets those tools, whatever its file lists. Every agent that does change the model also gets `spawn_worker` (see [Workers](#workers)), `python_run` and `rhino_run_python` whatever its file lists, and every agent gets `set_view`, its four camera tools and the four panel tools (`offer_panel`, `open_panel`, `update_panel`, `close_panel`), so older projects get them too; the panel of an agent that does not change the model is information only. This holds for what the model can see as well as what the bridge allows: HAI starts each agent with its definition as the app wants it (`--agents`, see [agent.md](agent.md)), taking the app's tools from the agent's role and everything else (prompt, model, your own tools such as `Read`) from the file, because Claude Code hides any tool the file's `tools:` line does not list. Mochi can show information in a panel of its own, and hands a panel for tuning values to Architect or Product, which offers it ([agent.md](agent.md#generated-panels)). Changing an agent's tools starts it in a new conversation, since an agent resuming an old one keeps to what it said it could not do.
 - **Mochi reports.** When every task Mochi handed out in one turn has finished, the bridge sends Mochi a short report (each task's agent, outcome and the specialist's summary) and Mochi tells you what was done. A report waits while you are talking to Mochi.
 
 The first time you used HAI in a project before the team existed, that one conversation becomes Mochi's, so nothing is lost.
@@ -83,7 +85,7 @@ The **Agents** tab lists the team from the project's files, with each agent's mo
 | Name | The file name and Claude Code's `name` (lower-case letters, digits and -) |
 | What it does | Claude Code's `description`; Mochi reads it to choose the agent |
 | Model | Claude Code's `model` (`sonnet`, `opus`, `haiku`, or the same as Claude Code) |
-| What it may do | Its `hai` tools: read the model, change the model, sun studies |
+| What it may do | Its `hai` tools: read the model, change the model, sun studies, read the city context, open data, urban open data, weather and climate data, simulation inputs (what fetches open data only while Open data is on) |
 | Other Claude Code tools | Any other tools it may use, for example `Read` or `WebSearch` |
 | Instructions | The file's body |
 | Other names it is heard as, colour | `.hai/agents.json` |
@@ -125,6 +127,20 @@ To check what it made, an agent does not borrow your view. Each agent places **c
 - A sun study takes its pictures in the sun's light for those pictures only; your own light does not change.
 
 A set of four 1024-pixel pictures takes about 0.2 s and eight about 0.3 s on a laptop with a GPU, with no gap longer than a frame or two in your own view.
+
+## Urban, Climate and Simulation with open data
+
+With **Open data** on (Settings > Open data, off by default, see [open-data.md](open-data.md)) three specialists can read what is known about the place. None of them changes the model.
+
+- **Urban** finds datasets in open-data portals (`open_data_search`, `open_data_get`), fetches the neighbouring buildings and trees around the site (`urban_buildings`), the green cover and greenness (`urban_vegetation`) and works out the metrics of the site (`urban_metrics`: building coverage, mean height, green share, tree count). What it fetches is drawn in the grey **context layer** beside your model, which no hand can select. To use a neighbour in the model, Urban asks an agent that changes the model, which can adopt it (`context_adopt`).
+- **Climate** gains `weather_now`, `weather_forecast` and `climate_normals` next to its sun studies. Every answer says its source and how old it is.
+- **Simulation** reads the ground's temperature (`surface_temperature`: the temperature of the surface seen from a satellite, not of the air, from a scene that is days old, with its date and a colour overlay), describes the model for a simulation (`simulation_geometry`) and, when you installed the Ladybug Tools MCP server as an extension, uses it for daylight and energy studies. Each of its calls asks for your approval. Without it Simulation tells you how to install it and offers sun studies and the data above instead.
+
+The project's **site** (latitude, longitude, where north is) is what turns a place into model coordinates. Mochi or a specialist proposes it with `site_set` and an approval card shows the values before anything is saved. Mochi sends questions about the surroundings, plants and green cover to Urban, weather questions to Climate and heat, daylight and energy questions to Simulation.
+
+## Information panels
+
+Every agent can show a panel, Mochi and the three above included. The panel of an agent that does not change the model is **information only**: it shows a table, a comparison or a status, has a **Close** button where a writer's panel has **Done**, and cannot move anything. A panel that tries to preview or commit a change is refused, the model does not move, and the agent is told when the panel closes. See [agent.md](agent.md#generated-panels).
 
 ## Climate's sun studies
 

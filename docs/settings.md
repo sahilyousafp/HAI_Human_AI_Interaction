@@ -10,6 +10,7 @@ The first page lists the sections; each opens its own page with a back button, a
 | **Camera and tracking** | Which camera, whether its image is mirrored, what is drawn over the preview, the live Gestures and Detection cards, and the frame rate, inference time and backend ([perception.md](perception.md)) |
 | **Features** | One switch per feature: see below |
 | **Modelling** | How the agent models: Automatic, Rhino or Python only, and what is connected now: see below |
+| **Open data** | The Open data switch, each source with its host and licence, the portals, the project's site, Show context and the requests made ([open-data.md](open-data.md)) |
 | **Drawing aids** | Grid, Ortho, Endpoint, Midpoint, Centre, Project and Perpendicular for the create tools and Move ([tools.md](tools.md)) |
 | **Gestures** | What each gesture does, for each hand where a gesture belongs to one, including what a fist drag does (pan by default) and what a still fist does (cancel) ([gestures.md](gestures.md)) |
 | **Tool rings** | The eight slots of the tools ring and of the create ring ([tools.md](tools.md)) |
@@ -38,6 +39,7 @@ Every feature can be switched off on its own, so a demo or a release shows exact
 | Number what I point at | Off by default. When on, elements your hand rests on while you speak get numbered markers and count as what you mean |
 | Generated panels | The agent is not offered the panel tools, and an open panel closes and drops its preview |
 | Parallel modelling | One agent changes the model at a time, as before; scopes, owner tints, claim boxes and the Parts list highlight are off ([parallel.md](parallel.md)) |
+| Open data | Off by default. While it is off, no agent is offered an open-data tool and nothing is fetched; switched on, agents may read the sources listed in Settings > Open data ([open-data.md](open-data.md)) |
 | Latency readout | The status bar does not show the gesture-to-render time |
 
 The list lives in `packages/protocol/src/features.ts`. To put a new feature behind a switch, add it there and check `features.on("<id>")` where the feature acts (a tool can name its feature in `Tool.feature` instead).

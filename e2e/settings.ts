@@ -5,6 +5,7 @@ export type SettingsSection =
   | "camera"
   | "features"
   | "modelling"
+  | "open-data"
   | "drawing-aids"
   | "gestures"
   | "rings"

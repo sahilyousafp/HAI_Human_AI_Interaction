@@ -14,6 +14,7 @@ interface Window {
     wear?(id: string): { color: string; outline: string | null; glow: string | null } | null;
     claimBoxes?(): string[];
     cameraMarkers?(): string[];
+    context?(): { buildings: number; trees: number; rasters: number; visible: boolean; stale: boolean };
     renders(): number;
     project(point: [number, number, number]): [number, number];
     overSection(x: number, y: number): boolean;

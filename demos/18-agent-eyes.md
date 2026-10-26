@@ -1,6 +1,6 @@
 # Demo 18 - "The agent checks its work"
 
-> Draft: written before a real run with Claude Code. Do a full practice run and fix this script to match what the agent really does before recording; it chooses its own cameras and geometry, so the pictures differ each time.
+> Checked on a real run with Claude Code (see the checklist below). An automated recording of the flow is made by `HAI_LIVE_CLAUDE=1 pnpm exec playwright test e2e/agent-eyes-demo.spec.ts` (1080p, typed request, no hands or voice; it lands in `test-results`). The agent chooses its own cameras and geometry, so the pictures differ each time, and it does not always find something to fix: in the checked run it set the roof's base so that the slab sat on the column tops instead of finding a missing column.
 
 Target length 45-60 s, 16:9, captions burned in. You keep orbiting the model with both hands while Architect builds a pavilion and checks it from its own cameras. Its thumbnails appear on its chip, it finds a missing column and fixes it, and your view never moves. Show my hands is on.
 
@@ -23,12 +23,12 @@ Target length 45-60 s, 16:9, captions burned in. You keep orbiting the model wit
 
 ## Check on a real run with Claude Code (fill in before posting)
 
-- Did Architect place cameras or use a preset, and how many pictures did it take: ______
-- Did it change anything after looking (what): ______
-- Did your own camera stay yours the whole time, even in the middle of a drag: yes / no
-- Did a picture ever show your selection or hover: yes / no
-- Time from the model changing to the agent's first picture: ______ s
-- The thumbnail on the chip matches the agent's description of what it saw: yes / no
+- Did Architect place cameras or use a preset, and how many pictures did it take: it used its own cameras unprompted, from the north, north-east, south-west and above (four pictures); the chip showed "Architect iso", then "Architect ne".
+- Did it change anything after looking (what): yes, it set the roof slab's base to 3200 mm so that it sits on the column tops (a slab extrudes down from its base).
+- Did your own camera stay yours the whole time, even in the middle of a drag: yes, the camera was identical before and after the run. The automated run does not drag, so check the drag by hand when recording.
+- Did a picture ever show your selection or hover: no in the pictures checked (nothing was selected in the automated run); select something while it builds when recording, to be sure.
+- Time from the model changing to the agent's first picture: the first thumbnail was on the chip 50 s after the request (Mochi's hand-off and the building included).
+- The thumbnail on the chip matches the agent's description of what it saw: yes, the north-east picture shows the six columns and the slab roof next to the neighbouring block, as it described.
 
 ## Check after recording
 

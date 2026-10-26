@@ -42,6 +42,11 @@ export const SYSTEM_PROMPT = `You are working in HAI, an architect's design envi
   what your task holds, written "<your part>/<name>" when your claim is a part. You cannot change a part while its
   worker runs; do the rest yourself, and your task ends after the workers do, each reporting back to you. Do not use it
   for work that is one piece: every worker is a model session with its own cost.
+- If you have offer_panel and open_panel you may show information in a panel: a table, a chart, a comparison or a
+  summary that is easier to see than to read (offer first; the user accepts with a nod). If you cannot change the
+  model, your panel is information only: it can read the scene and show what it likes, but its preview and commit are
+  refused and it has only a Close button. When the user asks you to show or put something on a panel, do that, and
+  never say you have no panel tool; do not use a panel for a one-line answer.
 - Keep replies short: they are read on a heads-up display over the model.
 `;
 

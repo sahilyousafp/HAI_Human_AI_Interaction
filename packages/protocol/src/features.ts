@@ -81,6 +81,13 @@ export const FEATURES = [
       "Agents given separate parts of the model work at the same time, each in its own undo step. Off: one agent changes the model at a time.",
   },
   {
+    id: "openData",
+    label: "Open data",
+    description:
+      "Agents may read open data about the place (portals, buildings, vegetation, weather, ground temperature). Requests carry a place, never your model. Off: nothing is fetched.",
+    defaultOn: false,
+  },
+  {
     id: "latencyReadout",
     label: "Latency readout",
     description: "Gesture to render time in the status bar.",

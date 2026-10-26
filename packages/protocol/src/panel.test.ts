@@ -11,13 +11,26 @@ describe("panel messages", () => {
     ["panel.offer", { offerId: "o1", purpose: "Set the wall to column clearance", state: "waiting" }],
     ["panel.offer", { offerId: "o1", purpose: "Tolerance", state: "expired", agent: "architect" }],
     ["panel.open", { panelId: "p1", offerId: "o1", ...doc }],
+    ["panel.open", { panelId: "p1", offerId: "o1", agent: "climate", readOnly: true, ...doc }],
     ["panel.update", { panelId: "p1", ...doc }],
+    ["panel.update", { panelId: "p1", readOnly: true, ...doc }],
+    ["panel.refused", { panelId: "p1", attempt: "commit" }],
+    ["panel.refused", { panelId: "p1", attempt: "preview" }],
     ["panel.close", { panelId: "p1", reason: "agent" }],
     ["panel.offer.answer", { offerId: "o1", answer: "accepted" }],
     ["panel.status", { panelId: "p1", state: "failed", reason: "The document threw on load" }],
     ["panel.closed", { panelId: "p1", outcome: "kept" }],
   ])("accepts %s", (type, payload) => {
     expect(parseMessage(frame(type, payload)).ok).toBe(true);
+  });
+
+  it("a panel document the agent writes cannot carry the read-only mark: only the bridge sets it", () => {
+    expect(PanelDocument.safeParse({ ...doc, readOnly: false }).success).toBe(false);
+    expect(PanelDocument.safeParse({ ...doc, readOnly: true }).success).toBe(false);
+  });
+
+  it("rejects a refusal of an unknown attempt", () => {
+    expect(parseMessage(frame("panel.refused", { panelId: "p1", attempt: "delete" })).ok).toBe(false);
   });
 
   it.each([

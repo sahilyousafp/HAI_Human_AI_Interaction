@@ -28,4 +28,4 @@
 ## 5. Docs and demo
 
 - [x] 5.1 Update `docs/agent.md` (the four tools in the tool table), `docs/agents.md` and `docs/settings.md` (Show cameras); the docs tests must pass
-- [ ] 5.2 Write `demos/18-agent-eyes.md` ("The agent checks its work": the user keeps orbiting, Architect's cameras and thumbnails appear, a missing column is found and fixed, the user's view never moved) and record the clip; verify on a real run with Claude Code
+- [x] 5.2 Write `demos/18-agent-eyes.md` ("The agent checks its work": the user keeps orbiting, Architect's cameras and thumbnails appear, a missing column is found and fixed, the user's view never moved) and record the clip; verify on a real run with Claude Code

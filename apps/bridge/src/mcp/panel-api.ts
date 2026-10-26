@@ -11,6 +11,8 @@ export const PANEL_HAND_CONTROLS = ["button", "checkbox", "radio", "range"] as c
 export function openPanelDescription(elementShapes: string): string {
   return `Puts a small panel on the user's screen, written by you for this task, after the user accepted your offer_panel. Without an accepted offer this is refused. Returns "ready" once the page loaded your document, or the error if it did not (then fix it with update_panel). The call returns at once; the user keeps the panel open as long as they like, and you are told when it closes and whether they kept the result.
 
+If you cannot change the model, your panel is INFORMATION ONLY: it can read the scene and show anything it likes, but hai.preview and hai.commit are refused (the page tells the panel and you hear it when the panel closes), and the panel has only a Close button. Use it for a table, a chart, a comparison or a summary; do not put sliders in it.
+
 You write ONE self-contained HTML document (at most ${PANEL_MAX_BYTES / 1024} KB) with a title and a size in pixels (width 200-720, height 120-720; default 320 x 240). Keep it small: a few labelled controls with units, and a readout. Show the tolerance state in the panel itself (for example turn the readout red outside the range). The panel runs in a sandbox: no network, no external scripts, fonts or images (use data: URIs), no storage, no windows, and no access to your tools or to the app. Use inline <script> and <style> only.
 
 THE hai OBJECT (the only way out of the panel):

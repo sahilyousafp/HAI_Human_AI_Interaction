@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import type { PythonEnv } from "../apps/bridge/src/python/python-env.ts";
-import { type Bridge, createBridge } from "../apps/bridge/src/server.ts";
+import { type Bridge, type BridgeOptions, createBridge } from "../apps/bridge/src/server.ts";
 import type { AgentProvider } from "../packages/agent-core/src/index.ts";
 import { E2E_ORIGINS } from "./stack.ts";
 
@@ -30,6 +30,8 @@ export async function startTestBridge(
     pythonEnv?: PythonEnv;
     /** The folder to work in (settings, project, mirror), to start a second bridge on the same workspace. */
     root?: string;
+    /** A local stand-in for the open-data hosts (their real addresses are never contacted in tests). */
+    openData?: BridgeOptions["openData"];
   } = {},
 ): Promise<Bridge & { port: number }> {
   const port = nextPort++;
@@ -51,6 +53,7 @@ export async function startTestBridge(
     settingsFile,
     mirrorDir: join(root, "mirror"),
     ...(options.pythonEnv ? { pythonEnv: options.pythonEnv } : {}),
+    ...(options.openData ? { openData: options.openData } : {}),
     ...(options.agent ? { agent: { provider: options.agent } } : {}),
   });
   await bridge.start();

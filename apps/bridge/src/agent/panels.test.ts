@@ -320,9 +320,65 @@ describe("PanelBroker closing", () => {
     const { broker, openPanel, closed, closures } = setup();
     await openPanel();
     closed("kept");
-    expect(closures).toEqual([{ agent: "architect", title: "Clearance", outcome: "kept", by: "user" }]);
+    expect(closures).toEqual([
+      {
+        agent: "architect",
+        title: "Clearance",
+        outcome: "kept",
+        by: "user",
+        readOnly: false,
+        refused: false,
+      },
+    ]);
     expect(broker.stateOf("architect")).toBe("none");
     expect(broker.active).toBe(false);
+  });
+
+  describe("an information panel (its agent does not change the model)", () => {
+    const openInfo = async (broker: PanelBroker, answer: (v: "accepted") => void, status: () => void) => {
+      const offer = broker.offer("climate", "Show the numbers");
+      answer("accepted");
+      await offer;
+      const opened = broker.open("climate", doc, true);
+      status();
+      expect(await opened).toEqual({ ok: true });
+    };
+
+    it("is marked read-only when it opens, on an update and for a page that connects later", async () => {
+      const { broker, sent, ofType, answer, status } = setup();
+      await openInfo(broker, answer, () => status("ready"));
+      expect(ofType("panel.open")[0]?.payload).toMatchObject({ agent: "climate", readOnly: true });
+      const updated = broker.update("climate", { title: "Numbers" });
+      status("ready");
+      await updated;
+      expect(ofType("panel.update")[0]?.payload).toMatchObject({ readOnly: true, title: "Numbers" });
+      const late: Message[] = [];
+      broker.greet((m) => late.push(m));
+      expect(late[0]?.payload).toMatchObject({ readOnly: true });
+      expect(sent.length).toBeGreaterThan(0);
+    });
+
+    it("a writer's panel carries no read-only mark", async () => {
+      const { ofType, openPanel } = setup();
+      await openPanel();
+      expect(ofType("panel.open")[0]?.payload).not.toHaveProperty("readOnly");
+    });
+
+    it("tells the agent, when it closes, that a change was tried and refused", async () => {
+      const { broker, closures, answer, status, panelId, closed } = setup();
+      await openInfo(broker, answer, () => status("ready"));
+      broker.handle({ type: "panel.refused", id: "r", payload: { panelId: panelId(), attempt: "commit" } });
+      closed("discarded");
+      expect(closures[0]).toMatchObject({ agent: "climate", readOnly: true, refused: true });
+    });
+
+    it("ignores a refusal that is not about the open information panel", async () => {
+      const { broker, closures, openPanel, panelId, closed } = setup();
+      await openPanel();
+      broker.handle({ type: "panel.refused", id: "r", payload: { panelId: panelId(), attempt: "commit" } });
+      closed("kept");
+      expect(closures[0]).toMatchObject({ readOnly: false, refused: false });
+    });
   });
 
   it("the agent closing it tells the page and discards", async () => {

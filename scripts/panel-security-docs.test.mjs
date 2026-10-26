@@ -34,6 +34,7 @@ describe("SECURITY.md on generated panels", () => {
     ["navigate the app", "topNavigation"],
     ["send itself elsewhere", "selfNavigation"],
     ["invalid operation changes nothing", "malformedOperations"],
+    ["preview or commit a change", "informationOnly"],
   ])("promises that a panel cannot %s, and a hostile panel tries to", (promise, attempt) => {
     expect(`${section}\n${agentDoc}`.toLowerCase()).toContain(promise.toLowerCase());
     expect(hostile).toContain(`attempt("${attempt}"`);

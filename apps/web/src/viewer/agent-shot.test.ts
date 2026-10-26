@@ -201,3 +201,31 @@ describe("pictures from an agent's camera", () => {
     expect(calls).toBe(2);
   });
 });
+
+describe("the city context in pictures", () => {
+  it("is shown in an agent's picture even when the user has hidden it, and hidden again for the user's frame", async () => {
+    const { rig, scene, gl } = setup();
+    const context = new THREE.Group();
+    context.userData = { contextLayer: true };
+    context.visible = false; // Settings > Open data > Show context is off
+    scene.add(context);
+    const visibleAtRender: boolean[] = [];
+    const render = gl.render;
+    gl.render = (s: THREE.Scene, cam: THREE.Camera) => {
+      visibleAtRender.push(context.visible);
+      render(s, cam);
+    };
+    await takeShots(rig, request);
+    expect(visibleAtRender).toEqual([true, false]);
+    expect(context.visible).toBe(false);
+  });
+
+  it("is left alone when the user shows it", async () => {
+    const { rig, scene } = setup();
+    const context = new THREE.Group();
+    context.userData = { contextLayer: true };
+    scene.add(context);
+    await takeShots(rig, request);
+    expect(context.visible).toBe(true);
+  });
+});

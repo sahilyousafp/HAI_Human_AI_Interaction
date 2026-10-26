@@ -157,9 +157,12 @@ test.describe("switched off, and Rhino", () => {
 
   test("Rhino objects that carry hai.owner wear their owner's colour too", async ({ page }) => {
     await start(page);
-    const rhino = await connectFakeRhino({ port: (bridge as Bridge).port } as AddressInfo, {
-      token: (bridge as Bridge & { token: string }).token,
-    });
+    const rhino = await connectFakeRhino(
+      { port: (bridge as Bridge & { port: number }).port } as AddressInfo,
+      {
+        token: (bridge as Bridge & { token: string }).token,
+      },
+    );
     const asset = await rhino.uploadMesh(1000, [0, 0, 0]);
     rhino.send(
       "rhino.objects",

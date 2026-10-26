@@ -26,6 +26,10 @@ export interface PanelClosure {
   outcome: PanelOutcome;
   /** Who ended it: the user (Done, Close, Escape), the agent, or the system (connection lost, switched off). */
   by: "user" | "agent" | "system";
+  /** An information panel (its agent does not change the model): it could show, never change. */
+  readOnly: boolean;
+  /** An information panel tried to preview or commit a change and was refused. */
+  refused: boolean;
 }
 
 /** open_panel and update_panel give up waiting for the page to report the document loaded after this long. */
@@ -50,6 +54,10 @@ interface Slot {
   state: "waiting" | "accepted" | "open";
   panelId?: string;
   document?: PanelDocument;
+  /** Set when the panel opens, from the agent's role: an information panel cannot change the model. */
+  readOnly?: boolean;
+  /** An information panel tried to change the model. */
+  refused?: boolean;
   /** Settles the agent's offer_panel call. */
   answer?(answer: OfferAnswer): void;
   timer?: ReturnType<typeof setTimeout>;
@@ -191,7 +199,7 @@ export class PanelBroker {
    * The agent supplies the panel. Refused unless the user accepted an offer of this agent that no panel has used.
    * Resolves when the page has loaded the document (ready) or failed to.
    */
-  open(agent: string | null, document: PanelDocument): Promise<PanelResult> {
+  open(agent: string | null, document: PanelDocument, readOnly = false): Promise<PanelResult> {
     const slot = this.slot;
     if (slot?.agent === agent && slot.state === "open") {
       return Promise.resolve({
@@ -208,10 +216,17 @@ export class PanelBroker {
     slot.state = "open";
     slot.panelId = randomUUID();
     slot.document = document;
+    slot.readOnly = readOnly;
     this.broadcast({
       type: "panel.open",
       id: randomUUID(),
-      payload: { panelId: slot.panelId, offerId: slot.offerId, ...(agent ? { agent } : {}), ...document },
+      payload: {
+        panelId: slot.panelId,
+        offerId: slot.offerId,
+        ...(agent ? { agent } : {}),
+        ...(readOnly ? { readOnly } : {}),
+        ...document,
+      },
     });
     return this.awaitLoad(slot);
   }
@@ -233,7 +248,7 @@ export class PanelBroker {
     this.broadcast({
       type: "panel.update",
       id: randomUUID(),
-      payload: { panelId: slot.panelId, ...document.data },
+      payload: { panelId: slot.panelId, ...(slot.readOnly ? { readOnly: true } : {}), ...document.data },
     });
     return this.awaitLoad(slot);
   }
@@ -273,6 +288,11 @@ export class PanelBroker {
             state === "ready" ? { ok: true } : { ok: false, error: reason ?? "The panel failed to load." },
           );
         }
+        return true;
+      }
+      case "panel.refused": {
+        const slot = this.slot;
+        if (slot?.panelId === message.payload.panelId && slot.readOnly) slot.refused = true;
         return true;
       }
       case "panel.closed": {
@@ -335,6 +355,7 @@ export class PanelBroker {
           panelId: slot.panelId,
           offerId: slot.offerId,
           ...(slot.agent ? { agent: slot.agent } : {}),
+          ...(slot.readOnly ? { readOnly: true } : {}),
           ...slot.document,
         },
       });
@@ -369,7 +390,14 @@ export class PanelBroker {
     this.slot = null;
     this.settleLoad(slot, { ok: false, error: "The panel was closed before it loaded." });
     this.options.log?.info("panel closed", { outcome, by, ...(slot.agent ? { agent: slot.agent } : {}) });
-    this.options.closed?.({ agent: slot.agent, title: slot.document?.title ?? slot.purpose, outcome, by });
+    this.options.closed?.({
+      agent: slot.agent,
+      title: slot.document?.title ?? slot.purpose,
+      outcome,
+      by,
+      readOnly: slot.readOnly === true,
+      refused: slot.refused === true,
+    });
     this.promote();
   }
 

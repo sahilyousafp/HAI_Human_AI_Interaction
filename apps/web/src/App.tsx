@@ -13,6 +13,8 @@ import {
   type ConnectionState,
   connectToBridge,
 } from "./bridge/connection.ts";
+import { ContextLegend } from "./context/ContextLegend.tsx";
+import { ContextClient } from "./context/context-client.ts";
 import { ProjectExporter } from "./export/exporter.ts";
 import { buildInWorker } from "./export/rhino-client.ts";
 import { ModelImporter } from "./import/importer.ts";
@@ -21,6 +23,8 @@ import { convertInWorker } from "./import/rhino-client.ts";
 import { GestureSettingsCard } from "./input/GestureSettingsCard.tsx";
 import { GestureSettings } from "./input/gesture-settings.ts";
 import { InputBus } from "./input/input-bus.ts";
+import { OpenDataSettings } from "./open-data/OpenDataSettings.tsx";
+import { OpenDataStore } from "./open-data/open-data-store.ts";
 import { PanelClient } from "./panel/panel-client.ts";
 import { CameraSettings } from "./perception/CameraSettings.tsx";
 import { CameraView } from "./perception/CameraView.tsx";
@@ -156,6 +160,15 @@ export function App() {
     [],
   );
   const rhinoState = useSyncExternalStore(mirror.subscribe, mirror.getStatus);
+  // Open data (Settings > Open data): the source choices, the project's site and the requests made.
+  const openData = useMemo(
+    () => new OpenDataStore((message: Message) => connection.current?.send(message) ?? false),
+    [],
+  );
+  // The city context the agents fetched, drawn read-only beside the model.
+  const contextClient = useMemo(() => new ContextClient(), []);
+  const contextState = useSyncExternalStore(contextClient.subscribe, contextClient.getSnapshot);
+  const openDataState = useSyncExternalStore(openData.subscribe, openData.getSnapshot);
   // Who owns what: tint and outline in the agents' colours, region claims as boxes, and the claim under the pointer in
   // the panel lit. Only while Parallel modelling is on; the owner tint and boxes follow Show owners.
   // Outline and tint what agents own, and draw their region claims (Settings > Modelling > Show owners).
@@ -491,6 +504,8 @@ export function App() {
         agent.handle(message) ||
         panels.handle(message) ||
         mirror.handle(message) ||
+        openData.handle(message) ||
+        contextClient.handle(message) ||
         sceneClient.handle(message)
       )
         return;
@@ -516,7 +531,20 @@ export function App() {
       conn.close();
       viewLink.dispose();
     };
-  }, [sceneClient, tools, viewLink, agent, panels, mirror, gestureSettings, speaker, features, aids]);
+  }, [
+    sceneClient,
+    tools,
+    viewLink,
+    agent,
+    panels,
+    mirror,
+    openData,
+    contextClient,
+    gestureSettings,
+    speaker,
+    features,
+    aids,
+  ]);
 
   // A panel needs the bridge (its Done sends the result there) and its feature: without either it closes and its
   // preview goes, so the model shows what the bridge has.
@@ -626,6 +654,14 @@ export function App() {
           onMaxSessions={changeMaxSessions}
         />
       ),
+    },
+    {
+      id: "open-data",
+      title: "Open data",
+      icon: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9S9.5 5.5 12 3z",
+      tint: "var(--tint-green)",
+      detail: featureState.openData ? "On" : "Off",
+      render: () => <OpenDataSettings store={openData} flags={features} />,
     },
     {
       id: "drawing-aids",
@@ -816,7 +852,10 @@ export function App() {
             markers={markers}
             owners={owners}
             cameraMarkers={cameraMarkerList}
+            context={contextState}
+            showContext={openDataState.showContext}
           >
+            <ContextLegend state={contextState} visible={openDataState.showContext} />
             {featureState.agent && (
               <AgentPanel
                 client={agent}

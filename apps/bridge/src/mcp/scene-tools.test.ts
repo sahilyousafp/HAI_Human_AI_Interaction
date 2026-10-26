@@ -155,6 +155,9 @@ describe("MCP endpoint access", () => {
         "camera_set",
         "capture_view",
         "close_panel",
+        "context_adopt",
+        "context_get",
+        "context_list",
         "create_elements",
         "delete_elements",
         "get_elements",
@@ -166,6 +169,7 @@ describe("MCP endpoint access", () => {
         "set_selection",
         "set_tags",
         "set_view",
+        "simulation_geometry",
         "sun_study",
         "update_elements",
         "update_panel",
@@ -461,6 +465,38 @@ describe("panel tools", () => {
     expect(refused.isError).toBe(true);
     expect(textOf(refused)).toMatch(/offer_panel/);
     expect(browser.received.some((m) => m.type === "panel.open")).toBe(false);
+  });
+
+  describe("information panels", () => {
+    const READ = new Set(["get_elements", "offer_panel", "open_panel", "update_panel", "close_panel"]);
+    const WRITE = new Set([...READ, "create_elements", "update_elements"]);
+    /** Offers, accepts and opens a panel as an agent with these tools; returns what the page was sent. */
+    async function openAs(tools: Set<string>, input: Record<string, unknown> = {}) {
+      const address = await start();
+      const browser = await page(address);
+      const agent = await mcp(address, agentToken({ agent: "someone", tools }));
+      const offered = agent.callTool({ name: "offer_panel", arguments: { purpose: "Show" } });
+      browser.send("panel.offer.answer", { offerId: (await offerOf(browser)).offerId, answer: "accepted" });
+      await offered;
+      const opened = agent.callTool({ name: "open_panel", arguments: { ...panelDoc, ...input } });
+      const sent = await panelOf(browser).then(() => browser.received.find((m) => m.type === "panel.open"));
+      browser.send("panel.status", { panelId: await panelOf(browser), state: "ready" });
+      await opened;
+      return sent?.payload as Record<string, unknown>;
+    }
+
+    it("an agent that cannot change the model gets a read-only panel, marked by the bridge", async () => {
+      expect(await openAs(READ)).toMatchObject({ readOnly: true });
+    });
+
+    it("an agent that changes the model gets an ordinary panel", async () => {
+      expect(await openAs(WRITE)).not.toHaveProperty("readOnly");
+    });
+
+    it("a writer cannot ask for the mark, and a reader cannot drop it, by what it writes in the call", async () => {
+      expect(await openAs(WRITE, { readOnly: true })).not.toHaveProperty("readOnly");
+      expect(await openAs(READ, { readOnly: false })).toMatchObject({ readOnly: true });
+    });
   });
 
   it("an oversized document is refused with the limit, and the accepted offer stays usable", async () => {

@@ -28,7 +28,18 @@ export function toolSource(tool: string): string {
 }
 
 /** A readable one-line summary of a tool's input: the command, path, URL or query when there is one. */
+/** App tools that ask the user every time, whatever "Always allow" says: they save something that is the user's. */
+export const ASK_EVERY_TIME: readonly string[] = [`mcp__${HAI_SERVER}__site_set`];
+
+/** The summary of a proposed site: the place and the north angle, in words. */
+function summarizeSite(input: Record<string, unknown>): string {
+  const num = (v: unknown) => (typeof v === "number" ? String(v) : "?");
+  const north = typeof input.north_deg === "number" ? `, true north ${input.north_deg} degrees from +Y` : "";
+  return `Set the project's site to latitude ${num(input.latitude)}, longitude ${num(input.longitude)}${north}`;
+}
+
 export function summarizeInput(tool: string, input: Record<string, unknown>): string {
+  if (tool === `mcp__${HAI_SERVER}__site_set`) return summarizeSite(input);
   const pick = (...keys: string[]) =>
     keys.map((k) => input[k]).find((v) => typeof v === "string") as string | undefined;
   const known =
@@ -127,6 +138,7 @@ export class ApprovalBroker {
       const approved = new Set(projectDir ? readApprovedPackages(projectDir) : []);
       return this.alwaysAllowed.includes(tool) && installs.every((spec) => approved.has(packageName(spec)));
     }
+    if (ASK_EVERY_TIME.includes(tool)) return false;
     return tool.startsWith(`mcp__${HAI_SERVER}__`) || this.alwaysAllowed.includes(tool);
   }
 
@@ -154,6 +166,7 @@ export class ApprovalBroker {
       summary: isCode ? summarizeCode(input) : summarizeInput(tool, input),
       input,
       ...(isCode ? { installs } : {}),
+      ...(ASK_EVERY_TIME.includes(tool) ? { once: true } : {}),
       ...(toolUseId ? { toolUseId } : {}),
       ...(agent ? { agent } : {}),
       expiresAt: Date.now() + timeoutMs,

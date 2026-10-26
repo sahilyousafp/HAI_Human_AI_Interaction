@@ -19,9 +19,11 @@ import {
   TeamTask,
 } from "./agent.ts";
 import { GestureBindingsSchema } from "./bindings.ts";
+import { ContextCredit, ContextItem } from "./context.ts";
 import { DrawingAidChoices } from "./drawing-aids.ts";
 import { BridgeStatusMessage, Envelope, HelloMessage, MessageId } from "./envelope.ts";
 import { FeatureChoices } from "./features.ts";
+import { OPEN_DATA_SOURCE_IDS, OpenDataRecordEntry, PortalHost, Site } from "./open-data.ts";
 import { PanelDocument, PanelId, PanelOfferState, PanelOutcome } from "./panel.ts";
 import {
   ModellingInUse,
@@ -83,6 +85,14 @@ export const Settings = z.strictObject({
   showCameras: z.boolean().default(true),
   /** How many agent sessions may run at once: Mochi, the specialists and their workers. Each is a model session with its own cost. */
   maxSessions: z.number().int().min(2).max(12).default(6),
+  /** Show the city context agents fetched (buildings, trees, ground data); agents' own pictures always include it. */
+  showContext: z.boolean().default(true),
+  /** Per-source choices for open data, where the user changed them; a source is on until switched off. */
+  openDataSources: z.record(z.string(), z.boolean()).default({}),
+  /** Sources whose limit the user acknowledged (a free service for non-commercial use only). */
+  openDataAcknowledged: z.array(z.string()).default([]),
+  /** Portal hosts the user added to the starter list. */
+  portalHosts: z.array(PortalHost).max(50).default([]),
 });
 export type Settings = z.infer<typeof Settings>;
 const Project = z.strictObject({ name: z.string(), path: z.string() });
@@ -299,10 +309,19 @@ export const PanelOfferMessage = message(
 /** The agent supplied the panel (the first document after an accepted offer). */
 export const PanelOpenMessage = message(
   "panel.open",
-  PanelDocument.extend({ panelId: PanelId, offerId: PanelId, agent: AgentName }),
+  PanelDocument.extend({
+    panelId: PanelId,
+    offerId: PanelId,
+    agent: AgentName,
+    /** Set by the bridge for an agent that does not change the model: the panel shows and cannot change anything. */
+    readOnly: z.boolean().optional(),
+  }),
 );
 /** The agent replaced the open panel's document; any uncommitted preview is discarded. */
-export const PanelUpdateMessage = message("panel.update", PanelDocument.extend({ panelId: PanelId }));
+export const PanelUpdateMessage = message(
+  "panel.update",
+  PanelDocument.extend({ panelId: PanelId, readOnly: z.boolean().optional() }),
+);
 /** The bridge closes the panel: the agent asked, or the Generated panels feature was switched off. */
 export const PanelCloseMessage = message(
   "panel.close",
@@ -446,8 +465,38 @@ export const SettingsSetMessage = message(
     showOwners: z.boolean().optional(),
     showCameras: z.boolean().optional(),
     maxSessions: z.number().int().min(2).max(12).optional(),
+    showContext: z.boolean().optional(),
+    /** Sources switched on or off; merged into the saved choices. */
+    openDataSources: z
+      .partialRecord(z.enum(OPEN_DATA_SOURCE_IDS as [string, ...string[]]), z.boolean())
+      .optional(),
+    openDataAcknowledged: z.array(z.enum(OPEN_DATA_SOURCE_IDS as [string, ...string[]])).optional(),
+    portalHosts: z.array(PortalHost).max(50).optional(),
   }),
 );
+/** The project's site, or null when it has none (sent on connect, project change and every change). */
+export const SiteSnapshotMessage = message("site.snapshot", z.strictObject({ site: Site.nullable() }));
+/** The user sets, changes or clears the project's site in Settings. */
+export const SiteSetMessage = message("site.set", z.strictObject({ site: Site.nullable() }));
+/** The open-data requests made in this session, newest last (sent on connect and after every request). */
+export const OpenDataRecordMessage = message(
+  "opendata.record",
+  z.strictObject({ entries: z.array(OpenDataRecordEntry).max(200) }),
+);
+/**
+ * The city context agents fetched (buildings, trees, ground data), drawn read-only beside the model. It is not part of
+ * the scene document. `stale` is set when the site changed after it was built.
+ */
+export const ContextSnapshotMessage = message(
+  "context.snapshot",
+  z.strictObject({
+    items: z.array(ContextItem).max(10_000),
+    stale: z.boolean(),
+    credits: z.array(ContextCredit),
+  }),
+);
+/** The user clears the list of requests (the cache stays). */
+export const OpenDataClearMessage = message("opendata.clear", z.strictObject({}));
 export const AgentSendMessage = message(
   "agent.send",
   z.strictObject({
@@ -525,6 +574,11 @@ export const PanelStatusMessage = message(
     reason: z.string().max(2000).optional(),
   }),
 );
+/** An information panel tried to preview or commit a change and was refused; the agent is told when it closes. */
+export const PanelRefusedMessage = message(
+  "panel.refused",
+  z.strictObject({ panelId: PanelId, attempt: z.enum(["preview", "commit"]) }),
+);
 /** The panel closed, and whether its result was kept (Done) or discarded. */
 export const PanelClosedMessage = message(
   "panel.closed",
@@ -540,6 +594,11 @@ export const Message = z.discriminatedUnion("type", [
   ProjectStatusMessage,
   RequestErrorMessage,
   SettingsSnapshotMessage,
+  SiteSnapshotMessage,
+  SiteSetMessage,
+  ContextSnapshotMessage,
+  OpenDataRecordMessage,
+  OpenDataClearMessage,
   AgentStatusMessage,
   AgentTranscriptMessage,
   AgentTurnStartMessage,
@@ -592,6 +651,7 @@ export const Message = z.discriminatedUnion("type", [
   ViewCapturedMessage,
   PanelOfferAnswerMessage,
   PanelStatusMessage,
+  PanelRefusedMessage,
   PanelClosedMessage,
 ]);
 export type Message = z.infer<typeof Message>;

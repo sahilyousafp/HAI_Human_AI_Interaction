@@ -594,4 +594,49 @@ test.describe("extensions", () => {
       await bridge.stop();
     }
   });
+
+  test("the Ladybug Tools card shows its licence, command and warnings first, and adds nothing until Add server", async ({
+    page,
+  }) => {
+    const bridge = await startWithFakeAgent(page);
+    try {
+      await page.getByTestId("agent-tab-extensions").click();
+      const view = page.getByTestId("extensions-view");
+      const card = view.getByTestId("curated-ladybug");
+      await expect(card).toContainText("Ladybug Tools MCP");
+      await expect(card.getByTestId("curated-ladybug-licence")).toHaveText("GPL-3.0-only");
+      await expect(card.getByTestId("curated-ladybug-note")).toContainText("separate program");
+      await expect(card.getByTestId("curated-ladybug-note")).toContainText(
+        "does not include, download, run or link it",
+      );
+      await expect(card.getByTestId("curated-ladybug-command")).toContainText("lbt-mcp@1.2.3 install");
+      await expect(card).toContainText("experimental");
+      await expect(card).toContainText("asks for your approval");
+      // Showing the card ran nothing and added nothing.
+      await expect(view.getByTestId("project-server")).toHaveCount(0);
+      await expect(card.getByTestId("curated-ladybug-installed")).toHaveCount(0);
+
+      // The button only fills the form: the name, the arguments and the variable names, no values.
+      await card.getByTestId("curated-ladybug-setup").click();
+      await expect(view.getByTestId("server-name")).toHaveValue("ladybug");
+      await expect(view.getByTestId("server-args")).toHaveValue("-I\n-m\nladybug_tools_mcp.server");
+      await expect(view.getByLabel("Variable 1", { exact: true })).toHaveValue("LADYBUG_TOOLS_GARDENS_ROOT");
+      await expect(view.getByLabel("Variable 2", { exact: true })).toHaveValue(
+        "LADYBUG_TOOLS_MCP_INSTALLATION",
+      );
+      await expect(view.getByTestId("add-server")).toBeDisabled();
+      await expect(view.getByTestId("project-server")).toHaveCount(0);
+
+      // The user gives the installed Python and the paths the installer printed; only then is the server added.
+      await view.getByTestId("server-command").fill("C:\\Users\\me\\ladybug\\python.exe");
+      await view.getByLabel("Value 1 (hidden)").fill("C:\\Users\\me\\ladybug\\gardens");
+      await view.getByLabel("Value 2 (hidden)").fill("C:\\Users\\me\\ladybug\\install");
+      await view.getByTestId("add-server").click();
+      await expect(view.getByTestId("extensions-result")).toContainText("Added the MCP server ladybug");
+      await expect(view.getByTestId("project-server").filter({ hasText: "ladybug" })).toBeVisible();
+      await expect(card.getByTestId("curated-ladybug-installed")).toBeVisible();
+    } finally {
+      await bridge.stop();
+    }
+  });
 });

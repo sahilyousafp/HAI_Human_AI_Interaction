@@ -4,7 +4,7 @@ import { DEFAULT_FEATURES, FEATURE_IDS, FEATURES, resolveFeatures } from "./feat
 describe("features", () => {
   it("every feature is on until the user turns it off, except those that say they start off", () => {
     const startOff = FEATURES.filter((f) => "defaultOn" in f && f.defaultOn === false).map((f) => f.id);
-    expect(startOff).toEqual(["pointCapture"]);
+    expect(startOff).toEqual(["pointCapture", "openData"]);
     expect(FEATURE_IDS.filter((id) => !DEFAULT_FEATURES[id])).toEqual(startOff);
     expect(resolveFeatures(null)).toEqual(DEFAULT_FEATURES);
   });

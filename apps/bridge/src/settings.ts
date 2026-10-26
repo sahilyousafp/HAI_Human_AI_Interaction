@@ -9,7 +9,10 @@ import {
   type Message,
   type MessageOf,
   ModellingMode,
+  OPEN_DATA_SOURCE_IDS,
+  OPEN_DATA_SOURCES,
   PaletteLayout,
+  PortalHost,
   ReplyVoice,
   resolveFeatures,
   type Settings,
@@ -21,6 +24,23 @@ type Send = (message: Message) => void;
 /** The session limit as stored: a whole number from 2 to 12, else the default of 6. */
 function parseSessions(stored: unknown): number {
   return typeof stored === "number" && Number.isInteger(stored) && stored >= 2 && stored <= 12 ? stored : 6;
+}
+
+/** The source choices as stored: only known sources with a yes or no. */
+function parseSourceChoices(stored: unknown): Record<string, boolean> {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+  return Object.fromEntries(
+    Object.entries(stored).filter(
+      (entry): entry is [string, boolean] =>
+        OPEN_DATA_SOURCE_IDS.includes(entry[0]) && typeof entry[1] === "boolean",
+    ),
+  );
+}
+
+/** A list of known source ids, or of valid portal hosts, as stored; anything else is dropped. */
+function parseList(stored: unknown, valid: (item: string) => boolean): string[] {
+  if (!Array.isArray(stored)) return [];
+  return [...new Set(stored.filter((item): item is string => typeof item === "string" && valid(item)))];
 }
 
 /** The settings file as a plain object; missing or unreadable reads as empty. */
@@ -78,7 +98,32 @@ export class SettingsHub {
       showOwners: stored.showOwners !== false,
       showCameras: stored.showCameras !== false,
       maxSessions: parseSessions(stored.maxSessions),
+      showContext: stored.showContext !== false,
+      openDataSources: parseSourceChoices(stored.openDataSources),
+      openDataAcknowledged: parseList(stored.openDataAcknowledged, (id) => OPEN_DATA_SOURCE_IDS.includes(id)),
+      portalHosts: parseList(stored.portalHosts, (host) => PortalHost.safeParse(host).success),
     };
+  }
+
+  /**
+   * Whether open data from this source may be fetched now: the Open data switch is on, the source is not switched
+   * off, and a source with a limit (a free service for non-commercial use) has been acknowledged.
+   */
+  openDataAllows(sourceId: string): boolean {
+    if (!this.featureOn("openData")) return false;
+    const source = OPEN_DATA_SOURCES.find((s) => s.id === sourceId);
+    if (!source || this.settings.openDataSources[sourceId] === false) return false;
+    return !source.limit || this.settings.openDataAcknowledged.includes(sourceId);
+  }
+
+  /** The portal hosts the user added (the starter list is the app's own). */
+  get portalHosts(): readonly string[] {
+    return this.settings.portalHosts;
+  }
+
+  /** Whether the user wants the city context drawn (agents' own pictures include it either way). */
+  get showContext(): boolean {
+    return this.settings.showContext;
   }
 
   greet(send: Send): void {
@@ -118,6 +163,10 @@ export class SettingsHub {
       showOwners,
       showCameras,
       maxSessions,
+      showContext,
+      openDataSources,
+      openDataAcknowledged,
+      portalHosts,
     } = message.payload;
     const patch: Partial<Settings> = {
       ...(palette ? { palette } : {}),
@@ -136,6 +185,19 @@ export class SettingsHub {
       ...(showOwners !== undefined ? { showOwners } : {}),
       ...(showCameras !== undefined ? { showCameras } : {}),
       ...(maxSessions !== undefined ? { maxSessions } : {}),
+      ...(showContext !== undefined ? { showContext } : {}),
+      // Source choices merge, so switching one source never resets the others.
+      ...(openDataSources
+        ? { openDataSources: { ...this.settings.openDataSources, ...parseSourceChoices(openDataSources) } }
+        : {}),
+      ...(openDataAcknowledged
+        ? {
+            openDataAcknowledged: [
+              ...new Set([...this.settings.openDataAcknowledged, ...openDataAcknowledged]),
+            ],
+          }
+        : {}),
+      ...(portalHosts ? { portalHosts: [...new Set(portalHosts)] } : {}),
     };
     const before = resolveFeatures(this.settings.features);
     this.settings = { ...this.settings, ...patch };
