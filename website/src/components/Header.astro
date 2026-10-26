@@ -1,0 +1,192 @@
+---
+import { nav } from "../data/site";
+import HandSvg from "./HandSvg.astro";
+---
+
+<a class="skip" href="#main">Skip to content</a>
+<div class="top-sentinel" data-sentinel aria-hidden="true"></div>
+
+<header class="hdr" data-hdr>
+  <div class="wrap hdr-in">
+    <a class="brand" href="/" aria-label="HAI, Human AI Interface, by SPAIRL. Home" data-brand>
+      <span class="logo-card" data-logo>
+        <span class="logo-face logo-en" aria-hidden="true"></span>
+        <span class="logo-face logo-hi" aria-hidden="true"></span>
+      </span>
+      <!-- A tiny hand pinches the end of "HAI" and drags it open into the full name (scripts/brand.ts). -->
+      <span class="brand-sub" aria-hidden="true" data-hai>
+        <span class="hai-word">H<span class="tail">uman </span>A<span class="tail">I </span>I<span class="tail">nterface</span></span>
+        <span class="hai-hand"><HandSvg solid bones={false} joints="index" jointR={22} /></span>
+      </span>
+    </a>
+
+    <nav class="nav" aria-label="Main">
+      <ul>
+        {
+          nav.map((n) => {
+            const external = n.href.startsWith("http");
+            return (
+              <li class={`nav-${n.id}`}>
+                <a
+                  href={n.href}
+                  data-nav={n.id}
+                  {...(external ? { target: "_blank", rel: "noopener" } : {})}
+                >
+                  {n.label}
+                  {external && <span class="ext" aria-hidden="true">↗</span>}
+                </a>
+              </li>
+            );
+          })
+        }
+      </ul>
+    </nav>
+    <button class="theme" type="button" data-theme-toggle aria-label="Switch to dark mode" aria-pressed="false">
+      <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" /></svg>
+      <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6Z" /></svg>
+    </button>
+  </div>
+</header>
+
+<script>
+  import "../scripts/header";
+  import "../scripts/theme";
+</script>
+
+<style>
+  .top-sentinel { position: absolute; top: 0; left: 0; width: 1px; height: 8px; pointer-events: none; }
+  .hdr {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 60;
+    height: var(--header-h);
+    border-bottom: 1px solid transparent;
+    transition: background-color 0.4s, border-color 0.4s, backdrop-filter 0.4s;
+  }
+  .hdr:global(.scrolled) {
+    background: var(--hdr-bg);
+    -webkit-backdrop-filter: saturate(1.3) blur(14px);
+    backdrop-filter: saturate(1.3) blur(14px);
+    border-bottom-color: var(--hairline);
+  }
+  .hdr-in {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    height: 100%;
+  }
+  .brand { display: inline-flex; align-items: center; gap: 12px; }
+  .brand-sub {
+    position: relative;
+    display: inline-flex;
+    padding-left: 12px;
+    border-left: 1px solid var(--hairline-2);
+    color: var(--stone);
+    font-size: 14px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .hai-word { display: inline-flex; align-items: baseline; }
+  /* Each word's tail is folded to nothing until the hand drags it open; --w is its measured width. */
+  .tail {
+    display: inline-block;
+    max-width: 0;
+    overflow: hidden;
+    white-space: pre;
+    vertical-align: bottom;
+    transition: max-width 0.7s var(--ease-io);
+  }
+  .brand-sub:global(.open) .tail { max-width: var(--w, 6em); }
+
+  /* The hand sits on the right edge of the word, so it travels with the edge as the tails open. Its index
+     and thumb tips meet on that edge (the offsets are the pinched fingertip in the 18 px drawing). */
+  .hai-hand {
+    position: absolute;
+    left: calc(100% - 4px);
+    top: calc(50% - 9px);
+    width: 18px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s var(--ease);
+  }
+  .brand-sub:global(.grab) .hai-hand { opacity: 1; }
+  .hai-hand :global(svg) { display: block; width: 100%; height: auto; overflow: visible; }
+  .hai-hand :global(.flesh) { color: var(--graphite-2); opacity: 0.7; }
+  .hai-hand :global(.joint) { fill: var(--accent); }
+  @media (prefers-reduced-motion: reduce) {
+    .tail { transition: none; }
+    .hai-hand { display: none; }
+  }
+
+  .nav ul { display: flex; gap: 4px; }
+  .nav a {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 36px;
+    padding: 0 13px;
+    border-radius: 999px;
+    color: var(--graphite-2);
+    font-size: 15px;
+    transition: color 0.3s, background-color 0.3s;
+  }
+  .nav a:hover { color: var(--graphite); background: var(--shade); }
+  .nav a::after {
+    content: "";
+    position: absolute;
+    left: 13px;
+    right: 13px;
+    bottom: 5px;
+    height: 1.5px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: 0;
+    transition: transform 0.45s var(--ease);
+  }
+  .nav a:global(.active) { color: var(--graphite); }
+  .nav a:global(.active)::after { transform: scaleX(1); }
+  .ext { font-size: 13px; transition: transform 0.5s var(--ease); }
+  .nav a:hover .ext { transform: translate(2px, -2px); }
+
+  /* On a phone the in-page links are a thumb's reach away anyway; keep the one that leaves the site. */
+  /* Light and dark switch: a sun in dark mode (to go light), a moon in light mode. */
+  .hdr-in { gap: 12px; }
+  .nav { margin-left: auto; }
+  .theme {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid var(--hairline-2);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--graphite-2);
+    cursor: pointer;
+    transition: color 0.3s, border-color 0.3s, background-color 0.3s;
+  }
+  .theme:hover { color: var(--graphite); border-color: var(--graphite); }
+  .theme svg {
+    grid-area: 1 / 1;
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 0.6s var(--spring), opacity 0.3s var(--ease);
+  }
+  .theme .sun { opacity: 0; transform: rotate(-90deg) scale(0.5); }
+  .theme[aria-pressed="true"] .sun { opacity: 1; transform: none; }
+  .theme[aria-pressed="true"] .moon { opacity: 0; transform: rotate(90deg) scale(0.5); }
+  html:not(.js) .theme { display: none; }
+
+  @media (width <= 560px) {
+    .nav-stages, .nav-about { display: none; }
+    .nav a { border: 1px solid var(--hairline-2); }
+  }
+</style>

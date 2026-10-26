@@ -1,0 +1,196 @@
+---
+import { site } from "../data/site";
+import HandSvg from "./HandSvg.astro";
+
+interface Props {
+  stageCount: number;
+}
+const { stageCount } = Astro.props;
+
+const letters = "HAI".split("");
+---
+
+<section class="hero" id="top">
+  <canvas class="cloud" aria-hidden="true" data-cloud></canvas>
+  <div class="wrap hero-in">
+    <div class="hero-copy">
+      <p class="eyebrow meta"><i class="live-dot" aria-hidden="true"></i> Built in public, {stageCount} {stageCount === 1 ? "stage" : "stages"} so far</p>
+      <h1 class="hero-name" aria-label="HAI">
+        {letters.map((c, i) => (
+          <span class="w" aria-hidden="true"><span style={`--i:${i}`}>{c}</span></span>
+        ))}
+      </h1>
+      <p class="hero-sub">Human AI Interface</p>
+      <div class="hero-foot">
+        <p class="hero-line">Hands, face and voice for AEC agents. Point at a wall, say "make it 300 thick", nod to accept. All from a normal laptop webcam.</p>
+        <div class="hero-cta">
+          <a class="btn primary" href="#stages">Watch the stages</a>
+          <a class="btn" href={site.github} target="_blank" rel="noopener">Code on GitHub <span class="arrow" aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Moved by a 3D rig in scripts/hero-hand.ts; click it for a gesture. -->
+    <div class="hand-stage" data-hand-stage title="Click me">
+      <HandSvg class="hand" ring label="A hand with the 21 points HAI tracks, waving hello" />
+      <span class="hi" data-hi aria-hidden="true"><span>H</span><span>i</span></span>
+    </div>
+  </div>
+</section>
+
+<script>
+  import "../scripts/hero-hand";
+  import { initPointCloud } from "../scripts/pointcloud";
+
+  const cloud = document.querySelector<HTMLCanvasElement>("[data-cloud]");
+  if (cloud) initPointCloud(cloud);
+</script>
+
+<style>
+  .hero {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    min-height: 92svh;
+    overflow: hidden;
+  }
+  /* The point-cloud landscape (scripts/pointcloud.ts), faded out under the text as spairl.si fades its
+     contours. */
+  .cloud {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    -webkit-mask-image: linear-gradient(90deg, #0000001f 0%, #00000099 38%, #000 70%);
+    mask-image: linear-gradient(90deg, #0000001f 0%, #00000099 38%, #000 70%);
+  }
+  .cloud:global(.ready) { opacity: 1; transition: opacity 1.8s var(--ease) 0.2s; }
+  .hero-in {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    align-items: end;
+    gap: clamp(24px, 4vw, 64px);
+    padding-top: calc(var(--header-h) + 40px);
+    padding-bottom: clamp(36px, 6vh, 64px);
+  }
+  .eyebrow { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 clamp(16px, 2vh, 24px); }
+
+  .hero-name {
+    display: flex;
+    margin: 0 0 0 -0.04em;
+    font-size: clamp(96px, 22vw, 340px);
+    font-weight: 540;
+    line-height: 0.88;
+    letter-spacing: -0.04em;
+  }
+  .w {
+    display: inline-block;
+    margin-bottom: -0.06em;
+    padding-bottom: 0.06em;
+    overflow: hidden;
+  }
+  .w > span { display: inline-block; }
+  :global(.js) .w > span {
+    transform: translateY(104%);
+    animation: rise 1.2s var(--ease) forwards;
+    animation-delay: calc(0.1s + var(--i) * 0.08s);
+  }
+  @keyframes rise { to { transform: none; } }
+
+  .hero-sub {
+    margin: clamp(10px, 1.4vw, 18px) 0 clamp(28px, 4vh, 44px);
+    color: var(--stone);
+    font-size: clamp(20px, 2vw, 28px);
+    letter-spacing: -0.014em;
+  }
+  .hero-foot { display: grid; gap: 24px; }
+  .hero-line {
+    max-width: 38ch;
+    margin: 0;
+    font-size: clamp(19px, 1.7vw, 24px);
+    line-height: 1.35;
+    letter-spacing: -0.012em;
+  }
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 10px; }
+  :global(.js) .hero-foot,
+  :global(.js) .hero-sub,
+  :global(.js) .eyebrow {
+    opacity: 0;
+    animation: fade-in 1s var(--ease) 0.55s forwards;
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .hand-stage {
+    position: relative;
+    justify-self: end;
+    width: min(100%, 440px);
+    aspect-ratio: 320 / 420;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .hand-stage > :global(.hand) { width: 100%; height: 100%; overflow: visible; }
+  /* Drawn like HAI's tracking overlay in the week 2 clip: a teal skeleton with filled joints, and the
+     app's hollow pointer ring at the index fingertip. */
+  .hero :global(.hand .bone) { stroke: var(--hand); stroke-width: 3; stroke-linecap: round; }
+  .hero :global(.hand .joint) { fill: var(--hand); }
+  .hero :global(.hand .ring) { fill: none; stroke: var(--graphite); stroke-width: 2; opacity: 0.75; }
+  :global(.js) .hero :global(.hand .bone) {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: draw 0.9s var(--ease) forwards;
+    animation-delay: calc(0.5s + var(--i) * 0.045s);
+  }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  :global(.js) .hero :global(.hand .joint) {
+    opacity: 0;
+    animation: pop 0.6s var(--spring) forwards;
+    animation-delay: calc(0.4s + var(--i) * 0.045s);
+  }
+  @keyframes pop { from { opacity: 0; r: 0; } to { opacity: 1; r: 5; } }
+  :global(.js) .hero :global(.hand .ring) { animation: fade-in 0.6s var(--ease) 1.5s backwards; }
+
+  /* The greeting beside the fingers. scripts/hero-hand.ts drives each letter's --a (0 hidden, 1 shown, a
+     little over 1 as it lands) and the word's --tilt, so it moves with the wave. */
+  .hi {
+    position: absolute;
+    top: 4%;
+    right: -2%;
+    z-index: 1;
+    display: flex;
+    color: var(--accent);
+    font-size: clamp(36px, 4.4vw, 64px);
+    font-weight: 560;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    pointer-events: none;
+    transform: rotate(calc(var(--tilt, 0) * 1deg));
+    transform-origin: 0% 100%;
+  }
+  .hi > span {
+    display: inline-block;
+    opacity: clamp(0, var(--a, 0), 1);
+    transform: translateY(calc((1 - var(--a, 0)) * 0.45em)) rotate(calc((1 - var(--a, 0)) * -16deg))
+      scale(calc(0.6 + 0.4 * var(--a, 0)));
+    transform-origin: 50% 100%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.js) .hero :global(.hand .bone) { stroke-dashoffset: 0; animation: none; }
+    :global(.js) .hero :global(.hand .joint) { opacity: 1; animation: none; }
+    :global(.js) .hero :global(.hand .ring) { animation: none; }
+  }
+  @media (width <= 860px) {
+    .hero { min-height: 0; }
+    .cloud {
+      -webkit-mask-image: linear-gradient(#000 0%, #00000059 100%);
+      mask-image: linear-gradient(#000 0%, #00000059 100%);
+    }
+    .hero-in { grid-template-columns: minmax(0, 1fr); }
+    .hand-stage { order: -1; justify-self: start; width: min(46vw, 220px); margin-bottom: -8px; }
+  }
+</style>

@@ -1,0 +1,76 @@
+---
+import { site } from "../data/site";
+
+const year = new Date().getFullYear();
+---
+
+<footer class="foot wrap" id="follow">
+  <h2 class="foot-title rv">Follow the build</h2>
+  <p class="foot-text rv" style="--d:1">A new stage goes up every week, here and on LinkedIn.</p>
+  <a class="foot-big rv" style="--d:2" href={site.linkedin} target="_blank" rel="noopener">
+    <span>Sahil Yousaf on LinkedIn</span>
+    <svg class="fm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
+  </a>
+
+  <div class="foot-row">
+    <p class="meta foot-by">HAI is a <a class="link" href={site.spairl} target="_blank" rel="noopener">SPAIRL</a> project. Write to <a class="link" href={`mailto:${site.email}`}>{site.email}</a></p>
+    <ul class="foot-links">
+      <li><a class="link-quiet" href="/#stages">Stages</a></li>
+      <li><a class="link-quiet" href={site.github} target="_blank" rel="noopener">GitHub</a></li>
+      <li><a class="link-quiet" href={site.spairl} target="_blank" rel="noopener">spairl.si</a></li>
+    </ul>
+    <p class="foot-legal meta">&copy; {year} SPAIRL</p>
+  </div>
+</footer>
+
+<style>
+  .foot { margin-top: clamp(72px, 9vw, 120px); }
+  .foot::before {
+    content: "";
+    display: block;
+    border-top: 1px solid var(--graphite);
+    margin-bottom: clamp(56px, 8vw, 104px);
+  }
+  .foot-title { font-size: clamp(40px, 5.4vw, 80px); letter-spacing: -0.026em; }
+  .foot-text { max-width: 46ch; margin: 18px 0 clamp(28px, 4vw, 44px); color: var(--stone); }
+  .foot-big {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2em;
+    max-width: 100%;
+    padding-bottom: 0.1em;
+    font-size: clamp(26px, 5.1vw, 84px);
+    font-weight: 520;
+    line-height: 1.05;
+    letter-spacing: -0.028em;
+  }
+  .foot-big span { overflow-wrap: anywhere; }
+  .foot-big::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--graphite);
+    transition: background-color 0.3s;
+  }
+  .foot-big:hover::after { background: var(--accent); }
+  .fm-icon { flex: none; width: 0.6em; height: 0.6em; transition: transform 0.6s var(--ease), color 0.3s; }
+  .foot-big:hover .fm-icon { color: var(--accent); transform: translate(0.08em, -0.08em); }
+
+  .foot-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px 32px;
+    margin-top: clamp(48px, 7vw, 96px);
+    padding: 22px 0 30px;
+    border-top: 1px solid var(--hairline);
+  }
+  .foot-by { margin: 0; max-width: 52ch; }
+  .foot-links { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 15px; }
+  .foot-legal { margin: 0; }
+</style>

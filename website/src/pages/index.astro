@@ -1,0 +1,16 @@
+---
+import About from "../components/About.astro";
+import Hero from "../components/Hero.astro";
+import Stages from "../components/Stages.astro";
+import Base from "../layouts/Base.astro";
+import { getStages } from "../lib/stages";
+
+const stages = await getStages();
+---
+
+<Base>
+  <Hero stageCount={stages.length} />
+  <!-- Newest stage first, so returning visitors see what is new. -->
+  <Stages stages={[...stages].reverse()} />
+  <About />
+</Base>

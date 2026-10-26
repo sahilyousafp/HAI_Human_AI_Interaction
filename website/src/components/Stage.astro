@@ -1,0 +1,151 @@
+---
+import { type CollectionEntry, render } from "astro:content";
+import LinkedInPost from "./LinkedInPost.astro";
+import VideoPlayer from "./VideoPlayer.astro";
+
+interface Props {
+  stage: CollectionEntry<"stages">;
+}
+const { stage } = Astro.props;
+const { Content } = await render(stage);
+const d = stage.data;
+const num = String(d.order).padStart(2, "0");
+---
+
+<article class="stage" id={stage.id}>
+  <header class="stage-head rv">
+    <span class="stage-num num" aria-hidden="true">{num}</span>
+    <div class="stage-title">
+      <p class="meta"><span class="week">{d.week}</span></p>
+      <h1 class="title">{d.title}</h1>
+      <p class="summary">{d.summary}</p>
+    </div>
+  </header>
+
+  {
+    d.video ? (
+      <div class="rv" style="--d:1">
+        <VideoPlayer slug={stage.id} title={d.title} {...d.video} />
+      </div>
+    ) : (
+      <div class="gallery">
+        {d.images?.map((img, i) => (
+          <figure class="still rv" style={`--d:${i + 1}`}>
+            <a href={img.src} target="_blank" rel="noopener" aria-label={`Open full size: ${img.alt}`}>
+              <img src={img.src} alt={img.alt} width={img.width} height={img.height} loading={i ? "lazy" : "eager"} decoding="async" />
+            </a>
+          </figure>
+        ))}
+      </div>
+    )
+  }
+
+  <div class="stage-body">
+    <div class="notes rv" style="--d:2">
+      <h2 class="notes-title">{d.video ? "In this clip" : "What the research found"}</h2>
+      <ul class="hl">
+        {d.highlights.map((h) => <li>{h}</li>)}
+      </ul>
+      <div class="prose"><Content /></div>
+    </div>
+    <div class="rv" style="--d:3">
+      <LinkedInPost {...d.linkedin} date={d.date} />
+    </div>
+  </div>
+</article>
+
+<style>
+  .stage { display: grid; gap: clamp(20px, 2.4vw, 32px); scroll-margin-top: calc(var(--header-h) + 24px); }
+
+  .stage-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: clamp(16px, 2.4vw, 32px);
+    align-items: start;
+  }
+  .stage-num {
+    font-size: clamp(44px, 5vw, 72px);
+    font-weight: 500;
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    color: var(--accent);
+  }
+  .stage-title .meta { margin: 0 0 8px; }
+  .week {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 11px;
+    border: 1px solid var(--hairline-2);
+    border-radius: 999px;
+    color: var(--graphite-2);
+  }
+  .title { font-size: clamp(40px, 5.4vw, 80px); letter-spacing: -0.026em; line-height: 1.02; }
+  .summary { max-width: 60ch; margin: 14px 0 0; color: var(--stone); font-size: 18px; }
+
+  /* A research week's stills: the lead image across the top, the rest side by side. */
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(12px, 1.6vw, 20px);
+    align-items: start;
+  }
+  .still { margin: 0; }
+  .still:first-child { grid-column: 1 / -1; }
+  .still a {
+    display: block;
+    overflow: hidden;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-panel);
+    background: var(--sheet);
+    transition: border-color 0.4s var(--ease);
+  }
+  .still a:hover { border-color: var(--hairline-2); }
+  .still img { width: 100%; }
+
+  .stage-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: clamp(20px, 2.4vw, 32px);
+    align-items: stretch;
+  }
+  .notes-title {
+    margin-bottom: 14px;
+    font-size: 13.5px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--stone);
+  }
+  .hl { border-top: 1px solid var(--hairline); }
+  .hl li {
+    position: relative;
+    padding: 12px 0 12px 22px;
+    border-bottom: 1px solid var(--hairline);
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  .hl li::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 1.15em;
+    width: 7px;
+    height: 7px;
+    border: 1.6px solid var(--accent);
+    border-radius: 50%;
+  }
+  .prose { margin-top: 20px; color: var(--graphite-2); font-size: 16px; }
+  .prose :global(p:last-child) { margin-bottom: 0; }
+
+  @media (width <= 860px) {
+    .stage-body,
+    .gallery { grid-template-columns: minmax(0, 1fr); }
+  }
+  /* On a phone the number sits above the title so the text gets the full width. */
+  @media (width <= 560px) {
+    .stage-head { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .stage-num { font-size: 40px; }
+    .summary { font-size: 17px; }
+  }
+</style>

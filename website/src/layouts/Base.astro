@@ -1,0 +1,75 @@
+---
+import "@fontsource-variable/geist";
+import "../styles/tokens.css";
+import "../styles/base.css";
+import "../styles/components.css";
+import Footer from "../components/Footer.astro";
+import HandCursor from "../components/HandCursor.astro";
+import Header from "../components/Header.astro";
+import { site } from "../data/site";
+
+interface Props {
+  title?: string;
+  description?: string;
+  path?: string;
+  /** Absolute path of a 1200x630 social preview image, e.g. a stage's poster. */
+  image?: string;
+  imageAlt?: string;
+}
+
+const {
+  title = site.title,
+  description = site.description,
+  path = "/",
+  image = "/brand/hai-card.jpg",
+  imageAlt = "HAI, Human AI Interface: a hand traced by its 21 landmarks over a point-cloud landscape",
+} = Astro.props;
+const canonical = new URL(path, site.url).href;
+const ogImage = new URL(image, site.url).href;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)" data-theme-color />
+    <meta name="theme-color" content="#0d0f12" media="(prefers-color-scheme: dark)" data-theme-color />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/brand/mark.jpg" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="HAI by SPAIRL" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script is:inline>
+      document.documentElement.classList.add("js");
+      // Apply a saved light/dark choice before the first paint; without one the page follows the system.
+      try {
+        const saved = localStorage.getItem("hai-theme");
+        if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <Header />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+    <HandCursor />
+    <script>
+      import "../scripts/reveal";
+    </script>
+  </body>
+</html>

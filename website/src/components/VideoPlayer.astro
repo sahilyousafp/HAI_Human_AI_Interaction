@@ -1,0 +1,80 @@
+---
+interface Props {
+  slug: string;
+  title: string;
+  width: number;
+  height: number;
+  duration: number;
+}
+const { slug, title, width, height, duration } = Astro.props;
+// Whole seconds, rounded down like the browser's own player, so the two never disagree.
+const secs = Math.floor(duration);
+const length = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+---
+
+<figure class="player theme-dark" data-player style={`--ar:${width} / ${height}`}>
+  <video
+    controls
+    playsinline
+    preload="metadata"
+    poster={`/media/${slug}.webp`}
+    width={width}
+    height={height}
+    aria-label={`Screen recording: ${title}`}
+  >
+    <source src={`/media/${slug}.mp4`} type="video/mp4" />
+    <a href={`/media/${slug}.mp4`}>Download the clip</a>
+  </video>
+  <button class="play" type="button" data-play aria-label={`Play: ${title}, ${length}`}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>
+    <span class="len num">{length}</span>
+  </button>
+</figure>
+
+<script>
+  import "../scripts/player";
+</script>
+
+<style>
+  .player {
+    position: relative;
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-panel);
+    background: var(--film);
+    aspect-ratio: var(--ar);
+  }
+  video { width: 100%; height: 100%; object-fit: contain; background: var(--film); }
+
+  /* Shown until the clip first plays; the native controls take over after that. */
+  .play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 56px;
+    padding: 0 22px 0 18px;
+    border: 1px solid #ffffff4d;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--film) 70%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    color: var(--graphite);
+    font-size: 15px;
+    cursor: pointer;
+    transform: translate(-50%, -50%);
+    transition: background-color 0.4s var(--ease), border-color 0.4s, transform 0.3s var(--ease), opacity 0.3s;
+  }
+  .play svg { width: 22px; height: 22px; fill: currentColor; }
+  .play:hover { background: var(--accent); border-color: var(--accent); color: #0a1522; }
+  .play:active { transform: translate(-50%, -50%) scale(0.97); }
+  @media (width <= 560px) {
+    .play { height: 44px; padding: 0 16px 0 13px; gap: 7px; font-size: 14px; }
+    .play svg { width: 18px; height: 18px; }
+  }
+  html:not(.js) .play,
+  .player:global(.started) .play { opacity: 0; pointer-events: none; }
+</style>
