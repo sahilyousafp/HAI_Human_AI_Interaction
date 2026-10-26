@@ -132,7 +132,7 @@ test("portals: the starter list is shown, a host can be added and removed, and a
     await openViewer(page);
     await openSettings(page, "open-data");
     const list = page.getByTestId("portal-list");
-    await expect(list).toContainText("catalog.data.gov");
+    await expect(list).toContainText("ckan.publishing.service.gov.uk");
     await page.getByTestId("portal-input").fill("https://x.example/y");
     await page.getByTestId("portal-add").click();
     await expect(page.getByTestId("portal-error")).toBeVisible();

@@ -69,7 +69,9 @@ export function registerUrbanTools(register: McpServer["registerTool"], deps: Ur
       description:
         "Searches the catalogue of an open-data portal for datasets by text (CKAN, Socrata and ArcGIS Hub portals): title, publisher, licence, date, formats and which resources read as a table. The portal must be one listed in Settings > Open data (the starter list and the hosts the user added; open_data_sources lists them). Only your search text is sent.",
       inputSchema: z.object({
-        portal: z.string().describe("A portal host from open_data_sources, e.g. catalog.data.gov"),
+        portal: z
+          .string()
+          .describe("A portal host from open_data_sources, e.g. ckan.publishing.service.gov.uk"),
         query: z.string().trim().min(1).max(200).describe("What to look for"),
         limit: z.number().int().min(1).max(20).optional().describe("How many datasets (default 8)"),
         kind: KIND.optional().describe(
@@ -121,7 +123,7 @@ export function registerUrbanTools(register: McpServer["registerTool"], deps: Ur
   register(
     "urban_buildings",
     {
-      description: `Fetches the buildings (and, unless you turn it off, the trees) within a radius of the project's site from OpenStreetMap, and puts them in the model's context layer (drawn read-only beside the model, seen in everyone's pictures and in sun studies). Heights are marked: measured (the source gave one), inferred (three metres a level) or a default of nine metres. Needs the site (open_data_sources says if it is set). Radius at most ${MAX_RADIUS_M} m. Read what was fetched with context_get; it returns counts, not the items. Only the site's coordinates and the radius are sent.`,
+      description: `Fetches the buildings (and, unless you turn it off, the trees) within a radius of the project's site from OpenStreetMap, and puts them in the model's context layer (drawn read-only beside the model, seen in everyone's pictures and in sun studies). Heights are marked: measured (the source gave one), inferred (three metres a level) or a default of nine metres. Needs the site (open_data_sources says if it is set). Radius at most ${MAX_RADIUS_M} m. The public server can take up to a minute for a dense district (a repeat of the same question is answered at once); a smaller radius is faster. Read what was fetched with context_get; it returns counts, not the items. Only the site's coordinates and the radius are sent.`,
       inputSchema: z.object({
         radius_m: z
           .number()

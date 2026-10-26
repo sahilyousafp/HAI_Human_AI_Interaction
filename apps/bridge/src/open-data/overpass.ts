@@ -15,6 +15,8 @@ export const LEVEL_MM = 3000;
 
 /** The most the radius may be, in metres: past this the answer is too large for one request. */
 export const MAX_RADIUS_M = 2000;
+/** How long to wait for Overpass: a few hundred metres of a dense city took 24 to 36 s on the public server. */
+const OVERPASS_TIMEOUT_MS = 50_000;
 
 /** The Overpass QL for the buildings (ways) and trees (nodes) inside a box. */
 export function overpassQuery(
@@ -22,7 +24,7 @@ export function overpassQuery(
   trees: boolean,
 ): string {
   const bbox = `${box.south.toFixed(6)},${box.west.toFixed(6)},${box.north.toFixed(6)},${box.east.toFixed(6)}`;
-  return `[out:json][timeout:25];(way["building"](${bbox});${trees ? `node["natural"="tree"](${bbox});` : ""});out geom;`;
+  return `[out:json][timeout:45];(way["building"](${bbox});${trees ? `node["natural"="tree"](${bbox});` : ""});out geom;`;
 }
 
 /**
@@ -142,6 +144,10 @@ export async function fetchBuildings(
     body: `data=${encodeURIComponent(query)}`,
     headers: { "content-type": "application/x-www-form-urlencoded" },
     ttlMs: TTL_MS,
+    // The public server takes 25 to 40 s for a dense district: measured against the real one.
+    timeoutMs: OVERPASS_TIMEOUT_MS,
+    // The public server answers 502 while it is at capacity and asks for a retry with backoff.
+    retries: 2,
     maxBytes: MAX_BYTES,
   });
   let parsed: unknown;

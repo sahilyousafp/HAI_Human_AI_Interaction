@@ -111,11 +111,10 @@ export const OPEN_DATA_SOURCE_IDS = OPEN_DATA_SOURCES.map((s) => s.id);
 
 /** The portals the app lists before the user adds any: large public catalogues, each on a known platform. */
 export const STARTER_PORTALS: ReadonlyArray<{ host: string; kind: "ckan" | "socrata" | "arcgis-hub" }> = [
-  { host: "catalog.data.gov", kind: "ckan" },
-  { host: "data.gov.uk", kind: "ckan" },
-  { host: "opendata.swiss", kind: "ckan" },
+  { host: "ckan.publishing.service.gov.uk", kind: "ckan" },
+  { host: "ckan.opendata.swiss", kind: "ckan" },
   { host: "data.cityofnewyork.us", kind: "socrata" },
-  { host: "data.sfgov.org", kind: "socrata" },
+  { host: "data.sf.gov", kind: "socrata" },
   { host: "data.cityofchicago.org", kind: "socrata" },
   { host: "data.lacity.org", kind: "socrata" },
   { host: "data.seattle.gov", kind: "socrata" },
@@ -125,6 +124,8 @@ export const STARTER_PORTALS: ReadonlyArray<{ host: string; kind: "ckan" | "socr
 /** What one request is allowed to cost: the time, and the size of what comes back, by kind of answer. */
 export const OPEN_DATA_LIMITS = {
   timeoutMs: 10_000,
+  /** The most a request may ask for as its own time limit (a public server answering a large query slowly). */
+  maxTimeoutMs: 60_000,
   maxRedirects: 3,
   /** Text and JSON answers. */
   maxJsonBytes: 2 * 1024 * 1024,

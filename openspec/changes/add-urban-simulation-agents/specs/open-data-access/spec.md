@@ -34,7 +34,7 @@ An open-data request SHALL contain only a place, an area, a time, an identifier 
 - **THEN** only that text and the portal's own paging parameters are sent
 
 ### Requirement: Only listed sources and safe hosts are contacted
-The system SHALL contact only the hosts of the listed sources and the portal hosts the user has added or the shipped starter list names, over HTTPS. It SHALL refuse an address that resolves to a loopback, private or link-local network, SHALL check every redirect against the same rules, and SHALL limit the time of a request (10 seconds), the size of an answer and the kinds of content accepted. A request to any other host SHALL be refused with the reason, and the agent SHALL be told so.
+The system SHALL contact only the hosts of the listed sources and the portal hosts the user has added or the shipped starter list names, over HTTPS. It SHALL refuse an address that resolves to a loopback, private or link-local network, SHALL check every redirect against the same rules, and SHALL limit the time of a request (10 seconds, or up to 60 for a source known to answer slowly), the size of an answer and the kinds of content accepted. A request to any other host SHALL be refused with the reason, and the agent SHALL be told so.
 
 #### Scenario: Private address refused
 - **WHEN** an agent asks a portal tool for a URL on 127.0.0.1 or an address on a private network

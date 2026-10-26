@@ -6,7 +6,7 @@ Your agents can read open data about the place a project stands in: the weather,
 
 - **Nothing, until you switch it on.** Settings > Open data > **Open data** (also in Settings > Features). While it is off no agent is offered an open-data tool and the app makes no request to any open-data host.
 - **A place, an area, a time or a search text, never your work.** A request carries the project's site (or coordinates the agent names), a radius, a date or a text the agent searches for. It never carries your model, element or project names, file paths, camera pictures, your voice or the conversation. Every request names the app in its User-Agent (`HAI/<version> ...`), and sends no account, key or cookie.
-- **Only the hosts listed in Settings, over HTTPS.** Each source below lists the host it uses. A request to any other host is refused with the reason, an address on a private network (127.0.0.1, 10.x, 192.168.x and the like) is refused even if a portal names it, and a redirect to another host stops the request. A request ends after 10 seconds, and an answer larger than its limit (2 MB of text, 20 MB of raster) is cut off.
+- **Only the hosts listed in Settings, over HTTPS.** Each source below lists the host it uses. A request to any other host is refused with the reason, an address on a private network (127.0.0.1, 10.x, 192.168.x and the like) is refused even if a portal names it, and a redirect to another host stops the request. A request ends after 10 seconds (50 for the building lookup, which the public OpenStreetMap server answers slowly in a dense city), and an answer larger than its limit (2 MB of text, 20 MB of raster) is cut off.
 - **You can see it.** Settings > Open data > Requests lists each request of this session: the time, the host, what it was for, whether it came from the saved answers and how large it was, or why it failed. **Clear the list** empties it; the saved answers stay.
 - **Switching it off is immediate.** A request in flight ends, and the agents are restarted so the tools go.
 
@@ -30,13 +30,25 @@ No source needs an account, a key or a sign-in, and the app never asks for one. 
 
 Every result carries its **source, licence, attribution, the time it was observed, the time it was fetched and its age in minutes**, and a value that was worked out rather than read (a building's height from its number of levels) is marked as inferred. Agents are told to repeat the source and the age when they report. "Live" differs by source: weather is minutes old, a satellite scene is days old.
 
+## What each host sees, and what was checked against the real ones
+
+A host sees what any website sees: **your internet address**, the app's name in the User-Agent and the request itself, which holds the place's coordinates. MET Norway says so in its terms and keeps such logs; the others do the same in their own way.
+
+Checked by hand against the real servers (`HAI_LIVE_OPEN_DATA=1`, see `apps/bridge/src/open-data/live.test.ts`) on 2026-10-26, with what it found:
+
+- **Every source answered in the shape its adapter reads**: weather now and forecast (MET Norway, and the National Weather Service for New York), the climate normals, land cover, greenness, Landsat ground temperature, and the CKAN and Socrata portals (search and a table of rows).
+- **Overpass is slow and sometimes busy.** The public server needed 24 to 36 s for a dense district of 300 m around central Amsterdam (884 buildings, 1.2 MB), so the building lookup waits up to 50 s, and a "server at capacity" answer (HTTP 502) is asked again after 2 s and then 4 s, as the server asks for. Its policy asks regular users to stay near 100 queries and 10 MB a day; building answers are saved for 7 days, so asking again about a place costs the server nothing.
+- **MET Norway** asks not to repeat a request before its `Expires` time (30 minutes ahead), so its answers are kept for 30 minutes.
+- **Hosts that moved** were found and changed in the starter list: `catalog.data.gov` no longer serves the CKAN API (removed), and `data.gov.uk`, `opendata.swiss` and `data.sfgov.org` redirect to `ckan.publishing.service.gov.uk`, `ckan.opendata.swiss` and `data.sf.gov`, which the app refuses to follow by design, so the list names the hosts that answer.
+- **Terms re-read:** MET Norway (identify yourself in the User-Agent, credit it, do not overload it, cache) and the OpenStreetMap Overpass policy are met by the above. NASA POWER asks to be cited in publications and states no request limit that was found. Open-Meteo was not called.
+
 ## Saved answers
 
 Answers are kept in `.hai/open-data` in the workspace (not in the project) for a time that depends on the kind of data, so a repeated question is answered at once from disk. A cached answer keeps the time it was first fetched, so the age an agent reports is honest. A host that answers "slow down" (HTTP 429 or 503) is left alone for the time it asks, and requests to one host go one at a time, a quarter of a second apart.
 
 ## The portals
 
-Agents may search the catalogues of the hosts in Settings > Open data > Portals: a starter list of large public catalogues (`catalog.data.gov`, `data.gov.uk`, `opendata.swiss`, the open-data portals of New York (`data.cityofnewyork.us`), San Francisco (`data.sfgov.org`), Chicago (`data.cityofchicago.org`), Los Angeles (`data.lacity.org`) and Seattle (`data.seattle.gov`), and ArcGIS Hub (`hub.arcgis.com`)) and the hosts you add (a host name such as `data.example.org`, no `https://`, no path).
+Agents may search the catalogues of the hosts in Settings > Open data > Portals: a starter list of large public catalogues (`ckan.publishing.service.gov.uk`, `ckan.opendata.swiss`, the open-data portals of New York (`data.cityofnewyork.us`), San Francisco (`data.sf.gov`), Chicago (`data.cityofchicago.org`), Los Angeles (`data.lacity.org`) and Seattle (`data.seattle.gov`), and ArcGIS Hub (`hub.arcgis.com`)) and the hosts you add (a host name such as `data.example.org`, no `https://`, no path).
 
 ## The site
 

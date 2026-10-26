@@ -68,7 +68,7 @@ Depends on `add-generated-panels`, `add-agent-cameras` and `add-agent-workers` b
 
 ## 8. Live checks and the demo (ends with: a filmable clip and a checklist from a real run)
 
-- [ ] 8.1 Run the real sources once by hand through the adapters (manual, `HAI_LIVE_OPEN_DATA=1`): each adapter's real answer matches its fixture's shape, the User-Agent is accepted, and the terms of each source are re-read and recorded; verify by the printed report and the notes in `docs/open-data.md`
+- [x] 8.1 Run the real sources once by hand through the adapters (manual, `HAI_LIVE_OPEN_DATA=1`): each adapter's real answer matches its fixture's shape, the User-Agent is accepted, and the terms of each source are re-read and recorded; verify by the printed report and the notes in `docs/open-data.md`
 - [ ] 8.2 Run each new agent and Mochi's panel against the real Claude Code (manual, `HAI_LIVE_CLAUDE=1`): Urban around a real site, Climate's weather now, Simulation's ground temperature and a sun study (and, with no Ladybug installed, how it says to install it and its offer of a sun study), Mochi's information panel; verify by a live spec that prints what happened and the checklist in the demo file
 - [ ] 8.3 Write `demos/19-urban-and-simulation.md` ("The site talks back": set the site, Urban's neighbours and green share in the grey layer, Climate's weather with its age, Simulation's ground temperature and shade, Mochi's information panel that cannot change the model) with a shot list and the real-run checklist, and record the clip (45 to 60 seconds); verify against a real run with Claude Code
 

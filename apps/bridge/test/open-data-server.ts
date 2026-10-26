@@ -213,7 +213,7 @@ export function openDataServer(): OpenDataServer {
           },
         });
       }
-      case "catalog.data.gov":
+      case "ckan.publishing.service.gov.uk":
         return url.pathname.includes("package_search")
           ? json({
               success: true,

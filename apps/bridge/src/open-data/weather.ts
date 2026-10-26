@@ -257,6 +257,8 @@ async function nwsHours(client: OpenDataClient, place: Place, ttlMs: number) {
 // What the tools call ------------------------------------------------------------------------------------------------
 
 const NOW_TTL_MS = 10 * 60_000;
+/** MET Norway asks not to repeat a request before its Expires time, which it sets about 30 minutes ahead. */
+const MET_TTL_MS = 30 * 60_000;
 const FORECAST_TTL_MS = 3600_000;
 
 /** Tries the sources in order and returns the first that answers; when all fail, the last error says why. */
@@ -301,7 +303,7 @@ export async function weatherNow(
       };
     }
     if (id === "met-norway") {
-      const r = await metSeries(client, place, NOW_TTL_MS);
+      const r = await metSeries(client, place, MET_TTL_MS);
       const first = r.hours[0];
       if (!first) throw new OpenDataError("http", "MET Norway returned no hours.");
       return {

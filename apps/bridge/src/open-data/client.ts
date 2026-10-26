@@ -102,6 +102,10 @@ export interface OpenDataRequest {
   ttlMs: number;
   /** Content types accepted, as prefixes; the default is JSON and text. */
   accept?: readonly string[];
+  /** How long to wait for the answer, ms: the default limit, or up to the largest one for a source that is known to be slow. */
+  timeoutMs?: number;
+  /** How many times to ask again, after 2 s and then 4 s, when a busy server answers 502 or 504 (within the time limit). */
+  retries?: number;
   /** The most bytes of answer; the default is the limit for text and JSON. */
   maxBytes?: number;
   /** The least time since the last request to this host, ms; object stores that serve ranges need none. */
@@ -140,6 +144,8 @@ export interface OpenDataClientOptions {
 const DEFAULT_ACCEPT = ["application/json", "application/geo+json", "application/vnd.geo+json", "text/"];
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const SLOW_DOWN = new Set([429, 503]);
+/** A gateway that says its server is at capacity (Overpass does): worth asking again shortly. */
+const BUSY = new Set([502, 504]);
 const CACHED_BODY_LIMIT = OPEN_DATA_LIMITS.maxJsonBytes;
 
 /**
@@ -296,19 +302,23 @@ export class OpenDataClient {
 
     const controller = new AbortController();
     this.inflight.add(controller);
+    const limitMs = Math.min(req.timeoutMs ?? OPEN_DATA_LIMITS.timeoutMs, OPEN_DATA_LIMITS.maxTimeoutMs);
     const timer = setTimeout(
-      () =>
-        controller.abort(
-          new OpenDataError("timeout", `No answer within ${OPEN_DATA_LIMITS.timeoutMs / 1000} seconds.`),
-        ),
-      OPEN_DATA_LIMITS.timeoutMs,
+      () => controller.abort(new OpenDataError("timeout", `No answer within ${limitMs / 1000} seconds.`)),
+      limitMs,
     );
     try {
-      for (let hops = 0; ; hops++) {
+      let hops = 0;
+      let retried = 0;
+      for (;;) {
         seen(url.hostname);
         const raw = await this.send(req, url, controller);
+        if (BUSY.has(raw.status) && retried < (req.retries ?? 0)) {
+          await this.sleep(2000 * 2 ** retried++);
+          continue;
+        }
         if (REDIRECTS.has(raw.status) && raw.headers.location) {
-          if (hops >= OPEN_DATA_LIMITS.maxRedirects)
+          if (hops++ >= OPEN_DATA_LIMITS.maxRedirects)
             throw new OpenDataError("too-many-redirects", "Too many redirects.");
           url = this.checkUrl(req, new URL(raw.headers.location, url).href);
           continue;

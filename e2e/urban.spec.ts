@@ -95,7 +95,7 @@ test("Urban fetches the buildings and trees around the site into the context lay
   // Only the site's box went out: no project name, no element, nothing of the model.
   const sent = decodeURIComponent(server.bodies[0] ?? "");
   expect(sent).toMatch(
-    /^data=\[out:json\]\[timeout:25\];\(way\["building"\]\(52\.\d+,4\.\d+,52\.\d+,4\.\d+\);node\["natural"="tree"\]/,
+    /^data=\[out:json\]\[timeout:45\];\(way\["building"\]\(52\.\d+,4\.\d+,52\.\d+,4\.\d+\);node\["natural"="tree"\]/,
   );
   expect(sent).not.toMatch(/block|wall|column|mixed-use/i);
   // The list in Settings shows the host that was contacted.
@@ -134,7 +134,7 @@ test("a portal search and a table read come back with publisher, licence and the
 }) => {
   const team = await start(page, true);
   const found = JSON.parse(
-    await ask(team, "open_data_search", { portal: "catalog.data.gov", query: "street trees" }),
+    await ask(team, "open_data_search", { portal: "ckan.publishing.service.gov.uk", query: "street trees" }),
   );
   expect(found.data.datasets[0]).toMatchObject({
     title: "Street trees",
@@ -143,7 +143,7 @@ test("a portal search and a table read come back with publisher, licence and the
   });
   const table = JSON.parse(
     await ask(team, "open_data_get", {
-      portal: "catalog.data.gov",
+      portal: "ckan.publishing.service.gov.uk",
       dataset: "street-trees",
       resource: "res-1",
     }),

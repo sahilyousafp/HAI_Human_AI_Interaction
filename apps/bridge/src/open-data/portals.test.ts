@@ -9,7 +9,10 @@ const json = (value: unknown, status = 200): RawResponse => ({
   body: Buffer.from(JSON.stringify(value)),
 });
 
-function setup(respond: (url: URL) => RawResponse, hosts = ["data.example.org", "catalog.data.gov"]) {
+function setup(
+  respond: (url: URL) => RawResponse,
+  hosts = ["data.example.org", "ckan.publishing.service.gov.uk"],
+) {
   const calls: string[] = [];
   const transport: Transport = async (url) => {
     calls.push(url.href);
@@ -45,8 +48,10 @@ const ckanPackage = {
 describe("portal search", () => {
   it("a CKAN catalogue answers with title, publisher, licence, date and formats, and which resources read as a table", async () => {
     const t = setup(() => json({ success: true, result: { count: 41, results: [ckanPackage] } }));
-    const found = await searchPortal(t.client, "catalog.data.gov", "ckan", "street trees", 5);
-    expect(t.calls[0]).toBe("https://catalog.data.gov/api/3/action/package_search?q=street%20trees&rows=5");
+    const found = await searchPortal(t.client, "ckan.publishing.service.gov.uk", "ckan", "street trees", 5);
+    expect(t.calls[0]).toBe(
+      "https://ckan.publishing.service.gov.uk/api/3/action/package_search?q=street%20trees&rows=5",
+    );
     expect(found.total).toBe(41);
     expect(found.datasets[0]).toMatchObject({
       id: "11111111-aaaa",
@@ -55,7 +60,7 @@ describe("portal search", () => {
       licence: "Creative Commons Attribution",
       updated: "2026-09-01T10:00:00",
       formats: ["CSV", "GEOJSON"],
-      url: "https://catalog.data.gov/dataset/street-trees",
+      url: "https://ckan.publishing.service.gov.uk/dataset/street-trees",
     });
     expect(found.datasets[0]?.resources).toEqual([
       { id: "r-1", format: "CSV", table: true },
@@ -122,7 +127,7 @@ describe("portal search", () => {
   });
 
   it("knows the kind of a starter-list host and not of one the user added", () => {
-    expect(starterKind("catalog.data.gov")).toBe("ckan");
+    expect(starterKind("ckan.publishing.service.gov.uk")).toBe("ckan");
     expect(starterKind("data.cityofnewyork.us")).toBe("socrata");
     expect(starterKind("data.example.org")).toBeNull();
     expect(searchUrl("h.example", "ckan", "a b", 2)).toContain("q=a%20b&rows=2");
@@ -163,9 +168,16 @@ describe("reading a dataset", () => {
         },
       }),
     );
-    const read = await readDataset(t.client, "catalog.data.gov", "ckan", "street-trees", "r-1", 5000);
+    const read = await readDataset(
+      t.client,
+      "ckan.publishing.service.gov.uk",
+      "ckan",
+      "street-trees",
+      "r-1",
+      5000,
+    );
     expect(t.calls[0]).toBe(
-      `https://catalog.data.gov/api/3/action/datastore_search?resource_id=r-1&limit=${TABLE_ROW_LIMIT + 1}`,
+      `https://ckan.publishing.service.gov.uk/api/3/action/datastore_search?resource_id=r-1&limit=${TABLE_ROW_LIMIT + 1}`,
     );
     expect(read.table.columns).toEqual(["species", "trunk"]);
     expect(read.table.rows).toHaveLength(TABLE_ROW_LIMIT);
@@ -176,7 +188,7 @@ describe("reading a dataset", () => {
     const t = setup(() =>
       json({ success: true, result: { total: 3, fields: [{ id: "a" }], records: rows(3) } }),
     );
-    const read = await readDataset(t.client, "catalog.data.gov", "ckan", "d", undefined, 50);
+    const read = await readDataset(t.client, "ckan.publishing.service.gov.uk", "ckan", "d", undefined, 50);
     expect(read.table.rows).toHaveLength(3);
     expect(read.table.truncated).toBe(false);
   });

@@ -83,7 +83,7 @@ describe("the query", () => {
   it("asks for buildings and, when wanted, trees inside the box", () => {
     const box = { south: 52.3, west: 4.8, north: 52.4, east: 5 };
     expect(overpassQuery(box, false)).toBe(
-      '[out:json][timeout:25];(way["building"](52.300000,4.800000,52.400000,5.000000););out geom;',
+      '[out:json][timeout:45];(way["building"](52.300000,4.800000,52.400000,5.000000););out geom;',
     );
     expect(overpassQuery(box, true)).toContain(
       'node["natural"="tree"](52.300000,4.800000,52.400000,5.000000);',
@@ -185,7 +185,7 @@ describe("fetching", () => {
     await fetchBuildings(t.client, site, 300, false);
     const body = decodeURIComponent((t.calls[0]?.body ?? "").slice(5));
     expect(body).toMatch(
-      /^\[out:json\]\[timeout:25\];\(way\["building"\]\(52\.\d+,4\.\d+,52\.\d+,4\.\d+\);\);out geom;$/,
+      /^\[out:json\]\[timeout:45\];\(way\["building"\]\(52\.\d+,4\.\d+,52\.\d+,4\.\d+\);\);out geom;$/,
     );
   });
 

@@ -18,7 +18,14 @@ function setup(
     url: URL,
     init: { method: string; headers: Record<string, string>; body?: string; signal: AbortSignal },
   ) => RawResponse | Promise<RawResponse>,
-  options: { allowed?: boolean; cache?: boolean; now?: () => number; hosts?: string[]; gapMs?: number } = {},
+  options: {
+    allowed?: boolean;
+    cache?: boolean;
+    now?: () => number;
+    hosts?: string[];
+    gapMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
 ) {
   const calls: Array<{ url: string; method: string; headers: Record<string, string>; body?: string }> = [];
   const entries: OpenDataRecordEntry[] = [];
@@ -41,7 +48,7 @@ function setup(
     userAgent: "HAI/test (open source)",
     record,
     transport,
-    sleep: async () => {},
+    sleep: options.sleep ?? (async () => {}),
     ...(options.now ? { now: options.now } : {}),
     ...(options.gapMs !== undefined ? { gapMs: options.gapMs } : {}),
   });
@@ -309,6 +316,83 @@ describe("OpenDataClient timeout", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("OpenDataClient per-request time limit", () => {
+  const slow = (answerAfterMs: number) => (_url: URL, init: { signal: AbortSignal }) =>
+    new Promise<RawResponse>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(json({ ok: true })), answerAfterMs);
+      init.signal.addEventListener("abort", () => {
+        clearTimeout(timer);
+        reject(init.signal.reason);
+      });
+    });
+
+  it("a request may ask to wait longer than the default, and gets its answer", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = setup(slow(30_000), { gapMs: 0 });
+      const pending = t.client.request({ ...forecast, ttlMs: 0, timeoutMs: 50_000 });
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect((await pending).body.toString()).toContain("ok");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("no request may ask for more than the largest limit", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = setup(slow(500_000), { gapMs: 0 });
+      const settled = t.client.request({ ...forecast, ttlMs: 0, timeoutMs: 500_000 }).then(
+        () => "answered",
+        (e: OpenDataError) => e.message,
+      );
+      await vi.advanceTimersByTimeAsync(60_001);
+      expect(await settled).toBe("No answer within 60 seconds.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("OpenDataClient busy servers", () => {
+  const busy: RawResponse = {
+    status: 502,
+    headers: { "content-type": "text/plain" },
+    body: Buffer.from("at capacity"),
+  };
+
+  it("asks again after a pause when a busy server answers 502, up to the number of retries", async () => {
+    const waits: number[] = [];
+    let calls = 0;
+    const t = setup(() => (++calls < 3 ? busy : json({ ok: true })), {
+      gapMs: 0,
+      sleep: async (ms: number) => {
+        waits.push(ms);
+      },
+    });
+    const answer = await t.client.request({ ...forecast, ttlMs: 0, retries: 2 });
+    expect(answer.body.toString()).toContain("ok");
+    expect(calls).toBe(3);
+    expect(waits).toEqual([2000, 4000]);
+  });
+
+  it("gives up with the status once the retries are used, and never retries without being asked", async () => {
+    let calls = 0;
+    const t = setup(
+      () => {
+        calls++;
+        return busy;
+      },
+      { gapMs: 0, sleep: async () => {} },
+    );
+    await expect(t.client.request({ ...forecast, ttlMs: 0, retries: 1 })).rejects.toThrow(/HTTP 502/);
+    expect(calls).toBe(2);
+    calls = 0;
+    await expect(t.client.request({ ...forecast, ttlMs: 0 })).rejects.toThrow(/HTTP 502/);
+    expect(calls).toBe(1);
   });
 });
 

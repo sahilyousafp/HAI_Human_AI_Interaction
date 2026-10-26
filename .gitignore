@@ -26,3 +26,10 @@ site/
 # .NET build output (plugins/rhino)
 plugins/rhino/**/bin/
 plugins/rhino/**/obj/
+
+# hai.spairl.si: encoded clips are rebuilt by website/scripts/encode-video.mjs; Catalyst CLI state is per machine
+website/public/media/
+website/.astro/
+website/.catalystrc
+website/cli-config.json
+website/catalyst-debug.log

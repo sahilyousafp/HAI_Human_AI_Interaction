@@ -4,6 +4,8 @@
 
 > Status: week 12 of a 19-week build in public. Hand and face tracking, both hands as equal pointers, gestures, hand navigation, tool rings with hand-drawn walls, slabs and columns, your own Claude as a small design team (Mochi and its specialists), on-device voice in and out, an Apple-style studio layout with feature switches and a "show my hands" overlay for recordings, pointers that snap to buttons, drawing aids (snap, ortho, projection) import of Rhino .3dm models, snapping and measuring at every height, new empty projects and saving as a Rhino file all work in the built-in viewer. Next: the Rhino 8 connector.
 
+Watch the build stage by stage, each with its clip and LinkedIn post, at [hai.spairl.si](https://hai.spairl.si). The site's source is in [website/](website/).
+
 ## Download
 
 **On Windows:** download the installer from the [releases page](https://github.com/sahilyousafp/HAI_Human_AI_Interaction/releases/latest) and double click it. It installs for you only and needs no administrator rights. The first screen walks you through installing Claude Code and downloading the voice models. You need a Claude account for the agent; the camera and the viewer work without one. Details, and how to build it yourself, are in [docs/desktop.md](docs/desktop.md); shipping a new version is in [docs/releasing.md](docs/releasing.md).

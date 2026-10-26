@@ -90,7 +90,7 @@ describe("Open data tools", () => {
     expect(byId["met-norway"]).toMatchObject({ on: true, hosts: ["api.met.no"] });
     expect(byId["open-meteo"]).toMatchObject({ on: false });
     expect(byId["open-meteo"].why).toMatch(/non-commercial/);
-    expect(byId.portals.hosts).toContain("catalog.data.gov");
+    expect(byId.portals.hosts).toContain("ckan.publishing.service.gov.uk");
   });
 
   it("site_set saves the site, tells every page, and open_data_sources then reports it", async () => {
