@@ -1,0 +1,206 @@
+/* Buttons: pill, circular fill grows from the centre on hover. */
+.btn {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 46px;
+  padding: 0 22px;
+  overflow: hidden;
+  border: 1px solid var(--hairline-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--graphite);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 0.4s var(--ease),
+    border-color 0.4s var(--ease),
+    transform 0.2s var(--ease);
+}
+.btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--graphite);
+  opacity: 0;
+  transform: scale(0.2);
+  transition:
+    transform 0.5s var(--ease),
+    opacity 0.35s var(--ease);
+}
+.btn:hover {
+  color: var(--film);
+  border-color: var(--graphite);
+}
+.btn:hover::before {
+  opacity: 1;
+  transform: scale(1);
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn.primary {
+  background: var(--graphite);
+  color: var(--film);
+  border-color: var(--graphite);
+}
+.btn.primary::before {
+  background: var(--accent);
+}
+.btn.primary:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+.theme-dark .btn.primary:hover {
+  color: var(--film);
+}
+.btn.small {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+.btn .arrow {
+  transition: transform 0.5s var(--ease);
+}
+.btn:hover .arrow {
+  transform: translate(2px, -2px);
+}
+
+/* Links: underline wipes out on hover, or in. */
+.link {
+  padding-bottom: 1px;
+  background: linear-gradient(currentColor, currentColor) 0 100% / 100% 1px no-repeat;
+  transition:
+    background-size 0.45s var(--ease),
+    color 0.3s;
+}
+.link:hover {
+  background-position: 100% 100%;
+  background-size: 0 1px;
+}
+.link-quiet {
+  padding-bottom: 1px;
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+  transition: background-size 0.45s var(--ease);
+}
+.link-quiet:hover {
+  background-size: 100% 1px;
+}
+
+/* Chips */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 15px;
+  border: 1px solid var(--hairline-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--graphite-2);
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background-color 0.3s var(--ease),
+    color 0.3s,
+    border-color 0.3s;
+}
+.chip:hover {
+  border-color: var(--graphite);
+  color: var(--graphite);
+}
+.chip .count {
+  font-size: 12px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pulsing "live" dot */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: live 2.2s ease-out infinite;
+}
+@keyframes live {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(3.2);
+  }
+}
+
+/* Brand logo: PNG used as a mask so it takes the theme colour. */
+.logo-card {
+  display: grid;
+  width: 128px;
+  aspect-ratio: 385 / 100;
+  perspective: 600px;
+  transform-style: preserve-3d;
+  transition: transform 0.9s var(--ease-io);
+}
+.logo-face {
+  grid-area: 1 / 1;
+  align-self: center;
+  width: 100%;
+  aspect-ratio: var(--ar);
+  background: var(--graphite);
+  -webkit-mask: var(--src) center / contain no-repeat;
+  mask: var(--src) center / contain no-repeat;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.logo-en {
+  --src: url("/brand/spairl-en.png");
+  --ar: 385 / 98;
+}
+.logo-hi {
+  --src: url("/brand/spairl-hi.png");
+  --ar: 800 / 209;
+  background: var(--accent);
+  transform: rotateX(180deg);
+}
+.logo-card.is-flipped {
+  transform: rotateX(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-card,
+  .logo-card.is-flipped {
+    transform: none;
+  }
+  .logo-hi {
+    transform: none;
+    opacity: 0;
+  }
+  .logo-face {
+    transition: opacity 0.6s;
+  }
+  .logo-card.is-flipped .logo-en {
+    opacity: 0;
+  }
+  .logo-card.is-flipped .logo-hi {
+    opacity: 1;
+  }
+}

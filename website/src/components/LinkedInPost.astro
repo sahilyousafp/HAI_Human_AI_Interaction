@@ -1,0 +1,72 @@
+---
+interface Props {
+  url: string;
+  urn: string;
+  hook: string;
+  date: Date;
+}
+const { url, urn, hook, date } = Astro.props;
+const posted = date.toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+---
+
+<aside class="post" data-post aria-label="The LinkedIn post for this stage">
+  <div class="post-card" data-post-card>
+    <p class="post-src meta">
+      <svg class="in" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9.75h4v11H3zm6.5 0h3.8v1.5h.06c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.77 2.65 4.77 6.1v5.45h-4v-4.83c0-1.15-.02-2.63-1.6-2.63-1.6 0-1.85 1.25-1.85 2.55v4.91h-4z" /></svg>
+      On LinkedIn, <time datetime={date.toISOString().slice(0, 10)}>{posted}</time>
+    </p>
+    <blockquote class="post-hook" cite={url}>{hook}</blockquote>
+    <div class="post-cta">
+      <a class="btn primary small" href={url} target="_blank" rel="noopener">Read the post <span class="arrow" aria-hidden="true">↗</span></a>
+      <button class="btn small" type="button" data-embed={`https://www.linkedin.com/embed/feed/update/${urn}`}>Show it here</button>
+    </div>
+    <p class="post-note meta" data-post-note aria-live="polite">Nothing loads from LinkedIn until you choose to show the post here.</p>
+  </div>
+</aside>
+
+<script>
+  import "../scripts/embed";
+</script>
+
+<style>
+  .post-card {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    height: 100%;
+    padding: clamp(22px, 2.6vw, 32px);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-panel);
+    background: var(--sheet);
+  }
+  .post-src { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+  .in { width: 16px; height: 16px; fill: var(--accent); }
+  .post-hook {
+    margin: 0;
+    font-size: clamp(20px, 1.7vw, 24px);
+    font-weight: 520;
+    line-height: 1.25;
+    letter-spacing: -0.016em;
+    text-wrap: balance;
+  }
+  .post-hook::before { content: "\201C"; }
+  .post-hook::after { content: "\201D"; }
+  .post-cta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+  .post-note { margin: 0; }
+  [data-embed]:disabled { cursor: progress; opacity: 0.7; }
+  html:not(.js) [data-embed],
+  html:not(.js) .post-note { display: none; }
+
+  .post :global(.post-frame) {
+    width: 100%;
+    height: min(720px, 80svh);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-panel);
+    background: var(--sheet);
+  }
+</style>

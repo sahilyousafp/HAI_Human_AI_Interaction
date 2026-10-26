@@ -1,0 +1,80 @@
+---
+// The landmark hand as an SVG, in its open pose. Scripts move it with applyPose() from lib/hand.
+import { BONES, FINGERS, INDEX_TIP, OPEN, PALM, VIEWBOX } from "../lib/hand";
+
+interface Props {
+  class?: string;
+  /** The solid hand silhouette, as the app's "show my hands" overlay draws it. */
+  solid?: boolean;
+  /** The landmark skeleton: bones between the joints. */
+  bones?: boolean;
+  /** Which joints get a dot. */
+  joints?: "all" | "index";
+  /** Ring around the index tip, the app's hover ring. */
+  ring?: boolean;
+  label?: string;
+  /** Radii in viewBox units; a hand drawn small needs bigger joints to stay visible. */
+  jointR?: number;
+  ringR?: number;
+}
+const {
+  class: className,
+  solid = false,
+  bones = true,
+  joints = "all",
+  ring = false,
+  label,
+  jointR = 5,
+  ringR = 16,
+} = Astro.props;
+const shown = joints === "all" ? OPEN.map((_, i) => i) : [INDEX_TIP];
+const points = (ids: readonly number[]) => ids.map((i) => OPEN[i].join(",")).join(" ");
+---
+
+<svg
+  class:list={["hand-svg", className]}
+  viewBox={VIEWBOX}
+  role={label ? "img" : undefined}
+  aria-label={label}
+  aria-hidden={label ? undefined : "true"}
+  data-hand
+>
+  {
+    solid && (
+      <g class="flesh">
+        <polygon class="palm" data-pts={PALM.join(" ")} points={points(PALM)} stroke-width="40" />
+        {FINGERS.map((f) => (
+          <polyline class="finger" data-pts={f.chain.join(" ")} points={points(f.chain)} stroke-width={f.width} />
+        ))}
+      </g>
+    )
+  }
+  {
+    bones && (
+      <g class="bones">
+        {BONES.map(([a, b], i) => (
+          <line
+            class="bone"
+            data-a={a}
+            data-b={b}
+            x1={OPEN[a][0]}
+            y1={OPEN[a][1]}
+            x2={OPEN[b][0]}
+            y2={OPEN[b][1]}
+            pathLength="1"
+            style={`--i:${i}`}
+          />
+        ))}
+      </g>
+    )
+  }
+  {shown.map((i) => <circle class="joint" data-j={i} cx={OPEN[i][0]} cy={OPEN[i][1]} r={jointR} style={`--i:${i}`} />)}
+  {ring && <circle class="ring" data-j={INDEX_TIP} cx={OPEN[INDEX_TIP][0]} cy={OPEN[INDEX_TIP][1]} r={ringR} />}
+  <slot />
+</svg>
+
+<style>
+  /* One shape: the group carries the opacity, so overlapping fingers and palm don't double up. */
+  .flesh { fill: currentColor; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+  .finger { fill: none; }
+</style>

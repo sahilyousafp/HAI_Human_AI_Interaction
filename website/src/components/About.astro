@@ -1,0 +1,78 @@
+---
+import { site } from "../data/site";
+
+const points = [
+  {
+    h: "Hands, face and voice",
+    p: "Both hands as equal pointers, a nod for yes, a shake for no, and speech that stays on the laptop. Nothing fires until you engage, so talking with your hands doesn't move the model.",
+  },
+  {
+    h: "Private by design",
+    p: "Camera video is processed inside the browser on your machine. It is never recorded or uploaded; only gesture events reach the app.",
+  },
+  {
+    h: "Your own agent, real geometry",
+    p: "HAI drives your own signed-in Claude as a small design team, and keeps the precise modelling in tools like Rhino.",
+  },
+];
+---
+
+<section class="about theme-dark" id="about" data-spy="about">
+  <div class="wrap inner">
+    <div class="copy">
+      <h2 class="section-title rv">Build the hands, not the modeler</h2>
+      <p class="lede rv" style="--d:1">
+        AI agents can already drive design tools, but talking to them still means typing into a chat box. HAI rethinks how you direct the agent, from a normal laptop webcam.
+      </p>
+      <div class="cta rv" style="--d:2">
+        <a class="btn primary" href={`${site.github}/releases/latest`} target="_blank" rel="noopener">Download for Windows <span class="arrow" aria-hidden="true">↗</span></a>
+        <a class="btn" href={site.github} target="_blank" rel="noopener">Read the code <span class="arrow" aria-hidden="true">↗</span></a>
+      </div>
+      <p class="meta rv" style="--d:3">Open source under Apache-2.0.</p>
+    </div>
+
+    <ol class="points">
+      {points.map((pt, i) => (
+        <li class="rv" style={`--d:${i + 1}`}>
+          <span class="p-num num">{String(i + 1).padStart(2, "0")}</span>
+          <h3>{pt.h}</h3>
+          <p>{pt.p}</p>
+        </li>
+      ))}
+    </ol>
+  </div>
+</section>
+
+<style>
+  .about {
+    margin-top: clamp(120px, 15vw, 200px);
+    background: var(--film);
+    color: var(--graphite);
+    scroll-margin-top: var(--header-h);
+  }
+  .inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(40px, 6vw, 96px);
+    padding-block: clamp(72px, 10vw, 140px);
+  }
+  .section-title { font-size: clamp(40px, 5vw, 76px); }
+  .lede { max-width: 44ch; margin: 22px 0 30px; color: var(--graphite-2); font-size: 18px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+
+  .points { border-top: 1px solid var(--hairline-2); }
+  .points li {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 12px;
+    padding: 26px 0;
+    border-bottom: 1px solid var(--hairline-2);
+  }
+  .p-num { grid-row: span 2; color: var(--accent); font-size: 15px; line-height: 1.6; }
+  .points h3 { font-size: clamp(20px, 1.8vw, 24px); letter-spacing: -0.016em; line-height: 1.25; }
+  .points p { margin: 8px 0 0; color: var(--graphite-2); font-size: 16px; }
+
+  @media (width <= 860px) {
+    .inner { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>

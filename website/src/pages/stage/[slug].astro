@@ -1,0 +1,59 @@
+---
+import type { GetStaticPaths } from "astro";
+import Stage from "../../components/Stage.astro";
+import Base from "../../layouts/Base.astro";
+import { getStages } from "../../lib/stages";
+
+export const getStaticPaths = (async () => {
+  const stages = await getStages();
+  return stages.map((stage, i) => ({
+    params: { slug: stage.id },
+    props: { stage, prev: stages[i - 1], next: stages[i + 1] },
+  }));
+}) satisfies GetStaticPaths;
+
+const { stage, prev, next } = Astro.props;
+---
+
+<Base
+  title={`${stage.data.week}: ${stage.data.title} - HAI`}
+  description={stage.data.summary}
+  path={`/stage/${stage.id}/`}
+  image={`/media/${stage.id}.jpg`}
+>
+  <div class="wrap page">
+    <a class="back meta link-quiet" href="/#stages">← All stages</a>
+    <Stage stage={stage} />
+
+    <nav class="pager" aria-label="More stages">
+      {prev ? (
+        <a class="pg prev" href={`/stage/${prev.id}/`}>
+          <span class="meta">← {prev.data.week}</span>
+          <span class="pg-title">{prev.data.title}</span>
+        </a>
+      ) : <span />}
+      {next && (
+        <a class="pg next" href={`/stage/${next.id}/`}>
+          <span class="meta">{next.data.week} →</span>
+          <span class="pg-title">{next.data.title}</span>
+        </a>
+      )}
+    </nav>
+  </div>
+</Base>
+
+<style>
+  .page { padding-top: calc(var(--header-h) + clamp(32px, 5vw, 64px)); }
+  .back { display: inline-block; margin-bottom: clamp(24px, 3vw, 40px); }
+  .pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: clamp(56px, 7vw, 96px);
+    border-top: 1px solid var(--hairline);
+  }
+  .pg { display: grid; gap: 4px; padding: 20px 0; }
+  .pg.next { text-align: right; }
+  .pg-title { font-size: clamp(18px, 1.6vw, 22px); letter-spacing: -0.014em; transition: color 0.3s; }
+  .pg:hover .pg-title { color: var(--accent); }
+</style>

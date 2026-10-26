@@ -1,0 +1,35 @@
+---
+import type { CollectionEntry } from "astro:content";
+import StageCard from "./StageCard.astro";
+
+interface Props {
+  stages: CollectionEntry<"stages">[];
+}
+const { stages } = Astro.props;
+---
+
+<section class="section wrap stages" id="stages" data-spy="stages">
+  <h2 class="section-title rv">Stages</h2>
+  <p class="section-lede rv" style="--d:1">One stage a week, each with its clip and the LinkedIn post that went out with it. Open a stage to watch it in full.</p>
+
+  <ol class="grid">
+    {stages.map((s, i) => (
+      <li class="rv" style={`--d:${Math.min(i, 3) + 1}`}>
+        <StageCard stage={s} />
+      </li>
+    ))}
+  </ol>
+</section>
+
+<script>
+  import "../scripts/previews";
+</script>
+
+<style>
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+    gap: clamp(16px, 2vw, 28px);
+    margin-top: clamp(40px, 5vw, 72px);
+  }
+</style>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>HAI</title>
+  <rect width="64" height="64" rx="14" fill="#0b3bd6"/>
+  <text x="32" y="46" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="42" font-weight="500" fill="#f4f5f7">H</text>
+  <rect x="14" y="52" width="36" height="3" rx="1.5" fill="#f4f5f7"/>
+</svg>

@@ -1,0 +1,83 @@
+---
+// A small solid hand, drawn like the app's "show my hands" overlay, that replaces the mouse pointer with its
+// index fingertip on the pointer's hotspot. It pinches to click, grabs and drags to scroll, and rings what
+// it hovers. Only for a real mouse, and not with reduced motion; scripts/cursor.ts switches it on.
+import HandSvg from "./HandSvg.astro";
+---
+
+<div class="hand-cursor" data-cursor aria-hidden="true">
+  <HandSvg class="hc-hand" solid bones={false} joints="index" ring jointR={17} ringR={100} />
+  <svg class="hc-scroll" viewBox="0 0 12 12"><path d="M3 7.5 6 4.5 9 7.5" /></svg>
+</div>
+
+<script>
+  import "../scripts/cursor";
+</script>
+
+<style>
+  .hand-cursor {
+    --ink: #2b3038;
+    --tip: var(--accent);
+    --halo: #ffffffe6;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    display: none;
+    pointer-events: none;
+    will-change: transform;
+  }
+  :global(html.hand-cursor-on) .hand-cursor { display: block; }
+  /* The hand stands in for the pointer everywhere, including over buttons that ask for a pointer. */
+  :global(html.hand-cursor-on),
+  :global(html.hand-cursor-on *) { cursor: none; }
+  .hand-cursor.hidden { opacity: 0; }
+  .hand-cursor.on-dark { --ink: #dfe5ee; --tip: #8fb0ff; --halo: #0a1522cc; }
+
+  .hand-cursor :global(.hc-hand) {
+    display: block;
+    width: 41px;
+    height: auto;
+    overflow: visible;
+    filter: drop-shadow(0 0 1.2px var(--halo)) drop-shadow(0 0 1.2px var(--halo));
+  }
+  .hand-cursor :global(.flesh) { color: var(--ink); opacity: 0.62; transition: opacity 0.25s var(--ease); }
+  .hand-cursor.over :global(.flesh) { opacity: 0.78; }
+  .hand-cursor :global(.joint) { fill: var(--tip); }
+  .hand-cursor :global(.ring) {
+    fill: none;
+    stroke: var(--tip);
+    stroke-width: 18;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+    transform: scale(0.4);
+    transition: opacity 0.2s var(--ease), transform 0.35s var(--spring);
+  }
+  /* Hovering something clickable: the app's hover ring. */
+  .hand-cursor.over :global(.ring) { opacity: 1; transform: none; }
+  /* A completed pinch: the ring flashes out from the fingertips. */
+  .hand-cursor.clicked :global(.ring) { animation: burst 0.45s var(--ease); }
+  @keyframes burst {
+    from { opacity: 1; transform: scale(0.5); }
+    to { opacity: 0; transform: scale(1.8); }
+  }
+
+  /* Scrolling: a chevron beside the hand shows the direction it is dragging the page. */
+  .hc-scroll {
+    position: absolute;
+    left: 44px;
+    top: 6px;
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: var(--tip);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0;
+    transition: opacity 0.2s var(--ease), transform 0.25s var(--ease);
+  }
+  .hand-cursor.scrolling .hc-scroll { opacity: 1; }
+  .hand-cursor.scroll-down .hc-scroll { transform: rotate(180deg); }
+</style>
