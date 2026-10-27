@@ -1466,10 +1466,18 @@ kbd {
   border-color: var(--risk);
   color: var(--risk);
 }
+/* A 32 px button with a 40 px reach for a hand. */
 .agent-head .icon-button,
 .agent-strip .icon-button {
-  width: 40px;
-  height: 40px;
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+.agent-head .icon-button::after,
+.agent-strip .icon-button::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
 }
 .agent-unavailable {
   display: grid;
@@ -1602,14 +1610,19 @@ kbd {
   white-space: nowrap;
 }
 /* What each agent last looked at from its own cameras: a thumbnail each, in the agent's colour. */
+/* What each agent last looked at: a row of small pictures that scrolls sideways, so a picture never takes the chat. */
 .team-shots {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 4px;
+  scrollbar-width: thin;
 }
 .team-shot {
   display: grid;
+  flex: none;
   gap: 3px;
+  width: 104px;
   min-width: 0;
   padding: 3px;
   border: 0.5px solid color-mix(in srgb, var(--agent-color) 60%, var(--line));
@@ -1626,7 +1639,7 @@ kbd {
 .team-shot img {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  height: 56px;
   object-fit: cover;
   border-radius: 5px;
   background: var(--bg);
@@ -1932,7 +1945,9 @@ kbd {
   overscroll-behavior: contain;
   font-size: 14px;
   line-height: 1.5;
-  mask-image: linear-gradient(transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  scrollbar-width: thin;
+  scrollbar-color: var(--fill-strong) transparent;
+  mask-image: linear-gradient(transparent, #000 8px, #000 calc(100% - 12px), transparent);
 }
 .agent-empty {
   max-width: 34ch;
@@ -2393,7 +2408,7 @@ kbd {
   display: grid;
   border: 0.5px solid var(--line);
   border-radius: var(--r-m);
-  background: var(--bg);
+  background: var(--fill);
 }
 .agent-composer-field:focus-within {
   outline: 2px solid var(--accent);
@@ -3952,6 +3967,7 @@ kbd {
 .agent-tray-body {
   max-height: 160px;
   overflow-y: auto;
+  scrollbar-width: thin;
 }
 .written-files {
   display: grid;
