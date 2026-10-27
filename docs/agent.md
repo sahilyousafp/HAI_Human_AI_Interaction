@@ -130,9 +130,11 @@ User-level servers and skills stay yours to manage in Claude Code itself.
 - **Speak** is the main way to ask: press the microphone button (or hold the **`** key) and say what to change while you point at the model. The transcript is sent after 1.5 s, or at once with a nod or **Enter**; a shake or **Escape** discards it. See [voice.md](voice.md).
 - Or type a request and press **Enter** to send it (**Shift+Enter** adds a line). You can send while the agent is ready; while it works, the send button becomes **Stop**.
 - **Ask agent** in the tool palette (or the **A** key) opens the panel and starts listening.
-- Replies stream in as they are written. Each tool call is a chip showing running, needs approval, done, failed or denied. Click a chip to see its input and its result or error.
+- **The panel is a rail down the left**, beside the model, never over it. Drag its right edge to make it between 320 and 560 px wide, or use the arrow keys on the edge; a double-click puts it back to 380 px, and a press (a hand cannot drag) steps through a few widths. The width is remembered. Below 860 px of window width it is a sheet over the bottom of the model.
+- Replies stream in as they are written. Each tool call is a chip showing running, needs approval, done, failed or denied. Click a chip to see its input and its result or error. Several calls in a row fold into one line, such as "3 steps, done" or "Bash needs approval": it is open while a call runs, waits or failed, and folded once all are done.
+- Files the agent's scripts wrote, and reports of scripts that went outside their claim, wait in one **Files and runs** row above the input. It opens when a new one arrives.
 - The status shows Mochi's state: Unavailable, Starting, Ready, Working or Recovering.
-- Collapse the panel with its arrow button. While collapsed, it shows how many approvals are waiting.
+- Collapse the panel with its arrow button: it becomes a narrow strip with the status, how many approvals are waiting, and the microphone.
 
 ## Privacy and logs
 

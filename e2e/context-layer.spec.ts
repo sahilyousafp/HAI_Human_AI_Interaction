@@ -112,12 +112,23 @@ test("the layer is never picked: a building standing over a column leaves the co
   page,
 }) => {
   const b = await start(page);
-  const at = await findElementOnScreen(page, "col-a1");
+  // Whichever of the sample's columns is clear on screen (the chat takes the view's left).
+  const columns = Object.values(b.scene.scene.doc.elements).filter((e) => e.type === "column");
+  let found: { id: string; at: [number, number] } | null = null;
+  for (const c of columns) {
+    if (found) break;
+    found = await findElementOnScreen(page, c.id).then(
+      (at) => ({ id: c.id, at }),
+      () => null,
+    );
+  }
+  if (!found) throw new Error("no column is clear on screen");
+  const { id, at } = found;
   const before = await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x as number, y as number), at);
-  expect(before).toBe("col-a1");
+  expect(before).toBe(id);
   // A tall context building around the column, between it and the camera.
-  const column = b.scene.scene.doc.elements["col-a1"];
-  if (column?.type !== "column") throw new Error("no col-a1");
+  const column = b.scene.scene.doc.elements[id];
+  if (column?.type !== "column") throw new Error(`no ${id}`);
   const [cx, cy] = column.position;
   b.context.replace(
     "overpass",
@@ -128,7 +139,7 @@ test("the layer is never picked: a building standing over a column leaves the co
   await expect.poll(() => held(page)).toMatchObject({ buildings: 1 });
   await page.waitForTimeout(300);
   const after = await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x as number, y as number), at);
-  expect(after).toBe("col-a1");
+  expect(after).toBe(id);
 });
 
 test("Show context hides it for the user, brings it back, and a changed site marks it out of date", async ({

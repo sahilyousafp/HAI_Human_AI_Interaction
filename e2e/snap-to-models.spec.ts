@@ -35,8 +35,9 @@ async function find(page: Page, kind: { near: number } | { far: number }): Promi
       }
       return false;
     };
-    // The middle and right of the view: away from the panels at its left and the controls, which a pointer snaps to.
-    for (let py = 20; py < rect.height / 2; py += 12) {
+    // The middle and right of the view, below the project bar: away from the panels and the controls, which a
+    // pointer snaps to.
+    for (let py = 140; py < rect.height * 0.6; py += 12) {
       for (let px = rect.width * 0.7; px < rect.width - 20; px += 12) {
         if (!free(px, py) || hits(px, py)) continue;
         if ("near" in k) {

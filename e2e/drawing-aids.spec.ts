@@ -118,12 +118,22 @@ test("Endpoint: a wall starts exactly on the end of another wall", async ({ page
   await start(page);
   await turnOn(page, "endpoint");
   const { end, at } = await visibleWallEnd(page);
-  const far = await groundSpan(page, 6000, 0);
+  // The new wall runs 6 m from that end, whichever way is clear on screen.
+  let to: Point | null = null;
+  for (const [dx, dy] of [
+    [6000, 0],
+    [-6000, 0],
+    [0, 6000],
+    [0, -6000],
+  ] as const) {
+    to ??= await screenOf(page, [end[0] + dx, end[1] + dy]);
+  }
+  if (!to) throw new Error("no clear ground 6 m from the wall end");
   await page.keyboard.press("w");
   // Hovering shows what a start point would snap to; the label goes with the drag, which looks for the end.
   await page.mouse.move(at[0] + 9, at[1] + 6);
   await expect(page.getByTestId("snap-label")).toHaveText("Endpoint");
-  await drag(page, [at[0] + 9, at[1] + 6], (await screenOf(page, far.end)) ?? at);
+  await drag(page, [at[0] + 9, at[1] + 6], to);
   await page.mouse.up();
   await expect.poll(() => lastWall()?.start).toEqual(end);
 });

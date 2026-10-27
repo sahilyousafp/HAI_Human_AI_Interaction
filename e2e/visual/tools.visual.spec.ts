@@ -163,12 +163,13 @@ for (const scheme of ["light", "dark"] as const) {
         { type, hand, position: await ground(x, y) },
       );
     await page.keyboard.press("e");
+    // On the open ground in front of the model that the view shows beside the chat.
     const outline: Array<[number, number]> = [
-      [-4000, -4000],
-      [4000, -4000],
-      [4000, -10_000],
-      [-4000, -10_000],
-      [-4000, -5000],
+      [4000, -2000],
+      [10_000, -2000],
+      [10_000, -6000],
+      [4000, -6000],
+      [4000, -3000],
     ];
     for (const [n, [x, y]] of outline.entries()) {
       const type =
@@ -177,13 +178,13 @@ for (const scheme of ["light", "dark"] as const) {
       await gesture("Left", type, x, y);
     }
     await page.keyboard.press("l");
-    await gesture("Right", "pinch.drag.start", 8000, -4000);
-    await gesture("Right", "pinch.drag.update", 14_000, -4000);
-    await gesture("Right", "pinch.drag.update", 14_000, -9000);
-    await gesture("Right", "pinch.drag.end", 14_000, -9000);
+    await gesture("Right", "pinch.drag.start", 13_000, -2000);
+    await gesture("Right", "pinch.drag.update", 20_000, -2000);
+    await gesture("Right", "pinch.drag.update", 17_000, -5000);
+    await gesture("Right", "pinch.drag.end", 17_000, -5000);
     await page.keyboard.press("k");
-    await gesture("Right", "pinch.tap", 0, -7000);
-    await gesture("Right", "pinch.tap", 11_000, -7000);
+    await gesture("Right", "pinch.tap", 7000, -4000);
+    await gesture("Right", "pinch.tap", 16_000, -3500);
     await page.keyboard.press("v");
     await expect(page.getByTestId("letter-marker")).toHaveCount(2);
     await expect(page.getByTestId("sketch-label")).toHaveCount(2);
@@ -210,19 +211,19 @@ for (const scheme of ["light", "dark"] as const) {
         const [x, y] = [box.x + box.width * 0.62, box.y + box.height * 0.42];
         return { x: x - 60, y: y - 60, width: 360, height: 120 };
       };
-      // Fingers closing and the hand still: frames until the ring shows, so it is caught part-filled however slow
+      // The left hand (the one that talks): fingers closing and the hand still: frames until the ring shows, so it is caught part-filled however slow
       // the machine is (how far it filled varies a little, so this shot allows a larger difference).
       const closing = () =>
         page.evaluate(
-          (p) => window.__HAI_INPUT__?.pointer(p as [number, number], null, { Right: true }),
+          (p) => window.__HAI_INPUT__?.pointer(null, p as [number, number], { Left: true }),
           hand,
         );
-      const progress = page.getByTestId("hold-progress-right");
+      const progress = page.getByTestId("hold-progress-left");
       for (let i = 0; i < 40 && !(await progress.isVisible()); i++) {
         await closing();
         await page.waitForTimeout(60);
       }
-      await expect(page.getByTestId("hold-progress-right")).toBeVisible();
+      await expect(page.getByTestId("hold-progress-left")).toBeVisible();
       await expect(page).toHaveScreenshot(`hold-progress-${scheme}-${width}.png`, {
         clip: await area(),
         maxDiffPixelRatio: 0.06,
@@ -231,13 +232,13 @@ for (const scheme of ["light", "dark"] as const) {
       const send = (type: string) =>
         page.evaluate(
           (e) =>
-            window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], hand: "Right", ...e } as never]),
+            window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], hand: "Left", ...e } as never]),
           { type, position: hand, ts: performance.now() },
         );
-      await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p as [number, number]), hand);
+      await page.evaluate((p) => window.__HAI_INPUT__?.pointer(null, p as [number, number]), hand);
       await send("pinch.drag.start");
       await send("pinch.hold");
-      // Silent: after 0.6 s the action ring shows around the hand, and the chip moves under it.
+      // The left hand talks. Silent: after 0.6 s its reference ring shows around the hand, and the chip moves under it.
       await expect(page.getByTestId("held-chip")).toHaveText("Listening. Speak now.", { timeout: 15_000 });
       await expect(page.getByTestId("tool-palette")).toBeVisible();
       await expect(page.getByTestId("held-chip")).toHaveAttribute("data-ring", "true");

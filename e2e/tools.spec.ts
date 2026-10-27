@@ -511,10 +511,19 @@ test.describe("hand UX regressions", () => {
     const pointer = page.getByTestId("hand-pointer-right");
     await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), await handAt(page, [0.4, 0.5]));
     await expect(pointer).toBeVisible();
-    await page.evaluate(() => window.__HAI_INPUT__?.pointer(null)); // one frame without the hand
-    await page.waitForTimeout(100);
-    await expect(pointer).toBeVisible();
-    await page.waitForTimeout(300); // gone for longer: the pointer goes
+    // One frame without the hand: the pointer is still there 100 ms later, and gone 400 ms later. Timed in the page,
+    // so round trips from the test never stretch the gap past the 250 ms the pointer waits.
+    const [after100, after400] = await page.evaluate(async () => {
+      const present = () => document.querySelector('[data-testid="hand-pointer-right"]') !== null;
+      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+      window.__HAI_INPUT__?.pointer(null);
+      await wait(100);
+      const early = present();
+      await wait(300);
+      return [early, present()];
+    });
+    expect(after100).toBe(true);
+    expect(after400).toBe(false);
     await expect(pointer).toHaveCount(0);
     await page.evaluate(() => window.__HAI_INPUT__?.engaged(false));
     await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p), await handAt(page, [0.4, 0.5]));

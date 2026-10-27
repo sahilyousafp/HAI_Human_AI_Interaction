@@ -10,6 +10,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  memo,
   useEffect,
   useRef,
   useState,
@@ -79,9 +80,15 @@ const TASK_STATUS_LABEL: Record<TeamTask["status"], string> = {
 };
 const VIEW_LABEL = { chat: "Chat", agents: "Agents", extensions: "Extensions" } as const;
 const COLLAPSED_KEY = "hai.agentCollapsed";
-const CHEVRON_UP = "M6 15l6-6 6 6";
-const CHEVRON_DOWN = "M6 9l6 6 6-6";
+const WIDTH_KEY = "hai.agentWidth";
+/** The rail's width is dragged between these; a hand press on its edge steps up through RAIL_STEPS, then back to the least. */
+const RAIL_MIN = 320;
+const RAIL_MAX = 560;
+const RAIL_DEFAULT = 380;
+const RAIL_STEPS = [RAIL_DEFAULT, 460, RAIL_MAX];
 const CHEVRON_LEFT = "M15 6l-6 6 6 6";
+const CHEVRON_RIGHT = "M9 6l6 6-6 6";
+const TRAY_ICON = "M6 15l6-6 6 6";
 const STOP_ICON = "M7 7h10v10H7z";
 const SEND_ICON = "M5 12h13M13 6l6 6-6 6";
 const SPEAKER_ICON = "M11 5 6 9H3v6h3l5 4V5zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13";
@@ -139,12 +146,105 @@ function readCollapsed(): boolean {
   }
 }
 
+const clampWidth = (px: number) => Math.round(Math.min(RAIL_MAX, Math.max(RAIL_MIN, px)));
+
+function readWidth(): number {
+  try {
+    const stored = Number(localStorage.getItem(WIDTH_KEY));
+    return Number.isFinite(stored) && stored > 0 ? clampWidth(stored) : RAIL_DEFAULT;
+  } catch {
+    return RAIL_DEFAULT;
+  }
+}
+
+function writeWidth(value: number): void {
+  try {
+    localStorage.setItem(WIDTH_KEY, String(value));
+  } catch {
+    // Storage blocked: the rail opens at its default width next time.
+  }
+}
+
+/**
+ * The rail's right edge: drag it to widen or narrow the chat, use the arrow keys, double-click for the default, or
+ * press it by hand (a hand press cannot drag) to step through a few widths.
+ */
+function RailHandle({ width, onWidth }: { width: number; onWidth: (px: number) => void }) {
+  const drag = useRef<{ x: number; width: number } | null>(null);
+  const step = () => onWidth(RAIL_STEPS.find((w) => w > width) ?? RAIL_MIN);
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: a focusable separator that resizes is the WAI-ARIA window splitter
+    <div
+      className="agent-rail-resize"
+      data-testid="agent-rail-resize"
+      data-hand-press
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Chat width"
+      aria-valuemin={RAIL_MIN}
+      aria-valuemax={RAIL_MAX}
+      aria-valuenow={width}
+      tabIndex={0}
+      title="Drag to resize the chat (double-click for the default)"
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { x: e.clientX, width };
+      }}
+      onPointerMove={(e) => {
+        const start = drag.current;
+        if (start) onWidth(clampWidth(start.width + e.clientX - start.x));
+      }}
+      onPointerUp={() => {
+        drag.current = null;
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+      }}
+      onClick={(e) => {
+        // A hand press arrives as a click with no pointer down first.
+        if (e.detail === 0) step();
+      }}
+      onDoubleClick={() => onWidth(RAIL_DEFAULT)}
+      onKeyDown={(e) => {
+        switch (e.key) {
+          case "ArrowRight":
+            onWidth(clampWidth(width + 16));
+            break;
+          case "ArrowLeft":
+            onWidth(clampWidth(width - 16));
+            break;
+          case "Home":
+            onWidth(RAIL_MIN);
+            break;
+          case "End":
+            onWidth(RAIL_MAX);
+            break;
+          default:
+            return;
+        }
+        e.preventDefault();
+      }}
+    />
+  );
+}
+
 function writeCollapsed(value: boolean): void {
   try {
     localStorage.setItem(COLLAPSED_KEY, String(value));
   } catch {
     // Storage blocked: the panel opens expanded next time.
   }
+}
+
+/** A settled plan in one line: what became of it and who did the parts. */
+function planSummary(plan: PlanView): string {
+  const kept = plan.parts.filter((p) => plan.keep?.includes(p.id));
+  if (plan.outcome === "confirmed") {
+    const who = [...new Set(kept.map((p) => displayName(p.agent)))];
+    const names = who.length > 2 ? `${who.slice(0, 2).join(", ")} +${who.length - 2}` : who.join(", ");
+    return `Plan: ${kept.length} of ${plan.parts.length} parts, ${names}`;
+  }
+  return plan.outcome === "skipped" ? "Plan skipped: nothing was handed out" : "Plan not answered";
 }
 
 /** Seconds until a pending card is denied, refreshed every second. */
@@ -279,8 +379,8 @@ function ApprovalCard({
             {displayName(request.agent)}
           </span>
         )}
-        <strong>{outcome ? label.tool : `Allow ${label.tool}?`}</strong>
-        <span className="muted">{request.source}</span>
+        <strong className="approval-title">{outcome ? label.tool : `Allow ${label.tool}?`}</strong>
+        <span className="muted approval-source">{request.source}</span>
       </div>
       <code className="approval-summary" data-testid="approval-summary">
         {request.summary}
@@ -549,10 +649,7 @@ function ToolChip({
   agent?: string;
 }) {
   const label = toolLabel(item.name);
-  const declined = approval?.outcome === "denied" || approval?.outcome === "timed-out";
-  let outcome: ToolOutcome | "waiting" = item.outcome;
-  if (declined && item.outcome !== "done") outcome = "denied";
-  else if (approval && !approval.outcome && item.outcome === "running") outcome = "waiting";
+  const outcome = chipOutcome(item, approval);
   const input = JSON.stringify(item.input ?? {}, null, 2);
   return (
     <details className="tool-chip" data-testid="tool-chip" data-outcome={outcome}>
@@ -576,6 +673,94 @@ function ToolChip({
             <pre data-testid="tool-chip-result">{clip(item.summary)}</pre>
           </>
         )}
+      </div>
+    </details>
+  );
+}
+
+/** What a tool call shows: its own outcome, or denied or waiting from its approval card. */
+function chipOutcome(
+  item: Extract<TurnItem, { kind: "tool" }>,
+  approval?: ApprovalView,
+): ToolOutcome | "waiting" {
+  const declined = approval?.outcome === "denied" || approval?.outcome === "timed-out";
+  if (declined && item.outcome !== "done") return "denied";
+  if (approval && !approval.outcome && item.outcome === "running") return "waiting";
+  return item.outcome;
+}
+
+/** The order the steps group reports a turn's calls in: what needs the user first, then what went wrong. */
+const STEP_WEIGHT: Record<ToolOutcome | "waiting", number> = {
+  waiting: 4,
+  failed: 3,
+  denied: 3,
+  running: 2,
+  done: 1,
+};
+
+/**
+ * Several tool calls in a row, as one line: how many, and the one that matters most (one waiting for approval, a
+ * failure, one still running). It is open while its turn runs or a call waits or failed, so nothing needing
+ * attention is hidden, and folds once all is done; pressing it shows or hides every call.
+ */
+function StepsGroup({
+  tools,
+  approvalOf,
+  agent,
+  live,
+}: {
+  tools: Extract<TurnItem, { kind: "tool" }>[];
+  approvalOf: (toolId: string) => ApprovalView | undefined;
+  agent?: string;
+  /** The turn is still running: more calls may come. */
+  live: boolean;
+}) {
+  const outcomes = tools.map((t) => chipOutcome(t, approvalOf(t.id)));
+  const worst = outcomes.reduce((a, b) => (STEP_WEIGHT[b] > STEP_WEIGHT[a] ? b : a), "done");
+  const count = (o: ToolOutcome | "waiting") => outcomes.filter((x) => x === o).length;
+  const waiting = tools[outcomes.indexOf("waiting")];
+  let summary = `${tools.length} steps`;
+  if (waiting) summary = `${toolLabel(waiting.name).tool} needs approval`;
+  else if (worst === "failed" || worst === "denied")
+    summary += `, ${count("failed") + count("denied")} ${worst === "denied" ? "denied" : "failed"}`;
+  else if (worst === "running") summary += `, ${count("running")} running`;
+  else summary += live ? " so far" : ", done";
+  // Open while there is something to watch or answer, folded once all is done, unless the user chose otherwise.
+  const watch = live || worst !== "done";
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const open = chosen ?? watch;
+  return (
+    <details
+      className="agent-steps"
+      data-testid="agent-steps"
+      data-outcome={worst}
+      open={open}
+      onToggle={(e) => {
+        // Only a toggle that differs from what the group shows on its own is the user's choice.
+        if (e.currentTarget.open !== open) setChosen(e.currentTarget.open);
+      }}
+    >
+      <summary className="agent-steps-head" data-hand-press>
+        <span className="agent-steps-dots" aria-hidden="true">
+          {outcomes.slice(0, 3).map((o, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: one dot per call, in order
+            <span key={i} className="tool-chip-dot" data-outcome={o} />
+          ))}
+        </span>
+        <span className="agent-steps-summary">{summary}</span>
+      </summary>
+      <div className="agent-steps-list">
+        {tools.map((item) => {
+          const approval = approvalOf(item.id);
+          return (
+            <ToolChip
+              key={item.id}
+              item={item}
+              {...(approval ? { approval } : {})}
+              {...(agent ? { agent } : {})}
+            />
+          );
+        })}
       </div>
     </details>
   );
@@ -610,7 +795,24 @@ function HandOffChip({
   );
 }
 
-function Turn({
+/**
+ * Whether a turn's props are the same: arrays item by item (the panel filters them afresh on every render), anything
+ * else by identity. A turn then re-renders only when its own data changes, not with every streamed word of another.
+ */
+function sameTurnProps<P extends object>(a: P, b: P): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof P>;
+  for (const key of keys) {
+    const [x, y] = [a[key], b[key]];
+    if (x === y) continue;
+    if (!Array.isArray(x) || !Array.isArray(y) || x.length !== y.length) return false;
+    if (x.some((item, i) => item !== y[i])) return false;
+  }
+  return true;
+}
+
+const Turn = memo(TurnItems, sameTurnProps);
+
+function TurnItems({
   turn,
   approvals,
   client,
@@ -657,8 +859,20 @@ function Turn({
   const offerCard = (offer: OfferView) => (
     <OfferCard key={offer.offerId} offer={offer} panels={panels} only={offer.offerId === onlyOfferId} />
   );
-  // An offer sits under the chip of the offer_panel call that made it (the n-th call, the n-th offer).
+  // An offer belongs to the offer_panel call that made it (the n-th call, the n-th offer).
   let offered = 0;
+  // Calls in a row read as one steps group; their cards and offers follow the group, where they are seen.
+  type Segment =
+    | { kind: "item"; index: number }
+    | { kind: "steps"; tools: Extract<TurnItem, { kind: "tool" }>[] };
+  const segments: Segment[] = [];
+  turn.items.forEach((item, index) => {
+    const last = segments.at(-1);
+    if (item.kind !== "tool") segments.push({ kind: "item", index });
+    else if (last?.kind === "steps") last.tools.push(item);
+    else segments.push({ kind: "steps", tools: [item] });
+  });
+  let firstText = true;
   return (
     <li
       className="agent-turn"
@@ -673,30 +887,57 @@ function Turn({
           Session recovered: the agent restarted and continued the conversation.
         </p>
       )}
-      {turn.items.map((item, i) => {
-        if (item.kind === "text")
+      {segments.map((segment) => {
+        if (segment.kind === "steps") {
+          const [only] = segment.tools;
+          const cards = segment.tools.flatMap((t) => {
+            const approval = cardFor(t.id);
+            return approval ? [card(approval)] : [];
+          });
+          const offerCards = segment.tools.flatMap((t) => {
+            const offer = toolLabel(t.name).tool === "offer_panel" ? offers[offered++] : undefined;
+            return offer ? [offerCard(offer)] : [];
+          });
+          const approval = only ? cardFor(only.id) : undefined;
           return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: items only ever append, so the index is stable
-            <p key={i} className="agent-text" data-testid="agent-text">
+            <div key={only?.id} className="agent-tool">
+              {segment.tools.length === 1 && only ? (
+                <ToolChip item={only} {...(approval ? { approval } : {})} {...(agent ? { agent } : {})} />
+              ) : (
+                <StepsGroup
+                  tools={segment.tools}
+                  approvalOf={cardFor}
+                  live={!turn.ended}
+                  {...(agent ? { agent } : {})}
+                />
+              )}
+              {cards}
+              {offerCards}
+            </div>
+          );
+        }
+        const item = turn.items[segment.index];
+        if (item?.kind === "text") {
+          const lead = firstText;
+          firstText = false;
+          return (
+            <p
+              key={segment.index}
+              className="agent-text"
+              data-testid="agent-text"
+              data-lead={lead && turn.kind !== "digest" ? "true" : undefined}
+            >
               {item.text}
             </p>
           );
-        if (item.kind === "error")
+        }
+        if (item?.kind === "error")
           return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: items only ever append, so the index is stable
-            <p key={i} className="agent-error" role="alert">
+            <p key={segment.index} className="agent-error" role="alert">
               {item.message}
             </p>
           );
-        const approval = cardFor(item.id);
-        const offer = toolLabel(item.name).tool === "offer_panel" ? offers[offered++] : undefined;
-        return (
-          <div key={item.id} className="agent-tool">
-            <ToolChip item={item} approval={approval} {...(agent ? { agent } : {})} />
-            {approval && card(approval)}
-            {offer && offerCard(offer)}
-          </div>
-        );
+        return null;
       })}
       {unlinked.map(card)}
       {offers.slice(offered).map(offerCard)}
@@ -751,8 +992,9 @@ function SpeakToggle({
 }
 
 /**
- * Every specialist and its state. While everyone is idle it is one compact row, so it covers little of the model;
- * with work under way each specialist gets a chip with its task. Pressing one opens its task's thread.
+ * Every specialist and its state, as one row of chips that scrolls sideways, so the conversation keeps its height.
+ * With work under way each chip shows its task, its workers nest under it, and Stop all is pinned at the row's end.
+ * Pressing a chip opens its task's thread.
  */
 function TeamStrip({
   team,
@@ -823,14 +1065,12 @@ function TeamStrip({
     );
   });
   return (
-    <div className="team-strip" data-testid="team-strip" data-idle={idle}>
-      <div className="team-strip-head">
-        <span className="team-strip-label">Team</span>
-        {idle ? (
-          <span className="team-names" title="All idle">
-            {chips}
-          </span>
-        ) : (
+    <section className="team-strip" data-testid="team-strip" data-idle={idle} aria-label="Team">
+      <div className="team-row">
+        <div className="team-chips" title={idle ? "All idle" : undefined}>
+          {chips}
+        </div>
+        {!idle && (
           <>
             <span className="team-strip-summary" data-testid="team-summary">
               {summary.join(", ")}
@@ -848,10 +1088,9 @@ function TeamStrip({
           </>
         )}
       </div>
-      {!idle && <div className="team-grid">{chips}</div>}
       {team.shots.length > 0 && <ShotsStrip team={team} />}
       {team.claims.length > 0 && <PartsList team={team} client={client} />}
-    </div>
+    </section>
   );
 }
 
@@ -1130,6 +1369,8 @@ export function AgentPanel({
 }) {
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [width, setWidth] = useState(readWidth);
+  const [trayOpen, setTrayOpen] = useState(true);
   const [draft, setDraft] = useState("");
   const [view, setView] = useState<"chat" | "agents" | "extensions">("chat");
   /** The task whose thread is open, instead of Mochi's chat. */
@@ -1152,11 +1393,21 @@ export function AgentPanel({
     pending.length === 0 && waitingOffers.length === 1 ? (waitingOffers[0]?.offerId ?? null) : null;
   const toApprove = pending.length + waitingOffers.length;
   const offersOf = (turnId: string) => offers.filter((o) => o.turnId === turnId);
+  const latestPlan = state.plans.at(-1);
 
   const setPanelCollapsed = (value: boolean) => {
     setCollapsed(value);
     writeCollapsed(value);
   };
+  const setRailWidth = (px: number) => {
+    setWidth(px);
+    writeWidth(px);
+  };
+  const trayCount = (onImportFile ? state.written.length : 0) + state.runReports.length;
+  // New files or reports open the tray: they wait for the user to choose.
+  useEffect(() => {
+    if (trayCount > 0) setTrayOpen(true);
+  }, [trayCount]);
 
   // A voice request starting (the microphone button, the talk key, Ask agent) shows the panel on the chat.
   useEffect(() => {
@@ -1200,28 +1451,67 @@ export function AgentPanel({
     }
   };
 
+  const toggle = (
+    <button
+      type="button"
+      className="icon-button agent-collapse"
+      data-hand-press
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? "Show the agent panel" : "Hide the agent panel"}
+      title={collapsed ? "Show the agent panel" : "Hide the agent panel"}
+      onClick={() => setPanelCollapsed(!collapsed)}
+    >
+      <ToolIcon path={collapsed ? CHEVRON_RIGHT : CHEVRON_LEFT} size={16} />
+    </button>
+  );
+  const statusOutput = (
+    <output className="agent-status" data-testid="agent-status" data-state={status}>
+      <span className="agent-dot" aria-hidden="true" />
+      <span className="agent-status-label">{STATUS_LABEL[status]}</span>
+    </output>
+  );
+  const title = (
+    <span className="agent-title" data-testid="agent-title">
+      {team ? displayName(client.lead) : "Agent"}
+    </span>
+  );
+
   return (
     <section
-      className="agent-panel"
+      className="agent-panel agent-rail"
       data-testid="agent-panel"
       data-collapsed={collapsed}
       data-hud
       aria-label="Agent"
+      style={{ "--rail-w": `${width}px` } as CSSProperties}
     >
-      <header className="agent-head">
-        <span className="agent-title" data-testid="agent-title">
-          {team ? displayName(client.lead) : "Agent"}
-        </span>
-        <output className="agent-status" data-testid="agent-status" data-state={status}>
-          <span className="agent-dot" aria-hidden="true" />
-          {STATUS_LABEL[status]}
-        </output>
-        {collapsed && toApprove > 0 && (
-          <span className="agent-badge" data-testid="agent-pending-badge">
-            {toApprove} to approve
-          </span>
-        )}
-        {!collapsed && (
+      {collapsed ? (
+        <div className="agent-strip">
+          {toggle}
+          {statusOutput}
+          {title}
+          {toApprove > 0 && (
+            <span className="agent-badge" data-testid="agent-pending-badge" title={`${toApprove} to approve`}>
+              {toApprove}
+              <span className="visually-hidden"> to approve</span>
+            </span>
+          )}
+          {voiceOn && (
+            <MicButton
+              voice={voice}
+              onStart={startVoice}
+              disabled={status === "unavailable"}
+              notice={voiceNotice}
+            />
+          )}
+        </div>
+      ) : (
+        <header className="agent-head">
+          <div className="agent-head-row">
+            {title}
+            {statusOutput}
+            {toggle}
+          </div>
           <div className="agent-tabs" role="tablist" aria-label="Agent views">
             {(["chat", "agents", "extensions"] as const).map((v) => (
               <button
@@ -1237,19 +1527,8 @@ export function AgentPanel({
               </button>
             ))}
           </div>
-        )}
-        <button
-          type="button"
-          className="icon-button"
-          data-hand-press
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Show the agent panel" : "Hide the agent panel"}
-          title={collapsed ? "Show the agent panel" : "Hide the agent panel"}
-          onClick={() => setPanelCollapsed(!collapsed)}
-        >
-          <ToolIcon path={collapsed ? CHEVRON_DOWN : CHEVRON_UP} size={16} />
-        </button>
-      </header>
+        </header>
+      )}
       {!collapsed && view === "agents" && <AgentsView client={client} />}
       {!collapsed && view === "extensions" && <ExtensionsView client={client} />}
       {!collapsed && view === "chat" && (
@@ -1269,14 +1548,18 @@ export function AgentPanel({
               onlyPendingId={onlyPendingId}
             />
           )}
-          {team && !task && state.plans.length > 0 && (
+          {team && !task && latestPlan && (
             <div className="plan-cards">
-              <PlanCard
-                key={state.plans.at(-1)?.id}
-                plan={state.plans.at(-1) as PlanView}
-                team={team}
-                client={client}
-              />
+              {latestPlan.outcome === undefined ? (
+                <PlanCard key={latestPlan.id} plan={latestPlan} team={team} client={client} />
+              ) : (
+                <details key={latestPlan.id} className="plan-summary" data-outcome={latestPlan.outcome}>
+                  <summary className="plan-summary-head" data-hand-press>
+                    <span className="plan-summary-text">{planSummary(latestPlan)}</span>
+                  </summary>
+                  <PlanCard plan={latestPlan} team={team} client={client} />
+                </details>
+              )}
             </div>
           )}
           {task && team && (
@@ -1340,70 +1623,96 @@ export function AgentPanel({
                 />
               ))}
           </ol>
-          {state.written.length > 0 && onImportFile && (
-            <WrittenFiles
-              files={state.written}
-              rhinoConnected={rhinoConnected}
-              onImport={onImportFile}
-              onOpenInRhino={(path) => onOpenInRhino?.(path)}
-              onDismiss={(path) => client.dismissWritten(path)}
-            />
-          )}
-          {state.runReports.length > 0 && <RunReports reports={state.runReports} client={client} />}
-          {voiceOn && <VoiceBar voice={voice} nameOf={nameOf} />}
-          <form className="agent-input" onSubmit={submit}>
-            {voiceOn && (
-              <MicButton
-                voice={voice}
-                onStart={startVoice}
-                disabled={status === "unavailable"}
-                notice={voiceNotice}
-              />
-            )}
-            <SpeakToggle speaker={speaker} on={speakReplies} onChange={onSpeakReplies} />
-            <textarea
-              ref={input}
-              value={draft}
-              rows={1}
-              placeholder={working ? "The agent is working..." : "Speak, or type a request"}
-              aria-label="Request for the agent"
-              data-testid="agent-input"
-              disabled={status === "unavailable"}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={onKey}
-            />
-            {working ? (
+          {trayCount > 0 && (
+            <div className="agent-tray" data-open={trayOpen}>
               <button
                 type="button"
-                className="icon-button stop"
-                data-testid="agent-stop"
+                className="agent-tray-toggle"
+                data-testid="agent-tray-toggle"
                 data-hand-press
-                aria-label="Stop the agent"
-                title="Stop (or clench both fists, then open your hands)"
-                onClick={() => client.stop()}
+                aria-expanded={trayOpen}
+                onClick={() => setTrayOpen(!trayOpen)}
               >
-                <ToolIcon path={STOP_ICON} size={16} />
+                <span>Files and runs ({trayCount})</span>
+                <ToolIcon path={TRAY_ICON} size={14} />
               </button>
-            ) : (
-              <button
-                type="submit"
-                className="icon-button send"
-                data-testid="agent-send"
-                aria-label="Send"
-                title="Send (Enter)"
-                disabled={!canSend}
-              >
-                <ToolIcon path={SEND_ICON} size={16} />
-              </button>
-            )}
-          </form>
+              {trayOpen && (
+                <div className="agent-tray-body">
+                  {state.written.length > 0 && onImportFile && (
+                    <WrittenFiles
+                      files={state.written}
+                      rhinoConnected={rhinoConnected}
+                      onImport={onImportFile}
+                      onOpenInRhino={(path) => onOpenInRhino?.(path)}
+                      onDismiss={(path) => client.dismissWritten(path)}
+                    />
+                  )}
+                  {state.runReports.length > 0 && <RunReports reports={state.runReports} client={client} />}
+                </div>
+              )}
+            </div>
+          )}
           {state.error && (
             <p className="agent-input-error" role="alert" data-testid="agent-error">
               {state.error}
             </p>
           )}
+          <form className="agent-input agent-composer" onSubmit={submit}>
+            <div className="agent-composer-field">
+              {voiceOn && <VoiceBar voice={voice} nameOf={nameOf} />}
+              <textarea
+                className="agent-composer-input"
+                ref={input}
+                value={draft}
+                rows={1}
+                placeholder={working ? "The agent is working..." : "Speak, or type a request"}
+                aria-label="Request for the agent"
+                data-testid="agent-input"
+                disabled={status === "unavailable"}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={onKey}
+              />
+              <div className="agent-composer-actions">
+                {voiceOn && (
+                  <MicButton
+                    voice={voice}
+                    onStart={startVoice}
+                    disabled={status === "unavailable"}
+                    notice={voiceNotice}
+                  />
+                )}
+                <SpeakToggle speaker={speaker} on={speakReplies} onChange={onSpeakReplies} />
+                <span className="agent-composer-spacer" />
+                {working ? (
+                  <button
+                    type="button"
+                    className="icon-button stop"
+                    data-testid="agent-stop"
+                    data-hand-press
+                    aria-label="Stop the agent"
+                    title="Stop (or clench both fists, then open your hands)"
+                    onClick={() => client.stop()}
+                  >
+                    <ToolIcon path={STOP_ICON} size={16} />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="icon-button send"
+                    data-testid="agent-send"
+                    aria-label="Send"
+                    title="Send (Enter)"
+                    disabled={!canSend}
+                  >
+                    <ToolIcon path={SEND_ICON} size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </form>
         </>
       )}
+      {!collapsed && <RailHandle width={width} onWidth={setRailWidth} />}
     </section>
   );
 }

@@ -187,32 +187,28 @@ export function App() {
   // A small marker in the model for each camera an agent placed (Settings > Modelling > Show cameras).
   const [showCameras, setShowCameras] = useState(true);
   const [maxSessions, setMaxSessions] = useState(6);
-  const agentState = useSyncExternalStore(agent.subscribe, agent.getSnapshot);
-  const sceneState = useSyncExternalStore(sceneClient.subscribe, sceneClient.getSnapshot);
+  // Only what the app itself draws from the agent and the scene: the whole agent state changes with every streamed
+  // word of a reply, and re-rendering the app for each one held the page up for tens of milliseconds.
+  const agentTeam = useSyncExternalStore(agent.subscribe, () => agent.getSnapshot().team);
+  const highlightedClaim = useSyncExternalStore(agent.subscribe, () => agent.getSnapshot().highlightedClaim);
+  const sceneDoc = useSyncExternalStore(sceneClient.subscribe, () => sceneClient.getSnapshot().doc);
   const owners = useMemo<OwnerDisplay>(() => {
-    const team = agentState.team;
+    const team = agentTeam;
     if (!team || !featureState.parallelModelling) return NO_OWNERS;
-    const lit = team.claims.find((c) => c.taskId === agentState.highlightedClaim);
+    const lit = team.claims.find((c) => c.taskId === highlightedClaim);
     return {
       colors: showOwners ? agentColors(team.members) : NO_OWNERS.colors,
-      boxes: showOwners ? claimBoxes(team.claims, team.members, sceneState.doc) : [],
+      boxes: showOwners ? claimBoxes(team.claims, team.members, sceneDoc) : [],
       highlight:
-        lit && sceneState.doc
-          ? new Set(elementsInScope(lit.scope, sceneState.doc).map((e) => e.id))
+        lit && sceneDoc
+          ? new Set(elementsInScope(lit.scope, sceneDoc).map((e) => e.id))
           : NO_OWNERS.highlight,
       highlightColor: lit ? (team.members.find((m) => m.name === lit.agent)?.color ?? null) : null,
     };
-  }, [
-    agentState.team,
-    agentState.highlightedClaim,
-    featureState.parallelModelling,
-    showOwners,
-    sceneState.doc,
-  ]);
+  }, [agentTeam, highlightedClaim, featureState.parallelModelling, showOwners, sceneDoc]);
   const cameraMarkerList = useMemo(
-    () =>
-      showCameras && agentState.team ? cameraMarkers(agentState.team.cameras, agentState.team.members) : [],
-    [showCameras, agentState.team],
+    () => (showCameras && agentTeam ? cameraMarkers(agentTeam.cameras, agentTeam.members) : []),
+    [showCameras, agentTeam],
   );
   // How long a change in Rhino takes to be drawn here, refreshed twice a second.
   const [rhinoMs, setRhinoMs] = useState<number | null>(null);
@@ -925,6 +921,24 @@ export function App() {
         </div>
       </header>
       <main className="workspace">
+        {/* The chat docks down the left; the model view starts beside it. */}
+        {featureState.agent && (
+          <AgentPanel
+            client={agent}
+            panels={panels}
+            voice={voice}
+            startVoice={startVoice}
+            voiceOn={featureState.voice}
+            voiceNotice={voiceReady ? null : voiceStatus.label}
+            nameOf={nameOf}
+            speaker={speaker}
+            speakReplies={speakReplies}
+            onSpeakReplies={changeSpeakReplies}
+            rhinoConnected={rhinoState.connected && rhinoState.mode !== "python"}
+            onImportFile={importWritten}
+            onOpenInRhino={openWrittenInRhino}
+          />
+        )}
         <div className="stage">
           <Viewer
             client={sceneClient}
@@ -950,23 +964,6 @@ export function App() {
             showContext={openDataState.showContext}
           >
             <ContextLegend state={contextState} visible={openDataState.showContext} />
-            {featureState.agent && (
-              <AgentPanel
-                client={agent}
-                panels={panels}
-                voice={voice}
-                startVoice={startVoice}
-                voiceOn={featureState.voice}
-                voiceNotice={voiceReady ? null : voiceStatus.label}
-                nameOf={nameOf}
-                speaker={speaker}
-                speakReplies={speakReplies}
-                onSpeakReplies={changeSpeakReplies}
-                rhinoConnected={rhinoState.connected && rhinoState.mode !== "python"}
-                onImportFile={importWritten}
-                onOpenInRhino={openWrittenInRhino}
-              />
-            )}
           </Viewer>
           <CameraView session={session} />
           {label.hint && <p className="hint">{label.hint}</p>}
