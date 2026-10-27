@@ -254,9 +254,9 @@ test.describe("built-in tools", () => {
     await start(page);
     await page.keyboard.press("m");
     const box = await viewerBox(page);
-    // Top right: empty sky, clear of the project bar and agent panel on the left.
-    const empty = { x: box.x + box.width * 0.92, y: box.y + box.height * 0.2 };
-    expect(await page.evaluate(() => window.__HAI_VIEWER__?.pick(0.92, 0.2))).toBeNull();
+    // Upper middle: empty sky, clear of the project bar, the chat on the left and the view cube on the right.
+    const empty = { x: box.x + box.width * 0.7, y: box.y + box.height * 0.25 };
+    expect(await page.evaluate(() => window.__HAI_VIEWER__?.pick(0.7, 0.25))).toBeNull();
     const before = await camera(page);
     const origin = (await element(page, "block-c"))?.origin;
     await mouseDrag(page, empty, { x: empty.x + 150, y: empty.y });

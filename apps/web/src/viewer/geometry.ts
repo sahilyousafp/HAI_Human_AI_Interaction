@@ -1,6 +1,7 @@
-import type { Element, Level } from "@hai/protocol";
+import type { Element, Level, Point3Mm } from "@hai/protocol";
 import { elementBase, type MeshPart } from "@hai/scene";
 import * as THREE from "three";
+import { polylineLength, tubeAlong, tubeRadiusMm } from "../import/curve-tube.ts";
 
 /** Scene units are millimetres; the viewer works in metres. */
 export const MM = 0.001;
@@ -11,6 +12,7 @@ export const MM = 0.001;
  * - slab: outline extruded downward from its level (the level is the top of the floor).
  * - wall: box centred on its baseline, rising from its level.
  * - column: box centred on its position, rising from its level.
+ * - line: a thin tube along its points (a closed line returns to its first).
  * - imported: its bounding box (its triangles are drawn from the asset: see `modelGeometry`).
  */
 export function elementGeometry(element: Element, levels: Level[]): THREE.BufferGeometry {
@@ -45,6 +47,16 @@ export function elementGeometry(element: Element, levels: Level[]): THREE.Buffer
       const [w, d] = element.section;
       const g = new THREE.BoxGeometry(w * MM, d * MM, element.height * MM);
       g.translate(element.position[0] * MM, element.position[1] * MM, (base + element.height / 2) * MM);
+      return g;
+    }
+    case "line": {
+      const points = element.closed ? [...element.points, element.points[0] as Point3Mm] : element.points;
+      const { positions, indices } = tubeAlong(points, tubeRadiusMm(polylineLength(points)));
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      g.setIndex(new THREE.BufferAttribute(indices, 1));
+      g.scale(MM, MM, MM);
+      g.computeVertexNormals();
       return g;
     }
     case "imported": {

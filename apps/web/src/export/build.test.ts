@@ -118,6 +118,30 @@ describe("buildFile3dm", () => {
     ]);
   });
 
+  it("a line is saved as a polyline curve at its real heights, a closed one returning to its start", () => {
+    const line: Element = {
+      id: "ln-1",
+      name: "Path",
+      type: "line",
+      level: "L1",
+      properties: {},
+      closed: true,
+      points: [
+        [0, 0, 4500],
+        [4000, 0, 4500],
+        [4000, 3000, 5000],
+      ],
+    };
+    const result = buildFile3dm(rhino, { doc: docOf(line), assets });
+    if (!result.ok) throw new Error(result.error);
+    expect(result.report).toMatchObject({ objects: 1, curves: 1, extrusions: 0, skipped: [] });
+    const [curve] = readBack(result.bytes).objects;
+    expect(curve).toMatchObject({ kind: "NurbsCurve", layer: "Lines", name: "Path" });
+    expect(curve?.min).toEqual([0, 0, 4500]);
+    expect(curve?.max).toEqual([4000, 3000, 5000]);
+    expect(curve?.strings).toMatchObject({ "hai.id": "ln-1", "hai.level": "Level 1" });
+  });
+
   it("heights and sizes are exact: a wall 6000 x 200 x 3000 on a level at 4500", () => {
     const result = buildFile3dm(rhino, { doc: docOf(wall), assets });
     if (!result.ok) throw new Error(result.error);

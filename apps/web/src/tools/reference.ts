@@ -193,7 +193,7 @@ export const sketchLineTool = (): Tool =>
   sketchTool({
     id: "sketch-line",
     label: "Sketch line",
-    spoken: ["line", "sketch line", "path"],
+    spoken: ["sketch line", "path"],
     icon: "M4 18c3-6 5-8 8-6s5 0 8-6",
     shortcut: "l",
     kind: "path",

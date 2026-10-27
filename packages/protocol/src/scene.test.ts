@@ -90,6 +90,36 @@ describe("parseScene", () => {
   });
 });
 
+describe("line elements", () => {
+  const line = { id: "l1", name: "Line 1", type: "line", properties: {} };
+  const two = [
+    [0, 0, 0],
+    [1000, 0, 500],
+  ];
+  const parse = (element: unknown) => parseScene(scene({ l1: element }));
+
+  it("a line is points at real heights, open unless it says closed", () => {
+    const result = parse({ ...line, points: two });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.doc.elements.l1).toMatchObject({ type: "line", closed: false });
+  });
+
+  it("refuses a line of one point, a closed line of two, and a point that is not a number", () => {
+    expect(parse({ ...line, points: [[0, 0, 0]] }).ok).toBe(false);
+    expect(parse({ ...line, points: two, closed: true }).ok).toBe(false);
+    expect(
+      parse({
+        ...line,
+        points: [
+          [0, 0, 0],
+          [Number.NaN, 0, 0],
+        ],
+      }).ok,
+    ).toBe(false);
+    expect(parse({ ...line, points: [...two, [1000, 1000, 0]], closed: true }).ok).toBe(true);
+  });
+});
+
 describe("imported elements", () => {
   const imported = {
     id: "i-1",

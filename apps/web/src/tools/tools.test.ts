@@ -1,5 +1,6 @@
 import {
   DEFAULT_ACTION_LAYOUT,
+  DEFAULT_DRAWING_AIDS,
   DEFAULT_REFERENCE_LAYOUT,
   type GestureEvent,
   type Point2,
@@ -47,7 +48,7 @@ const doc = (): SceneDocument => ({
 const LIST_X = 0.95;
 const BUTTON_Y = 0.05;
 
-function setup() {
+function setup(extra: Partial<ToolEnvironment> = {}) {
   const registry = new ToolRegistry();
   registerBuiltinTools(registry);
   const controller = new ToolController(registry, {
@@ -88,10 +89,23 @@ function setup() {
         : null,
     onSectionLine: () => false,
     askAgent: () => "The agent is not connected: the bridge is offline.",
+    ...extra,
   };
   controller.attach(env);
   return { registry, controller, applied, calls, navigated };
 }
+
+/** A camera for the stand-in view, 400 x 300 px: ground points are matched to where they are on screen. */
+const PX = { width: 400, height: 300 };
+const withCamera: Partial<ToolEnvironment> = {
+  screenSize: () => [PX.width, PX.height],
+  projector: () => (point, out) => {
+    const [x, y] = toViewer(point[0], point[1]);
+    out[0] = x * PX.width;
+    out[1] = y * PX.height;
+    return true;
+  },
+};
 
 /** Opens the palette with the mouse at the centre of the view, steers in a direction and releases. */
 function flick(controller: ToolController, [dx, dy]: Point2) {
@@ -458,5 +472,117 @@ describe("tools tied to a feature", () => {
     // Tools without a feature stay.
     controller.choose("massing");
     expect(controller.getSnapshot().activeId).toBe("massing");
+  });
+});
+
+describe("Line tool", () => {
+  /** Taps ground points (mm) with the Line tool active. */
+  function draw(controller: ToolController, ...points: Array<[number, number]>) {
+    for (const [x, y] of points) controller.tap(toViewer(x, y));
+  }
+  const lines = (applied: Array<{ ops: SceneOp[] }>) =>
+    applied
+      .flatMap((a) => a.ops)
+      .flatMap((op) => (op.op === "create" && op.element.type === "line" ? [op.element] : []));
+
+  it("each tap places a point, the segment follows the pointer, and a nod finishes one undo step", () => {
+    const { controller, applied } = setup();
+    controller.choose("line");
+    draw(controller, [2000, 3000], [8000, 3000]);
+    controller.hover(toViewer(8000, 9000));
+    expect(controller.getSnapshot().overlay.draft).toMatchObject({ type: "line" });
+    expect(controller.getSnapshot().overlay.notice).toContain("6000 mm at 90 deg");
+    expect(controller.accept()).toBe(true);
+    expect(applied).toHaveLength(1);
+    expect(applied[0]?.label).toBe("Add Line 1");
+    expect(lines(applied)[0]).toMatchObject({
+      points: [
+        [2000, 3000, 0],
+        [8000, 3000, 0],
+      ],
+      closed: false,
+      level: "L0",
+    });
+    expect(controller.getSnapshot().overlay.draft).toBeNull();
+  });
+
+  it("one point is not a line: a nod with fewer than two does nothing", () => {
+    const { controller, applied } = setup();
+    controller.choose("line");
+    draw(controller, [2000, 3000]);
+    expect(controller.accept()).toBe(false);
+    expect(applied).toHaveLength(0);
+  });
+
+  it("tapping the last point again finishes, and tapping the first of three or more closes the line", () => {
+    const open = setup(withCamera);
+    open.controller.choose("line");
+    draw(open.controller, [2000, 3000], [8000, 3000], [8000, 3000]);
+    expect(lines(open.applied)).toHaveLength(1);
+    expect(lines(open.applied)[0]).toMatchObject({ closed: false });
+    expect(lines(open.applied)[0]?.points).toHaveLength(2);
+
+    const closed = setup(withCamera);
+    closed.controller.choose("line");
+    draw(closed.controller, [2000, 3000], [8000, 3000], [8000, 9000], [2000, 3000]);
+    expect(lines(closed.applied)[0]).toMatchObject({ closed: true });
+    expect(lines(closed.applied)[0]?.points).toHaveLength(3);
+  });
+
+  it("Escape takes back the last point, then the line, then returns to Select", () => {
+    const { controller, applied } = setup();
+    controller.choose("line");
+    draw(controller, [2000, 3000], [8000, 3000], [8000, 9000]);
+    controller.cancel();
+    controller.hover(toViewer(8000, 3000));
+    expect(controller.getSnapshot().activeId).toBe("line");
+    // Two points are left, and the segment to the pointer is the third of the draft.
+    const draft = controller.getSnapshot().overlay.draft;
+    expect(draft?.type === "line" ? draft.points.slice(0, 2) : null).toEqual([
+      [2000, 3000, 0],
+      [8000, 3000, 0],
+    ]);
+    controller.cancel();
+    controller.cancel();
+    expect(controller.getSnapshot().overlay.draft).toBeNull();
+    expect(controller.getSnapshot().activeId).toBe("line");
+    controller.cancel();
+    expect(controller.getSnapshot().activeId).toBe(DEFAULT_TOOL);
+    expect(applied).toHaveLength(0);
+  });
+
+  it("Ortho locks every segment to its angle step, and a typed length fixes the next one", () => {
+    const { controller, applied } = setup({ aids: () => ({ ...DEFAULT_DRAWING_AIDS, ortho: true }) });
+    controller.choose("line");
+    draw(controller, [2000, 3000]);
+    // A hand 20 degrees off the X axis still draws along it.
+    const off: [number, number] = [12_000, 3000 + 3640];
+    controller.hover(toViewer(...off));
+    expect(controller.getSnapshot().overlay.notice).toContain("0 deg");
+    controller.setLength(2500);
+    draw(controller, off);
+    expect(controller.getSnapshot().constraints.lengthMm).toBeNull(); // used up by the point
+    expect(controller.accept()).toBe(true);
+    expect(lines(applied)[0]?.points[1]).toEqual([4500, 3000, 0]);
+  });
+
+  it("the angle step is remembered between sessions", () => {
+    const stored = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => void stored.set(key, value),
+    });
+    try {
+      setup().controller.setAngleStep(15);
+      expect(setup().controller.getSnapshot().constraints.angleStepDeg).toBe(15);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("Line is Wall's neighbour in the reference ring and is picked by its name", () => {
+    const { registry } = setup();
+    expect(registry.get("line")?.shortcut).toBe("n");
+    expect(DEFAULT_REFERENCE_LAYOUT).toContain("line");
   });
 });

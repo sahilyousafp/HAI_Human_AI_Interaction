@@ -1,8 +1,17 @@
 import type { DrawingAids, Element, Point2, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
 import { elementBase, elementBounds } from "./bounds.ts";
+import type { WorkPlane } from "./views.ts";
 
 /** What a point snapped to; `ortho` is a point only held on an axis, with nothing else near. */
-export type SnapKind = "endpoint" | "midpoint" | "centre" | "perpendicular" | "project" | "grid" | "ortho";
+export type SnapKind =
+  | "endpoint"
+  | "midpoint"
+  | "centre"
+  | "perpendicular"
+  | "project"
+  | "grid"
+  | "ortho"
+  | "length";
 
 export const SNAP_LABELS: Record<SnapKind, string> = {
   endpoint: "Endpoint",
@@ -12,14 +21,16 @@ export const SNAP_LABELS: Record<SnapKind, string> = {
   project: "Project",
   grid: "Grid",
   ortho: "Ortho",
+  length: "Length",
 };
 
 /** How close, on screen, a point must be to existing geometry to snap to it. */
 export const SNAP_TOLERANCE_PX = 24;
 /** The grid, millimetres. */
 export const GRID_MM = 100;
-/** Ortho holds a line to an axis or a diagonal when it is within this many degrees of it. */
-export const ORTHO_WINDOW_DEG = 7.5;
+/** The angles Ortho holds a line to, in degrees: every multiple of the step from the X axis. */
+export const ORTHO_STEPS = [90, 45, 15] as const;
+export const DEFAULT_ORTHO_STEP_DEG = 45;
 /** A point counts as lying on the ortho line (and in its plane) when it is within this distance, millimetres. */
 const ON_RAY_MM = 1;
 
@@ -123,6 +134,18 @@ function addElement(index: SnapIndex, element: Element, doc: SceneDocument): voi
       addOutline(index, element.outline, elementBase(element, doc.levels), centre);
       return;
     }
+    case "line": {
+      // Every vertex, the middle of every span, and the spans; a closed line also has its closing span.
+      const { points } = element;
+      index.endpoint.push(...points);
+      const spans = element.closed ? points.length : points.length - 1;
+      for (let i = 0; i < spans; i++) {
+        const [a, b] = [points[i] as Point3Mm, points[(i + 1) % points.length] as Point3Mm];
+        index.midpoint.push(mid3(a, b));
+        index.segments.push([a, b]);
+      }
+      return;
+    }
     case "massing":
     case "imported": {
       const { min, max } = elementBounds(element, doc.levels);
@@ -164,6 +187,19 @@ export interface ResolveInput {
   index: SnapIndex;
   /** The camera; without one no existing geometry can be matched and only Ortho and Grid apply. */
   project: Projector | null;
+  /**
+   * The plane points are drawn in: plan (the default), or a vertical plane in a side view, where `ground` returns the
+   * point of the view ray on the plane through the anchor and only Ortho, a length, Endpoint, Midpoint, Centre and Grid
+   * apply (Perpendicular and Project work in plan).
+   */
+  plane?: WorkPlane;
+  /** How a line being drawn is held; both are for the segment from `anchor`, and apply only with one. */
+  constraints?: {
+    /** The angles Ortho holds to, degrees (90, 45 or 15); 45 when left out. */
+    angleStepDeg?: number;
+    /** The length of the segment, millimetres, along the Ortho direction or else towards the pointer. */
+    lengthMm?: number | null;
+  };
 }
 
 export interface Resolved {
@@ -179,16 +215,20 @@ export interface Resolved {
 
 const round3 = (p: Point3Mm): Point3Mm => [Math.round(p[0]), Math.round(p[1]), Math.round(p[2])];
 
-/** The unit direction an ortho line takes from `anchor` towards `raw` in plan, or null when it is free (off every axis). */
-function orthoDirection(anchor: readonly number[], raw: readonly number[]): PointMm | null {
+/** A unit direction from an angle in plan, with the rounding noise taken off the axes. */
+const directionAt = (angle: number): PointMm =>
+  [Math.cos(angle), Math.sin(angle)].map((v) => (Math.abs(v) < 1e-9 ? 0 : v)) as PointMm;
+
+/**
+ * The unit direction an ortho line takes from `anchor` towards `raw` in plan: the nearest multiple of `stepDeg` from the
+ * X axis, however far the pointer is from it (a hard lock, as in Rhino). Null only when the pointer is on the anchor.
+ */
+function orthoDirection(anchor: readonly number[], raw: readonly number[], stepDeg: number): PointMm | null {
   const dx = (raw[0] as number) - (anchor[0] as number);
   const dy = (raw[1] as number) - (anchor[1] as number);
   if (Math.hypot(dx, dy) === 0) return null;
-  const step = Math.PI / 4;
-  const angle = Math.atan2(dy, dx);
-  const nearest = Math.round(angle / step) * step;
-  if (Math.abs(angle - nearest) > (ORTHO_WINDOW_DEG * Math.PI) / 180) return null;
-  return [Math.cos(nearest), Math.sin(nearest)].map((v) => (Math.abs(v) < 1e-9 ? 0 : v)) as PointMm;
+  const step = (stepDeg * Math.PI) / 180;
+  return directionAt(Math.round(Math.atan2(dy, dx) / step) * step);
 }
 
 /** The distance from a point to the infinite line through `anchor` along `dir`, in plan. */
@@ -288,18 +328,39 @@ const snapped = (point: Point3Mm, kind: SnapKind, ortho: boolean): Resolved => (
 
 /**
  * Where a point lands once the drawing aids that are on have had their say. Ortho comes first and holds the point on an
- * axis or diagonal through the anchor, in the plane at the anchor's height. Then the first of Endpoint, Midpoint,
+ * angle step (a multiple of 45 degrees unless the constraints say 90 or 15) through the anchor, in the plane at the
+ * anchor's height, however far the pointer is from it. A length in the constraints then fixes how far along that
+ * direction (or, without Ortho, towards the pointer) the point is, and nothing else moves it. Then the first of Endpoint, Midpoint,
  * Centre, Perpendicular and Project that has geometry within 24 px of the pointer on screen wins, whatever its height
  * (with Ortho on, only a point on the held line, in that plane, counts); then Grid takes what is left. With nothing on,
  * or nothing near, the free point on the plane is returned as it is. Null when the pointer meets no plane and nothing
  * snapped.
  */
 export function resolvePoint(input: ResolveInput): Resolved | null {
+  if (input.plane && input.plane !== "xy") return resolveInPlane(input, input.plane);
   const { pointer, anchor, aids, index, project } = input;
   const height = anchor ? anchor[2] : 0;
   const raw = input.ground(height);
-  const dir = aids.ortho && anchor && raw ? orthoDirection(anchor, raw) : null;
+  const dir =
+    aids.ortho && anchor && raw
+      ? orthoDirection(anchor, raw, input.constraints?.angleStepDeg ?? DEFAULT_ORTHO_STEP_DEG)
+      : null;
   const ortho = dir !== null;
+  const lengthMm = input.constraints?.lengthMm;
+  if (lengthMm && lengthMm > 0 && anchor && raw) {
+    // A typed length: along the held direction, else towards the pointer; geometry and grid do not move it.
+    const toward = Math.hypot(raw[0] - anchor[0], raw[1] - anchor[1]);
+    const along =
+      dir ??
+      (toward > 0 ? ([(raw[0] - anchor[0]) / toward, (raw[1] - anchor[1]) / toward] as PointMm) : null);
+    if (along)
+      return {
+        point: round3([anchor[0] + along[0] * lengthMm, anchor[1] + along[1] * lengthMm, height]),
+        kind: "length",
+        label: SNAP_LABELS.length,
+        ortho,
+      };
+  }
   // The pointer's point on the plane, held on the ortho line when there is one.
   let held: Point3Mm | null = raw;
   if (raw && anchor && dir) {
@@ -409,4 +470,119 @@ export function resolvePoint(input: ResolveInput): Resolved | null {
   }
   if (raw) return { point: raw, kind: null, label: null, ortho: false };
   return null;
+}
+
+/** The two axes a vertical plane's points vary along, and the axis it stands square to. */
+const PLANE_AXES: Record<"xz" | "yz", [number, number, number]> = { xz: [0, 2, 1], yz: [1, 2, 0] };
+
+/**
+ * `resolvePoint` for a vertical plane (a side view): the same order of Ortho (a hard lock to the angle step, in the
+ * plane's two axes), a typed length, then the point snaps within reach on screen, then Grid, with the free point on the
+ * plane as the last resort. `input.ground` gives the view ray's point on the plane through the anchor.
+ */
+function resolveInPlane(input: ResolveInput, plane: "xz" | "yz"): Resolved | null {
+  const { pointer, anchor, aids, index, project } = input;
+  const [ia, ib, ni] = PLANE_AXES[plane];
+  const raw = input.ground(anchor ? (anchor[ni] as number) : 0);
+  if (!raw) return null;
+  const level = anchor ? (anchor[ni] as number) : (raw[ni] as number);
+  const make = (a: number, b: number): Point3Mm => {
+    const p: Point3Mm = [0, 0, 0];
+    p[ia] = a;
+    p[ib] = b;
+    p[ni] = level;
+    return p;
+  };
+  const along2 = (p: readonly number[], q: readonly number[]): [number, number] => [
+    (p[ia] as number) - (q[ia] as number),
+    (p[ib] as number) - (q[ib] as number),
+  ];
+
+  let dir: [number, number] | null = null;
+  if (anchor) {
+    const [da, db] = along2(raw, anchor);
+    const reach = Math.hypot(da, db);
+    if (aids.ortho && reach > 0) {
+      const step = ((input.constraints?.angleStepDeg ?? DEFAULT_ORTHO_STEP_DEG) * Math.PI) / 180;
+      const angle = Math.round(Math.atan2(db, da) / step) * step;
+      dir = [Math.cos(angle), Math.sin(angle)].map((v) => (Math.abs(v) < 1e-9 ? 0 : v)) as [number, number];
+    }
+    const lengthMm = input.constraints?.lengthMm;
+    if (lengthMm && lengthMm > 0 && (dir || reach > 0)) {
+      const [ua, ub] = dir ?? [da / reach, db / reach];
+      return {
+        point: round3(make((anchor[ia] as number) + ua * lengthMm, (anchor[ib] as number) + ub * lengthMm)),
+        kind: "length",
+        label: SNAP_LABELS.length,
+        ortho: dir !== null,
+      };
+    }
+  }
+  const ortho = dir !== null;
+  let held: Point3Mm = raw;
+  if (anchor && dir) {
+    const [da, db] = along2(raw, anchor);
+    const along = da * dir[0] + db * dir[1];
+    held = make((anchor[ia] as number) + dir[0] * along, (anchor[ib] as number) + dir[1] * along);
+  }
+  /** With Ortho holding a line, a candidate must lie on it, in its plane. */
+  const onLine = (p: Point3Mm) => {
+    if (!anchor || !dir) return true;
+    const [pa, pb] = along2(p, anchor);
+    return (
+      Math.abs(pa * dir[1] - pb * dir[0]) <= ON_RAY_MM && Math.abs((p[ni] as number) - level) <= ON_RAY_MM
+    );
+  };
+
+  if (project) {
+    const tol2 = SNAP_TOLERANCE_PX * SNAP_TOLERANCE_PX;
+    const px: [number, number] = [0, 0];
+    const reach: [number, number] = [pointer[0], pointer[1]];
+    if (ortho) project(held, reach);
+    const dist2 = (q: [number, number]) => (q[0] - reach[0]) ** 2 + (q[1] - reach[1]) ** 2;
+    const near = nearGroups(index, project, reach);
+    for (const kind of ["endpoint", "midpoint", "centre"] as const) {
+      if (!aids[kind]) continue;
+      let best: Point3Mm | null = null;
+      let bestDistance = tol2;
+      const list = index[kind];
+      for (const g of near) {
+        const [from, to] = kind === "centre" ? g.centres : g[kind];
+        for (let i = from; i < to; i++) {
+          const candidate = list[i] as Point3Mm;
+          if (!project(candidate, px)) continue;
+          const d = dist2(px);
+          if (d <= bestDistance && onLine(candidate)) {
+            best = candidate;
+            bestDistance = d;
+          }
+        }
+      }
+      if (best) return snapped(best, kind, ortho);
+    }
+  }
+
+  if (aids.grid) {
+    if (anchor && dir) {
+      // Step along the held line so its length lands on the grid, on both axes for a diagonal.
+      const step = GRID_MM / Math.max(Math.abs(dir[0]), Math.abs(dir[1]));
+      const [da, db] = along2(held, anchor);
+      const k = Math.round((da * dir[0] + db * dir[1]) / step);
+      return snapped(
+        round3(make((anchor[ia] as number) + dir[0] * k * step, (anchor[ib] as number) + dir[1] * k * step)),
+        "grid",
+        true,
+      );
+    }
+    return snapped(
+      make(
+        Math.round((held[ia] as number) / GRID_MM) * GRID_MM,
+        Math.round((held[ib] as number) / GRID_MM) * GRID_MM,
+      ),
+      "grid",
+      ortho,
+    );
+  }
+  if (dir) return { point: held, kind: "ortho", label: SNAP_LABELS.ortho, ortho: true };
+  return { point: raw, kind: null, label: null, ortho: false };
 }

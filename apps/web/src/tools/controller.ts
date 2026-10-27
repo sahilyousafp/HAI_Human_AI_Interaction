@@ -14,12 +14,15 @@ import {
 } from "@hai/protocol";
 import {
   buildSnapIndex,
+  DEFAULT_ORTHO_STEP_DEG,
   emptySnapIndex,
+  ORTHO_STEPS,
   type Projector,
   type Resolved,
   resolvePoint,
   type SnapIndex,
   type SnapKind,
+  type WorkPlane,
 } from "@hai/scene";
 import type { DragMode, RouterTargets } from "./input-router.ts";
 import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from "./palette.ts";
@@ -68,6 +71,10 @@ export interface ToolEnvironment {
   /** What is at a viewer position; for a hand (`source`) the nearest model in reach when none is exactly there. */
   pick(at: Point2, source?: PointerSource): Hit | null;
   ground(at: Point2, heightMm?: number): Point3Mm | null;
+  /** The plane points are drawn in: plan, unless a side view (front, back, left, right) is showing. */
+  plane?(): WorkPlane;
+  /** Where the view ray at a viewer position meets the vertical plane through a point (the anchor, else the view's target). */
+  workPoint?(at: Point2, through: Point3Mm | null): Point3Mm | null;
   /** The size of the view, px, and where a scene point is on it: the camera, for matching snaps on screen. */
   screenSize?(): Point2;
   projector?(): Projector | null;
@@ -102,6 +109,25 @@ export interface ToolEnvironment {
   askAgent(): string | null;
 }
 
+const ANGLE_STEP_KEY = "hai.orthoStep";
+
+function readAngleStep(): number {
+  try {
+    const stored = Number(localStorage.getItem(ANGLE_STEP_KEY));
+    return (ORTHO_STEPS as readonly number[]).includes(stored) ? stored : DEFAULT_ORTHO_STEP_DEG;
+  } catch {
+    return DEFAULT_ORTHO_STEP_DEG;
+  }
+}
+
+function writeAngleStep(value: number): void {
+  try {
+    localStorage.setItem(ANGLE_STEP_KEY, String(value));
+  } catch {
+    // Storage blocked: the step is 45 degrees next time.
+  }
+}
+
 export interface ToolSnapshot {
   activeId: string;
   /** Each ring's tool id per slot, clockwise from the top; null is an empty slot. */
@@ -124,6 +150,8 @@ export interface ToolSnapshot {
   overlay: ToolOverlay;
   /** The question waiting for a yes or no, if any. */
   question: string | null;
+  /** How the line being drawn is held: the angles Ortho takes (degrees), and a length typed for the next segment. */
+  constraints: { angleStepDeg: number; lengthMm: number | null };
   /** Bumped when tools are registered, so lists of available tools refresh. */
   registryVersion: number;
 }
@@ -171,6 +199,7 @@ export class ToolController {
       palette: null,
       overlay: EMPTY_OVERLAY,
       question: null,
+      constraints: { angleStepDeg: readAngleStep(), lengthMm: null },
       registryVersion: 0,
     };
     registry.onChange(() => {
@@ -209,7 +238,11 @@ export class ToolController {
     this.closeQuestion(false);
     this.active?.deactivate?.(ctx);
     this.clearSnap();
-    this.update({ activeId: id, overlay: { ...this.snapshot.overlay, notice: null } });
+    this.update({
+      activeId: id,
+      overlay: { ...this.snapshot.overlay, notice: null },
+      constraints: { ...this.snapshot.constraints, lengthMm: null },
+    });
     tool.activate?.(ctx);
   }
 
@@ -221,6 +254,18 @@ export class ToolController {
   /** Applies a layout that came from elsewhere (settings loaded from the bridge) without echoing it back. */
   loadLayout(layout: Array<string | null>, ring: Ring = "action"): void {
     this.update({ layouts: { ...this.snapshot.layouts, [ring]: normaliseLayout(layout) } });
+  }
+
+  /** The angles Ortho holds a line to, 90, 45 or 15 degrees; remembered. */
+  setAngleStep(angleStepDeg: number): void {
+    this.update({ constraints: { ...this.snapshot.constraints, angleStepDeg } });
+    writeAngleStep(angleStepDeg);
+  }
+
+  /** A length for the next segment (millimetres), or null to free it; it is also freed once a point is placed. */
+  setLength(lengthMm: number | null): void {
+    const length = lengthMm !== null && lengthMm > 0 ? Math.round(lengthMm) : null;
+    this.update({ constraints: { ...this.snapshot.constraints, lengthMm: length } });
   }
 
   setDominantHand(hand: Hand): void {
@@ -491,6 +536,19 @@ export class ToolController {
     this.closeQuestion(yes);
   }
 
+  /**
+   * A nod or Enter: answers the question waiting, else lets the active tool finish what it is drawing. True when it
+   * did something.
+   */
+  accept(): boolean {
+    if (this.answer) {
+      this.closeQuestion(true);
+      return true;
+    }
+    const ctx = this.ctx();
+    return ctx ? (this.active?.onAccept?.(ctx) ?? false) : false;
+  }
+
   /** A fist held for FIST_RESET_MS runs `held`: by default, back to Select from any tool. */
   fist(closed: boolean, held: () => void = () => this.choose(DEFAULT_TOOL)): void {
     if (this.fistTimer) clearTimeout(this.fistTimer);
@@ -542,7 +600,7 @@ export class ToolController {
         drag: (p, hand) => this.drag(toViewer(p), hand),
         dragEnd: (p, hand) => this.dragEnd(toViewer(p), hand),
         dragCancel: (hand) => this.cancelDrag(hand),
-        nod: () => this.respond(true),
+        nod: () => this.accept(),
         shake: () => this.cancel(),
         clutch: (closed, held) => this.fist(closed, held),
         select: (p) => this.selectAt(toViewer(p)),
@@ -568,6 +626,8 @@ export class ToolController {
       aids: () => env.aids?.() ?? DEFAULT_DRAWING_AIDS,
       resolve: (at, options) => this.resolveSnap(env, at, options),
       clearSnap: () => this.clearSnap(),
+      constraints: () => this.snapshot.constraints,
+      setLength: (lengthMm) => this.setLength(lengthMm),
       bounds: () => env.bounds(),
       onSectionLine: (at) => env.onSectionLine(at),
       overlay: () => this.snapshot.overlay,
@@ -619,13 +679,21 @@ export class ToolController {
       const out: [number, number] = [0, 0];
       if (project(probe, out)) pointer = out;
     }
+    // Only a tool that draws in a side view's plane gets it; the others find no ground there and place nothing.
+    const plane = this.active?.drawsInView ? (env.plane?.() ?? "xy") : "xy";
+    const anchor = options.anchor ?? null;
     const result = resolvePoint({
       pointer,
-      ground: (heightMm) => (probe ? [probe[0], probe[1], heightMm] : env.ground(at, heightMm)),
-      anchor: options.anchor ?? null,
+      ground:
+        plane === "xy"
+          ? (heightMm) => (probe ? [probe[0], probe[1], heightMm] : env.ground(at, heightMm))
+          : () => env.workPoint?.(at, anchor) ?? null,
+      plane,
+      anchor,
       aids,
       index: doc ? this.snapIndex(doc, options.exclude ?? []) : emptySnapIndex(),
       project,
+      constraints: this.snapshot.constraints,
     });
     if (!result) {
       this.clearSnap();

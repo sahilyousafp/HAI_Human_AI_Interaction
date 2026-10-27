@@ -130,6 +130,8 @@ export function simulationGeometry(input: {
           heightM: m(element.size[2]),
         });
         break;
+      case "line":
+        break; // a curve casts no shadow and holds no sun
       case "imported": {
         imported++;
         const [tx, ty, tz] = element.translation;

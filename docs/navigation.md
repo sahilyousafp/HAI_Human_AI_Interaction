@@ -24,6 +24,23 @@ Engage first by holding an open palm toward the camera (see [gestures.md](gestur
 
 Hand navigation runs entirely in the browser. It keeps working while the bridge is offline; only edits wait for the bridge.
 
+## The view cube and orthographic views
+
+A **view cube** sits at the top right of the model (under the sun badge during a sun study). It turns with the camera, so it always shows where Top, Front and Right are, and each face is a button (a hand can press it): Top, Bottom, Front, Back, Left and Right switch to a **true orthographic** camera, the way Rhino's Top and Front viewports look, with no perspective: verticals stay parallel and a plan shows as a plan. **Perspective** returns to the turntable camera you were using.
+
+| View | The camera looks from | Screen right is |
+|---|---|---|
+| Top | above, north up | X |
+| Bottom | below | X |
+| Front | the south (-Y) | X |
+| Back | the north (+Y) | -X |
+| Right | the east (+X) | Y |
+| Left | the west (-X) | -Y |
+
+Panning and zooming keep the view; orbiting (a left drag, a pinch drag, two-hand turn), framing the model or an agent's request for a view returns to perspective. The same size is framed at the camera's target, so switching keeps what you were looking at.
+
+Drawing follows the view. In Top (and in perspective) points land on the ground plane or at the height of a snap, as before. In **Front, Back, Left and Right** the **Line** tool draws in the vertical plane through its first point, so Ortho holds a line to the plane's two axes (an upright line is one Ortho step away), a typed length and the Endpoint, Midpoint, Centre and Grid snaps work there, and Perpendicular and Project (which work in plan) do not. Wall, Slab, Column, Move and Copy are drawn in plan and place nothing in a side view: switch to Top or perspective.
+
 ## Mouse and keyboard
 
 | Do | Effect |

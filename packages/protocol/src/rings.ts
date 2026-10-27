@@ -29,7 +29,7 @@ export const DEFAULT_REFERENCE_LAYOUT: Array<string | null> = [
   "measure",
   "massing",
   "section",
-  null,
+  "line",
   null,
 ];
 

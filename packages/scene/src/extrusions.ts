@@ -116,7 +116,8 @@ export function exportExtrusions(doc: SceneDocument): ExtrusionExport[] {
         break;
       }
       case "imported":
-        break;
+      case "line":
+        break; // meshes and curves are not extrusions
     }
   }
   // A wall drawn right to left has the same rectangle; make sure each one runs counter-clockwise for Rhino.

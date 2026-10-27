@@ -61,6 +61,7 @@ const resolve = (
   raw: [number, number],
   anchor: Point3Mm | null = null,
   mmPerPixel = 1,
+  constraints?: { angleStepDeg?: number; lengthMm?: number | null },
 ) => {
   const { project, ground } = view(mmPerPixel);
   const pointer: [number, number] = [raw[0] / mmPerPixel, raw[1] / mmPerPixel];
@@ -71,6 +72,7 @@ const resolve = (
     aids: aids(on),
     index: buildSnapIndex(doc),
     project,
+    ...(constraints ? { constraints } : {}),
   });
   if (!result) throw new Error("no point");
   return result;
@@ -344,6 +346,91 @@ describe("resolvePoint: priority and distance", () => {
   });
 });
 
+describe("resolvePoint: lines", () => {
+  const polyline = (closed: boolean): Element => ({
+    id: "ln",
+    name: "Line",
+    type: "line",
+    properties: {},
+    closed,
+    points: [
+      [0, 0, 0],
+      [4000, 0, 0],
+      [4000, 3000, 0],
+    ],
+  });
+
+  it("an open line offers its vertices and the middle of each span, and a closed one the closing span too", () => {
+    const open = buildSnapIndex(docOf(polyline(false)));
+    expect(open.endpoint).toHaveLength(3);
+    expect(open.midpoint).toEqual([
+      [2000, 0, 0],
+      [4000, 1500, 0],
+    ]);
+    const closed = buildSnapIndex(docOf(polyline(true)));
+    expect(closed.midpoint).toHaveLength(3);
+    expect(closed.segments).toHaveLength(3);
+  });
+
+  it("Endpoint snaps to a vertex of a line", () => {
+    const r = resolve(docOf(polyline(false)), { endpoint: true }, [4010, 20]);
+    expect(r).toMatchObject({ kind: "endpoint", point: [4000, 0, 0] });
+  });
+});
+
+describe("resolvePoint: a vertical plane (side views)", () => {
+  const empty = docOf();
+  /** A front view: the plane y = 5000, where the view ray meets it at (x, 5000, z). */
+  const inFront = (
+    on: Partial<DrawingAids>,
+    anchor: Point3Mm | null,
+    at: [number, number],
+    constraints?: { angleStepDeg?: number; lengthMm?: number | null },
+    plane: "xz" | "yz" = "xz",
+  ) => {
+    const { project } = view(1);
+    const hit: Point3Mm = plane === "xz" ? [at[0], 5000, at[1]] : [5000, at[0], at[1]];
+    const r = resolvePoint({
+      pointer: [0, 0],
+      ground: () => hit,
+      anchor,
+      aids: aids(on),
+      index: buildSnapIndex(empty),
+      project,
+      plane,
+      ...(constraints ? { constraints } : {}),
+    });
+    if (!r) throw new Error("no point");
+    return r;
+  };
+
+  it("Ortho holds a line to the plane's two axes: nearly flat draws flat, nearly upright draws upright", () => {
+    const flat = inFront({ ortho: true }, [0, 5000, 0], [4000, 200]);
+    expect(flat).toMatchObject({ point: [4000, 5000, 0], ortho: true });
+    const upright = inFront({ ortho: true, grid: true }, [0, 5000, 0], [150, 3900]);
+    expect(upright.point).toEqual([0, 5000, 3900]);
+    const diagonal = inFront({ ortho: true }, [0, 5000, 0], [3000, 2900]);
+    expect(diagonal.point[0]).toBeCloseTo(diagonal.point[2], 3);
+  });
+
+  it("a point stays in the plane through the anchor, whichever vertical plane it is", () => {
+    const side = inFront({ ortho: true }, [5000, 0, 0], [3000, 150], undefined, "yz");
+    expect(side.point).toEqual([5000, 3000, 0]);
+  });
+
+  it("a locked length fixes the segment in the plane", () => {
+    const r = inFront({ ortho: true }, [0, 5000, 1000], [9000, 9000], { lengthMm: 2000, angleStepDeg: 90 });
+    expect(r).toMatchObject({ kind: "length" });
+    const [x, , z] = r.point;
+    expect(Math.hypot(x, z - 1000)).toBeCloseTo(2000, 0);
+  });
+
+  it("the grid rounds both axes, and with nothing on the free point is kept", () => {
+    expect(inFront({ grid: true }, null, [1234, 5678]).point).toEqual([1200, 5000, 5700]);
+    expect(inFront({}, null, [1234.5, 5678.9]).point).toEqual([1234.5, 5000, 5678.9]);
+  });
+});
+
 describe("resolvePoint: ortho", () => {
   const empty = docOf();
   const origin: Point3Mm = [0, 0, 0];
@@ -363,11 +450,48 @@ describe("resolvePoint: ortho", () => {
     expect(r.point[0]).toBeCloseTo(r.point[1], 3);
   });
 
-  it("is free beyond 7.5 degrees from an axis", () => {
+  it("is a hard lock: a hand 20 degrees off the axis still draws along it", () => {
     const angle = (20 * Math.PI) / 180;
     const raw: [number, number] = [Math.cos(angle) * 4000, Math.sin(angle) * 4000];
     const r = resolve(empty, { ortho: true }, raw, origin);
-    expect(r).toMatchObject({ point: [raw[0], raw[1], 0], ortho: false, kind: null });
+    expect(r.ortho).toBe(true);
+    expect(r.point[1]).toBeCloseTo(0);
+    expect(r.point[0]).toBeCloseTo(raw[0], 0);
+  });
+
+  it("the angle step sets the directions: 90 holds to the axes only, 15 to every 15 degrees", () => {
+    const at = (deg: number): [number, number] => [
+      Math.cos((deg * Math.PI) / 180) * 4000,
+      Math.sin((deg * Math.PI) / 180) * 4000,
+    ];
+    // 40 degrees: 90 says the X axis's neighbour (45 is not allowed), 45 says the diagonal, 15 says 45 (nearest of 30, 45).
+    const ninety = resolve(empty, { ortho: true }, at(40), origin, 1, { angleStepDeg: 90 });
+    expect(ninety.point[1]).toBeCloseTo(0);
+    expect(ninety.point[0]).toBeCloseTo(at(40)[0], 0);
+    const fifteen = resolve(empty, { ortho: true }, at(34), origin, 1, { angleStepDeg: 15 });
+    expect(Math.atan2(fifteen.point[1], fifteen.point[0])).toBeCloseTo((30 * Math.PI) / 180, 5);
+    const diagonal = resolve(empty, { ortho: true }, at(40), origin, 1, { angleStepDeg: 45 });
+    expect(diagonal.point[0]).toBeCloseTo(diagonal.point[1], 3);
+  });
+
+  it("a locked length fixes the segment along the held direction, whatever the pointer or the geometry", () => {
+    const d = docOf(wall("w", [3000, -2000], [3000, 2000]));
+    const r = resolve(d, { ortho: true, endpoint: true, grid: true }, [5100, 300], origin, 1, {
+      lengthMm: 2500,
+    });
+    expect(r).toMatchObject({ point: [2500, 0, 0], kind: "length", ortho: true });
+  });
+
+  it("a locked length without Ortho runs towards the pointer; with the pointer on the anchor it is not applied", () => {
+    const r = resolve(empty, {}, [3000, 4000], origin, 1, { lengthMm: 1000 });
+    expect(r.kind).toBe("length");
+    expect(r.point[0]).toBeCloseTo(600, 0);
+    expect(r.point[1]).toBeCloseTo(800, 0);
+    expect(resolve(empty, {}, [0, 0], origin, 1, { lengthMm: 1000 }).kind).toBeNull();
+  });
+
+  it("a length needs a start point", () => {
+    expect(resolve(empty, {}, [3000, 4000], null, 1, { lengthMm: 1000 }).kind).toBeNull();
   });
 
   it("off means a 20 degree wall is drawn at 20 degrees", () => {
