@@ -40,9 +40,15 @@ async function openGround(page: Page): Promise<[Point, Point]> {
   return page.evaluate(() => {
     const v = window.__HAI_VIEWER__;
     if (!v) throw new Error("viewer not ready");
-    const clear = (x: number, y: number) => v.pick(x, y) === null;
+    const canvas = document.querySelector("[data-testid=viewer] canvas");
+    const box = canvas?.getBoundingClientRect();
+    // Open ground: no element there, and the model itself on top (not a panel, the status strip or the camera).
+    const clear = (x: number, y: number) =>
+      v.pick(x, y) === null &&
+      !!box &&
+      document.elementFromPoint(box.left + x * box.width, box.top + y * box.height) === canvas;
     for (let y = 0.95; y >= 0.3; y -= 0.05) {
-      for (let x = 0.5; x <= 0.75; x += 0.05) {
+      for (let x = 0.05; x <= 0.8; x += 0.05) {
         if (clear(x, y) && clear(x + 0.08, y) && clear(x + 0.16, y))
           return [
             [x, y],

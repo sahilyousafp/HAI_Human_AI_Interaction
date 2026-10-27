@@ -241,16 +241,19 @@ button {
   background: var(--fill-strong);
 }
 
+/* The workspace: the chat docked down the left (when the agent is on), then the model. */
 .workspace {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "rail stage";
   min-height: 0;
   overflow: hidden;
 }
 .stage {
-  /* The width the model's left column (project bar, agent panel) takes; messages centre in the space beside it. */
-  --hud-left: 404px;
+  /* What the model's left column takes from messages centred over the model: only the project bar now, at the top. */
+  --hud-left: 0px;
+  grid-area: stage;
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -343,7 +346,7 @@ button {
   position: absolute;
   top: 12px;
   left: 12px;
-  bottom: 64px;
+  max-height: calc(100% - 76px);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1295,30 +1298,31 @@ kbd {
 }
 
 /* Agent panel: in the model's left column, under the project bar; it shrinks and scrolls before the status strip. */
+/* The chat rail: full height beside the model, resizable from its right edge, folded to a strip when collapsed. */
 .agent-panel {
+  grid-area: rail;
+  position: relative;
   z-index: 5;
   display: flex;
   flex-direction: column;
-  flex: 0 1 auto;
   min-height: 0;
-  width: min(380px, 100%);
-  background: var(--material);
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-l);
-  backdrop-filter: var(--blur);
-  box-shadow: var(--shadow-2);
+  width: var(--rail-w, 380px);
+  background: var(--panel);
+  border-right: 0.5px solid var(--line);
 }
 .agent-panel[data-collapsed="true"] {
-  width: auto;
+  width: 52px;
 }
 .agent-head {
+  display: grid;
+  border-bottom: 0.5px solid var(--line);
+}
+.agent-head-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 8px 8px 14px;
-}
-.agent-panel:not([data-collapsed="true"]) .agent-head {
-  border-bottom: 1px solid var(--line);
+  height: 48px;
+  padding: 0 8px 0 16px;
 }
 .agent-title {
   font: 600 15px / 1.2 var(--f-display);
@@ -1357,6 +1361,79 @@ kbd {
   color: var(--warn);
   font: 600 11.5px / 1.4 var(--f-body);
 }
+.agent-collapse {
+  margin-left: auto;
+}
+/* Collapsed: a strip with the way back, the state, what waits for the user, and the microphone. */
+.agent-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+  padding: 8px 6px;
+}
+.agent-strip .agent-status {
+  flex-direction: column;
+  gap: 8px;
+}
+.agent-strip .agent-status .agent-dot {
+  width: 10px;
+  height: 10px;
+}
+.agent-strip .agent-status-label,
+.agent-strip .agent-title {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+.agent-strip .agent-title {
+  font-size: 13px;
+}
+.agent-strip .agent-badge {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+}
+/* The microphone sits at the strip's foot. */
+.agent-strip > [data-testid="mic-button"] {
+  margin-top: auto;
+}
+/* The rail's right edge: a 12 px grip on the line (a hand pointer locks onto it), its pill shown when pointed at. */
+.agent-rail-resize {
+  position: absolute;
+  top: 0;
+  right: -6px;
+  bottom: 0;
+  z-index: 6;
+  width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.agent-rail-resize::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 4px;
+  height: 48px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 40%, var(--fill-strong));
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+.agent-rail-resize:hover::after,
+.agent-rail-resize:focus-visible::after,
+.agent-rail-resize:active::after,
+.agent-rail-resize[data-hand-hover]::after {
+  opacity: 1;
+}
+.agent-rail-resize:focus-visible,
+.agent-rail-resize[data-hand-hover] {
+  outline: none;
+}
 .icon-button {
   display: grid;
   place-items: center;
@@ -1389,13 +1466,15 @@ kbd {
   border-color: var(--risk);
   color: var(--risk);
 }
-.agent-head .icon-button {
-  margin-left: auto;
+.agent-head .icon-button,
+.agent-strip .icon-button {
+  width: 40px;
+  height: 40px;
 }
 .agent-unavailable {
   display: grid;
   gap: 2px;
-  margin: 12px 14px 0;
+  margin: 12px 16px 0;
   padding: 10px 12px;
   border-left: 3px solid var(--risk);
   background: color-mix(in srgb, var(--risk) 8%, transparent);
@@ -1403,30 +1482,42 @@ kbd {
 }
 .team-strip {
   display: grid;
-  gap: 6px;
-  padding: 8px 14px 10px;
-  border-bottom: 1px solid var(--line);
+  gap: 8px;
+  margin: 0;
+  padding: 6px 16px;
+  border: 0;
+  border-bottom: 0.5px solid var(--line);
 }
-.team-strip-head {
+.team-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 22px;
+  min-height: 40px;
 }
-.team-strip-label {
-  font: 600 11px / 1.2 var(--f-body);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--muted);
+.team-chips {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 6px 2px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  mask-image: linear-gradient(90deg, #000 calc(100% - 16px), transparent);
+}
+.team-chips::-webkit-scrollbar {
+  display: none;
+}
+.team-chips > * {
+  flex: none;
+  scroll-snap-align: start;
 }
 .team-strip-summary {
-  font: 500 11.5px / 1.2 var(--f-body);
+  flex: none;
+  font: 500 12px / 1.2 var(--f-body);
   color: var(--muted);
-}
-.team-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  white-space: nowrap;
 }
 .team-dot {
   width: 7px;
@@ -1442,7 +1533,7 @@ kbd {
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-  padding: 4px 9px;
+  padding: 4px 10px;
   border: 0.5px solid var(--line);
   border-radius: 999px;
   background: transparent;
@@ -1451,7 +1542,15 @@ kbd {
   cursor: pointer;
 }
 .team-chip {
-  width: 100%;
+  position: relative;
+  min-height: 28px;
+  max-width: 240px;
+}
+/* A 40 px target for a hand around the 28 px chip. */
+.team-chip::after {
+  content: "";
+  position: absolute;
+  inset: -6px -2px;
 }
 .team-chip:hover:not(:disabled),
 .handoff-chip:hover {
@@ -1710,8 +1809,9 @@ kbd {
   font-size: 11.5px;
 }
 .team-stop {
-  margin-left: auto;
-  padding: 2px 9px;
+  flex: none;
+  min-height: 28px;
+  padding: 2px 10px;
   border: 1px solid var(--risk);
   border-radius: 999px;
   background: transparent;
@@ -1722,28 +1822,16 @@ kbd {
 .team-stop:hover {
   background: color-mix(in srgb, var(--risk) 10%, transparent);
 }
-.team-names {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 12px;
-  min-width: 0;
-}
-.team-strip[data-idle="true"] {
-  padding-bottom: 8px;
-}
 .team-strip[data-idle="true"] .team-chip {
-  width: auto;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  color: var(--muted);
-  font-size: 11.5px;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--fill) 60%, transparent);
 }
-.team-strip[data-idle="true"] .team-dot {
-  opacity: 1;
+.team-strip[data-idle="true"] .team-chip-name {
+  font-weight: 500;
 }
 .handoff-chip {
   justify-self: start;
+  min-height: 32px;
   border-radius: var(--r-s);
 }
 .handoff-status {
@@ -1761,7 +1849,7 @@ kbd {
   color: var(--warn);
 }
 .agent-digest {
-  margin: 0;
+  margin: 0 0 -4px;
   font: 600 11px / 1.2 var(--f-body);
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -1818,8 +1906,8 @@ kbd {
 .task-thread {
   display: grid;
   gap: 8px;
-  padding: 8px 14px 10px;
-  border-bottom: 1px solid var(--line);
+  padding: 8px 16px 12px;
+  border-bottom: 0.5px solid var(--line);
 }
 .tool-chip-agent,
 .approval-agent {
@@ -1836,14 +1924,18 @@ kbd {
   min-height: 0;
   overflow-y: auto;
   margin: 0;
-  padding: 12px 14px;
+  padding: 16px 16px 24px;
   list-style: none;
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 24px;
   overscroll-behavior: contain;
+  font-size: 14px;
+  line-height: 1.5;
+  mask-image: linear-gradient(transparent, #000 12px, #000 calc(100% - 12px), transparent);
 }
 .agent-empty {
+  max-width: 34ch;
   font-size: 13.5px;
 }
 .agent-turn {
@@ -1851,20 +1943,51 @@ kbd {
   gap: 8px;
   min-width: 0;
 }
+/* Everything the agent says or does sits under its dot, 16 px in. */
+.agent-turn > :not(.agent-request) {
+  margin-left: 16px;
+}
+.agent-turn > .agent-digest {
+  margin-left: 16px;
+}
 .agent-request {
   justify-self: end;
-  max-width: 88%;
+  max-width: 85%;
   margin: 0;
-  padding: 7px 11px;
-  border-radius: 10px 10px 2px 10px;
+  padding: 8px 12px;
+  border-radius: 12px 12px 4px 12px;
   background: color-mix(in srgb, var(--accent) 16%, var(--panel));
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  line-height: 1.45;
 }
 .agent-text {
+  position: relative;
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.agent-text[data-lead="true"]::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: -16px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--agent-color, var(--accent));
+}
+.agent-turn[data-kind="digest"] {
+  padding: 8px 12px;
+  margin-left: 16px;
+  gap: 4px;
+  border-radius: var(--r-m);
+  background: color-mix(in srgb, var(--fill) 60%, transparent);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.agent-turn[data-kind="digest"] > * {
+  margin-left: 0;
 }
 .agent-notice,
 .agent-ended {
@@ -1883,7 +2006,10 @@ kbd {
   font-size: 13.5px;
 }
 .agent-input-error {
-  padding: 0 14px 10px;
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  border-radius: var(--r-s);
+  background: color-mix(in srgb, var(--risk) 10%, transparent);
 }
 .agent-working {
   width: 28px;
@@ -1910,7 +2036,7 @@ kbd {
 }
 .agent-tool {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 .tool-chip {
@@ -1926,8 +2052,9 @@ kbd {
 .tool-chip summary {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 9px;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 10px;
   cursor: pointer;
   list-style: none;
 }
@@ -1989,10 +2116,91 @@ kbd {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.agent-steps {
+  justify-self: start;
+  max-width: 100%;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-s);
+}
+.agent-steps[open] {
+  justify-self: stretch;
+}
+.agent-steps-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  font: 500 12.5px / 1.3 var(--f-body);
+  cursor: pointer;
+  list-style: none;
+}
+.agent-steps-head::-webkit-details-marker {
+  display: none;
+}
+.agent-steps-head::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(45deg) translateY(-2px);
+}
+.agent-steps[open] > .agent-steps-head::after {
+  transform: rotate(-135deg) translate(-1px, -1px);
+}
+.agent-steps-dots {
+  display: inline-flex;
+}
+.agent-steps-dots .tool-chip-dot + .tool-chip-dot {
+  margin-left: -2px;
+  box-shadow: 0 0 0 1.5px var(--panel);
+}
+.agent-steps-dots .tool-chip-dot[data-outcome="done"] {
+  background: var(--ok);
+}
+.agent-steps-dots .tool-chip-dot[data-outcome="failed"],
+.agent-steps-dots .tool-chip-dot[data-outcome="denied"] {
+  background: var(--risk);
+}
+.agent-steps-dots .tool-chip-dot[data-outcome="waiting"] {
+  background: var(--warn);
+}
+.agent-steps[data-outcome="waiting"] {
+  border: 1px solid var(--warn);
+}
+.agent-steps[data-outcome="waiting"] .agent-steps-summary {
+  color: var(--warn);
+}
+.agent-steps[data-outcome="failed"],
+.agent-steps[data-outcome="denied"] {
+  border-color: color-mix(in srgb, var(--risk) 50%, var(--line));
+}
+.agent-steps[data-outcome="failed"] .agent-steps-summary,
+.agent-steps[data-outcome="denied"] .agent-steps-summary {
+  color: var(--risk);
+}
+.agent-steps-list {
+  display: grid;
+  gap: 2px;
+  padding: 0 4px 4px;
+}
+.agent-steps-list .tool-chip {
+  justify-self: stretch;
+  border: 0;
+  border-radius: 6px;
+}
+@media (hover: hover) {
+  .agent-steps-head:hover,
+  .agent-steps-list .tool-chip summary:hover {
+    background: color-mix(in srgb, var(--fill) 60%, transparent);
+  }
+}
 .approval-card {
   display: grid;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px;
   border: 1px solid var(--warn);
   border-radius: var(--r-m);
   background: color-mix(in srgb, var(--warn) 8%, var(--panel));
@@ -2011,6 +2219,21 @@ kbd {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+}
+/* An approval: who asks and through what on top, the question under them. */
+.approval-card .approval-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+}
+.approval-title {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  font-size: 14px;
+}
+.approval-source {
+  grid-column: 2;
+  font-size: 12px;
 }
 .approval-summary {
   display: block;
@@ -2045,12 +2268,46 @@ kbd {
 .plan-cards {
   display: grid;
   gap: 8px;
-  padding: 8px 14px 0;
+  padding: 8px 16px;
+  border-bottom: 0.5px solid var(--line);
+}
+/* A settled plan folds to one line that opens in place. */
+.plan-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  font: 500 12.5px / 1.3 var(--f-body);
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+.plan-summary-head::-webkit-details-marker {
+  display: none;
+}
+.plan-summary-head::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.plan-summary[data-outcome="confirmed"] > .plan-summary-head::before {
+  background: var(--ok);
+}
+.plan-summary-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-summary[open] > .plan-summary-head {
+  margin-bottom: 8px;
 }
 .plan-card {
   display: grid;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px;
   border: 1px solid var(--accent);
   border-radius: var(--r-m);
   background: color-mix(in srgb, var(--accent) 7%, var(--panel));
@@ -2106,10 +2363,11 @@ kbd {
 .approval-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
-.approval-actions .primary {
-  padding: 7px 14px;
+.approval-actions button {
+  min-height: 40px;
+  padding: 0 16px;
   font-size: 13.5px;
 }
 .approval-hint,
@@ -2127,34 +2385,80 @@ kbd {
 .approval-card[data-outcome="timed-out"] .approval-outcome {
   color: var(--risk);
 }
-.agent-input {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--line);
+.agent-composer {
+  padding: 8px 12px 12px;
+  border-top: 0.5px solid var(--line);
 }
-.agent-input textarea {
-  flex: 1;
-  min-width: 0;
-  min-height: 40px;
-  max-height: 140px;
-  padding: 8px 10px;
+.agent-composer-field {
+  display: grid;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-s);
+  border-radius: var(--r-m);
   background: var(--bg);
-  color: var(--ink);
-  font: inherit;
-  font-size: 14px;
-  resize: vertical;
 }
-.agent-input textarea:focus-visible {
+.agent-composer-field:focus-within {
   outline: 2px solid var(--accent);
-  outline-offset: 0;
+  outline-offset: -1px;
 }
-.agent-input .icon-button {
+.agent-composer-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  max-height: 148px;
+  field-sizing: content;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 400 14.5px / 1.45 var(--f-body);
+  resize: none;
+}
+.agent-composer-input:focus-visible {
+  outline: none;
+}
+.agent-composer-input:disabled {
+  color: var(--muted);
+}
+.agent-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 8px;
+}
+.agent-composer-spacer {
+  flex: 1;
+}
+.agent-composer-actions > button {
   width: 40px;
   height: 40px;
+  border-radius: 50%;
+}
+.agent-composer .icon-button.stop {
+  border: 1px solid var(--risk);
+  background: color-mix(in srgb, var(--risk) 10%, transparent);
+}
+/* A voice request under way takes the field's first row; the typed request waits under it. */
+.agent-composer-field:has(
+  .voice-bar[data-phase="listening"],
+  .voice-bar[data-phase="transcribing"],
+  .voice-bar[data-phase="review"],
+  .voice-bar[data-phase="starting"]
+) {
+  border-color: var(--accent);
+}
+.agent-composer-field:has(
+    .voice-bar[data-phase="listening"],
+    .voice-bar[data-phase="transcribing"],
+    .voice-bar[data-phase="review"],
+    .voice-bar[data-phase="starting"]
+  )
+  .agent-composer-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 .allowed-tools {
   display: grid;
@@ -2173,23 +2477,61 @@ kbd {
 .agent-permissions p {
   margin: 0;
 }
+/* Narrow screens: the chat is a sheet over the bottom of the model. */
 @media (max-width: 860px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "stage";
+  }
   .agent-panel {
+    grid-area: stage;
+    align-self: end;
+    width: auto;
     max-height: 50%;
+    border-right: 0;
+    border-top: 0.5px solid var(--line);
+    border-radius: var(--r-l) var(--r-l) 0 0;
+    background: var(--material);
+    backdrop-filter: var(--blur);
+    box-shadow: var(--shadow-2);
+  }
+  .agent-panel[data-collapsed="true"] {
+    width: auto;
+  }
+  .agent-strip {
+    flex-direction: row;
+    height: 56px;
+    padding: 8px 12px;
+  }
+  .agent-strip .agent-status-label,
+  .agent-strip .agent-title {
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+  .agent-strip .agent-status {
+    flex-direction: row;
+  }
+  .agent-strip > [data-testid="mic-button"] {
+    margin: 0 0 0 auto;
+  }
+  .agent-rail-resize {
+    display: none;
   }
 }
 .agent-tabs {
   display: flex;
   gap: 2px;
-  margin-left: auto;
+  margin: 0 16px 8px;
   padding: 2px;
-  border-radius: 9px;
+  border-radius: var(--r-s);
   background: var(--fill);
 }
 .agent-tabs button {
-  padding: 3px 7px;
+  flex: 1;
+  min-height: 36px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
   font: 500 12.5px / 1.3 var(--f-body);
@@ -2199,9 +2541,6 @@ kbd {
   background: var(--segment);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
   color: var(--ink);
-}
-.agent-tabs + .icon-button {
-  margin-left: 0;
 }
 .extensions-view {
   flex: 1 1 auto;
@@ -2556,15 +2895,15 @@ kbd {
     box-shadow: 0 0 0 12px transparent;
   }
 }
-.agent-input {
-  align-items: center;
-}
 .voice-bar {
+  position: relative;
   display: grid;
   gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+  min-height: 44px;
+  padding: 10px 12px 8px;
+  border-bottom: 0.5px solid var(--line);
+  border-radius: var(--r-m) var(--r-m) 0 0;
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
 }
 .voice-status {
   display: flex;
@@ -3587,13 +3926,39 @@ kbd {
 }
 
 /* Files the agent's Python wrote: one row each, with the choices. */
+.agent-tray {
+  border-top: 0.5px solid var(--line);
+}
+.agent-tray-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 500 13px / 1.3 var(--f-body);
+  cursor: pointer;
+}
+.agent-tray-toggle svg {
+  margin-left: auto;
+  transition: transform 120ms var(--ease);
+}
+.agent-tray[data-open="false"] .agent-tray-toggle svg {
+  transform: rotate(180deg);
+}
+.agent-tray-body {
+  max-height: 160px;
+  overflow-y: auto;
+}
 .written-files {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
-  padding: 8px 14px;
+  padding: 0 16px 8px;
   list-style: none;
-  border-top: 1px solid var(--line);
 }
 .written-file {
   display: flex;
@@ -3613,9 +3978,8 @@ kbd {
   display: grid;
   gap: 8px;
   margin: 0;
-  padding: 8px 14px;
+  padding: 0 16px 8px;
   list-style: none;
-  border-top: 1px solid var(--line);
 }
 .run-report {
   display: grid;

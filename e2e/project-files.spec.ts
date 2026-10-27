@@ -188,6 +188,8 @@ test("Endpoint snaps to the top corner of an imported building, and the wall is 
   page,
 }) => {
   await start(page);
+  // Snapping, not the chat: fold the chat to its strip so the imported building has the width of the window.
+  await page.getByRole("button", { name: "Hide the agent panel" }).click();
   await newProject(page);
   await page.getByTestId("import-input").setInputFiles(join(MODELS, "meshes-and-breps.3dm"));
   await expect.poll(async () => (await elements(page)).length, { timeout: 30_000 }).toBe(5);
@@ -221,6 +223,8 @@ test("Endpoint snaps to the top corner of an imported building, and the wall is 
 
 test("Measure snaps to corners at different heights and shows the across and up parts", async ({ page }) => {
   await start(page);
+  // Snapping, not the chat: fold the chat to its strip so the imported building has the width of the window.
+  await page.getByRole("button", { name: "Hide the agent panel" }).click();
   await newProject(page);
   await page.getByTestId("import-input").setInputFiles(join(MODELS, "meshes-and-breps.3dm"));
   await expect.poll(async () => (await elements(page)).length, { timeout: 30_000 }).toBe(5);
