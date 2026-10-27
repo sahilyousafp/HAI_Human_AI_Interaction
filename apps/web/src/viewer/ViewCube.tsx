@@ -83,6 +83,7 @@ export function ViewCube({
 
   return (
     <div className="view-cube-box" data-testid="view-cube" data-hud>
+      {/* biome-ignore lint/a11y/useSemanticElements: a cube of buttons laid out in 3D, not a form fieldset */}
       <div className="view-cube" role="group" aria-label="Views">
         <div className="view-cube-body">
           {FACES.map(({ id, label }, i) => (

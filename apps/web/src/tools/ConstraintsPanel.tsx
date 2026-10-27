@@ -106,6 +106,7 @@ export function ConstraintsPanel({
           </button>
         )}
       </form>
+      {/* biome-ignore lint/a11y/useSemanticElements: a row of toggle buttons, not a form fieldset */}
       <div className="constraints-snaps" role="group" aria-label="Point snaps">
         {SNAP_AIDS.map((id) => (
           <button
