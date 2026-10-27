@@ -4,6 +4,7 @@
 // transferred, is used once and dropped; only text goes back.
 import { type AutomaticSpeechRecognitionPipeline, env, pipeline } from "@huggingface/transformers";
 import type { FromTranscriber, ToTranscriber } from "./messages.ts";
+import { tokenLimit } from "./voice-config.ts";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -14,6 +15,7 @@ env.useBrowserCache = false; // the files are local already; no second copy in C
 if (env.backends.onnx.wasm) env.backends.onnx.wasm.wasmPaths = "/ort/";
 
 const MODEL = "moonshine-base";
+
 const post = (message: FromTranscriber) => self.postMessage(message);
 
 let ready: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
@@ -51,7 +53,7 @@ self.onmessage = async (event: MessageEvent<ToTranscriber>) => {
   try {
     const transcriber = await load();
     const started = performance.now();
-    const result = await transcriber(audio);
+    const result = await transcriber(audio, { max_new_tokens: tokenLimit(audio.length) });
     audio = null; // released: nothing keeps the samples once there is text
     const text = (Array.isArray(result) ? result[0]?.text : result.text)?.trim() ?? "";
     post({ type: "transcript", id, text, ms: Math.round(performance.now() - started) });

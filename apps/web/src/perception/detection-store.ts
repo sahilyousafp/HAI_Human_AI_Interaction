@@ -28,6 +28,11 @@ export interface DetectionSnapshot {
   rates: { left: number | null; right: number | null; face: number | null };
   pinch: Partial<Record<Hand, PinchReading>>;
   counts: { taps: number; drags: number; twoHand: number };
+  /**
+   * Long pinches since the camera started: all of them, those with speech, silent flicks on each ring, and those
+   * released with nothing chosen or said. Counted here only, never sent anywhere.
+   */
+  holds: { held: number; spoke: number; action: number; reference: number; cancelled: number };
   /** Capture to the frame's gestures reaching the page, p90 over the last 3 s. */
   cameraToGestureP90: number | null;
   /** Capture time of the newest frame, epoch ms (the strips end here). */
@@ -39,6 +44,7 @@ const EMPTY: DetectionSnapshot = {
   rates: { left: null, right: null, face: null },
   pinch: {},
   counts: { taps: 0, drags: 0, twoHand: 0 },
+  holds: { held: 0, spoke: 0, action: 0, reference: 0, cancelled: 0 },
   cameraToGestureP90: null,
   latestTs: null,
 };
@@ -117,6 +123,7 @@ function share<T>(items: T[], counts: (item: T) => boolean | null): number | nul
 export class DetectionStore {
   private samples: DetectionSample[] = [];
   private counts = { ...EMPTY.counts };
+  private holds = { ...EMPTY.holds };
   private readonly response = new LatencyTracker(3000);
   private snapshot = EMPTY;
   private readonly listeners = new Set<() => void>();
@@ -155,15 +162,34 @@ export class DetectionStore {
       },
       pinch: state.pinch,
       counts: { ...this.counts },
+      holds: { ...this.holds },
       cameraToGestureP90: this.response.p90(now),
       latestTs: frame.captureTs,
     };
     for (const listener of this.listeners) listener();
   }
 
+  /** How a long pinch ended: counted for the card (and for tuning the hold time), on this computer only. */
+  countHold(report: {
+    outcome: "send" | "choose" | "cancel";
+    ring: "action" | "reference";
+    spoke: boolean;
+  }): void {
+    this.holds = {
+      held: this.holds.held + 1,
+      spoke: this.holds.spoke + (report.spoke ? 1 : 0),
+      action: this.holds.action + (report.outcome === "choose" && report.ring === "action" ? 1 : 0),
+      reference: this.holds.reference + (report.outcome === "choose" && report.ring === "reference" ? 1 : 0),
+      cancelled: this.holds.cancelled + (report.outcome === "cancel" ? 1 : 0),
+    };
+    this.snapshot = { ...this.snapshot, holds: { ...this.holds } };
+    for (const listener of this.listeners) listener();
+  }
+
   reset(): void {
     this.samples = [];
     this.counts = { ...EMPTY.counts };
+    this.holds = { ...EMPTY.holds };
     this.response.clear();
     this.snapshot = EMPTY;
     for (const listener of this.listeners) listener();

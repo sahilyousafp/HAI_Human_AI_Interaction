@@ -16,10 +16,10 @@ export interface Addressed {
 const FUZZY_MIN = 4;
 
 /** Lower case, letters and digits only: "Machi:" becomes "machi". */
-const normalize = (word: string) => word.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+export const normalize = (word: string) => word.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
 /** Levenshtein distance, stopping early once it is over 1. */
-function withinOne(a: string, b: string): boolean {
+export function withinOne(a: string, b: string): boolean {
   if (a === b) return true;
   if (Math.abs(a.length - b.length) > 1) return false;
   let i = 0;

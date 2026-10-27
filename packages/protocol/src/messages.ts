@@ -25,6 +25,7 @@ import { BridgeStatusMessage, Envelope, HelloMessage, MessageId } from "./envelo
 import { FeatureChoices } from "./features.ts";
 import { OPEN_DATA_SOURCE_IDS, OpenDataRecordEntry, PortalHost, Site } from "./open-data.ts";
 import { PanelDocument, PanelId, PanelOfferState, PanelOutcome } from "./panel.ts";
+import { LetterMarkers } from "./references.ts";
 import {
   ModellingInUse,
   ModellingMode,
@@ -38,6 +39,7 @@ import {
   RhinoSync,
   ViewRequest,
 } from "./rhino.ts";
+import { DominantHand } from "./rings.ts";
 import { ElementId, SceneDocument, SceneOp } from "./scene.ts";
 
 function message<T extends string, P extends z.ZodType>(type: T, payload: P) {
@@ -58,10 +60,12 @@ export type ReplyVoice = z.infer<typeof ReplyVoice>;
 
 /** User settings kept by the bridge in .hai/settings.json. */
 export const Settings = z.strictObject({
-  /** The tools ring (the right hand's long pinch); null until the user changes it: the app's default applies. */
+  /** The action ring (the dominant hand's); null until the user changes it: the app's default applies. */
   palette: PaletteLayout.nullable(),
-  /** The create ring (the left hand's long pinch); null until the user changes it. */
+  /** The reference ring (the other hand's); null until the user changes it. */
   createPalette: PaletteLayout.nullable().default(null),
+  /** The hand the user draws with: its silent long pinch shows the action ring, the other hand's the reference ring. */
+  dominantHand: DominantHand.default("Right"),
   /** What each gesture does, where the user changed it; the rest keep their defaults. */
   gestures: GestureBindingsSchema.nullable().default(null),
   /** Where speech is turned into text: on this laptop (default), or the browser's cloud service (opt-in). */
@@ -453,6 +457,7 @@ export const SettingsSetMessage = message(
   z.strictObject({
     palette: PaletteLayout.optional(),
     createPalette: PaletteLayout.optional(),
+    dominantHand: DominantHand.optional(),
     gestures: GestureBindingsSchema.optional(),
     speech: SpeechMode.optional(),
     listenForNames: z.boolean().optional(),
@@ -476,6 +481,10 @@ export const SettingsSetMessage = message(
 );
 /** The project's site, or null when it has none (sent on connect, project change and every change). */
 export const SiteSnapshotMessage = message("site.snapshot", z.strictObject({ site: Site.nullable() }));
+/** The open project's lettered markers (Place marker), sent on connect and whenever they change. */
+export const MarkersSnapshotMessage = message("markers.snapshot", z.strictObject({ markers: LetterMarkers }));
+/** The user placed or removed a marker: the project's whole list as it is now. */
+export const MarkersSetMessage = message("markers.set", z.strictObject({ markers: LetterMarkers }));
 /** The user sets, changes or clears the project's site in Settings. */
 export const SiteSetMessage = message("site.set", z.strictObject({ site: Site.nullable() }));
 /** The open-data requests made in this session, newest last (sent on connect and after every request). */
@@ -528,6 +537,11 @@ export const ViewCapturedMessage = message(
 );
 /** Stops everything the team is doing (Mochi's turn and every task). */
 export const AgentStopMessage = message("agent.stop", z.strictObject({}));
+/** Stops one request the user just sent (a shake right after a held request): its turn and the tasks it handed out. */
+export const AgentStopRequestMessage = message(
+  "agent.stopRequest",
+  z.strictObject({ requestId: z.string() }),
+);
 /** Adds or changes an agent of the open project's team. */
 export const AgentsSaveMessage = message("agents.save", z.strictObject({ agent: AgentDefinitionInput }));
 /** Stops one task, or takes it off the queue. */
@@ -596,6 +610,8 @@ export const Message = z.discriminatedUnion("type", [
   SettingsSnapshotMessage,
   SiteSnapshotMessage,
   SiteSetMessage,
+  MarkersSnapshotMessage,
+  MarkersSetMessage,
   ContextSnapshotMessage,
   OpenDataRecordMessage,
   OpenDataClearMessage,
@@ -638,6 +654,7 @@ export const Message = z.discriminatedUnion("type", [
   SettingsSetMessage,
   AgentSendMessage,
   AgentStopMessage,
+  AgentStopRequestMessage,
   TaskStopMessage,
   AgentsSaveMessage,
   ApprovalDecideMessage,

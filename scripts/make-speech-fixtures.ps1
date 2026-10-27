@@ -15,16 +15,33 @@ $phrases = @{
   "mochi-ask-climate" = "Mochi, ask Climate to run a winter shadow study."
   "product-bench" = "Product, design a bench for the courtyard."
   "reviewer-heights" = "Reviewer, check the floor heights."
+  "measure" = "Measure."
+  "undo" = "Undo."
+  "sketch-area" = "Sketch area."
+  "bake" = "Bake to Rhino."
+  "measure-the-towers" = "Measure the distance between these towers."
+  # "|" is a pause of a second and a half: a held request spoken in two parts.
+  "copy-this-there" = "Copy this.|There."
 }
+# A tool's name is over in about a second: if the speech detector is still loading when the fake microphone starts
+# playing (it can take three seconds on a busy laptop), the name is lost. These get four seconds of silence before and
+# five after instead.
+$short = @("measure", "undo", "sketch-area", "bake", "copy-this-there")
 foreach ($name in $phrases.Keys) {
   $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
   $synth.Rate = 0
   $file = Join-Path $out "$name.wav"
   $synth.SetOutputToWaveFile($file, $format)
   $prompt = New-Object System.Speech.Synthesis.PromptBuilder
-  $prompt.AppendBreak([TimeSpan]::FromMilliseconds(1000))
-  if ($phrases[$name]) { $prompt.AppendText($phrases[$name]) }
-  $prompt.AppendBreak([TimeSpan]::FromMilliseconds(3000))
+  $lead = if ($short -contains $name) { 4000 } else { 1000 }
+  $trail = if ($short -contains $name) { 5000 } else { 3000 }
+  $prompt.AppendBreak([TimeSpan]::FromMilliseconds($lead))
+  $parts = @(if ($phrases[$name]) { $phrases[$name].Split("|") })
+  for ($i = 0; $i -lt $parts.Count; $i++) {
+    if ($i -gt 0) { $prompt.AppendBreak([TimeSpan]::FromMilliseconds(1500)) }
+    $prompt.AppendText($parts[$i])
+  }
+  $prompt.AppendBreak([TimeSpan]::FromMilliseconds($trail))
   $synth.Speak($prompt)
   $synth.Dispose()
   Write-Output "wrote $file"

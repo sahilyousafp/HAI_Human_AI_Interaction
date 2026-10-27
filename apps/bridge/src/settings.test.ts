@@ -30,6 +30,40 @@ describe("SettingsHub modelling mode", () => {
   });
 });
 
+describe("SettingsHub rings from before hold to talk", () => {
+  const OLD_TOOLS = ["select", "ask-agent", "measure", "section", "move", "massing", "delete", "undo"];
+
+  it("replaces the old default layout and long pinch on load, keeps the rest, and writes the file back", () => {
+    const root = tempRoot();
+    const file = settingsFile(root);
+    writeLastProject(root, "C:/work/tower");
+    const old = JSON.parse(readFileSync(file, "utf8"));
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...old,
+        palette: OLD_TOOLS,
+        createPalette: LAYOUT,
+        gestures: { "hold.right": "tools-ring" },
+      }),
+    );
+    const sent: Message[] = [];
+    new SettingsHub(file, () => {}).greet((m) => sent.push(m));
+    expect(sent[0]).toMatchObject({ payload: { palette: null, createPalette: LAYOUT, gestures: {} } });
+    const saved = JSON.parse(readFileSync(file, "utf8"));
+    expect(saved).toMatchObject({ palette: null, createPalette: LAYOUT, gestures: {} });
+    expect(readLastProject(root)).toBe("C:/work/tower");
+  });
+
+  it("keeps the Dominant hand choice across restarts", () => {
+    const file = settingsFile(tempRoot());
+    new SettingsHub(file, () => {}).handle(setSettings({ dominantHand: "Left" }));
+    const sent: Message[] = [];
+    new SettingsHub(file, () => {}).greet((m) => sent.push(m));
+    expect(sent[0]).toMatchObject({ payload: { dominantHand: "Left" } });
+  });
+});
+
 describe("SettingsHub features", () => {
   it("reports each feature that was switched on or off, once, and answers featureOn", () => {
     const changes: Array<[string, boolean]> = [];
@@ -59,6 +93,7 @@ describe("SettingsHub", () => {
         payload: {
           palette: null,
           createPalette: null,
+          dominantHand: "Right",
           gestures: null,
           speech: "device",
           listenForNames: false,
@@ -141,6 +176,7 @@ describe("SettingsHub", () => {
         payload: {
           palette: LAYOUT,
           createPalette: null,
+          dominantHand: "Right",
           gestures: null,
           speech: "device",
           listenForNames: false,

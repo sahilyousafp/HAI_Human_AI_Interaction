@@ -31,7 +31,8 @@ test("listening for names: a named utterance becomes a request with its countdow
     await expect(page.getByTestId("voice-countdown")).toBeVisible();
     // Sent when the countdown ends, to Mochi (no specialist named), without the name.
     const request = page.getByTestId("agent-turn").first().locator(".agent-request");
-    await expect(request).toHaveText(/^what is everyone doing/i);
+    // The countdown alone is 5 s (VOICE.sendDelayMs), as long as the default wait.
+    await expect(request).toHaveText(/^what is everyone doing/i, { timeout: 15_000 });
     // The microphone keeps listening for the next name, and no audio left the page.
     await expect(indicator).toHaveAttribute("data-state", "names");
     expect(outgoing()).toEqual([]);

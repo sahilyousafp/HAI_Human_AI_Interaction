@@ -63,7 +63,7 @@ test.describe("palette", () => {
     await expect(activeTool(page)).toContainText("Select");
   });
 
-  test("keyboard opens the palette at the pointer; moving right and releasing chooses Measure", async ({
+  test("keyboard opens the action ring at the pointer; moving right and releasing chooses Copy", async ({
     page,
   }) => {
     await start(page);
@@ -80,7 +80,7 @@ test.describe("palette", () => {
     await expect(page.getByTestId("palette-slot-2")).toHaveAttribute("data-highlighted", "true");
     await page.keyboard.up(" ");
     await expect(palette).toHaveCount(0);
-    await expect(activeTool(page)).toHaveAttribute("data-tool", "measure");
+    await expect(activeTool(page)).toHaveAttribute("data-tool", "copy");
   });
 
   test("release in the centre cancels: the tool is unchanged", async ({ page }) => {
@@ -100,7 +100,7 @@ test.describe("palette", () => {
     await page.mouse.move(centre.x, centre.y);
     await page.mouse.down({ button: "right" });
     await expect(page.getByTestId("tool-palette")).toBeVisible();
-    await page.mouse.move(centre.x, centre.y + 90, { steps: 4 });
+    await page.mouse.move(centre.x + 64, centre.y - 64, { steps: 4 }); // top right: Move
     await page.mouse.up({ button: "right" });
     await expect(activeTool(page)).toHaveAttribute("data-tool", "move");
 
@@ -110,7 +110,7 @@ test.describe("palette", () => {
     expect((await camera(page)).target).not.toEqual(before.target);
   });
 
-  test("a long pinch opens the palette at the hand; flicking right and releasing chooses Measure", async ({
+  test("a silent long pinch opens the action ring at the hand; flicking right and releasing chooses Copy", async ({
     page,
   }) => {
     await start(page);
@@ -140,7 +140,7 @@ test.describe("palette", () => {
       (events) => window.__HAI_INPUT__?.gestures(events),
       [ev("pinch.drag.end", 700, right)],
     );
-    await expect(activeTool(page)).toHaveAttribute("data-tool", "measure");
+    await expect(activeTool(page)).toHaveAttribute("data-tool", "copy");
   });
 
   test("a still fist returns to Select after 1.5 s; a shorter fist does not", async ({ page }) => {
@@ -184,7 +184,8 @@ test.describe("palette", () => {
         id: "test-bake",
         label: "Bake to Rhino",
         icon: "M4 4h16v16H4z",
-        shortcut: "k",
+        shortcut: "j",
+        spoken: ["bake"],
       }),
     );
     await openSettings(page, "rings");
@@ -238,12 +239,12 @@ test.describe("built-in tools", () => {
     await mouseDrag(page, from, to);
     await expect.poll(async () => (await element(page, "block-c"))?.origin).toEqual([5_200, 20_000, 0]);
 
-    // Undo is in the top-left slot.
+    // Undo is in the bottom slot.
     const box = await viewerBox(page);
     const centre = { x: box.x + box.width * 0.5, y: box.y + box.height * 0.5 };
     await page.mouse.move(centre.x, centre.y);
     await page.keyboard.down(" ");
-    await page.mouse.move(centre.x - 70, centre.y - 70, { steps: 4 });
+    await page.mouse.move(centre.x, centre.y + 90, { steps: 4 });
     await page.keyboard.up(" ");
     await expect.poll(async () => (await element(page, "block-c"))?.origin).toEqual([4_000, 20_000, 0]);
     await expect(activeTool(page)).toHaveAttribute("data-tool", "move");
@@ -417,7 +418,7 @@ test.describe("hand UX regressions", () => {
     await expect(page.getByTestId("hand-pointer-right")).toBeVisible();
   });
 
-  test("holding still on the section plane keeps holding it instead of opening the palette", async ({
+  test("Holding a grabbed object keeps holding it: still on the section plane, no ring opens and nothing listens", async ({
     page,
   }) => {
     await start(page);
@@ -427,6 +428,9 @@ test.describe("hand UX regressions", () => {
     const p = await handAt(page, [0.5, 0.45]);
     await inject(page, [ev("pinch.drag.start", ts, p), ev("pinch.hold", ts + 600, p)]);
     await expect(page.getByTestId("tool-palette")).toHaveCount(0);
+    await page.waitForTimeout(700); // past the moment a silent hold would show its ring
+    await expect(page.getByTestId("tool-palette")).toHaveCount(0);
+    await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "off");
     const before = (await tools(page)).overlay.sectionMm ?? 0;
     const lower: [number, number] = [p[0], p[1] + 0.15];
     await inject(page, [

@@ -57,6 +57,7 @@ The user's own Claude Code setup (MCP servers, skills) loads in the agent sessio
 | 12 | `add-3d-snapping-and-project-files` | From a blank project to a Rhino file | Snapping in 3D: matching on screen, not on the ground |
 | 13 | `add-rhino-connector` | Same gestures drive Rhino 8, and the agent writes Python | Why Python instead of a tool list: Ladybug, rhino3dm and anything else |
 | 14 | `add-modelling-tools` (to specify) | Openings, roofs and arrays by hand | Snapping inside Rhino |
+| 14b | `add-hold-to-talk` | Point, hold, speak: a long pinch says "this" and listens | Put-that-there with an LLM: rings by role, tool names without the agent |
 | 15 | `add-agent-turn-review` | The agent proposes, I nod | One undo per agent turn, in Rhino too |
 | 16 | providers (to specify) | Same task, three models | The AgentProvider interface |
 | 17 | overlay (to specify) | HUD floating over Rhino | Click-through windows on Windows |
@@ -83,6 +84,7 @@ Each built week ends in a clip; its script is in `demos/`. Tick a week once its 
 - [ ] Week 12: `demos/12-3d-snapping-and-project-files.md`
 - [ ] Bonus: `demos/12b-fist-pan.md` (fist-drag pan; `add-fist-drag-pan`; fill in its real-camera checks before posting)
 - [ ] Bonus: `demos/15b-generated-panel.md` ("My AI builds a panel for the job"; `add-generated-panels`; fill in its real-camera checks before posting)
+- [ ] Week 14b: `demos/20-hold-to-talk.md` ("Point, hold, speak"; `add-hold-to-talk`; fill in its real-camera checks before posting)
 
 ## Change dependencies
 

@@ -108,6 +108,7 @@ export function slabBetween(doc: SceneDocument, a: Point3Mm, b: Point3Mm): Eleme
 function dragToDraw(options: {
   id: string;
   label: string;
+  spoken: string[];
   feature: Tool["feature"];
   icon: string;
   shortcut: string;
@@ -124,6 +125,7 @@ function dragToDraw(options: {
   return {
     id: options.id,
     label: options.label,
+    spoken: options.spoken,
     feature: options.feature,
     icon: options.icon,
     shortcut: options.shortcut,
@@ -193,6 +195,7 @@ export function wallTool(): Tool {
   return dragToDraw({
     id: "wall",
     label: "Wall",
+    spoken: ["wall"],
     feature: "createTools",
     icon: "M3 20h18M5 20V8h14v12M5 12h14M5 16h14M9 8v4M15 8v4M12 12v4M9 16v4M15 16v4",
     shortcut: "w",
@@ -210,6 +213,7 @@ export function slabTool(): Tool {
   return dragToDraw({
     id: "slab",
     label: "Slab",
+    spoken: ["slab", "floor"],
     feature: "createTools",
     icon: "M3 14l9-5 9 5-9 5zM3 14v2l9 5 9-5v-2",
     shortcut: "f",
@@ -227,6 +231,7 @@ export function slabTool(): Tool {
 export const columnTool: Tool = {
   id: "column",
   label: "Column",
+  spoken: ["column"],
   feature: "createTools",
   icon: "M6 3h12v3H6zM6 18h12v3H6zM9 6v12M15 6v12",
   shortcut: "c",
@@ -264,6 +269,7 @@ export function copyTool(): Tool {
   return {
     id: "copy",
     label: "Copy",
+    spoken: ["copy", "duplicate"],
     feature: "createTools",
     icon: "M8 8h11v11H8zM5 16V5h11",
     shortcut: "p",
@@ -318,15 +324,3 @@ export function copyTool(): Tool {
     },
   };
 }
-
-/** The create ring at first start, clockwise from the top: the left hand's long pinch opens it. */
-export const DEFAULT_CREATE_LAYOUT: Array<string | null> = [
-  "wall",
-  "slab",
-  "column",
-  "massing",
-  "copy",
-  "redo",
-  "undo",
-  "delete",
-];

@@ -1,15 +1,17 @@
-import type { Point2 } from "@hai/protocol";
+import { DEFAULT_ACTION_LAYOUT, DEFAULT_REFERENCE_LAYOUT, type Point2 } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LAYOUT, registerBuiltinTools } from "./builtin.ts";
+import { registerBuiltinTools } from "./builtin.ts";
 import { type PointerSource, ToolController, type ToolEnvironment } from "./controller.ts";
-import { DEFAULT_CREATE_LAYOUT } from "./create.ts";
 import { ToolRegistry } from "./registry.ts";
 
 /** A page where the left hand's pointer is snapped to a button, wherever it is, and nothing else is a button. */
 function setup() {
   const registry = new ToolRegistry();
   registerBuiltinTools(registry);
-  const controller = new ToolController(registry, { tools: DEFAULT_LAYOUT, create: DEFAULT_CREATE_LAYOUT });
+  const controller = new ToolController(registry, {
+    action: DEFAULT_ACTION_LAYOUT,
+    reference: DEFAULT_REFERENCE_LAYOUT,
+  });
   const pressed: Array<{ at: Point2; source?: PointerSource }> = [];
   const navigated: string[] = [];
   const snapped: PointerSource = "Left";

@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { DEFAULT_ACTION_LAYOUT, DEFAULT_REFERENCE_LAYOUT } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LAYOUT, registerBuiltinTools } from "./builtin.ts";
-import { DEFAULT_CREATE_LAYOUT } from "./create.ts";
+import { registerBuiltinTools } from "./builtin.ts";
 import { SLOT_NAMES } from "./palette.ts";
 import { ToolRegistry } from "./registry.ts";
 
@@ -29,8 +29,8 @@ describe("docs/tools.md", () => {
     for (const row of rows) {
       const id = registry.list().find((t) => t.label === row.label)?.id ?? "";
       const slots = [
-        [DEFAULT_LAYOUT, "tools"],
-        [DEFAULT_CREATE_LAYOUT, "create"],
+        [DEFAULT_ACTION_LAYOUT, "action"],
+        [DEFAULT_REFERENCE_LAYOUT, "reference"],
       ] as const;
       const where = slots
         .filter(([layout]) => layout.includes(id))

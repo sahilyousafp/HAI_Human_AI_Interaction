@@ -9,6 +9,8 @@ export * from "./gestures.ts";
 export * from "./messages.ts";
 export * from "./open-data.ts";
 export * from "./panel.ts";
+export * from "./references.ts";
 export * from "./rhino.ts";
+export * from "./rings.ts";
 export * from "./scene.ts";
 export * from "./tracking.ts";

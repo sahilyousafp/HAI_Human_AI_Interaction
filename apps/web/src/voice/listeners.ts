@@ -1,50 +1,91 @@
 import { VOICE } from "./voice-config.ts";
 import type { Listener, ListenerEvents } from "./voice-input.ts";
 
+const MICROPHONE: MediaStreamConstraints = {
+  audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+};
+const stopTracks = (stream: MediaStream) => {
+  for (const track of stream.getTracks()) track.stop();
+};
+
+type Vad = Awaited<ReturnType<typeof import("@ricky0123/vad-web")["MicVAD"]["new"]>>;
+
+/** The speech detector, loaded once and kept; `events` is the listening session it reports to now, if any. */
+let detector: Promise<{ vad: Vad; route: { events: ListenerEvents | null } }> | null = null;
+
 /**
- * Listens on this machine: Silero VAD (vad-web, in an AudioWorklet) finds where speech starts and ends and hands
- * over the utterance as 16 kHz samples. The model and ONNX runtime are served by the app (scripts/fetch-assets.mjs).
- * The microphone stream is ours, so cancelling always stops every track.
+ * Loads Silero VAD (vad-web, in an AudioWorklet) without opening the microphone. Loading takes a second or more, so
+ * it is done before the first request (at first engagement) and kept: listening then starts at once.
  */
-export async function listenOnDevice(events: ListenerEvents): Promise<Listener> {
-  const { MicVAD } = await import("@ricky0123/vad-web");
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-  });
-  const stop = () => {
-    for (const track of stream.getTracks()) track.stop();
-  };
-  try {
+function loadDetector(): NonNullable<typeof detector> {
+  detector ??= (async () => {
+    const { MicVAD } = await import("@ricky0123/vad-web");
+    const route: { events: ListenerEvents | null } = { events: null };
     const vad = await MicVAD.new({
       model: "v5",
       baseAssetPath: "/vad/",
       onnxWASMBasePath: "/ort/",
       startOnLoad: false,
-      getStream: async () => stream,
-      pauseStream: async () => {},
+      // The microphone opens when listening starts and every track stops when it pauses.
+      getStream: () => navigator.mediaDevices.getUserMedia(MICROPHONE),
+      pauseStream: async (stream) => stopTracks(stream),
+      resumeStream: () => navigator.mediaDevices.getUserMedia(MICROPHONE),
       redemptionMs: VOICE.silenceMs,
       preSpeechPadMs: 300,
-      minSpeechMs: 250,
+      // A one-syllable command ("Bake.", "Undo.") has less than 250 ms of voiced speech and was dropped as a misfire;
+      // the microphone only opens on an explicit action, so a short floor costs little.
+      minSpeechMs: 150,
       submitUserSpeechOnPause: true,
-      onSpeechStart: () => events.speechStart(),
-      onSpeechEnd: (audio) => events.speechEnd({ audio }),
-      onFrameProcessed: (probabilities) => events.level(probabilities.isSpeech),
+      onSpeechStart: () => route.events?.speechStart(),
+      onSpeechEnd: (audio) => route.events?.speechEnd({ audio }),
+      onFrameProcessed: (probabilities) => route.events?.level(probabilities.isSpeech),
       ortConfig: (ort) => {
         ort.env.logLevel = "error";
       },
     });
+    return { vad, route };
+  })();
+  detector.catch(() => {
+    detector = null;
+  });
+  return detector;
+}
+
+/** Loads the speech detector now, so the next listening session does not wait for it. Never opens the microphone. */
+export function preloadOnDevice(): void {
+  loadDetector().catch(() => {}); // a failure is reported when listening starts
+}
+
+/**
+ * Listens on this machine: the speech detector finds where speech starts and ends and hands over the utterance as
+ * 16 kHz samples. The model and ONNX runtime are served by the app (scripts/fetch-assets.mjs). The microphone stream
+ * is ours, so ending a session always stops every track.
+ */
+export async function listenOnDevice(events: ListenerEvents): Promise<Listener> {
+  const { vad, route } = await loadDetector();
+  route.events = events;
+  try {
     await vad.start();
-    return {
-      finish: () => void vad.pause(), // delivers the speech so far (submitUserSpeechOnPause)
-      cancel: () => {
-        void vad.destroy();
-        stop();
-      },
-    };
   } catch (error) {
-    stop();
+    // The detector is left errored (the microphone was refused or missing): the next session loads a new one.
+    route.events = null;
+    detector = null;
+    vad.destroy().catch(() => {}); // a detector that never started has nothing to stop, and says so by throwing
     throw error;
   }
+  // A session only ends itself: once a newer one has the detector, ending this one changes nothing.
+  const current = () => route.events === events;
+  return {
+    finish: () => {
+      // Delivers the speech so far (submitUserSpeechOnPause), then stops the tracks.
+      if (current()) vad.pause().catch(() => {});
+    },
+    cancel: () => {
+      if (!current()) return;
+      route.events = null;
+      vad.pause().catch(() => {});
+    },
+  };
 }
 
 interface SpeechRecognitionLike {

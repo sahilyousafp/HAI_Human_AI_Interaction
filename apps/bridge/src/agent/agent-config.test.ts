@@ -50,6 +50,13 @@ describe("the version of the instructions", () => {
     expect(SYSTEM_PROMPT).toMatch(/capture_view only to see what the user is looking at/);
   });
 
+  it("agents are told what the pointed-out lines mean: the held target, the points, the sketches and the markers", () => {
+    expect(SYSTEM_PROMPT).toMatch(/"\[context\]".*the target\s+\("this"/s);
+    expect(SYSTEM_PROMPT).toMatch(/points P1, P2 their hand rested on/);
+    expect(SYSTEM_PROMPT).toMatch(/"\[sketches\]": paths and outlines S1, S2/);
+    expect(SYSTEM_PROMPT).toMatch(/"\[markers\]": the project's lettered markers A, B/);
+  });
+
   it("the texts it covers say what the agents must be told about curves", () => {
     expect(SYSTEM_PROMPT).toContain("python_run");
     expect(builderCapabilities(["architect", "product"])).toMatch(/^architect, product can do more than/);

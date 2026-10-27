@@ -1,3 +1,4 @@
+import type { Hand, HeldTarget } from "@hai/protocol";
 import { type RequestContext, UtteranceContext } from "./utterance-context.ts";
 import { VOICE } from "./voice-config.ts";
 
@@ -30,6 +31,13 @@ export interface VoiceDeps {
   isNamed?(text: string): boolean;
   /** Whether a transcript is only a team name and a greeting ("Hey Mochi"), with no request after it. */
   isBareName?(text: string): boolean;
+  /**
+   * A transcript that is only a tool's spoken name picks that tool here, without the agent: returns the tool's label
+   * when it did, null for a request.
+   */
+  command?(text: string): string | null;
+  /** Stops the request a held pinch just sent (a shake within `HELD_STOP_MS`). */
+  stopSent?(): void;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -37,18 +45,30 @@ export interface VoiceDeps {
 
 export type MicError = "denied" | "not-found" | "failed";
 
+/** How long after a held request is sent a shake still stops it, ms. */
+export const HELD_STOP_MS = 1500;
+
+/**
+ * Where voice input is. `held` names the hand whose long pinch is listening: those requests show beside the hand
+ * rather than in the voice bar, and are sent on release without a countdown.
+ */
 export type VoiceState =
   | { phase: "off" }
   /** Listening for a team name (opt-in): the microphone is open and only named utterances become requests. */
   | { phase: "names"; speaking: boolean; heard?: string }
-  | { phase: "starting" }
-  | { phase: "listening"; speaking: boolean; level: number }
-  | { phase: "transcribing" }
+  | { phase: "starting"; held?: Hand }
+  | { phase: "listening"; speaking: boolean; level: number; held?: Hand }
+  | { phase: "transcribing"; held?: Hand }
   /** Waiting to be sent: at `sendAt` unless `paused` (being edited). */
   | { phase: "review"; text: string; sendAt: number; paused: boolean }
-  | { phase: "sent"; text: string }
+  | { phase: "sent"; text: string; held?: Hand }
+  /** A held request was stopped by a shake right after it was sent. */
+  | { phase: "stopped"; text: string; held: Hand }
+  /** The transcript was a tool's name: that tool was picked, and nothing was sent. */
+  | { phase: "picked"; text: string; tool: string; held?: Hand }
   | { phase: "discarded"; text: string }
-  | { phase: "error"; error: MicError; message: string };
+  /** `held`: the microphone failed for a held pinch, so the chip beside that hand says so too. */
+  | { phase: "error"; error: MicError; message: string; held?: Hand };
 
 const MESSAGES: Record<MicError, string> = {
   denied:
@@ -72,6 +92,17 @@ export function micError(error: unknown): MicError {
  * so a nod or Enter sends it at once and a shake or Escape discards it. What the user points at while speaking
  * is recorded alongside.
  */
+/** One buffer of all the samples, in order. */
+function joined(parts: Float32Array[]): Float32Array {
+  const all = new Float32Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const part of parts) {
+    all.set(part, at);
+    at += part.length;
+  }
+  return all;
+}
+
 export class VoiceInput {
   readonly context = new UtteranceContext();
   private state: VoiceState = { phase: "off" };
@@ -94,6 +125,20 @@ export class VoiceInput {
   private hovered: () => string | null = () => null;
   /** A bare name was heard ("Hey Mochi"): the rest of the request is awaited until this timer ends. */
   private pendingName: { text: string; timer: unknown } | null = null;
+  /**
+   * A held pinch is listening: what it heard so far, across pauses, until the pinch is released (`releasing`: it was,
+   * with speech, and the last words are on their way).
+   */
+  private held: {
+    hand: Hand;
+    session: number;
+    audio: Float32Array[];
+    texts: string[];
+    speaking: boolean;
+    spoke: boolean;
+    releasing: boolean;
+  } | null = null;
+  private readonly heldSpeech = new Set<(hand: Hand) => void>();
 
   constructor(private readonly deps: VoiceDeps) {
     this.now = deps.now ?? (() => Date.now());
@@ -196,11 +241,172 @@ export class VoiceInput {
   /** Stops listening without sending anything. */
   cancel(): void {
     this.session++;
+    this.held = null;
     this.clearTimers();
     this.listener?.cancel();
     this.listener = null;
     this.context.clear();
     if (this.state.phase !== "review" && this.state.phase !== "names") this.update({ phase: "off" });
+  }
+
+  // Held pinch
+
+  /** The hand whose held pinch is listening, if any. */
+  get holding(): Hand | null {
+    return this.held?.hand ?? null;
+  }
+
+  /** Calls `listener` when speech starts during a held pinch. Returns a function that stops calling it. */
+  onHeldSpeech = (listener: (hand: Hand) => void): (() => void) => {
+    this.heldSpeech.add(listener);
+    return () => this.heldSpeech.delete(listener);
+  };
+
+  /**
+   * A long pinch is held: listen until it is released, about `target`. Pauses do not end it; what is said is
+   * collected and sent as one request on release (`releaseHeld`). Returns false, starting nothing, while another
+   * request is being listened to or written down.
+   */
+  startHeld(hand: Hand, target: HeldTarget | null): boolean {
+    const { phase } = this.state;
+    if (this.held || phase === "starting" || phase === "listening" || phase === "transcribing") return false;
+    this.holdNames = true;
+    if (phase === "review") this.discard();
+    this.stopNames();
+    const session = ++this.session;
+    this.context.clear();
+    this.context.lock(target);
+    this.held = { hand, session, audio: [], texts: [], speaking: false, spoke: false, releasing: false };
+    this.update({ phase: "starting", held: hand });
+    this.holdNames = false;
+    void this.openHeld(session, hand);
+    return true;
+  }
+
+  private async openHeld(session: number, hand: Hand): Promise<void> {
+    try {
+      const listener = await this.deps.listen({
+        speechStart: () => {
+          const held = this.held;
+          if (session !== this.session || !held) return;
+          held.speaking = true;
+          if (!held.spoke) {
+            held.spoke = true;
+            // What the hand rests on counts from the first word; the hold may not run on for ever.
+            this.context.begin(this.now(), null);
+            this.ticking(session);
+            this.after(VOICE.maxUtteranceMs, () => this.releaseHeld(true));
+            for (const listener of this.heldSpeech) listener(hand);
+          }
+          this.update({ phase: "listening", speaking: true, level: 1, held: hand });
+        },
+        speechEnd: (result) => this.heardHeld(session, result),
+        level: (value) => {
+          if (session === this.session && this.state.phase === "listening")
+            this.update({ ...this.state, level: value });
+        },
+      });
+      if (session !== this.session) {
+        listener.cancel(); // released while the microphone was opening
+        return;
+      }
+      this.listener = listener;
+      if (this.state.phase === "starting")
+        this.update({ phase: "listening", speaking: false, level: 0, held: hand });
+    } catch (error) {
+      if (session !== this.session) return;
+      this.held = null;
+      this.context.clear();
+      const kind = micError(error);
+      this.update({ phase: "error", error: kind, message: MESSAGES[kind], held: hand });
+    }
+  }
+
+  /** A pause in a held request: keep what was said and go on listening (unless the pinch was let go meanwhile). */
+  private heardHeld(session: number, result: { audio: Float32Array } | { text: string }): void {
+    const held = this.held;
+    if (session !== this.session || !held) return;
+    if ("text" in result) held.texts.push(result.text);
+    else held.audio.push(result.audio);
+    held.speaking = false;
+    if (held.releasing) void this.finishHeld();
+    else this.update({ phase: "listening", speaking: false, level: 0, held: held.hand });
+  }
+
+  /**
+   * The held pinch was released: with `send` and something said, it is written down and sent at once (or picks a
+   * tool); otherwise the microphone stops and nothing is sent.
+   */
+  releaseHeld(send: boolean): void {
+    const held = this.held;
+    if (!held) return;
+    if (!send || !held.spoke) {
+      this.cancel();
+      return;
+    }
+    held.releasing = true;
+    // Still speaking: the words so far arrive through `heardHeld`, which then finishes.
+    if (held.speaking) this.listener?.finish();
+    else void this.finishHeld();
+  }
+
+  private async finishHeld(): Promise<void> {
+    const held = this.held;
+    if (!held) return;
+    this.held = null;
+    const { session, hand } = held;
+    this.clearTimers();
+    this.listener?.cancel();
+    this.listener = null;
+    this.context.end(this.now());
+    this.update({ phase: "transcribing", held: hand });
+    let text: string;
+    try {
+      text = held.texts.length > 0 ? held.texts.join(" ") : await this.deps.transcribe(joined(held.audio));
+    } catch (error) {
+      if (session !== this.session) return;
+      this.context.clear();
+      this.update({ phase: "error", error: "failed", message: (error as Error).message });
+      return;
+    }
+    if (session !== this.session) return;
+    text = text.trim();
+    if (!text) {
+      this.context.clear();
+      this.update({ phase: "off" });
+      return;
+    }
+    const tool = this.deps.command?.(text);
+    if (tool) {
+      this.context.clear();
+      this.update({ phase: "picked", text, tool, held: hand });
+      return;
+    }
+    // The hold was the deliberate act: no countdown.
+    if (!this.deps.send(text, this.deps.context(this.context))) {
+      this.update({ phase: "off" });
+      return;
+    }
+    this.context.clear();
+    this.update({ phase: "sent", text, held: hand });
+    this.sendTimer = this.setTimer(() => {
+      this.sendTimer = null;
+      if (this.state.phase === "sent" && this.state.held) this.update({ phase: "off" });
+    }, HELD_STOP_MS);
+  }
+
+  /** A shake: stops a held request sent within `HELD_STOP_MS`. Returns whether there was one. */
+  stopSent(): boolean {
+    const { state } = this;
+    if (state.phase !== "sent" || !state.held || this.sendTimer === null) return false;
+    this.clearSendTimer();
+    this.deps.stopSent?.();
+    this.update({ phase: "stopped", text: state.text, held: state.held });
+    this.sendTimer = this.setTimer(() => {
+      this.sendTimer = null;
+      if (this.state.phase === "stopped") this.update({ phase: "off" });
+    }, HELD_STOP_MS);
+    return true;
   }
 
   /** What the hand points at, for what a request named while listening for names refers to. */
@@ -230,7 +436,14 @@ export class VoiceInput {
 
   /** Dismisses an error or a finished request. */
   dismiss(): void {
-    if (this.state.phase === "error" || this.state.phase === "sent" || this.state.phase === "discarded")
+    const { phase } = this.state;
+    if (
+      phase === "error" ||
+      phase === "sent" ||
+      phase === "discarded" ||
+      phase === "picked" ||
+      phase === "stopped"
+    )
       this.update({ phase: "off" });
   }
 
@@ -260,7 +473,17 @@ export class VoiceInput {
       this.update({ phase: "off" });
       return;
     }
+    if (this.picked(text)) return;
     this.review(text);
+  }
+
+  /** A transcript that is only a tool's name picks the tool at once: no countdown, nothing sent. */
+  private picked(text: string): boolean {
+    const tool = this.deps.command?.(text);
+    if (!tool) return false;
+    this.context.clear();
+    this.update({ phase: "picked", text, tool });
+    return true;
   }
 
   /** Shows a transcript for the send delay; a nod or Enter sends it now, a shake or Escape discards it. */
@@ -310,7 +533,14 @@ export class VoiceInput {
   /** Whether the microphone is free for listening for names: no spoken request is under way. */
   private get idle(): boolean {
     const { phase } = this.state;
-    return phase === "off" || phase === "names" || phase === "sent" || phase === "discarded";
+    return (
+      phase === "off" ||
+      phase === "names" ||
+      phase === "sent" ||
+      phase === "discarded" ||
+      phase === "picked" ||
+      phase === "stopped"
+    );
   }
 
   /**

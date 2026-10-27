@@ -5,8 +5,9 @@ import type { Hand } from "./gestures.ts";
 export const GestureAction = z.enum([
   "use-tool",
   "select",
-  "tools-ring",
-  "create-ring",
+  "talk",
+  "action-ring",
+  "reference-ring",
   "tool-or-orbit",
   "orbit",
   "pan",
@@ -25,8 +26,9 @@ export type GestureAction = z.infer<typeof GestureAction>;
 export const ACTION_LABELS: Record<GestureAction, string> = {
   "use-tool": "Use the active tool",
   select: "Select what it points at",
-  "tools-ring": "Open the tools ring",
-  "create-ring": "Open the create ring",
+  talk: "Hold to talk about this (the ring when silent)",
+  "action-ring": "Open the action ring",
+  "reference-ring": "Open the reference ring",
   "tool-or-orbit": "Active tool, else orbit",
   orbit: "Orbit the view",
   pan: "Pan the view",
@@ -61,10 +63,9 @@ export const GESTURE_SLOTS = {
     label: "Long pinch",
     how: "Pinch and keep still for a moment",
     perHand: true,
-    actions: ["tools-ring", "create-ring", "select", ...COMMANDS],
-    default: "tools-ring",
-    // The right hand opens the tools, the left hand the create tools.
-    defaults: { Left: "create-ring", Right: "tools-ring" },
+    actions: ["talk", "action-ring", "reference-ring", "select", ...COMMANDS],
+    // Both hands talk; a silent hold shows the action ring for the dominant hand and the reference ring for the other.
+    default: "talk",
   },
   drag: {
     label: "Pinch drag",

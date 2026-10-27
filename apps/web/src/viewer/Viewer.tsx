@@ -1,3 +1,4 @@
+import { DEFAULT_GESTURES } from "@hai/perception";
 import {
   actionFor,
   DEFAULT_BINDINGS,
@@ -7,6 +8,7 @@ import {
   type Hand,
   type Point2,
   type Point3Mm,
+  type Ring,
   type SceneDocument,
   type SunSetting,
 } from "@hai/protocol";
@@ -60,6 +62,7 @@ import type { PointerSource, ToolController } from "../tools/controller.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
 import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
 import type { Hit } from "../tools/types.ts";
+import type { VoiceInput, VoiceState } from "../voice/voice-input.ts";
 import { SUN_DISTANCE, takeShots, USER_ONLY } from "./agent-shot.ts";
 import { type CameraMarker, CameraMarkers } from "./camera-markers.tsx";
 import { elementGeometry, MM, modelGeometry, sceneBounds } from "./geometry.ts";
@@ -78,7 +81,16 @@ import {
   wornBy,
 } from "./owner-display.tsx";
 import { nearestModel, type SnapCandidate, snapRadius } from "./snap-pick.ts";
-import { MeasureMarks, ReferenceMarkers, SectionClipping, SectionPlane, SnapMarker } from "./ToolScene.tsx";
+import {
+  HeldPoints,
+  HeldTargetMark,
+  MeasureMarks,
+  ReferenceMarkers,
+  ReferenceMarks,
+  SectionClipping,
+  SectionPlane,
+  SnapMarker,
+} from "./ToolScene.tsx";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 import { between, resolveView, VIEW_ANIMATION_MS } from "./view-request.ts";
 
@@ -87,6 +99,45 @@ const NO_MARKERS: CameraMarker[] = [];
 const NO_CONTEXT: ContextState = { items: [], stale: false, credits: [] };
 /** The pan pointer's icon: arrows in the four directions. */
 const PAN_ICON = "M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3";
+/** A microphone: the hand holding a long pinch is listening. */
+const MIC_ICON = "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3";
+/** A still pinch shows its progress toward a long pinch only after this long, so a tap never flashes a ring. */
+const HOLD_SHOWN_AFTER_MS = 150;
+const VOICE_OFF: VoiceState = { phase: "off" };
+/** What the chip beside a holding hand says when the microphone fails (the agent panel says how to fix it). */
+const MIC_PROBLEM = {
+  denied: "Microphone blocked",
+  "not-found": "No microphone",
+  failed: "Microphone failed",
+} as const;
+const NO_POINTS: Point3Mm[] = [];
+const NO_VOICE = { subscribe: () => () => {}, getSnapshot: () => VOICE_OFF };
+
+/** What the chip beside a holding hand says, for each phase of its request; null shows no chip. */
+function heldChipText(state: VoiceState, listening: boolean): string | null {
+  switch (state.phase) {
+    case "starting":
+      return "Starting the microphone...";
+    case "listening":
+      return state.speaking
+        ? "Listening. Point at what you mean."
+        : listening
+          ? "Listening. Speak now."
+          : null;
+    case "transcribing":
+      return "Writing it down...";
+    case "sent":
+      return "Sent - shake to stop";
+    case "stopped":
+      return "Stopped";
+    case "picked":
+      return `${state.tool} picked`;
+    case "error":
+      return MIC_PROBLEM[state.error];
+    default:
+      return null;
+  }
+}
 /** Camera easing time constant: smooths hand jitter without adding visible lag. */
 /**
  * The camera eases toward where gestures put it. Hand input arrives about every 40 ms (one tracking frame); easing
@@ -117,9 +168,9 @@ function distanceToSegment([px, py]: Point2, [ax, ay]: Point2, [bx, by]: Point2)
 const PRESSABLE =
   'button, a[href], summary, label, input[type="checkbox"], input[type="radio"], [data-hand-press]';
 
-/** Whether a ring may open by mouse or keyboard: rings are switched on, and the create ring needs the create tools. */
-function ringAllowed(features: FeatureFlags, ring: "tools" | "create"): boolean {
-  return features.on("toolRings") && (ring !== "create" || features.on("createTools"));
+/** Whether a ring may open by mouse or keyboard: rings are switched on. */
+function ringAllowed(features: FeatureFlags): boolean {
+  return features.on("toolRings");
 }
 
 /** A DOM element (the scene's `Element` type shadows the DOM's name in this file). */
@@ -249,6 +300,8 @@ interface Colors {
   hover: string;
   grid: string;
   risk: string;
+  handLeft: string;
+  handRight: string;
 }
 
 function readColors(): Colors {
@@ -263,6 +316,8 @@ function readColors(): Colors {
     hover: v("--model-hover"),
     grid: v("--viewer-grid"),
     risk: v("--risk"),
+    handLeft: v("--hand-left"),
+    handRight: v("--hand-right"),
   };
 }
 
@@ -282,6 +337,8 @@ interface HandPointerState {
   overControl: boolean;
   /** The focus hand: it drives hover in the model and what "this" and "here" mean. */
   focus: boolean;
+  /** A still pinch on its way to a long pinch: how far, 0..1; null otherwise. */
+  hold: number | null;
 }
 
 /** The imported geometry the viewer draws; shared by every element mesh below it. */
@@ -693,6 +750,7 @@ export function Viewer({
   mirror,
   mirrorAssets,
   markers = [],
+  voice,
   owners,
   cameraMarkers = NO_MARKERS,
   context = NO_CONTEXT,
@@ -728,6 +786,8 @@ export function Viewer({
   mirrorAssets: ModelAssets;
   /** Elements captured while the user speaks, numbered in this order. */
   markers?: string[];
+  /** Voice input: what a held pinch is listening to, shown beside the hand, and the points it rested on. */
+  voice?: VoiceInput;
   /** Who owns which elements, and the claims to mark; absent: nothing is marked. */
   owners?: OwnerDisplay;
   /** The cameras agents placed, as small markers in the model (not in agents' own pictures). */
@@ -1104,6 +1164,24 @@ export function Viewer({
       outline(target);
     };
     const shown: Partial<Record<Hand, HandPointerState>> = {};
+    /** Each hand's pinch on its way to a long pinch: where it closed and when, or `moved` once it left that spot. */
+    const charging: Partial<Record<Hand, { position: Point2; since: number; moved: boolean }>> = {};
+    const holdProgress = (hand: Hand, position: Point2, closing: boolean): number | null => {
+      const bound = actionFor(gestures.bindings?.() ?? DEFAULT_BINDINGS, "hold", hand) !== "none";
+      if (!closing || !bound) {
+        delete charging[hand];
+        return null;
+      }
+      const now = performance.now();
+      const charge = charging[hand] ?? { position, since: now, moved: false };
+      charging[hand] = charge;
+      const { holdMs, holdMaxMove } = DEFAULT_GESTURES.pinch;
+      const dx = position[0] - charge.position[0];
+      const dy = (position[1] - charge.position[1]) / handAspect.current;
+      if (Math.hypot(dx, dy) >= holdMaxMove) charge.moved = true; // a drag now: this pinch is no long pinch
+      const held = now - charge.since;
+      return charge.moved || held < HOLD_SHOWN_AFTER_MS || held >= holdMs ? null : held / holdMs;
+    };
     const snaps: Partial<Record<Hand, HandSnap<HTMLElement>>> = {};
     const snapTargetOf = snapTargets.current;
     const publish = () => setPointers({ ...shown });
@@ -1159,7 +1237,12 @@ export function Viewer({
         // The pointer always shows where the hand is; controls respond only while engaged.
         const target = snapped?.key ?? (bus.engaged ? pressableAt(wrapper.current, at) : null);
         markHover(hand, target);
-        shown[hand] = { at, client: drawn, overControl: target !== null, focus: false };
+        const hold = holdProgress(
+          hand,
+          position,
+          bus.engaged && target === null && (sample.closing?.[hand] ?? false),
+        );
+        shown[hand] = { at, client: drawn, overControl: target !== null, focus: false, hold };
       }
       let focusHand: Hand | null = null;
       if (shown[focus]) focusHand = focus;
@@ -1228,8 +1311,8 @@ export function Viewer({
       const at = viewerAt(e.clientX, e.clientY);
       const start = { x: e.clientX, y: e.clientY, button: e.button, moved: false, byTool: false };
       drag = { ...start, holdTimer: null };
-      const ring = e.shiftKey ? "create" : "tools";
-      if (e.button === 2 && ringAllowed(features, ring)) {
+      const ring: Ring = e.shiftKey ? "reference" : "action";
+      if (e.button === 2 && ringAllowed(features)) {
         drag.holdTimer = setTimeout(() => {
           if (!drag || drag.moved) return;
           tools.openPalette({ center: at, aspect: el.clientWidth / el.clientHeight }, "pointer", ring);
@@ -1315,8 +1398,8 @@ export function Viewer({
       if (e.key === " ") {
         e.preventDefault();
         const canvas = wrapper.current?.querySelector("canvas");
-        const ring = e.shiftKey ? "create" : "tools";
-        if (!e.repeat && !tools.paletteOpen && canvas && ringAllowed(features, ring)) {
+        const ring: Ring = e.shiftKey ? "reference" : "action";
+        if (!e.repeat && !tools.paletteOpen && canvas && ringAllowed(features)) {
           const aspect = canvas.clientWidth / canvas.clientHeight;
           tools.openPalette({ center: lastMouse.current ?? [0.5, 0.5], aspect }, "pointer", ring);
         }
@@ -1412,12 +1495,14 @@ export function Viewer({
   const pointerLook = (hand: Hand, p: HandPointerState): { mode: string; glyph: string | null } => {
     let mode: string = toolState.activeId;
     if (!engaged) mode = "idle";
-    else if (toolState.palette?.hand === hand) mode = "palette";
+    else if (toolState.palette?.hand === hand && !toolState.palette.hidden) mode = "palette";
+    else if (listeningHand === hand) mode = "talk";
     else if (handShape[hand]?.panning || (handShape[hand]?.fist && fistPans(hand))) mode = "pan";
     else if (p.overControl) mode = "press";
     else if (p.focus && toolState.overlay.sectionHover) mode = "grab";
     if (mode === "grab") return { mode, glyph: "M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4" };
     if (mode === "pan") return { mode, glyph: PAN_ICON };
+    if (mode === "talk") return { mode, glyph: MIC_ICON };
     return {
       mode,
       glyph: mode === toolState.activeId && toolState.activeId !== "select" ? activeIcon : null,
@@ -1426,6 +1511,24 @@ export function Viewer({
 
   const selection = new Set(scene.selection);
   const { overlay } = toolState;
+  const references = useSyncExternalStore(tools.references.subscribe, tools.references.getSnapshot);
+  const voiceState = useSyncExternalStore(
+    voice?.subscribe ?? NO_VOICE.subscribe,
+    voice?.getSnapshot ?? NO_VOICE.getSnapshot,
+  );
+  const heldPoints = useSyncExternalStore(
+    voice?.context.subscribe ?? NO_VOICE.subscribe,
+    () => voice?.context.points ?? NO_POINTS,
+  );
+  // The hand whose long pinch is listening now, and the hand a held request's chip belongs to.
+  const listeningHand =
+    (voiceState.phase === "starting" || voiceState.phase === "listening") && voiceState.held
+      ? voiceState.held
+      : null;
+  const chipHand = "held" in voiceState && voiceState.held ? voiceState.held : null;
+  // A microphone that failed is said beside the hand only while it still holds (the agent panel keeps the fix).
+  const chipText =
+    voiceState.phase === "error" && !toolState.held ? null : heldChipText(voiceState, listeningHand !== null);
   // A move preview applies only while the element is still as it was when the drag began.
   const previewOffset = (element: Element): [number, number] | null =>
     overlay.movePreview?.id === element.id && overlay.movePreview.from === JSON.stringify(element)
@@ -1566,6 +1669,18 @@ export function Viewer({
           {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
           {overlay.snap && <SnapMarker point={overlay.snap.point} label={overlay.snap.label} />}
           {markers.length > 0 && <ReferenceMarkers ids={markers} doc={shownDoc} />}
+          {toolState.held && (
+            <HeldTargetMark
+              target={toolState.held.target}
+              doc={shownDoc}
+              color={toolState.held.hand === "Left" ? colors.handLeft : colors.handRight}
+            />
+          )}
+          {heldPoints.length > 0 && <HeldPoints points={heldPoints} />}
+          <ReferenceMarks
+            references={references}
+            colors={{ Left: colors.handLeft, Right: colors.handRight, mouse: colors.selected }}
+          />
         </group>
         {cameraMarkers.length > 0 && <CameraMarkers markers={cameraMarkers} />}
         <CameraRig
@@ -1601,11 +1716,39 @@ export function Viewer({
               aria-hidden="true"
             >
               {glyph && <ToolIcon path={glyph} size={mode === "pan" ? 20 : 14} />}
+              {p.hold !== null && (
+                <svg
+                  aria-hidden="true"
+                  className="hold-progress"
+                  viewBox="0 0 48 48"
+                  data-testid={`hold-progress-${hand.toLowerCase()}`}
+                >
+                  <circle cx="24" cy="24" r="21" pathLength="100" strokeDasharray={`${p.hold * 100} 100`} />
+                </svg>
+              )}
             </div>
           );
         }),
         document.body,
       )}
+      {chipHand &&
+        chipText &&
+        pointers[chipHand] &&
+        createPortal(
+          <div
+            className="held-chip"
+            data-testid="held-chip"
+            data-hand={chipHand.toLowerCase()}
+            data-phase={voiceState.phase}
+            data-ring={toolState.palette?.hand === chipHand && !toolState.palette.hidden}
+            role="status"
+            style={{ left: `${pointers[chipHand]?.client[0]}px`, top: `${pointers[chipHand]?.client[1]}px` }}
+          >
+            {voiceState.phase === "listening" && <span className="held-chip-dot" aria-hidden="true" />}
+            {chipText}
+          </div>,
+          document.body,
+        )}
       {stopArmed && (
         <p className="stop-armed" data-testid="stop-armed" role="status">
           Open both hands to stop

@@ -2,6 +2,7 @@
  * What a nod ("yes") or a shake ("no") answers, when several things may be waiting for one. The order is fixed, so
  * the same gesture always means the same thing:
  *
+ * 0. a shake within 1.5 s of a held request being sent stops that request;
  * 1. a voice request under review (a nod sends it, a shake throws it away);
  * 2. an approval card, when exactly one waits;
  * 3. a panel offer, when exactly one waits and no approval card is (a nod opens the panel, a shake skips it);
@@ -11,7 +12,13 @@
  */
 export interface AnswerTargets {
   /** The voice request under review, if there is one. */
-  voice: { readonly reviewing: boolean; confirm(): void; discard(): void };
+  voice: {
+    readonly reviewing: boolean;
+    confirm(): void;
+    discard(): void;
+    /** Stops a held request sent a moment ago; false if there is none. */
+    stopSent?(): boolean;
+  };
   approvals: {
     /** How many approval cards wait. */
     readonly waiting: number;
@@ -25,6 +32,7 @@ export interface AnswerTargets {
 }
 
 export function answerYesNo(yes: boolean, { voice, approvals, offers }: AnswerTargets): boolean {
+  if (!yes && voice.stopSent?.()) return true;
   if (voice.reviewing) {
     if (yes) voice.confirm();
     else voice.discard();

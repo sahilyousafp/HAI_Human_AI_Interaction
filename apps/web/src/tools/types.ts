@@ -8,6 +8,7 @@ import type {
   SceneOp,
 } from "@hai/protocol";
 import type { Resolved, SnapKind } from "@hai/scene";
+import type { ReferenceLayer } from "./reference-layer.ts";
 
 /** What is under a viewer position: an element and the surface point that was hit, millimetres. */
 export interface Hit {
@@ -89,6 +90,14 @@ export interface ToolContext {
   confirm(question: string, answer: (yes: boolean) => void): void;
   /** Opens the agent panel ready for a request; returns why it cannot, or null. */
   askAgent(): string | null;
+  /** The sketches and markers the user pointed out for the agent (not part of the model). */
+  references: ReferenceLayer;
+  /** Where a model point appears on screen, px, or null when it is behind the camera or the view is unknown. */
+  toScreen(point: Point3Mm): [number, number] | null;
+  /** A viewer position on screen, px. */
+  toPixels(at: Point2): [number, number];
+  /** The hand that made the current tap, hover or drag, or null for the mouse. */
+  hand(): "Left" | "Right" | null;
 }
 
 /**
@@ -102,6 +111,11 @@ export interface Tool {
   icon: string;
   /** A single key, lowercase. */
   shortcut: string;
+  /**
+   * What can be said to pick the tool without the agent, lower case; the first is shown in its ring slot. Without
+   * it the tool is picked by its label.
+   */
+  spoken?: string[];
   /** Instant tools (undo, redo, ask agent) run once and leave the previous tool active. */
   instant?: boolean;
   /** The feature that switches this tool on and off (Settings > Features); without one it is always available. */
@@ -118,4 +132,6 @@ export interface Tool {
   onDragEnd?(ctx: ToolContext, at: Point2): void;
   /** The drag was taken over (the palette opened) or the user disengaged: undo any preview, commit nothing. */
   onDragCancel?(ctx: ToolContext): void;
+  /** Escape or a shake with nothing else pending: return true to have handled it, else it goes back to Select. */
+  onCancel?(ctx: ToolContext): boolean;
 }

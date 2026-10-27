@@ -12,6 +12,7 @@ import type {
   PlanOutcome,
   PlanPart,
   RequestContext,
+  Sketch,
   TeamCamera,
   TeamClaim,
   TeamMemberInfo,
@@ -256,6 +257,10 @@ export class AgentClient {
   /** Requests this page sent, by what they were for, so a refusal shows in the right place. */
   private readonly sentRequests = new Map<string, "chat" | "extensions" | "agents">();
 
+  private references: { sketches(): Sketch[]; sent(): void } | null = null;
+  /** The message id of the request sent last. */
+  private lastRequestId: string | null = null;
+
   constructor(private readonly send: (message: Message) => boolean) {}
 
   subscribe = (listener: () => void): (() => void) => {
@@ -439,11 +444,32 @@ export class AgentClient {
     const id = newId();
     this.sentRequests.set(id, "chat");
     this.update({ error: null });
-    return this.send({
+    // Every request, typed or spoken, carries the sketches shown now; once sent they are cleared.
+    const sketches = this.references?.sketches() ?? [];
+    const withSketches =
+      sketches.length > 0
+        ? { ...(context ?? { references: [], selection: [], groundPoint: null }), sketches }
+        : context;
+    const sent = this.send({
       type: "agent.send",
       id,
-      payload: { text, ...(context ? { context } : {}), ...(agent ? { agent } : {}) },
+      payload: { text, ...(withSketches ? { context: withSketches } : {}), ...(agent ? { agent } : {}) },
     });
+    if (sent) this.lastRequestId = id;
+    if (sent && sketches.length > 0) this.references?.sent();
+    return sent;
+  }
+
+  /** Stops the request sent last (a shake right after a held request): its turn and the tasks it handed out. */
+  stopLastRequest(): void {
+    if (!this.lastRequestId) return;
+    this.send({ type: "agent.stopRequest", id: newId(), payload: { requestId: this.lastRequestId } });
+    this.lastRequestId = null;
+  }
+
+  /** Where the sketches a request carries come from, and what to do once they were sent (clear them). */
+  attachReferences(references: { sketches(): Sketch[]; sent(): void }): void {
+    this.references = references;
   }
 
   /**

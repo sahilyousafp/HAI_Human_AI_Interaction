@@ -70,9 +70,12 @@ export interface TurnMeta {
   preface?: string;
 }
 
+const mm = (point: readonly number[]) => `${point.map((v) => Math.round(v)).join(", ")} mm`;
+
 /**
- * The text the agent receives for a request that came with context (a spoken request): a compact block naming what
- * the user pointed at, then the request. The agent can still call get_user_context for more.
+ * The text the agent receives for a request that came with context: a compact block naming what the user pointed at
+ * (a spoken request's references, a held pinch's target and the points P1, P2 the hand rested on), the sketches S1,
+ * S2 the user drew and the project's lettered markers, then the request. The agent can still call get_user_context.
  */
 export function withContext(text: string, context: RequestContext | undefined): string {
   if (!context) return text;
@@ -80,10 +83,27 @@ export function withContext(text: string, context: RequestContext | undefined): 
     ? context.references.map((r, i) => `${i + 1}) ${r.type} ${r.id} "${r.name}"`).join(", ")
     : "none";
   const selection = context.selection.length ? context.selection.join(", ") : "none";
-  const ground = context.groundPoint
-    ? `${context.groundPoint.map((v) => Math.round(v)).join(", ")} mm`
-    : "none";
-  return `[context] references: ${refs}; selection: ${selection}; ground point: ${ground}\n${text}`;
+  const ground = context.groundPoint ? mm(context.groundPoint) : "none";
+  let line = `[context] references: ${refs}; selection: ${selection}; ground point: ${ground}`;
+  const target = context.target;
+  if (target)
+    line +=
+      target.kind === "element"
+        ? `; target ("this"): ${target.type} ${target.id} "${target.name}"`
+        : `; target ("this"): point ${mm(target.point)}${target.aid ? ` (${target.aid})` : ""}`;
+  if (context.points?.length)
+    line += `; points: ${context.points.map((p, i) => `P${i + 1} ${mm(p)}`).join(", ")}`;
+  const lines = [line];
+  if (context.sketches?.length) {
+    const sketches = context.sketches.map(
+      (s) =>
+        `${s.label} ${s.kind}: ${s.points.map((p) => `(${p.map((v) => Math.round(v)).join(", ")})`).join(" ")} mm`,
+    );
+    lines.push(`[sketches] ${sketches.join("; ")}`);
+  }
+  if (context.markers?.length)
+    lines.push(`[markers] ${context.markers.map((m) => `${m.letter} ${mm(m.point)}`).join("; ")}`);
+  return `${lines.join("\n")}\n${text}`;
 }
 
 /**
@@ -101,6 +121,8 @@ export class AgentHub {
   /** The previous process ended unexpectedly: the next turn resumes and is marked recovered. */
   private crashed = false;
   private running: AgentTurn | null = null;
+  /** The latest request a client sent and the turn it started (a shake right after it stops that turn). */
+  private lastRequest: { requestId: string; turnId: string } | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** An extension changed during a turn: restart once it ends. */
   private restartAfterTurn = false;
@@ -165,6 +187,16 @@ export class AgentHub {
         this.log.info("agent request refused", { reason: error.message });
         this.reject(message.id, error.message, send);
       });
+      if (this.running) this.lastRequest = { requestId: message.id, turnId: this.running.id };
+      return true;
+    }
+    if (message.type === "agent.stopRequest") {
+      // One session: the request can only be the turn running now.
+      if (
+        this.lastRequest?.requestId === message.payload.requestId &&
+        this.running?.id === this.lastRequest.turnId
+      )
+        void this.stop();
       return true;
     }
     if (message.type === "agent.stop") {

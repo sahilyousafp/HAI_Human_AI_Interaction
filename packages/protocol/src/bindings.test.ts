@@ -9,9 +9,9 @@ import {
 } from "./bindings.ts";
 
 describe("gesture bindings", () => {
-  it("defaults: a long pinch opens the tools ring on the right hand and the create ring on the left", () => {
-    expect(actionFor(DEFAULT_BINDINGS, "hold", "Right")).toBe("tools-ring");
-    expect(actionFor(DEFAULT_BINDINGS, "hold", "Left")).toBe("create-ring");
+  it("defaults: a long pinch with either hand is hold to talk", () => {
+    expect(actionFor(DEFAULT_BINDINGS, "hold", "Right")).toBe("talk");
+    expect(actionFor(DEFAULT_BINDINGS, "hold", "Left")).toBe("talk");
     for (const hand of ["Left", "Right"] as const) {
       expect(actionFor(DEFAULT_BINDINGS, "tap", hand)).toBe("use-tool");
       expect(actionFor(DEFAULT_BINDINGS, "drag", hand)).toBe("tool-or-orbit");
@@ -42,9 +42,9 @@ describe("gesture bindings", () => {
     expect(actionFor(b, "tap", "Left")).toBe("select");
     expect(actionFor(b, "tap", "Right")).toBe("select");
     expect(actionFor(b, "fist", "Left")).toBe("undo");
-    // The old single palette: each hand keeps its own ring.
-    expect(actionFor(b, "hold", "Left")).toBe("create-ring");
-    expect(actionFor(b, "hold", "Right")).toBe("tools-ring");
+    // The old single palette is no longer offered: each hand keeps the default.
+    expect(actionFor(b, "hold", "Left")).toBe("talk");
+    expect(actionFor(b, "hold", "Right")).toBe("talk");
     expect(actionFor(b, "stop")).toBe("none");
     // A newer per-hand choice wins over an older shared one.
     expect(actionFor(resolveBindings({ tap: "select", "tap.right": "undo" }), "tap", "Right")).toBe("undo");
@@ -74,7 +74,9 @@ describe("gesture bindings", () => {
   });
 
   it("the stored schema accepts per-hand and older keys, and refuses what a gesture cannot do", () => {
-    expect(GestureBindingsSchema.safeParse({ "hold.left": "tools-ring", nod: "undo" }).success).toBe(true);
+    expect(GestureBindingsSchema.safeParse({ "hold.left": "action-ring", nod: "undo" }).success).toBe(true);
+    expect(GestureBindingsSchema.safeParse({ "hold.right": "talk" }).success).toBe(true);
+    expect(GestureBindingsSchema.safeParse({ "tap.right": "talk" }).success).toBe(false);
     expect(GestureBindingsSchema.safeParse({ hold: "palette", palms: "stop-agent" }).success).toBe(true);
     expect(GestureBindingsSchema.safeParse({ "tap.left": "navigate" }).success).toBe(false);
     expect(GestureBindingsSchema.safeParse({ wave: "undo" }).success).toBe(false);

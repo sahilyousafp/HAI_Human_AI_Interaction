@@ -537,8 +537,9 @@ function onRequest(raw) {
   if (text === "crash") process.exit(3);
   history.push(text);
   writeFileSync(historyFile, JSON.stringify(history));
-  // A spoken request's "[context] ..." line (what the user pointed at) comes before what they said.
-  const said = text.replace(/^\[context\][^\n]*\n/, "");
+  // What the user pointed at ("[context] ..."), drew ("[sketches] ...") and marked ("[markers] ...") comes before what
+  // they said, one line each.
+  const said = text.replace(/^(\[(context|sketches|markers)\][^\n]*\n)+/, "");
   if (asLead(forAgent ? text : said, forAgent)) return;
   if (text === "panel" || text.startsWith("panel ")) {
     void panelRequest(text.slice("panel".length).trim());

@@ -1,6 +1,13 @@
-import type { GestureEvent, Point2, SceneDocument, SceneOp } from "@hai/protocol";
+import {
+  DEFAULT_ACTION_LAYOUT,
+  DEFAULT_REFERENCE_LAYOUT,
+  type GestureEvent,
+  type Point2,
+  type SceneDocument,
+  type SceneOp,
+} from "@hai/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_LAYOUT, MASSING_SIZE, registerBuiltinTools } from "./builtin.ts";
+import { MASSING_SIZE, registerBuiltinTools } from "./builtin.ts";
 import {
   DEFAULT_TOOL,
   FIST_RESET_MS,
@@ -9,7 +16,7 @@ import {
   ToolController,
   type ToolEnvironment,
 } from "./controller.ts";
-import { COLUMN, DEFAULT_CREATE_LAYOUT, SLAB, WALL } from "./create.ts";
+import { COLUMN, SLAB, WALL } from "./create.ts";
 import { InputRouter } from "./input-router.ts";
 import { ToolRegistry } from "./registry.ts";
 
@@ -43,7 +50,10 @@ const BUTTON_Y = 0.05;
 function setup() {
   const registry = new ToolRegistry();
   registerBuiltinTools(registry);
-  const controller = new ToolController(registry, { tools: DEFAULT_LAYOUT, create: DEFAULT_CREATE_LAYOUT });
+  const controller = new ToolController(registry, {
+    action: DEFAULT_ACTION_LAYOUT,
+    reference: DEFAULT_REFERENCE_LAYOUT,
+  });
   const applied: Array<{ label: string; ops: SceneOp[] }> = [];
   const calls: string[] = [];
   const navigated: GestureEvent[] = [];
@@ -96,11 +106,11 @@ describe("palette and active tool", () => {
     expect(DEFAULT_TOOL).toBe("select");
   });
 
-  it("flick right to choose: Measure is in the right-hand slot and becomes active", () => {
+  it("flick right to choose: Copy is in the action ring's right-hand slot and becomes active", () => {
     const { controller } = setup();
-    expect(controller.getSnapshot().layouts.tools[2]).toBe("measure");
+    expect(controller.getSnapshot().layouts.action[2]).toBe("copy");
     flick(controller, [0.2, 0]);
-    expect(controller.getSnapshot().activeId).toBe("measure");
+    expect(controller.getSnapshot().activeId).toBe("copy");
     expect(controller.getSnapshot().palette).toBeNull();
   });
 
@@ -119,10 +129,10 @@ describe("palette and active tool", () => {
     navigated.length = 0;
     router.handle(ev("pinch.hold", [0.4, 0.4]));
     expect(controller.getSnapshot().palette?.center).toEqual([0.4, 0.4]);
-    router.handle(ev("pinch.drag.update", [0.4, 0.6])); // down: bottom slot, Move
-    expect(controller.getSnapshot().palette?.highlighted).toBe(4);
-    router.handle(ev("pinch.drag.end", [0.4, 0.6]));
-    expect(controller.getSnapshot().activeId).toBe("move");
+    router.handle(ev("pinch.drag.update", [0.6, 0.4])); // right: Copy
+    expect(controller.getSnapshot().palette?.highlighted).toBe(2);
+    router.handle(ev("pinch.drag.end", [0.6, 0.4]));
+    expect(controller.getSnapshot().activeId).toBe("copy");
     // Navigation only hears the orbit end (so it stops orbiting); steering never reaches it.
     expect(navigated.map((e) => e.type)).toEqual(["pinch.drag.end"]);
   });
@@ -156,7 +166,13 @@ describe("palette and active tool", () => {
   it("registered tool appears in the list of available tools", () => {
     const { registry, controller } = setup();
     const before = controller.getSnapshot().registryVersion;
-    registry.register({ id: "rhino-bake", label: "Bake to Rhino", icon: "M4 4h16v16H4z", shortcut: "k" });
+    registry.register({
+      id: "rhino-bake",
+      label: "Bake to Rhino",
+      icon: "M4 4h16v16H4z",
+      shortcut: "j",
+      spoken: ["bake"],
+    });
     expect(controller.getSnapshot().registryVersion).toBe(before + 1);
     expect(registry.list().map((t) => t.id)).toContain("rhino-bake");
   });
@@ -180,7 +196,7 @@ describe("built-in tools", () => {
   it("undo from the palette: undoes once and Move is still active", () => {
     const { controller, calls } = setup();
     controller.choose("move");
-    flick(controller, [-0.15, -0.2]); // top left: Undo
+    flick(controller, [0, 0.2]); // bottom: Undo
     expect(calls).toEqual(["undo"]);
     expect(controller.getSnapshot().activeId).toBe("move");
   });
@@ -281,15 +297,15 @@ describe("two hands", () => {
   const ev = (type: string, hand: "Left" | "Right", position: Point2) =>
     ({ type, ts: 1, confidence: 1, hand, position, delta: [0, 0] }) as GestureEvent;
 
-  it("the left hand's long pinch opens the create ring; steering up and letting go picks Wall", () => {
+  it("the left hand's silent long pinch shows the reference ring; steering up and letting go picks Sketch line", () => {
     const { controller } = setup();
     const router = new InputRouter(controller.routerTargets);
     router.handle(ev("pinch.drag.start", "Left", [0.4, 0.4]));
     router.handle(ev("pinch.hold", "Left", [0.4, 0.4]));
-    expect(controller.getSnapshot().palette).toMatchObject({ ring: "create", hand: "Left" });
+    expect(controller.getSnapshot().palette).toMatchObject({ ring: "reference", hand: "Left" });
     router.handle(ev("pinch.drag.update", "Left", [0.4, 0.2])); // up: the top slot
     router.handle(ev("pinch.drag.end", "Left", [0.4, 0.2]));
-    expect(controller.getSnapshot().activeId).toBe("wall");
+    expect(controller.getSnapshot().activeId).toBe("sketch-line");
   });
 
   it("the active tool takes one hand's drag at a time: the other hand's drag navigates", () => {
@@ -418,8 +434,10 @@ describe("create tools", () => {
     expect(controller.dragStart(toViewer(2_000, 2_000))).toBe(false);
   });
 
-  it("the create ring's default layout lists the create tools first, clockwise from the top", () => {
-    expect(DEFAULT_CREATE_LAYOUT.slice(0, 5)).toEqual(["wall", "slab", "column", "massing", "copy"]);
+  it("every tool in the default rings is registered", () => {
+    const { registry } = setup();
+    for (const id of [...DEFAULT_ACTION_LAYOUT, ...DEFAULT_REFERENCE_LAYOUT])
+      if (id) expect(registry.get(id), id).toBeDefined();
   });
 });
 

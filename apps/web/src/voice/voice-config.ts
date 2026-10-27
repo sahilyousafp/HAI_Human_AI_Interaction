@@ -13,3 +13,15 @@ export const VOICE = {
   /** The hand pointer must rest on an element this long while speaking for the element to be captured. */
   dwellMs: 300,
 } as const;
+
+/** The fewest tokens a transcript may have, however short the utterance. */
+const MIN_TOKENS = 16;
+
+/**
+ * How many tokens Moonshine may write for an utterance of `samples` at `rate` Hz. Its guard against repeated output is
+ * 6 tokens per second of audio, which transformers.js rounds down to whole seconds: a one-word command ("Undo.", under
+ * a second) got no tokens at all and came out as "Und" or nothing. The same 6 per second, rounded up, but never fewer
+ * than 16.
+ */
+export const tokenLimit = (samples: number, rate = 16_000): number =>
+  Math.max(MIN_TOKENS, Math.ceil((samples / rate) * 6));

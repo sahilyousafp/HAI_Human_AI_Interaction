@@ -259,6 +259,61 @@ describe.each([{ agent: undefined }, { agent: "architect" }])(
       await hub.close();
     });
 
+    it('Held target and points: the agent\'s block names the held column as "this" and the rested point as P1', async () => {
+      const { hub, received } = setup(OK, agent);
+      await hub.ready;
+      await hub.request("copy this there", {
+        references: [],
+        selection: [],
+        groundPoint: null,
+        target: { kind: "element", id: "col-a", type: "column", name: "Column A" },
+        points: [[8000.2, 4000, 0]],
+      });
+      expect(received().at(-1)).toBe(
+        '[context] references: none; selection: none; ground point: none; target ("this"): column col-a "Column A"; points: P1 8000, 4000, 0 mm\ncopy this there',
+      );
+      await hub.close();
+    });
+
+    it("A sketch reaches the agent: a typed request with an outline lists S1 with its points, and the markers", async () => {
+      const { hub, received } = setup(OK, agent);
+      await hub.ready;
+      await hub.request("a canopy over this", {
+        references: [],
+        selection: [],
+        groundPoint: null,
+        sketches: [
+          {
+            label: "S1",
+            kind: "outline",
+            points: [
+              [0, 0, 0],
+              [10_000, 0, 0],
+              [10_000, 8000, 0],
+            ],
+          },
+        ],
+        markers: [{ letter: "A", point: [5000, 4000, 0] }],
+      });
+      expect(received().at(-1)).toBe(
+        "[context] references: none; selection: none; ground point: none\n[sketches] S1 outline: (0, 0, 0) (10000, 0, 0) (10000, 8000, 0) mm\n[markers] A 5000, 4000, 0 mm\na canopy over this",
+      );
+      await hub.close();
+    });
+
+    it("a held point target names the drawing aid that placed it", async () => {
+      const { hub, received } = setup(OK, agent);
+      await hub.ready;
+      await hub.request("start a wall here", {
+        references: [],
+        selection: [],
+        groundPoint: null,
+        target: { kind: "point", point: [3000, 2000, 3000], aid: "Endpoint" },
+      });
+      expect(received().at(-1)).toContain('target ("this"): point 3000, 2000, 3000 mm (Endpoint)');
+      await hub.close();
+    });
+
     it("select first, then speak: the selected slabs are the references", async () => {
       const { hub, received } = setup(OK, agent);
       await hub.ready;
