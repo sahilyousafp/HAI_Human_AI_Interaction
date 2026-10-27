@@ -58,6 +58,7 @@ import type { SceneClient, SceneState } from "../scene/scene-client.ts";
 import type { DrawingAidsStore } from "../settings/drawing-aids.ts";
 import type { FeatureFlags } from "../settings/feature-flags.ts";
 import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
+import { ConstraintsPanel } from "../tools/ConstraintsPanel.tsx";
 import type { PointerSource, ToolController } from "../tools/controller.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
 import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
@@ -1758,6 +1759,10 @@ export function Viewer({
       )}
 
       <ToolOverlays controller={tools} />
+      {/* The viewport's right column: the drawing constraints while Line or Wall is active. */}
+      <div className="viewer-right">
+        <ConstraintsPanel controller={tools} aids={aids} />
+      </div>
       <UndoStrip client={client} />
       <GeneratedPanel client={panels} scene={client} />
 
