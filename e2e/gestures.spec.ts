@@ -35,8 +35,8 @@ test.describe("gesture settings", () => {
     await expect(settings.getByTestId("gesture-tap-right")).toHaveValue("use-tool");
     await expect(settings.getByTestId("gesture-tap-left")).toHaveValue("use-tool");
     await expect(settings.getByLabel("Pinch tap, left hand")).toBeVisible();
-    // A long pinch is hold to talk with either hand (a silent one shows that hand's ring).
-    await expect(settings.getByTestId("gesture-hold-right")).toHaveValue("talk");
+    // A long pinch goes by role: the dominant (right) hand opens its action ring, the other hand holds to talk.
+    await expect(settings.getByTestId("gesture-hold-right")).toHaveValue("action-ring");
     await expect(settings.getByTestId("gesture-hold-left")).toHaveValue("talk");
     // A fist pans on either hand; holding it still is the cancel.
     await expect(settings.getByTestId("gesture-fistdrag-left")).toHaveValue("pan");

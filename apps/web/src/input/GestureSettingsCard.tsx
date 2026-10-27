@@ -3,7 +3,6 @@ import {
   BINDING_KEYS,
   type BindingKey,
   bindingKey,
-  DEFAULT_BINDINGS,
   GESTURE_SLOT_IDS,
   GESTURE_SLOTS,
   type GestureAction,
@@ -60,7 +59,7 @@ function ActionSelect({
       {GESTURE_SLOTS[slot].actions.map((action) => (
         <option key={action} value={action}>
           {ACTION_LABELS[action]}
-          {action === DEFAULT_BINDINGS[bindingId] ? " (default)" : ""}
+          {action === settings.defaults()[bindingId] ? " (default)" : ""}
         </option>
       ))}
     </select>
@@ -75,7 +74,8 @@ function ActionSelect({
 export function GestureSettingsCard({ settings, bus }: { settings: GestureSettings; bus: InputBus }) {
   const bindings = useSyncExternalStore(settings.subscribe, settings.getSnapshot);
   const [lit, setLit] = useState<{ slot: GestureSlot | "engage"; at: number } | null>(null);
-  const changed = BINDING_KEYS.some((key) => bindings[key] !== DEFAULT_BINDINGS[key]);
+  const defaults = settings.defaults();
+  const changed = BINDING_KEYS.some((key) => bindings[key] !== defaults[key]);
 
   useEffect(
     () =>

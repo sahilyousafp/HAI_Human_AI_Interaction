@@ -9,7 +9,7 @@ HAI turns smoothed hand and head tracking into a small gesture vocabulary. Every
 | Engage | Hold an open palm toward the camera for a moment | `engaged` |
 | Pinch tap | Touch thumb and index briefly, keep the other fingers relaxed open (like an OK sign) | `pinch.tap` |
 | Pinch drag | Pinch and move, then open the fingers | `pinch.drag.start`, `.update`, `.end` |
-| Long pinch | Pinch and keep the hand still for a moment: hold to talk about what is under the hand ([below](#hold-to-talk)). Held without a word, it shows the hand's ring: steer and release | `pinch.hold` |
+| Long pinch | Pinch and keep the hand still for a moment. Your dominant hand opens the action ring at once: steer and release. The other hand holds to talk about what is under it ([below](#hold-to-talk)); held without a word, it shows the reference ring | `pinch.hold` |
 | Clutch | Close the hand into a fist; open again. A fist closed while the hand was dragging stays a clutch: move your hand back without moving the view | `clutch.start`, `clutch.end` |
 | Fist drag | Close the hand into a fist at rest, then move it | `fist.drag.start`, `.update`, `.end` |
 | Two-hand pinch | Pinch with both hands at once; spread, bring together, move or rotate them | `twohand.start`, `.update`, `.end` |
@@ -33,7 +33,7 @@ Nothing but engagement produces a command until you are engaged. Lowering both h
 |---|---|---|
 | Open palm | Engage | (fixed) |
 | Pinch tap (each hand) | Use the active tool | Select what it points at (whatever the tool; a pointer near a model snaps to it), undo, redo, cancel, ask or stop the agent, nothing |
-| Long pinch (each hand) | Hold to talk; held silent, the hand's ring (the action ring for the dominant hand, the reference ring for the other) | Open the action ring or the reference ring at once (no listening), select, undo, redo, cancel, ask or stop the agent, nothing |
+| Long pinch (each hand) | Dominant hand: open the action ring at once. Other hand: hold to talk; held silent, the reference ring. The defaults follow **Dominant hand**; a choice you make stays with its hand | Open the action ring or the reference ring at once (no listening), select, undo, redo, cancel, ask or stop the agent, nothing |
 | Pinch drag (each hand) | Active tool, else orbit | Always orbit, pan the view, nothing |
 | Fist drag (each hand) | Pan the view | Orbit the view, nothing |
 | Two-hand pinch | Zoom, pan and turn the view | Nothing |
@@ -46,7 +46,7 @@ While both hands are fists, neither hand's fist action runs, so the stop never a
 
 ## Hold to talk
 
-A long pinch says "this" and listens. Pinch on what you mean and keep the hand still: a ring fills around the pointer, and when it is full (`pinch.holdMs`) the hold fires.
+A long pinch of your non-dominant hand (the left, unless **Dominant hand** says Left) says "this" and listens; the dominant hand draws, so its long pinch opens the action ring and never the microphone. Pinch on what you mean and keep the hand still: a ring fills around the pointer, and when it is full (`pinch.holdMs`) the hold fires.
 
 - **What "this" is.** The element under the pinch (the pointer snaps to the nearest model in reach), else the point the drawing aids find there (an end, a middle, a centre, at any height), else the point on the ground. It is outlined in the colour of the hand, or marked with a ring and the aid's name, until you let go.
 - **Listening.** The microphone opens and stays open only while you hold. The pointer shows a microphone and a chip beside the hand says what is happening: listening, then writing it down. Pauses do not end it: say "copy this", wait, say "there". Nothing opens the agent panel.

@@ -43,7 +43,7 @@ describe("settings saved before hold to talk", () => {
     expect(migrateRingSettings({ createPalette: custom }).createPalette).toEqual(custom);
   });
 
-  it("the old default long pinch becomes hold to talk, however it was stored", () => {
+  it("the old default long pinch takes the role defaults, however it was stored", () => {
     for (const gestures of [
       { "hold.left": "create-ring", "hold.right": "tools-ring", "tap.left": "select" },
       { "hold.right": "tools-ring" },
@@ -52,7 +52,7 @@ describe("settings saved before hold to talk", () => {
       const migrated = migrateRingSettings({ gestures }).gestures as Record<string, string>;
       const bindings = resolveBindings(migrated);
       expect(actionFor(bindings, "hold", "Left")).toBe("talk");
-      expect(actionFor(bindings, "hold", "Right")).toBe("talk");
+      expect(actionFor(bindings, "hold", "Right")).toBe("action-ring");
     }
     const kept = migrateRingSettings({ gestures: { "tap.left": "select", hold: "palette" } }).gestures;
     expect(kept).toEqual({ "tap.left": "select" });
@@ -74,6 +74,24 @@ describe("settings saved before hold to talk", () => {
       const once = migrateRingSettings(stored);
       expect(migrateRingSettings(once)).toEqual(once);
     }
+  });
+
+  it("talk on both hands, as hold to talk first stored it, takes the role defaults once", () => {
+    const stored = { gestures: { "hold.left": "talk", "hold.right": "talk", "tap.left": "select" } };
+    const migrated = migrateRingSettings(stored);
+    expect(migrated.gestures).toEqual({ "tap.left": "select" });
+    expect(migrated.holdRoles).toBe(true);
+    const bindings = resolveBindings(migrated.gestures as Record<string, string>);
+    expect(actionFor(bindings, "hold", "Right")).toBe("action-ring");
+    expect(actionFor(bindings, "hold", "Left")).toBe("talk");
+    // Chosen again after the change, talk on both hands is kept.
+    const chosen = { holdRoles: true, gestures: { "hold.left": "talk", "hold.right": "talk" } };
+    expect(migrateRingSettings(chosen)).toEqual(chosen);
+  });
+
+  it("a custom long pinch on one hand keeps both hands as they were", () => {
+    const stored = { gestures: { "hold.left": "talk", "hold.right": "undo" } };
+    expect(migrateRingSettings(stored).gestures).toEqual(stored.gestures);
   });
 
   it("leaves other settings alone", () => {
