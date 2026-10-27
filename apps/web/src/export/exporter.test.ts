@@ -36,7 +36,7 @@ const parts: MeshPart[] = [{ positions: new Float32Array(9), indices: new Uint32
 const ok: ExportResult = {
   ok: true,
   bytes: new Uint8Array([1, 2, 3]),
-  report: { objects: 2, extrusions: 1, meshes: 1, skipped: [] },
+  report: { objects: 2, extrusions: 1, curves: 0, meshes: 1, skipped: [] },
 };
 
 function setup(doc: SceneDocument | null, over: Partial<ExporterDeps> = {}) {
@@ -91,7 +91,13 @@ describe("ProjectExporter", () => {
       build: async () => ({
         ok: true,
         bytes: new Uint8Array(),
-        report: { objects: 1, extrusions: 1, meshes: 0, skipped: ["I: its model file is missing"] },
+        report: {
+          objects: 1,
+          extrusions: 1,
+          curves: 0,
+          meshes: 0,
+          skipped: ["I: its model file is missing"],
+        },
       }),
       loadAsset: async () => null,
     });

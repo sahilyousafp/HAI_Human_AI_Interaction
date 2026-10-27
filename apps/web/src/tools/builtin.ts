@@ -1,5 +1,5 @@
 import type { Element, Point3Mm, SceneOp } from "@hai/protocol";
-import { columnTool, copyTool, slabTool, wallTool } from "./create.ts";
+import { columnTool, copyTool, lineTool, slabTool, wallTool } from "./create.ts";
 import { snap } from "./grid.ts";
 import { movedOffset } from "./placement.ts";
 import { placeMarkerTool, referenceAt, sketchAreaTool, sketchLineTool } from "./reference.ts";
@@ -51,6 +51,12 @@ export function moveOp(element: Element, dx: number, dy: number): SceneOp {
       };
     case "slab":
       return { op: "update", id: element.id, patch: { outline: element.outline.map(shift) } };
+    case "line":
+      return {
+        op: "update",
+        id: element.id,
+        patch: { points: element.points.map(([x, y, z]) => [x + dx, y + dy, z]) },
+      };
     case "imported": {
       const [x, y, z] = element.translation;
       return { op: "update", id: element.id, patch: { translation: [x + dx, y + dy, z] } };
@@ -344,6 +350,7 @@ export function registerBuiltinTools(registry: ToolRegistry): void {
     redoTool,
     askAgentTool,
     wallTool(),
+    lineTool(),
     slabTool(),
     columnTool,
     copyTool(),

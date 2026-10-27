@@ -60,6 +60,8 @@ export function shifted(element: Element, dx: number, dy: number): Element {
       return { ...element, start: shift(element.start), end: shift(element.end) };
     case "slab":
       return { ...element, outline: element.outline.map(shift) };
+    case "line":
+      return { ...element, points: element.points.map(([x, y, z]): Point3Mm => [x + dx, y + dy, z]) };
     case "imported":
       return {
         ...element,
@@ -165,6 +167,7 @@ function dragToDraw(options: {
       const doc = ctx.doc();
       const current = drag;
       drag = null;
+      ctx.setLength(null); // a typed length is for one wall
       clear(ctx);
       if (!current || !doc) return;
       const small = options.tooSmall(current.start, current.end);
@@ -206,6 +209,129 @@ export function wallTool(): Tool {
       lengthMm(a, b) < WALL.minLength ? `Drag farther: a wall is at least ${WALL.minLength} mm long.` : null,
     size: (a, b) => `Wall ${lengthMm(a, b)} mm at ${angleDeg(a, b)} deg`,
   });
+}
+
+/** How near, in pixels, a tap must be to a placed point to mean that point (to finish the line there, or to close it). */
+const LINE_REACH_PX = 24;
+/** A closed line needs this many points. */
+const LINE_MIN_CLOSED = 3;
+
+/**
+ * Line: a tap places each point of a polyline, and the segment follows the pointer, held by the drawing aids (Ortho,
+ * its angle step, snaps) and by a length when one is set. Tapping the last point again, a nod or Enter finishes the
+ * line; tapping the first point closes it. Escape or a shake takes back the last point, and with none left goes back to
+ * Select. The line is one undo step.
+ */
+export function lineTool(): Tool {
+  let points: Point3Mm[] = [];
+  let identity: { id: string; name: string } | null = null;
+  const hint = "Tap to place each point. Tap the last point again, nod or press Enter to finish.";
+
+  const lineOf = (doc: SceneDocument, through: Point3Mm[], closed = false): Element | null => {
+    if (through.length < 2 || !identity) return null;
+    const { level } = levelFor(doc, through[0]?.[2] ?? 0);
+    return {
+      ...identity,
+      type: "line",
+      ...(level ? { level } : {}),
+      properties: {},
+      points: through,
+      closed,
+    };
+  };
+  const reset = (ctx: ToolContext) => {
+    points = [];
+    identity = null;
+    ctx.setLength(null);
+    ctx.clearSnap();
+    ctx.setOverlay({ draft: null });
+  };
+  const nearPixel = (ctx: ToolContext, at: [number, number], point: Point3Mm | undefined): boolean => {
+    const screen = point ? ctx.toScreen(point) : null;
+    if (!screen) return false;
+    const [px, py] = ctx.toPixels(at);
+    return Math.hypot(px - screen[0], py - screen[1]) <= LINE_REACH_PX;
+  };
+  /** Shows the line so far with the segment to `next`, and says how long it is and at what angle. */
+  const show = (ctx: ToolContext, next: Point3Mm | null) => {
+    const doc = ctx.doc();
+    const last = points.at(-1);
+    if (!doc || !last) return;
+    const through = next ? [...points, next] : points;
+    const locked = ctx.constraints().lengthMm !== null ? ", length locked" : "";
+    ctx.setOverlay({
+      draft: lineOf(doc, through),
+      notice: next
+        ? `Line ${lengthMm(last, next)} mm at ${angleDeg(last, next)} deg${snapNote(ctx)}${locked}. Tap to place the point.`
+        : hint,
+    });
+  };
+  const finish = (ctx: ToolContext, closed: boolean): boolean => {
+    const doc = ctx.doc();
+    const line = doc ? lineOf(doc, points, closed) : null;
+    if (!doc || !line) {
+      reset(ctx);
+      return false;
+    }
+    ctx.apply(`Add ${line.name}`, [{ op: "create", element: line }]);
+    reset(ctx);
+    ctx.setOverlay({ notice: hint });
+    return true;
+  };
+
+  return {
+    id: "line",
+    label: "Line",
+    spoken: ["line", "polyline"],
+    feature: "createTools",
+    icon: "M4 19 10 7l5 8 5-10M4 19h.01M10 7h.01M15 15h.01M20 5h.01",
+    shortcut: "n",
+    activate(ctx) {
+      ctx.setOverlay({ notice: hint });
+    },
+    deactivate(ctx) {
+      reset(ctx);
+      ctx.setOverlay({ notice: null });
+    },
+    onHover(ctx, at) {
+      const last = points.at(-1);
+      if (!last) {
+        ctx.resolve(at);
+        return;
+      }
+      const next = drawPoint(ctx, at, last);
+      if (next) show(ctx, next);
+    },
+    onTap(ctx, at) {
+      const doc = ctx.doc();
+      if (!doc) return;
+      const last = points.at(-1);
+      if (last && nearPixel(ctx, at, last)) {
+        finish(ctx, false);
+        return;
+      }
+      if (points.length >= LINE_MIN_CLOSED && nearPixel(ctx, at, points[0])) {
+        finish(ctx, true);
+        return;
+      }
+      const point = drawPoint(ctx, at, last ?? null);
+      if (!point) return;
+      identity ??= newIdentity(doc, "line", "Line");
+      points = [...points, point];
+      ctx.setLength(null); // a typed length is for one segment
+      show(ctx, null);
+    },
+    onAccept(ctx) {
+      return points.length >= 2 ? finish(ctx, false) : false;
+    },
+    onCancel(ctx) {
+      if (points.length === 0) return false;
+      points = points.slice(0, -1);
+      if (points.length === 0) reset(ctx);
+      else show(ctx, null);
+      return true;
+    },
+  };
 }
 
 /** Slab: pinch on the ground and drag from one corner to the opposite one; 200 mm thick. */

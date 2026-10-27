@@ -45,7 +45,7 @@ export const PanelId = MessageId;
 /** Which elements a panel asks for; the same filters as the agent's get_elements. */
 export const PanelQuery = z.strictObject({
   ids: z.array(ElementId).max(500).optional(),
-  type: z.enum(["massing", "slab", "wall", "column", "imported"]).optional(),
+  type: z.enum(["massing", "slab", "wall", "column", "line", "imported"]).optional(),
   level: ElementId.optional(),
 });
 export type PanelQuery = z.infer<typeof PanelQuery>;

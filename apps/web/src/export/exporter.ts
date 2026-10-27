@@ -32,9 +32,11 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 /** What the report says in a sentence: "Saved 4 objects (3 extrusions, 1 mesh) to Tower.3dm." */
 export function summarise(file: string, report: ExportReport): string {
-  const parts = [plural(report.extrusions, "extrusion"), plural(report.meshes, "mesh", "meshes")].filter(
-    (p) => !p.startsWith("0 "),
-  );
+  const parts = [
+    plural(report.extrusions, "extrusion"),
+    plural(report.curves, "curve"),
+    plural(report.meshes, "mesh", "meshes"),
+  ].filter((p) => !p.startsWith("0 "));
   const text = `Saved ${plural(report.objects, "object")} (${parts.join(", ")}) to ${file}.`;
   return report.skipped.length > 0 ? `${text} Left out: ${report.skipped.join("; ")}.` : text;
 }

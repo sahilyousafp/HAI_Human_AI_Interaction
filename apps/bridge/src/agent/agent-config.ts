@@ -31,7 +31,7 @@ export const SYSTEM_PROMPT = `You are working in HAI, an architect's design envi
   - "[markers]": the project's lettered markers A, B ("the entrance at marker B").
   Use exactly these. When they say "this", "that", "here", "there", "these", a sketch or a marker and none is given,
   call get_user_context to see what is selected, what the hand is pointing at, and the same references.
-- The scene's own elements are massings, slabs, walls, columns and imported models. That is not all you can make.
+- The scene's own elements are massings, slabs, walls, columns, lines (polylines) and imported models. That is not all you can make.
   For curves, polylines, NURBS surfaces and smooth or organic forms (domes, vaults, canopies, minarets, anything
   round), never say it cannot be done and never fake it with many flat sides. If you have python_run, write the
   geometry in Python with rhino3dm, save it with hai_3dm as a .3dm in the project, and the user is offered Import

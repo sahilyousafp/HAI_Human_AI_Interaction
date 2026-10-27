@@ -5,7 +5,7 @@ import type { ToolContext } from "./types.ts";
 
 /**
  * The point of an element that lands on a snap when it is moved or copied: a column's centre, a wall's start, the
- * origin corner of a massing, the first corner of a slab, the minimum corner of imported geometry.
+ * origin corner of a massing, the first corner of a slab, the first point of a line, the minimum corner of imported geometry.
  */
 export function referencePoint(element: Element, doc: SceneDocument): PointMm {
   switch (element.type) {
@@ -17,6 +17,8 @@ export function referencePoint(element: Element, doc: SceneDocument): PointMm {
       return element.outline[0] ?? [0, 0];
     case "massing":
       return [element.origin[0], element.origin[1]];
+    case "line":
+      return [element.points[0]?.[0] ?? 0, element.points[0]?.[1] ?? 0];
     case "imported": {
       const { min } = elementBounds(element, doc.levels);
       return [min[0], min[1]];
@@ -26,6 +28,7 @@ export function referencePoint(element: Element, doc: SceneDocument): PointMm {
 
 /** The height of an element's reference point, millimetres: its base (a massing's own corner, a model's bottom). */
 export function referenceHeight(element: Element, doc: SceneDocument): number {
+  if (element.type === "line") return element.points[0]?.[2] ?? 0;
   return elementBounds(element, doc.levels).min[2];
 }
 

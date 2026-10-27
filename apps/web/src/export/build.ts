@@ -9,9 +9,10 @@ export interface ExportInput {
 }
 
 export interface ExportReport {
-  /** Objects written: extrusions and meshes. */
+  /** Objects written: extrusions, curves and meshes. */
   objects: number;
   extrusions: number;
+  curves: number;
   meshes: number;
   /** Elements that could not be saved, with the reason. */
   skipped: string[];
@@ -53,14 +54,15 @@ const rgba = (hex: string | undefined) => {
 
 /**
  * Writes the scene as a Rhino file, in millimetres: each wall, slab, column and massing as a native extrusion of its
- * footprint at its real base height (with its prism as the render mesh, so mesh-only readers can draw it); each imported
- * element as a mesh moved by its translation. Every object is on a layer named after its type or its source layer, is
+ * footprint at its real base height (with its prism as the render mesh, so mesh-only readers can draw it); each line as
+ * a polyline curve through its points; each imported element as a mesh moved by its translation. Every object is on a layer named after its type or its source layer, is
  * named like the element, and carries the element's id, level and properties as user strings.
  */
 export function buildFile3dm(rhino: RhinoModule, { doc, assets }: ExportInput): ExportResult {
   const extrusions = exportExtrusions(doc);
   const imported = Object.values(doc.elements).filter((e) => e.type === "imported");
-  if (extrusions.length === 0 && imported.length === 0) {
+  const lines = Object.values(doc.elements).filter((e) => e.type === "line");
+  if (extrusions.length === 0 && imported.length === 0 && lines.length === 0) {
     return { ok: false, error: "There is nothing to save: the project has no elements." };
   }
 
@@ -93,7 +95,7 @@ export function buildFile3dm(rhino: RhinoModule, { doc, assets }: ExportInput): 
       return attributes;
     };
 
-    const report: ExportReport = { objects: 0, extrusions: 0, meshes: 0, skipped: [] };
+    const report: ExportReport = { objects: 0, extrusions: 0, curves: 0, meshes: 0, skipped: [] };
     for (const e of extrusions) {
       const ring = [...e.footprint, e.footprint[0] as [number, number]].map(([x, y]) => [x, y, e.baseMm]);
       const curve = rhino.NurbsCurve.create(false, 1, ring);
@@ -114,6 +116,19 @@ export function buildFile3dm(rhino: RhinoModule, { doc, assets }: ExportInput): 
       if (mesh) extrusion.setMesh(mesh, rhino.MeshType.Render);
       file.objects().addExtrusion(extrusion, attributesFor(e.name, e.layer, e.id, e.level, e.properties));
       report.extrusions++;
+    }
+
+    for (const line of lines) {
+      if (line.type !== "line") continue;
+      const points = line.closed ? [...line.points, line.points[0] as [number, number, number]] : line.points;
+      const curve = rhino.NurbsCurve.create(false, 1, points);
+      if (!curve) {
+        report.skipped.push(`${line.name}: its curve could not be written`);
+        continue;
+      }
+      const level = doc.levels.find((l) => l.id === line.level)?.name ?? null;
+      file.objects().addCurve(curve, attributesFor(line.name, "Lines", line.id, level, line.properties));
+      report.curves++;
     }
 
     for (const element of imported) {
@@ -150,7 +165,7 @@ export function buildFile3dm(rhino: RhinoModule, { doc, assets }: ExportInput): 
       report.meshes++;
     }
 
-    report.objects = report.extrusions + report.meshes;
+    report.objects = report.extrusions + report.curves + report.meshes;
     if (report.objects === 0) {
       return { ok: false, error: `Nothing could be saved. ${report.skipped.join("; ")}` };
     }

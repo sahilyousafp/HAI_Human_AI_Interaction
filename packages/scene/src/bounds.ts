@@ -25,7 +25,8 @@ export function elementBase(element: Element, levels: Level[]): number {
 /**
  * Axis-aligned bounds of an element in millimetres, matching how the viewer builds its geometry: massing from its
  * origin corner, slabs extruded down from their level, walls centred on their baseline and columns on their
- * position, both rising from their level, and imported geometry from its stored box moved by its translation.
+ * position, both rising from their level, lines through their points at their own heights, and imported geometry
+ * from its stored box moved by its translation.
  */
 export function elementBounds(element: Element, levels: Level[]): BoundsMm {
   const base = elementBase(element, levels);
@@ -59,6 +60,15 @@ export function elementBounds(element: Element, levels: Level[]): BoundsMm {
       const [x, y] = element.position;
       const [w, d] = element.section;
       return { min: [x - w / 2, y - d / 2, base], max: [x + w / 2, y + d / 2, base + element.height] };
+    }
+    case "line": {
+      const xs = element.points.map((p) => p[0]);
+      const ys = element.points.map((p) => p[1]);
+      const zs = element.points.map((p) => p[2]);
+      return {
+        min: [Math.min(...xs), Math.min(...ys), Math.min(...zs)],
+        max: [Math.max(...xs), Math.max(...ys), Math.max(...zs)],
+      };
     }
     case "imported": {
       const [tx, ty, tz] = element.translation;

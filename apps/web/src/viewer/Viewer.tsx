@@ -406,7 +406,9 @@ function ElementMesh({
   // section; cut elements are drawn without edges instead.
   // Imported models have no edge lines: finding them costs time proportional to the triangles (a model of a million
   // triangles cannot afford it), and on a detailed model they clutter the surface. Their normals show the forms.
-  const showEdges = (sectionMm === null || topMm <= sectionMm) && element.type !== "imported";
+  // A line is a thin tube: edge lines on it would only be noise.
+  const showEdges =
+    (sectionMm === null || topMm <= sectionMm) && element.type !== "imported" && element.type !== "line";
   const { owner: ownerColor, glow } = useOwnerDisplay(element.id, element.tags);
   const base = element.type === "massing" ? colors.massing : (importedColor(element) ?? colors.element);
   const ownerAmount = element.type === "imported" ? 0.4 : OWNER_TINT;
@@ -430,7 +432,7 @@ function ElementMesh({
     return (
       <mesh geometry={geometry} position={placed} scale={scale} raycast={() => null} renderOrder={1}>
         <meshStandardMaterial color={colors.selected} transparent opacity={0.55} depthWrite={false} />
-        <Edges threshold={20} color={colors.selected} />
+        {element.type !== "line" && <Edges threshold={20} color={colors.selected} />}
       </mesh>
     );
   }
@@ -1405,9 +1407,9 @@ export function Viewer({
         }
         return;
       }
-      if (e.key === "Enter" && tools.getSnapshot().question) {
+      // Enter answers a question, or finishes what the tool is drawing (a line).
+      if (e.key === "Enter" && tools.accept()) {
         e.preventDefault();
-        tools.respond(true);
         return;
       }
       if (e.key === "Escape") {

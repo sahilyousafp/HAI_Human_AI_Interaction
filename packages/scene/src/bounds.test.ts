@@ -20,6 +20,22 @@ describe("elementBounds", () => {
     expect(elementBounds(e, levels)).toEqual({ min: [1000, 2000, 0], max: [7000, 8000, 3500] });
   });
 
+  it("line: over its points, at their own heights, whatever its level", () => {
+    const e: Element = {
+      ...common,
+      id: "l",
+      type: "line",
+      level: "L1",
+      closed: false,
+      points: [
+        [0, 0, 0],
+        [4000, 1000, 500],
+        [2000, -3000, 1500],
+      ],
+    };
+    expect(elementBounds(e, levels)).toEqual({ min: [0, -3000, 0], max: [4000, 1000, 1500] });
+  });
+
   it("imported: its stored box moved by its translation", () => {
     const e: Element = {
       ...common,

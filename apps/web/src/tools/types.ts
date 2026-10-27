@@ -78,6 +78,10 @@ export interface ToolContext {
   ): Resolved | null;
   /** Removes the snap marker. */
   clearSnap(): void;
+  /** How the line being drawn is held: Ortho's angle step (degrees) and a length typed for the next segment. */
+  constraints(): { angleStepDeg: number; lengthMm: number | null };
+  /** Sets, or with null frees, the length for the next segment. */
+  setLength(lengthMm: number | null): void;
   /** Bounding box of the scene, millimetres. */
   bounds(): { min: Point3Mm; max: Point3Mm };
   /** Whether a viewer position is on the section's outline on screen (within a finger's width). */
@@ -134,4 +138,6 @@ export interface Tool {
   onDragCancel?(ctx: ToolContext): void;
   /** Escape or a shake with nothing else pending: return true to have handled it, else it goes back to Select. */
   onCancel?(ctx: ToolContext): boolean;
+  /** A nod or Enter with no question waiting: return true if the tool finished something (a line being drawn). */
+  onAccept?(ctx: ToolContext): boolean;
 }

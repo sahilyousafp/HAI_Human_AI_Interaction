@@ -86,6 +86,20 @@ export const ColumnElement = z.strictObject({
   height: positiveMm,
 });
 
+/**
+ * A polyline: a line drawn through points, in millimetres at their real heights (the level, when set, only says which
+ * floor it belongs to). It is a curve, not a solid, and what the agent can use as a rail or a guide.
+ */
+export const LineElement = z
+  .strictObject({
+    ...common,
+    type: z.literal("line"),
+    points: z.array(Point3Mm).min(2),
+    /** The last point joins the first. */
+    closed: z.boolean().default(false),
+  })
+  .refine((line) => !line.closed || line.points.length >= 3, "a closed line needs at least 3 points");
+
 /** An asset in the project folder: the id the bridge stored it under (a UUID). */
 export const AssetId = z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
 export type AssetId = z.infer<typeof AssetId>;
@@ -120,6 +134,7 @@ export const Element = z.discriminatedUnion("type", [
   SlabElement,
   WallElement,
   ColumnElement,
+  LineElement,
   ImportedElement,
 ]);
 export type Element = z.infer<typeof Element>;

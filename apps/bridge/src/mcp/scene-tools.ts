@@ -263,6 +263,7 @@ const ELEMENT_SHAPES = `Lengths are millimetres, Z up. Element shapes (id is opt
 - wall: { type: "wall", name, level?, start: [x, y], end: [x, y], height, thickness } (centred on its baseline, rising from its level)
 - column: { type: "column", name, level?, position: [x, y], section: [width, depth], height }
 - slab: { type: "slab", name, level?, outline: [[x, y], ...] (counter-clockwise), thickness } (extruded down from its level)
+- line: { type: "line", name, level?, points: [[x, y, z], ...] (at least 2, at their real heights), closed? } (a polyline the user drew or a curve for you to use as a path, a rail or a guide; it is a curve, not a solid)
 - imported: reference geometry from the user's Rhino file: { type: "imported", name, layer?, color?, bounds: { min: [x, y, z], max: [x, y, z] } (before translation), translation: [x, y, z] }. You see its box, never its triangles. Move it by changing translation; delete it as any element; copy it by creating another with the same asset, part and bounds. You cannot change its shape.
 Walls, slabs and columns may also have base: the height of their base in millimetres, which wins over their level's elevation (for elements placed off any level, such as on a roof).
 All may have properties: { key: string | number | boolean }.`;
@@ -336,7 +337,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       description: `Full details of elements, with their tags: by ids, or filtered by type, level, owner (the agent that made or last took over the element), part or tag (at most ${MAX_ELEMENTS}). While Rhino is connected the Rhino objects that match are listed too, under rhinoObjects. An element the user changed by hand since you last read it is marked changedByUser. ${ELEMENT_SHAPES}`,
       inputSchema: z.object({
         ids: z.array(z.string()).optional().describe("Element ids"),
-        type: z.enum(["massing", "slab", "wall", "column", "imported"]).optional(),
+        type: z.enum(["massing", "slab", "wall", "column", "line", "imported"]).optional(),
         level: z.string().optional().describe("Level id"),
         owner: z.string().optional().describe("An agent's name, e.g. architect"),
         part: z.string().optional().describe("A part name (the hai.part tag)"),
