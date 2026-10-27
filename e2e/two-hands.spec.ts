@@ -82,7 +82,7 @@ test("the left hand opens the settings and switches a feature off, each control 
   await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-focus", "true");
 });
 
-test("the left hand's long pinch opens the create ring; Wall draws a wall by hand, and one Undo removes it", async ({
+test("the right hand's silent long pinch shows the action ring; Wall draws a wall by hand, and one Undo removes it", async ({
   page,
 }) => {
   bridge = await startTestBridge(page);
@@ -91,17 +91,17 @@ test("the left hand's long pinch opens the create ring; Wall draws a wall by han
   const existing = new Set(Object.keys(bridge.scene.scene.doc.elements));
   const before = existing.size;
 
-  // Long pinch with the left hand, steer up to the top slot, let go: Wall.
+  // A silent long pinch with the dominant (right) hand shows the action ring; steer left, let go: Wall.
   const centre = await handAt(page, [0.6, 0.5]);
-  await gesture(page, "pinch.drag.start", "Left", centre);
-  await gesture(page, "pinch.hold", "Left", centre);
+  await gesture(page, "pinch.drag.start", "Right", centre);
+  await gesture(page, "pinch.hold", "Right", centre);
   const palette = page.getByTestId("tool-palette");
-  await expect(palette).toHaveAttribute("data-ring", "create");
-  await expect(palette).toHaveAttribute("data-hand", "left");
-  await expect(page.getByTestId("palette-slot-0")).toHaveAttribute("data-tool", "wall");
-  await gesture(page, "pinch.drag.update", "Left", [centre[0], centre[1] - 0.15]);
-  await expect(page.getByTestId("palette-slot-0")).toHaveAttribute("data-highlighted", "true");
-  await gesture(page, "pinch.drag.end", "Left", [centre[0], centre[1] - 0.15]);
+  await expect(palette).toHaveAttribute("data-ring", "action");
+  await expect(palette).toHaveAttribute("data-hand", "right");
+  await expect(page.getByTestId("palette-slot-6")).toHaveAttribute("data-tool", "wall");
+  await gesture(page, "pinch.drag.update", "Right", [centre[0] - 0.15, centre[1]]);
+  await expect(page.getByTestId("palette-slot-6")).toHaveAttribute("data-highlighted", "true");
+  await gesture(page, "pinch.drag.end", "Right", [centre[0] - 0.15, centre[1]]);
   await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "wall");
 
   // Draw it: pinch on open ground and drag.

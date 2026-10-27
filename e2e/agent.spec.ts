@@ -405,7 +405,7 @@ test.describe("agents tab", () => {
       await expect(lastTurn(page)).toHaveAttribute("data-ended", "done");
       await page.getByTestId("agent-tab-agents").click();
       const definitions = page.getByTestId("agent-definition");
-      await expect(definitions).toHaveCount(5);
+      await expect(definitions).toHaveCount(7); // Mochi, Architect, Product, Climate, Urban, Simulation, Reviewer
       await expect(definitions.first()).toContainText("Mochi");
       await expect(definitions.first()).toContainText("lead");
 
@@ -418,7 +418,7 @@ test.describe("agents tab", () => {
       await expect(page.getByTestId("agents-result")).toHaveText(
         "Saved Structure. It applies from its next task.",
       );
-      await expect(definitions).toHaveCount(6);
+      await expect(definitions).toHaveCount(8);
       await expect(definitions.filter({ hasText: "Structure" })).toContainText("changes the model");
 
       // Edit Architect's description.

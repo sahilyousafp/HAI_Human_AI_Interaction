@@ -1,24 +1,46 @@
 # Tools and the tool palette
 
-Many design actions are faster done directly than through the agent: measure a facade, cut a section, draw a wall, nudge a block. The tool palette puts them under your hands. None of these tools need the agent, and every change they make is an ordinary scene transaction, so Undo always reverses it.
+Many design actions are faster done directly than through the agent: measure a facade, cut a section, nudge a block, point out where something should go. The tool palette puts them under your hands. None of these tools need the agent, and every change they make to the model is an ordinary scene transaction, so Undo always reverses it.
 
 ## Two rings, one per hand
 
-The palette is two rings of eight tools. The **tools ring** (select, measure, section, move and so on) belongs to the right hand; the **create ring** (wall, slab, column, massing, copy) to the left. Both hands are full pointers otherwise: each can tap, press buttons, scroll and drag, so the left hand can draw a wall while the right orbits the view.
+The palette is two rings of eight tools, set out by what each hand is for:
+
+- The **action ring** belongs to the hand you draw with (your dominant hand, the right one unless you change it): Select, Move, Copy, Delete, Undo, Wall, Slab and Column, the tools that act on the model.
+- The **reference ring** belongs to the other hand: Sketch line, Sketch area, Place marker, Measure, Add massing and Section, the tools that point things out, for you and for the agent. Two slots are free for your own choice.
+
+Both hands are full pointers otherwise: each can tap, press buttons, scroll and drag, so one hand can draw a wall while the other orbits the view. Left-handed? Set **Dominant hand** to Left in **Settings > Tool rings** and the rings swap hands.
+
+Every tool also has a spoken name, shown under its icon in the ring: say just that word ("wall", "area", "measure", "undo") and the tool is picked at once, without the agent (see [voice.md](voice.md#tool-names)).
 
 ## Opening a ring
 
-| How | Tools ring | Create ring |
+A long pinch (engage with an open palm, then pinch and keep the hand still for a moment) is **hold to talk**: the microphone listens while you hold, about what was under your hand (see [gestures.md](gestures.md#hold-to-talk)). When you hold without speaking, the hand's ring fades in around it after 0.6 s, and you can flick to a tool at once, before it shows.
+
+| How | Action ring | Reference ring |
 |---|---|---|
-| Hand | Engage (open palm), then pinch with the right hand and keep it still for a moment (a long pinch). The ring opens around your hand | The same with the left hand |
+| Hand | A silent long pinch of your dominant hand. The ring opens around your hand | A silent long pinch of your other hand |
 | Keyboard | Hold Space. The ring opens at the mouse pointer | Hold Shift+Space |
 | Mouse | Hold the right button without moving. A right button drag still pans the view | Hold Shift and the right button |
 
-Which ring each hand opens is a setting (the **Gestures** card: Long pinch, per hand).
+To have a long pinch open a ring at once, without listening, set it to **Open the action ring** or **Open the reference ring** in the **Gestures** card (Long pinch, per hand).
 
-Then move toward a tool and release (the pinch, Space or the right button). The tool in that direction is highlighted once you are outside the small circle in the middle (4% of the image width); release there to cancel. Each slot keeps its direction, so with practice a quick flick picks a tool without looking.
+Then move toward a tool and release (the pinch, Space or the right button). The tool in that direction is highlighted once you are outside the small circle in the middle (4% of the image width); release there to cancel. Each slot keeps its direction, so with practice a quick flick picks a tool without looking. If you start speaking, the ring hides and your hand points instead: what you say wins.
 
-While a ring is open, the hand that opened it steers it; the other hand keeps working (tapping, pressing, scrolling, orbiting). One ring is open at a time. A long pinch while you are holding something (an element with Move, the section plane with Section, a wall being drawn) keeps holding it instead of opening a ring.
+While a ring is open, the hand that opened it steers it; the other hand keeps working (tapping, pressing, scrolling, orbiting). One ring is open at a time. A long pinch while you are holding something (an element with Move, the section plane with Section, a wall or a sketch being drawn) keeps holding it instead of opening a ring or listening.
+
+### What moved
+
+| Before | Now |
+|---|---|
+| Tools ring (right hand) and create ring (left hand) | Action ring (dominant hand) and reference ring (other hand) |
+| Wall, Slab and Column on the left hand | On the action ring, the hand you draw with |
+| Measure and Section on the right hand | On the reference ring |
+| Ask agent in a slot | A long pinch is the way to ask; Ask agent keeps its A key |
+| Redo in a slot | On the undo strip, the R key and by saying "redo" |
+| Undo, Delete and Add massing in both rings | Once each |
+
+A layout you changed yourself is kept as it was. To get the old ring-only long pinch back, set Long pinch to open a ring in the Gestures card.
 
 ## Getting back out, and the HUD by hand
 
@@ -57,19 +79,22 @@ The mouse cursor changes with the tool as well. The pointer stays put through br
 
 | Tool | Key | Default slot | What it does |
 |---|---|---|---|
-| Select | V | Top (tools) | Tap selects the element under the pointer; tap on empty space clears. Drags orbit the view |
-| Ask agent | A | Top right (tools) | Opens the agent panel on the conversation and starts listening (see [agent.md](agent.md)). If the agent is not available, it says why |
-| Measure | D | Right (tools) | Tap two points: the distance between them is shown in millimetres (rounded to 1 mm) with its across and up parts, for example `4123 mm (2828 across, 3000 up)`. Each point snaps to the model through the drawing aids (an end, a middle, a centre, at any height) and shows its marker while you hover; with no snap in reach it is the surface point under the pointer. Changes nothing |
-| Section | S | Bottom right (tools) | The cut is a plane you can grab: pinch on it (it lights up under the pointer) and drag down to cut lower, up to cut higher; the height is shown in millimetres. A drag off the plane orbits. The section stays when you change tool, until you press Remove (or tap the plane with Delete). From any other tool, its outline can still be grabbed and dragged, and tapping the outline selects the section |
-| Move | M | Bottom (tools) | Pinch an element and drag it along the ground; it snaps to 100 mm (or to the drawing aids) and is moved in one "Move" transaction when you let go. A drag that starts on empty space orbits instead |
-| Add massing | B | Bottom left (tools), Bottom right (create) | Tap the ground: a 6000 x 6000 x 3500 mm block is placed there, centred on the tap and snapped to 100 mm |
-| Delete | X | Left (tools), Top left (create) | Tap an element: it turns red and asks you to confirm. Nod or press Enter to delete it; shake your head or press Escape to keep it. Tapping the section plane removes the section |
-| Undo | U | Top left (tools), Left (create) | Undoes the last change at once and keeps your current tool; Undo again on the strip that appears steps further back |
-| Redo | R | Bottom left (create) | Redoes at once and keeps your current tool |
-| Wall | W | Top (create) | Pinch on the ground and drag from one end of the wall to the other: the wall shows as you drag, with its length, and is added when you let go (200 mm thick, 3000 mm high, ends snapped to 100 mm). Shorter than 300 mm adds nothing |
-| Slab | F | Top right (create) | Pinch on the ground and drag from one corner to the opposite one: a 200 mm slab fills the rectangle (sides at least 300 mm, corners snapped to 100 mm) |
-| Column | C | Right (create) | Tap the ground: a 400 x 400 mm column, 3000 mm high, is placed there, snapped to 100 mm |
-| Copy | P | Bottom (create) | Pinch an element and drag: a copy follows, snapped to 100 mm, and is added where you let go; the original stays. A drag that starts on empty space orbits instead |
+| Select | V | Top (action) | Tap selects the element under the pointer; tap on empty space clears. Drags orbit the view |
+| Ask agent | A | (not in a ring) | Opens the agent panel on the conversation and starts listening (see [agent.md](agent.md)). If the agent is not available, it says why |
+| Measure | D | Bottom right (reference) | Tap two points: the distance between them is shown in millimetres (rounded to 1 mm) with its across and up parts, for example `4123 mm (2828 across, 3000 up)`. Each point snaps to the model through the drawing aids (an end, a middle, a centre, at any height) and shows its marker while you hover; with no snap in reach it is the surface point under the pointer. Changes nothing |
+| Section | S | Bottom left (reference) | The cut is a plane you can grab: pinch on it (it lights up under the pointer) and drag down to cut lower, up to cut higher; the height is shown in millimetres. A drag off the plane orbits. The section stays when you change tool, until you press Remove (or tap the plane with Delete). From any other tool, its outline can still be grabbed and dragged, and tapping the outline selects the section |
+| Move | M | Top right (action) | Pinch an element and drag it along the ground; it snaps to 100 mm (or to the drawing aids) and is moved in one "Move" transaction when you let go. A drag that starts on empty space orbits instead |
+| Add massing | B | Bottom (reference) | Tap the ground: a 6000 x 6000 x 3500 mm block is placed there, centred on the tap and snapped to 100 mm |
+| Delete | X | Bottom right (action) | Tap an element: it turns red and asks you to confirm. Nod or press Enter to delete it; shake your head or press Escape to keep it. Tapping the section plane removes the section; tapping a sketch or a marker removes it without asking |
+| Undo | U | Bottom (action) | Undoes the last change at once and keeps your current tool; Undo again on the strip that appears steps further back |
+| Redo | R | (not in a ring) | Redoes at once and keeps your current tool |
+| Wall | W | Left (action) | Pinch on the ground and drag from one end of the wall to the other: the wall shows as you drag, with its length, and is added when you let go (200 mm thick, 3000 mm high, ends snapped to 100 mm). Shorter than 300 mm adds nothing |
+| Slab | F | Top left (action) | Pinch on the ground and drag from one corner to the opposite one: a 200 mm slab fills the rectangle (sides at least 300 mm, corners snapped to 100 mm) |
+| Column | C | Bottom left (action) | Tap the ground: a 400 x 400 mm column, 3000 mm high, is placed there, snapped to 100 mm |
+| Copy | P | Right (action) | Pinch an element and drag: a copy follows, snapped to 100 mm, and is added where you let go; the original stays. A drag that starts on empty space orbits instead |
+| Sketch line | L | Top (reference) | Pinch and drag to draw a path for the agent, through the drawing aids. It shows dashed in your hand's colour, labelled S1, S2 and so on, and is not part of the model. Shorter than 300 mm keeps nothing. Up to 8 sketches are kept; a request carries them all and clears them, and Escape with a sketch tool active clears them too |
+| Sketch area | E | Top right (reference) | Pinch and drag around an area: the outline closes when you let go and shows dashed and lightly filled, labelled like a path. Less than a square metre keeps nothing |
+| Place marker | K | Right (reference) | Tap to place a lettered marker (the first free letter, A to Z); tap a marker to remove it. Markers are kept with the project and every request tells the agent where they are |
 
 Everything the create tools add sits on the ground level and is one undo step, named after the element ("Add Wall 3"). Exact sizes come afterwards: select the element and say "make this 300 thick", or ask the agent.
 
@@ -95,7 +120,7 @@ Move and Copy carry one point of the element (a column's centre, a wall's start,
 
 ## Choosing the layout
 
-**Settings > Tool rings** has a switch between the two rings, listing its eight slots clockwise from the top. Pick any registered tool for each slot, or leave it empty. The layouts are saved by the bridge in `.hai/settings.json` in the workspace, so they are the same in every browser and after a restart.
+**Settings > Tool rings** has a switch between the action ring and the reference ring, listing its eight slots clockwise from the top. Pick any registered tool for each slot, or leave it empty. **Dominant hand** (Right or Left) decides which hand's silent long pinch shows which ring. The layouts and the dominant hand are saved by the bridge in `.hai/settings.json` in the workspace, so they are the same in every browser and after a restart.
 
 ## Adding a tool
 
@@ -108,7 +133,8 @@ const bakeTool: Tool = {
   id: "rhino-bake",
   label: "Bake to Rhino",
   icon: "M4 4h16v16H4z", // SVG path data for a 24 x 24 stroked icon
-  shortcut: "k", // one key, not used by another tool
+  shortcut: "j", // one key, not used by another tool
+  spoken: ["bake"], // say "bake" to pick it; the first is shown in the ring
   onTap(ctx, _at, hit) {
     if (hit) ctx.flash(`Baking ${hit.elementId}`);
   },

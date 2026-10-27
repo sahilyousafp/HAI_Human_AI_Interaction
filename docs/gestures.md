@@ -9,7 +9,7 @@ HAI turns smoothed hand and head tracking into a small gesture vocabulary. Every
 | Engage | Hold an open palm toward the camera for a moment | `engaged` |
 | Pinch tap | Touch thumb and index briefly, keep the other fingers relaxed open (like an OK sign) | `pinch.tap` |
 | Pinch drag | Pinch and move, then open the fingers | `pinch.drag.start`, `.update`, `.end` |
-| Long pinch | Pinch and keep the hand still for a moment; then steer and release (opens the hand's ring: tools on the right, create on the left) | `pinch.hold` |
+| Long pinch | Pinch and keep the hand still for a moment: hold to talk about what is under the hand ([below](#hold-to-talk)). Held without a word, it shows the hand's ring: steer and release | `pinch.hold` |
 | Clutch | Close the hand into a fist; open again. A fist closed while the hand was dragging stays a clutch: move your hand back without moving the view | `clutch.start`, `clutch.end` |
 | Fist drag | Close the hand into a fist at rest, then move it | `fist.drag.start`, `.update`, `.end` |
 | Two-hand pinch | Pinch with both hands at once; spread, bring together, move or rotate them | `twohand.start`, `.update`, `.end` |
@@ -19,7 +19,7 @@ HAI turns smoothed hand and head tracking into a small gesture vocabulary. Every
 
 Nothing but engagement produces a command until you are engaged. Lowering both hands out of view, or not gesturing for a while, disengages.
 
-**Both hands are equal.** Each hand taps, drags, scrolls and presses buttons on its own; a long pinch opens a different ring per hand. Two pinches are one two-hand gesture only when they start together (or while neither hand is doing something of its own): a hand that holds a ring open, or is already dragging, keeps its gesture, and the other hand's pinch is its own tap or drag.
+**Both hands are equal.** Each hand taps, drags, scrolls and presses buttons on its own; a silent long pinch shows a different ring per hand (the action ring for your dominant hand, the reference ring for the other). Two pinches are one two-hand gesture only when they start together (or while neither hand is doing something of its own): a hand that holds a ring open, or is already dragging, keeps its gesture, and the other hand's pinch is its own tap or drag.
 
 **Stop needs two fists first.** Open palms alone never stop anything, so showing both hands to the camera is safe. Close both hands into fists (the HUD then says to open them), and open both palms within a second to stop the agents.
 
@@ -33,16 +33,29 @@ Nothing but engagement produces a command until you are engaged. Lowering both h
 |---|---|---|
 | Open palm | Engage | (fixed) |
 | Pinch tap (each hand) | Use the active tool | Select what it points at (whatever the tool; a pointer near a model snaps to it), undo, redo, cancel, ask or stop the agent, nothing |
-| Long pinch (each hand) | Right: open the tools ring. Left: open the create ring | The other ring, select, undo, redo, cancel, ask or stop the agent, nothing |
+| Long pinch (each hand) | Hold to talk; held silent, the hand's ring (the action ring for the dominant hand, the reference ring for the other) | Open the action ring or the reference ring at once (no listening), select, undo, redo, cancel, ask or stop the agent, nothing |
 | Pinch drag (each hand) | Active tool, else orbit | Always orbit, pan the view, nothing |
 | Fist drag (each hand) | Pan the view | Orbit the view, nothing |
 | Two-hand pinch | Zoom, pan and turn the view | Nothing |
 | Fist hold (each hand, kept still for 1.5 s) | Cancel, back to Select | Undo, redo, ask or stop the agent, nothing |
 | Nod | Yes: send a spoken request, allow the agent's only waiting approval, open a panel the agent offered, or confirm the tool's question | Undo, redo, cancel, ask or stop the agent, nothing |
-| Shake | No: discard a spoken request, deny the only waiting approval, skip a panel offer, or cancel | Undo, redo, cancel, ask or stop the agent, nothing |
+| Shake | No: stop a held request sent in the last 1.5 s, discard a spoken request, deny the only waiting approval, skip a panel offer, or cancel | Undo, redo, cancel, ask or stop the agent, nothing |
 | Two fists, then open hands | Stop the agents | Undo, cancel, nothing |
 
-While both hands are fists, neither hand's fist action runs, so the stop never also cancels the tool. Whichever gesture is set to "Yes" or "No" answers what waits for it in a fixed order, and only one thing per gesture: a spoken request under review first, then an approval card (when exactly one waits), then a panel offer (when it is the only thing waiting), and only then the tool's question. Allowing a card and opening a panel need you to be engaged, so a stray nod never does either. A shake that answers a card or an offer never also cancels the active tool.
+While both hands are fists, neither hand's fist action runs, so the stop never also cancels the tool. Whichever gesture is set to "Yes" or "No" answers what waits for it in a fixed order, and only one thing per gesture: a "no" first stops a held request sent in the last 1.5 s, then a spoken request under review, then an approval card (when exactly one waits), then a panel offer (when it is the only thing waiting), and only then the tool's question. Allowing a card and opening a panel need you to be engaged, so a stray nod never does either. A shake that answers a card or an offer never also cancels the active tool.
+
+## Hold to talk
+
+A long pinch says "this" and listens. Pinch on what you mean and keep the hand still: a ring fills around the pointer, and when it is full (`pinch.holdMs`) the hold fires.
+
+- **What "this" is.** The element under the pinch (the pointer snaps to the nearest model in reach), else the point the drawing aids find there (an end, a middle, a centre, at any height), else the point on the ground. It is outlined in the colour of the hand, or marked with a ring and the aid's name, until you let go.
+- **Listening.** The microphone opens and stays open only while you hold. The pointer shows a microphone and a chip beside the hand says what is happening: listening, then writing it down. Pauses do not end it: say "copy this", wait, say "there". Nothing opens the agent panel.
+- **Pointing while you speak.** Once you are speaking, the hand points. An element it rests on for 300 ms is captured as a reference, and a point it rests on away from any element is captured as a point, marked P1, P2 and so on (the drawing aids place it, so it lands on an end or a middle when one is near). So "copy this there" and "a canopy from here to here" mean exactly where your hand went.
+- **Letting go sends it.** What you said goes to the agent at once, with no countdown: the hold was the deliberate act. A name at the start still chooses who does it ("Architect, add a stair core here"), and a tool's name alone picks the tool instead ([voice.md](voice.md#tool-names)). For 1.5 s the chip reads **Sent - shake to stop**: a head shake then stops that request (its turn and anything it handed out) and nothing else.
+- **Saying nothing shows the ring.** If you have not spoken 0.6 s after the hold fired, the hand's ring fades in around it. Move toward a tool and let go to choose it, as before, or let go in the centre for nothing. You need not wait for the ring: a flick before you speak highlights the slot at once. Speech always wins: once you speak the ring goes, and your hand points.
+- **Holding something keeps holding it.** A long pinch on a button presses the button; on the section plane, on an element you are moving, or while drawing a wall or a sketch, it keeps holding that. None of these listen.
+
+The speech detector and the speech model load when you first engage, so the microphone is live about 50 ms after the hold fires (the very first hold of a session also opens the audio device, about 0.4 s). It stops within about 20 ms of letting go. To have a long pinch open a ring at once, without listening, set it to **Open the action ring** or **Open the reference ring** above. The Detection card counts long pinches, those with speech, flicks per ring and those let go with nothing chosen; the counts stay on this computer.
 
 ## Hands in a generated panel
 

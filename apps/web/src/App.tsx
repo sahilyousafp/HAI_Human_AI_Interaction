@@ -1,4 +1,14 @@
-import type { FeatureId, Message, MessageOf, ModellingMode, ReplyVoice, SpeechMode } from "@hai/protocol";
+import {
+  DEFAULT_ACTION_LAYOUT,
+  DEFAULT_REFERENCE_LAYOUT,
+  type FeatureId,
+  type Hand,
+  type Message,
+  type MessageOf,
+  type ModellingMode,
+  type ReplyVoice,
+  type SpeechMode,
+} from "@hai/protocol";
 import { elementsInScope } from "@hai/scene";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
@@ -42,9 +52,9 @@ import { SettingsPanel, type SettingsSection } from "./settings/SettingsPanel.ts
 import { FirstRun, useModelsState, useUpdateState } from "./setup/FirstRun.tsx";
 import { SetupSettings } from "./setup/SetupSettings.tsx";
 import { updatesView } from "./setup/updates-view.ts";
-import { DEFAULT_LAYOUT, registerBuiltinTools } from "./tools/builtin.ts";
+import { registerBuiltinTools } from "./tools/builtin.ts";
 import { ToolController } from "./tools/controller.ts";
-import { DEFAULT_CREATE_LAYOUT } from "./tools/create.ts";
+import type { HoldReport, RouterTalk } from "./tools/input-router.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { PaletteSettings, ToolIcon } from "./tools/ToolOverlays.tsx";
 import { ListGroup, ListRow, Switch } from "./ui/controls.tsx";
@@ -53,8 +63,9 @@ import { LatencyTracker } from "./viewer/latency.ts";
 import { NO_OWNERS, type OwnerDisplay } from "./viewer/owner-display.tsx";
 import { Viewer } from "./viewer/Viewer.tsx";
 import { voiceAvailability, voicePillText } from "./voice/availability.ts";
-import { listenInCloud, listenOnDevice } from "./voice/listeners.ts";
+import { listenInCloud, listenOnDevice, preloadOnDevice } from "./voice/listeners.ts";
 import { bestEngine, resample, Speaker } from "./voice/speaker.ts";
+import { toolNamed } from "./voice/tool-commands.ts";
 import { Transcriber } from "./voice/transcriber.ts";
 import { VoiceSettingsCard } from "./voice/VoiceSettingsCard.tsx";
 import { VoiceInput } from "./voice/voice-input.ts";
@@ -267,15 +278,23 @@ export function App() {
     registerBuiltinTools(registry);
     // A tool tied to a feature (the create tools) is available only while that feature is on.
     registry.setAvailability((tool) => !tool.feature || features.on(tool.feature));
-    const controller = new ToolController(registry, { tools: DEFAULT_LAYOUT, create: DEFAULT_CREATE_LAYOUT });
+    const controller = new ToolController(registry, {
+      action: DEFAULT_ACTION_LAYOUT,
+      reference: DEFAULT_REFERENCE_LAYOUT,
+    });
     // The rings' layouts are user settings kept by the bridge, so they follow the workspace across browsers and
     // restarts.
     controller.onLayoutChange = (layout, ring) =>
       connection.current?.send({
         type: "settings.set",
         id: crypto.randomUUID(),
-        payload: ring === "tools" ? { palette: layout } : { createPalette: layout },
+        payload: ring === "action" ? { palette: layout } : { createPalette: layout },
       });
+    // Markers are kept with the project by the bridge, so every viewer and every agent sees the same ones.
+    controller.references.onMarkersChange = (markers) =>
+      connection.current?.send({ type: "markers.set", id: crypto.randomUUID(), payload: { markers } });
+    controller.onDominantHandChange = (dominantHand) =>
+      connection.current?.send({ type: "settings.set", id: crypto.randomUUID(), payload: { dominantHand } });
     return controller;
   }, [features]);
   useEffect(() => features.subscribe(() => tools.registry.refresh()), [features, tools]);
@@ -320,6 +339,15 @@ export function App() {
       }),
     [agent, speaker],
   );
+  // A request carries the sketches the user drew for it (without which hand drew them), and clears them once sent.
+  useEffect(
+    () =>
+      agent.attachReferences({
+        sketches: () => tools.references.sketches.map(({ hand: _hand, ...sketch }) => sketch),
+        sent: () => tools.references.clearSketches(),
+      }),
+    [agent, tools],
+  );
   const voice = useMemo(
     () =>
       new VoiceInput({
@@ -337,12 +365,21 @@ export function App() {
         // While Mochi speaks, what the microphone hears is Mochi: its words never count as a request.
         isNamed: (text) =>
           !speaker.speaking && addressOf(text, agent.getSnapshot().team?.members ?? []).agent !== null,
+        // A shake right after a held request was sent stops it: its turn and what it handed out.
+        stopSent: () => agent.stopLastRequest(),
+        // A transcript that is only a tool's name ("measure", "sketch area") picks the tool, without the agent.
+        command: (text) => {
+          const tool = toolNamed(text, tools.registry.list());
+          if (!tool) return null;
+          tools.choose(tool.id);
+          return tool.label;
+        },
         isBareName: (text) => {
           const { agent: named, text: rest } = addressOf(text, agent.getSnapshot().team?.members ?? []);
           return named !== null && rest.trim() === "";
         },
       }),
-    [transcriber, agent, sceneClient, viewLink, speaker],
+    [transcriber, agent, sceneClient, viewLink, speaker, tools],
   );
   // In the desktop app the voice models are downloaded after install: until they are in place the voice says so, the
   // speaker stays quiet and nothing asks for them. When they verify, voice starts without a reload.
@@ -389,7 +426,11 @@ export function App() {
   // What the hand points at, and what gets tapped into the selection, while the user speaks.
   useEffect(
     () =>
-      viewLink.onPointed((id) => voice.context.hover(features.on("pointCapture") ? id : null, Date.now())),
+      viewLink.onPointed((id) => {
+        // While a pinch is held, the holding hand points (see `talk` below), whatever the setting.
+        if (voice.holding) return;
+        voice.context.hover(features.on("pointCapture") ? id : null, Date.now());
+      }),
     [viewLink, voice, features],
   );
   useEffect(() => {
@@ -433,10 +474,51 @@ export function App() {
     };
   }, [voice]);
 
+  // Hold to talk listens the moment the hold fires: the speech detector and model load at the first engagement
+  // instead (the microphone stays off until a hold or a request opens it).
+  useEffect(
+    () =>
+      bus.onEngaged((engaged) => {
+        if (!engaged || !features.on("voice") || speechRef.current !== "device") return;
+        preloadOnDevice();
+        transcriber.load();
+      }),
+    [bus, features, transcriber],
+  );
+  // Hold to talk: a long pinch locks what is under the hand ("this") and listens while it is held. While speaking,
+  // the hand points: the elements and the points it rests on are captured. Released, what was said is sent at once.
+  const voiceReadyRef = useRef(voiceReady);
+  voiceReadyRef.current = voiceReady;
+  const talk = useMemo<RouterTalk>(
+    () => ({
+      start: (position, hand) => {
+        if (!features.on("voice") || !voiceReadyRef.current) return false;
+        const target = tools.lockTarget(tools.viewerOf(position), hand);
+        if (voice.startHeld(hand, target)) return true;
+        tools.releaseTarget();
+        return false;
+      },
+      move: (position, hand) => {
+        const at = tools.pointAt(tools.viewerOf(position), hand);
+        const now = Date.now();
+        voice.context.hover(at?.elementId ?? null, now);
+        voice.context.rest(at && !at.elementId ? at.point : null, now);
+      },
+      end: (_hand, send) => {
+        tools.releaseTarget();
+        voice.releaseHeld(send);
+      },
+      onSpeech: (listener) => voice.onHeldSpeech(listener),
+    }),
+    [features, tools, voice],
+  );
   const gestures = useMemo(
     () => ({
       bindings: gestureSettings.getSnapshot,
       enabled: (feature: FeatureId) => features.on(feature),
+      ringOf: (hand: Hand) => tools.ringOf(hand),
+      talk,
+      onHold: (report: HoldReport) => session.detection.countHold(report),
       agent: {
         // "Yes" and "no" answer, in this order: a spoken request waiting to be sent, the agent's approval card, a
         // panel offer; then the active tool's own question.
@@ -460,7 +542,7 @@ export function App() {
         ask: () => tools.choose("ask-agent"),
       },
     }),
-    [gestureSettings, agent, bus, tools, voice, speaker, features, panels],
+    [gestureSettings, agent, bus, tools, voice, speaker, features, panels, talk, session],
   );
 
   // The camera session goes on the page once mounted; dev builds hand it to end-to-end tests too.
@@ -509,9 +591,14 @@ export function App() {
         sceneClient.handle(message)
       )
         return;
+      if (message.type === "markers.snapshot") {
+        tools.references.loadMarkers(message.payload.markers);
+        return;
+      }
       if (message.type === "settings.snapshot") {
-        tools.loadLayout(message.payload.palette ?? DEFAULT_LAYOUT, "tools");
-        tools.loadLayout(message.payload.createPalette ?? DEFAULT_CREATE_LAYOUT, "create");
+        tools.loadLayout(message.payload.palette ?? DEFAULT_ACTION_LAYOUT, "action");
+        tools.loadLayout(message.payload.createPalette ?? DEFAULT_REFERENCE_LAYOUT, "reference");
+        tools.loadDominantHand(message.payload.dominantHand);
         gestureSettings.load(message.payload.gestures);
         setSpeech(message.payload.speech);
         setListenForNames(message.payload.listenForNames);
@@ -850,6 +937,7 @@ export function App() {
             mirror={mirror}
             mirrorAssets={mirrorAssets}
             markers={markers}
+            voice={voice}
             owners={owners}
             cameraMarkers={cameraMarkerList}
             context={contextState}

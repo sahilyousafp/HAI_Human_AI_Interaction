@@ -2,6 +2,7 @@ import type { Element, Point3Mm, SceneOp } from "@hai/protocol";
 import { columnTool, copyTool, slabTool, wallTool } from "./create.ts";
 import { snap } from "./grid.ts";
 import { movedOffset } from "./placement.ts";
+import { placeMarkerTool, referenceAt, sketchAreaTool, sketchLineTool } from "./reference.ts";
 import type { ToolRegistry } from "./registry.ts";
 import type { Tool, ToolContext } from "./types.ts";
 
@@ -60,6 +61,7 @@ export function moveOp(element: Element, dx: number, dy: number): SceneOp {
 export const selectTool: Tool = {
   id: "select",
   label: "Select",
+  spoken: ["select"],
   icon: "M5 3l14 8-6 2-3 6z",
   shortcut: "v",
   onTap(ctx, _at, hit) {
@@ -73,6 +75,7 @@ export function moveTool(): Tool {
   return {
     id: "move",
     label: "Move",
+    spoken: ["move"],
     icon: "M12 3v18M3 12h18M12 3 9 6M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3",
     shortcut: "m",
     activate(ctx) {
@@ -119,6 +122,7 @@ export function moveTool(): Tool {
 export const measureTool: Tool = {
   id: "measure",
   label: "Measure",
+  spoken: ["measure"],
   icon: "M3 17 17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2",
   shortcut: "d",
   activate(ctx) {
@@ -165,6 +169,7 @@ export function sectionTool(): Tool {
   return {
     id: "section",
     label: "Section",
+    spoken: ["section", "cut"],
     icon: "M4 8l8-4 8 4-8 4zM4 8v8l8 4 8-4V8M2 13h20",
     shortcut: "s",
     activate(ctx) {
@@ -204,6 +209,7 @@ export function sectionTool(): Tool {
 export const massingTool: Tool = {
   id: "massing",
   label: "Add massing",
+  spoken: ["massing", "add massing", "block"],
   icon: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12 4 7.5",
   shortcut: "b",
   activate(ctx) {
@@ -241,6 +247,7 @@ export const massingTool: Tool = {
 export const deleteTool: Tool = {
   id: "delete",
   label: "Delete",
+  spoken: ["delete", "erase"],
   icon: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
   shortcut: "x",
   activate(ctx) {
@@ -250,6 +257,18 @@ export const deleteTool: Tool = {
     ctx.setOverlay({ notice: null, marked: null });
   },
   onTap(ctx, at, hit) {
+    // Sketches and markers lie over the model, so a tap on one removes it, without asking: neither is model work.
+    const reference = referenceAt(ctx, at);
+    if (reference?.kind === "marker") {
+      ctx.references.removeMarker(reference.letter);
+      ctx.flash(`Marker ${reference.letter} removed.`);
+      return;
+    }
+    if (reference?.kind === "sketch") {
+      ctx.references.removeSketch(reference.label);
+      ctx.flash(`${reference.label} removed.`);
+      return;
+    }
     const element = hit ? ctx.doc()?.elements[hit.elementId] : undefined;
     if (!element) {
       // The section plane is not part of the model; tapping it with Delete simply removes it.
@@ -274,6 +293,8 @@ export const deleteTool: Tool = {
 export const undoTool: Tool = {
   id: "undo",
   label: "Undo",
+  // "undue" is how the on-device speech model hears a short "undo" (measured).
+  spoken: ["undo", "undue"],
   icon: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
   shortcut: "u",
   instant: true,
@@ -285,6 +306,7 @@ export const undoTool: Tool = {
 export const redoTool: Tool = {
   id: "redo",
   label: "Redo",
+  spoken: ["redo"],
   icon: "M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3",
   shortcut: "r",
   instant: true,
@@ -296,6 +318,7 @@ export const redoTool: Tool = {
 export const askAgentTool: Tool = {
   id: "ask-agent",
   label: "Ask agent",
+  spoken: ["ask", "ask agent"],
   icon: "M4 5h16v11H9l-5 4z",
   shortcut: "a",
   instant: true,
@@ -309,17 +332,6 @@ export const askAgentTool: Tool = {
  * The tools ring at first start, clockwise from the top: the right hand's long pinch opens it. Redo is in the create
  * ring, by key and in settings.
  */
-export const DEFAULT_LAYOUT: Array<string | null> = [
-  "select",
-  "ask-agent",
-  "measure",
-  "section",
-  "move",
-  "massing",
-  "delete",
-  "undo",
-];
-
 export function registerBuiltinTools(registry: ToolRegistry): void {
   for (const tool of [
     selectTool,
@@ -335,6 +347,9 @@ export function registerBuiltinTools(registry: ToolRegistry): void {
     slabTool(),
     columnTool,
     copyTool(),
+    sketchLineTool(),
+    sketchAreaTool(),
+    placeMarkerTool,
   ]) {
     registry.register(tool);
   }

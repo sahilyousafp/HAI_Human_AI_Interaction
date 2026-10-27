@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LetterMarkers, MAX_SKETCHES, Sketch } from "./references.ts";
 import { ElementId, Point3Mm, PointMm } from "./scene.ts";
 
 /** An MCP server as the agent session loaded it. */
@@ -75,11 +76,34 @@ export const AgentStatus = z.discriminatedUnion("state", [
 export type AgentStatus = z.infer<typeof AgentStatus>;
 
 /** What a request refers to: what the user pointed at or tapped while speaking (in order), the selection, the ground point. */
+/** What a held pinch locked when it began: the element under it, else the point the drawing aids resolved there. */
+export const HeldTarget = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("element"), id: z.string(), type: z.string(), name: z.string() }),
+  z.strictObject({
+    kind: z.literal("point"),
+    point: Point3Mm,
+    /** The drawing aid that placed it (Endpoint, Midpoint, ...), or null for the ground under the hand. */
+    aid: z.string().max(40).nullable(),
+  }),
+]);
+export type HeldTarget = z.infer<typeof HeldTarget>;
+
+/** Points the hand rested on while the user spoke (P1, P2, ...), at most this many. */
+export const MAX_HELD_POINTS = 12;
+
 export const RequestContext = z.strictObject({
   references: z.array(z.strictObject({ id: z.string(), type: z.string(), name: z.string() })).max(50),
   selection: z.array(z.string()).max(500),
   /** Where the hand pointer met the ground when the user stopped speaking, millimetres. */
   groundPoint: z.tuple([z.number(), z.number(), z.number()]).nullable(),
+  /** A held pinch's locked target ("this"). */
+  target: HeldTarget.optional(),
+  /** The points the hand rested on while holding and speaking, in order ("there", "from here to here"). */
+  points: z.array(Point3Mm).max(MAX_HELD_POINTS).optional(),
+  /** The sketches shown when the request was sent (a request carries them all, then they are cleared). */
+  sketches: z.array(Sketch).max(MAX_SKETCHES).optional(),
+  /** The project's lettered markers, added by the bridge to every request. */
+  markers: LetterMarkers.optional(),
 });
 export type RequestContext = z.infer<typeof RequestContext>;
 

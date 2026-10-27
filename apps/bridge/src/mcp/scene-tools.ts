@@ -2,13 +2,17 @@ import { randomUUID } from "node:crypto";
 import {
   type AgentCamera,
   type Element,
+  type HeldTarget,
+  type LetterMarker,
   MAX_AGENT_CAMERAS,
   PanelDocument,
+  type Point3Mm,
   RESERVED_TAG_PREFIX,
   type RhinoObject,
   type RhinoSelected,
   type SceneDocument,
   type SceneOp,
+  type Sketch,
   type SunSetting,
   TAG_OWNER,
   TAG_PART,
@@ -49,8 +53,18 @@ export interface SceneToolDeps {
   /** Applies a batch atomically (into the calling agent's running turn, if it has one). */
   apply(ops: SceneOp[], agent: string | null): { ok: true } | { ok: false; error: string };
   setSelection(ids: string[]): void;
-  /** What the user is pointing at with the hand, and the camera. */
-  userContext(): { pointed: string | null; camera: ViewCamera | null };
+  /**
+   * What the user is pointing at with the hand, and the camera; what the latest request pointed out (a held pinch's
+   * target and points, the sketches), and the project's lettered markers.
+   */
+  userContext(): {
+    pointed: string | null;
+    camera: ViewCamera | null;
+    target?: HeldTarget;
+    points?: Point3Mm[];
+    sketches?: Sketch[];
+    markers?: LetterMarker[];
+  };
   /** A PNG of the current view, from a connected viewer. */
   captureView(sun?: SunSetting): Promise<{ ok: true; png: string } | { ok: false; error: string }>;
   /** The team's task board, for the lead's delegate, team_status and cancel_task tools. */
@@ -375,12 +389,12 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
     "get_user_context",
     {
       description:
-        'What the user is referring to: the current selection, the element under their hand pointer, and the camera. Call it when they say "this", "that", "here" or "these".',
+        'What the user is referring to: the current selection, the element under their hand pointer, and the camera; what their latest request pointed out (the target of a held pinch, "this"; the points P1, P2 the hand rested on, "here" and "there"; the sketches S1, S2 they drew, paths and outlines in millimetres); and the lettered markers A, B of the project. Call it when they say "this", "that", "here", "there", "these", a sketch or a marker.',
       inputSchema: z.object({}),
     },
     async () => {
       const doc = deps.doc();
-      const { pointed, camera } = deps.userContext();
+      const { pointed, camera, target, points, sketches, markers } = deps.userContext();
       const pointedElement = pointed ? doc.elements[pointed] : undefined;
       const pointedRhino = pointed ? deps.rhino?.object(pointed) : undefined;
       return text({
@@ -407,6 +421,10 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
           .map(brief),
         pointed: pointedElement ? brief(pointedElement) : null,
         camera,
+        ...(target ? { target } : {}),
+        ...(points?.length ? { points: points.map((p, i) => ({ label: `P${i + 1}`, point: p })) } : {}),
+        ...(sketches?.length ? { sketches } : {}),
+        markers: markers ?? [],
       });
     },
   );

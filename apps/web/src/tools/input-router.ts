@@ -9,6 +9,7 @@ import {
   type Point2,
 } from "@hai/protocol";
 import type { Ring } from "./controller.ts";
+import { HoldMachine, type HoldOutcome, RING_AFTER_MS } from "./hold.ts";
 
 export type DragMode = "orbit" | "pan";
 
@@ -16,7 +17,11 @@ export type DragMode = "orbit" | "pan";
 export interface RouterTargets {
   palette: {
     readonly isOpen: boolean;
-    open(position: Point2, ring: Ring, hand: Hand): void;
+    /** Opens a ring at the hand; `hidden` until `show` (a held pinch shows it only when silent or flicking). */
+    open(position: Point2, ring: Ring, hand: Hand, hidden?: boolean): void;
+    show?(): void;
+    /** Width / height of the space hand positions are in. */
+    aspect?(): number;
     steer(position: Point2): void;
     release(): void;
     cancel(): void;
@@ -53,17 +58,47 @@ export interface RouterAgent {
   ask(): void;
 }
 
+/**
+ * Hold to talk, for a long pinch bound to `talk`: the app locks what is under the hand and listens while it is held.
+ * The router tells it where the hand moves and how the hold ended; it tells the router when speech starts.
+ */
+export interface RouterTalk {
+  /** The hold fired: lock the target and start listening. False if listening cannot start (the ring opens instead). */
+  start(position: Point2, hand: Hand): boolean;
+  /** The holding hand moved (it points while speaking). */
+  move(position: Point2, hand: Hand): void;
+  /** The hold ended: `send` what was said, or drop it. */
+  end(hand: Hand, send: boolean): void;
+  /** Calls `listener` when speech starts during a hold. Returns a function that stops calling it. */
+  onSpeech(listener: (hand: Hand) => void): () => void;
+}
+
+/** How a held pinch ended, for the local counts in the Detection card. */
+export type HoldReport = { outcome: HoldOutcome["kind"]; ring: Ring; spoke: boolean };
+
 export interface RouterOptions {
   /** What each gesture does now (the user can change it in the settings). */
   bindings?: () => GestureBindings;
   agent?: RouterAgent;
   /** Whether a feature is switched on (Settings > Features); everything is on without it. */
   enabled?: (feature: FeatureId) => boolean;
+  /** The ring a silent long pinch of a hand shows (by the dominant hand); the right hand's action ring without it. */
+  ringOf?: (hand: Hand) => Ring;
+  /** Hold to talk; without it a `talk` long pinch opens the hand's ring at once. */
+  talk?: RouterTalk;
+  /** Told how each held pinch ended. */
+  onHold?: (report: HoldReport) => void;
+  now?: () => number;
+  setTimer?: (fn: () => void, ms: number) => unknown;
+  clearTimer?: (handle: unknown) => void;
 }
 
-type Owner = "palette" | "tool" | "navigation" | "ignored";
+type Owner = "palette" | "talk" | "tool" | "navigation" | "ignored";
 
-const RINGS: Partial<Record<GestureAction, Ring>> = { "tools-ring": "tools", "create-ring": "create" };
+const RINGS: Partial<Record<GestureAction, Ring>> = {
+  "action-ring": "action",
+  "reference-ring": "reference",
+};
 
 /**
  * Sends each gesture to exactly one place, through the gesture's binding for the hand that made it (what the user set
@@ -86,24 +121,37 @@ export class InputRouter {
   /** Both hands were fists together: their fist actions stay off until both are open again. */
   private bothFists = false;
   private twoHand = false;
+  /** The held pinch that is listening, if any (one at a time, like a ring). */
+  private hold: { hand: Hand; machine: HoldMachine; ring: Ring; timer: unknown } | null = null;
+  private readonly now: () => number;
+  private readonly setTimer: (fn: () => void, ms: number) => unknown;
+  private readonly clearTimer: (handle: unknown) => void;
 
   constructor(
     private readonly targets: RouterTargets,
     private readonly options: RouterOptions = {},
-  ) {}
+  ) {
+    this.now = options.now ?? (() => performance.now());
+    this.setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+    this.clearTimer = options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+    options.talk?.onSpeech((hand) => this.speech(hand));
+  }
 
   private get bindings(): GestureBindings {
     return this.options.bindings?.() ?? DEFAULT_BINDINGS;
+  }
+
+  private ringOf(hand: Hand): Ring {
+    return this.options.ringOf?.(hand) ?? (hand === "Right" ? "action" : "reference");
   }
 
   private on(feature: FeatureId): boolean {
     return this.options.enabled?.(feature) ?? true;
   }
 
-  /** A ring that can open now: rings are switched on, and the create ring needs the create tools. */
+  /** A ring that can open now: rings are switched on. */
   private ringOpens(ring: Ring | undefined): ring is Ring {
-    if (!ring || !this.on("toolRings")) return false;
-    return ring !== "create" || this.on("createTools");
+    return !!ring && this.on("toolRings");
   }
 
   handle(event: GestureEvent): void {
@@ -114,7 +162,8 @@ export class InputRouter {
         const owner = this.owners.get(event.hand);
         if (owner === "tool" || palette.isOpen) return;
         const action = actionFor(b, "hold", event.hand);
-        const ring = RINGS[action];
+        if (action === "talk" && this.startTalk(event, owner)) return;
+        const ring = action === "talk" ? this.ringOf(event.hand) : RINGS[action];
         if (!this.ringOpens(ring)) {
           this.run(action, event.position, event.hand);
           return;
@@ -140,7 +189,10 @@ export class InputRouter {
         const owner = this.owners.get(event.hand) ?? "navigation";
         const end = event.type === "pinch.drag.end";
         if (end) this.owners.delete(event.hand);
-        if (owner === "palette") {
+        if (owner === "talk") {
+          if (end) this.endTalk(event.hand);
+          else this.moveTalk(event.position, event.hand);
+        } else if (owner === "palette") {
           if (end) this.closePalette(true);
           else palette.steer(event.position);
         } else if (owner === "tool") {
@@ -184,6 +236,7 @@ export class InputRouter {
         if (this.on("stopGesture")) this.run(actionFor(b, "stop"));
         return;
       case "disengaged":
+        this.dropTalk();
         this.closePalette(false);
         if ([...this.owners.values()].includes("tool")) tool.dragCancel();
         this.owners.clear();
@@ -195,6 +248,76 @@ export class InputRouter {
       default:
         return;
     }
+  }
+
+  /**
+   * A long pinch bound to talk: lock "this" and listen while held. The hand's ring opens hidden at once, so a flick
+   * before any speech highlights a slot straight away; the ring is shown when the hand flicks or the hold has been
+   * silent for `RING_AFTER_MS`. False when listening cannot start (the ring opens as before).
+   */
+  private startTalk(event: Extract<GestureEvent, { type: "pinch.hold" }>, owner: Owner | undefined): boolean {
+    const { hand, position } = event;
+    const talk = this.options.talk;
+    if (!talk || this.hold || !talk.start(position, hand)) return false;
+    if (owner === "navigation") this.targets.navigation({ ...event, type: "pinch.drag.end" });
+    const ring = this.ringOf(hand);
+    const { palette } = this.targets;
+    const machine = new HoldMachine({ center: position, aspect: palette.aspect?.() ?? 4 / 3 }, this.now());
+    if (this.ringOpens(ring)) palette.open(position, ring, hand, true);
+    const timer = this.setTimer(() => this.showRing(), RING_AFTER_MS);
+    this.hold = { hand, machine, ring, timer };
+    this.owners.set(hand, "talk");
+    return true;
+  }
+
+  private moveTalk(position: Point2, hand: Hand): void {
+    const hold = this.hold;
+    if (!hold || hold.hand !== hand) return;
+    hold.machine.move(position);
+    if (hold.machine.state(this.now()).phase !== "speaking" && this.targets.palette.isOpen) {
+      this.targets.palette.steer(position);
+      this.showRing();
+    }
+    this.options.talk?.move(position, hand);
+  }
+
+  /** Speech started during a hold: it wins, so the ring goes and the hand points from now on. */
+  speech(hand: Hand): void {
+    const hold = this.hold;
+    if (!hold || hold.hand !== hand) return;
+    hold.machine.speech();
+    if (this.targets.palette.isOpen) this.targets.palette.cancel();
+  }
+
+  private showRing(): void {
+    if (this.hold?.machine.state(this.now()).ringShown) this.targets.palette.show?.();
+  }
+
+  private endTalk(hand: Hand): void {
+    const hold = this.hold;
+    if (!hold || hold.hand !== hand) return;
+    const spoke = hold.machine.state(this.now()).phase === "speaking";
+    const outcome = hold.machine.release();
+    this.clearTimer(hold.timer);
+    this.hold = null;
+    const { palette } = this.targets;
+    if (palette.isOpen) {
+      if (outcome.kind === "choose") palette.release();
+      else palette.cancel();
+    }
+    this.options.talk?.end(hand, outcome.kind === "send");
+    this.options.onHold?.({ outcome: outcome.kind, ring: hold.ring, spoke });
+  }
+
+  /** The user disengaged mid-hold: nothing is chosen or sent. */
+  private dropTalk(): void {
+    const hold = this.hold;
+    if (!hold) return;
+    this.clearTimer(hold.timer);
+    this.hold = null;
+    this.owners.delete(hold.hand);
+    this.options.talk?.end(hold.hand, false);
+    this.options.onHold?.({ outcome: "cancel", ring: hold.ring, spoke: false });
   }
 
   private dragMode(hand: Hand): DragMode {

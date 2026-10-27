@@ -269,6 +269,55 @@ describe("read tools", () => {
     expect(context.selection.map((e: { id: string }) => e.id)).toEqual(["block-b"]);
     expect(context.camera.azimuth).toBe(305);
   });
+
+  it("Markers are always included: the project's lettered markers, with their points", async () => {
+    const address = await start();
+    const viewer = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    viewer.send("markers.set", {
+      markers: [
+        { letter: "A", point: [3000, 4000, 0] },
+        { letter: "B", point: [9000, 9000, 0] },
+      ],
+    });
+    await viewer.waitFor("markers.snapshot", (m) => m.payload.markers.length === 2);
+    const context = json(await (await mcp(address)).callTool({ name: "get_user_context", arguments: {} }));
+    expect(context.markers).toEqual([
+      { letter: "A", point: [3000, 4000, 0] },
+      { letter: "B", point: [9000, 9000, 0] },
+    ]);
+  });
+
+  it("what the latest request pointed out: its held target, its points P1, P2 and its sketches", async () => {
+    const address = await start();
+    const viewer = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    const sketch = {
+      label: "S1",
+      kind: "path",
+      points: [
+        [0, 0, 0],
+        [6000, 0, 0],
+      ],
+    };
+    viewer.send("agent.send", {
+      text: "a wall along this",
+      context: {
+        references: [],
+        selection: [],
+        groundPoint: null,
+        target: { kind: "point", point: [1000, 2000, 0], aid: null },
+        points: [[4000, 2000, 0]],
+        sketches: [sketch],
+      },
+    });
+    const agent = await mcp(address);
+    await expect
+      .poll(async () => json(await agent.callTool({ name: "get_user_context", arguments: {} })).sketches)
+      .toEqual([sketch]);
+    const context = json(await agent.callTool({ name: "get_user_context", arguments: {} }));
+    expect(context.target).toEqual({ kind: "point", point: [1000, 2000, 0], aid: null });
+    expect(context.points).toEqual([{ label: "P1", point: [4000, 2000, 0] }]);
+    expect(context.markers).toEqual([]);
+  });
 });
 
 describe("sun study", () => {

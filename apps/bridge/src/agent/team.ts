@@ -149,8 +149,15 @@ export interface TeamOptions {
  *   labelled "<Agent>: <title>". Agents that only read run alongside.
  * - When every task Mochi handed out in one turn has finished, Mochi gets a digest turn and reports.
  */
+/** How many recent requests are remembered for stopping one of them. */
+const REQUESTS_KEPT = 20;
+
 export class Team {
   private readonly hubs = new Map<string, AgentHub>();
+  /** The turn each recent request started, by the request's message id. */
+  private readonly requestTurns = new Map<string, string>();
+  /** Requests stopped before their turn started. */
+  private readonly stoppedRequests = new Set<string>();
   private members: TeamMember[] = [];
   /** The project the roster was read from. */
   private project: string | null = null;
@@ -287,7 +294,7 @@ export class Team {
   handle(message: Message, send: Send): boolean {
     if (message.type === "agent.send") {
       const { text, context, agent } = message.payload;
-      void this.request(text, context, agent).catch((error: Error) => {
+      void this.request(text, context, agent, message.id).catch((error: Error) => {
         this.log.info("agent request refused", { reason: error.message });
         send(refusal(message.id, error.message));
       });
@@ -295,6 +302,10 @@ export class Team {
     }
     if (message.type === "agent.stop") {
       void this.stopAll();
+      return true;
+    }
+    if (message.type === "agent.stopRequest") {
+      this.stopRequest(message.payload.requestId);
       return true;
     }
     if (message.type === "agents.save") {
@@ -316,20 +327,50 @@ export class Team {
    * The user's request, for Mochi; `target` is the specialist the user named, which Mochi then hands it to.
    * Resolves when Mochi's turn has ended (its hand-offs keep running).
    */
-  async request(text: string, context?: RequestContext, target?: string): Promise<AgentTurn> {
+  async request(
+    text: string,
+    context?: RequestContext,
+    target?: string,
+    requestId?: string,
+  ): Promise<AgentTurn> {
     this.ensureProject();
     const lead = this.hub(this.lead);
     if (this.digestRunning) await this.digestRunning;
     await this.restartIfChanged(this.lead);
+    if (requestId && this.stoppedRequests.delete(requestId)) throw new Error("The request was stopped.");
     if (target && !this.member(target))
       throw new Error(`There is no agent called ${target} in this project.`);
     const preface = target && target !== this.lead ? `[for: ${target}]` : undefined;
     try {
-      return await lead.request(text, context, { kind: "request", ...(preface ? { preface } : {}) });
+      const turn = lead.request(text, context, { kind: "request", ...(preface ? { preface } : {}) });
+      const started = lead.runningTurn?.id;
+      if (requestId && started) this.remember(requestId, started);
+      return await turn;
     } finally {
       this.checkBatches();
       this.pumpDigests();
     }
+  }
+
+  /**
+   * Stops one request the user sent (a shake just after a held request): Mochi's turn for it, and every task that
+   * turn handed out. A request whose turn has not started yet is refused when it would.
+   */
+  stopRequest(requestId: string): void {
+    const turnId = this.requestTurns.get(requestId);
+    if (!turnId) {
+      this.stoppedRequests.add(requestId);
+      return;
+    }
+    const lead = this.hub(this.lead);
+    if (lead.runningTurn?.id === turnId) void lead.stop();
+    for (const task of this.tasks) if (task.fromTurn === turnId) this.cancel(task.id);
+  }
+
+  /** Keeps which turn a request started, for the latest few requests. */
+  private remember(requestId: string, turnId: string): void {
+    this.requestTurns.set(requestId, turnId);
+    for (const old of [...this.requestTurns.keys()].slice(0, -REQUESTS_KEPT)) this.requestTurns.delete(old);
   }
 
   /** A specialist's tool for starting a worker on a part of its own task. */

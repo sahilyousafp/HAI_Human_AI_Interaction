@@ -29,7 +29,7 @@ for (const scheme of ["light", "dark"] as const) {
   test(`agents tab (${scheme})`, async ({ page }) => {
     await withTeam(page, scheme);
     await page.getByTestId("agent-tab-agents").click();
-    await expect(page.getByTestId("agent-definition")).toHaveCount(5);
+    await expect(page.getByTestId("agent-definition")).toHaveCount(7);
     await expect(page.getByTestId("agent-panel")).toHaveScreenshot(`agents-tab-${scheme}.png`);
   });
 }

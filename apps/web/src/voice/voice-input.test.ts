@@ -3,7 +3,7 @@ import type { RequestContext } from "./utterance-context.ts";
 import { VOICE } from "./voice-config.ts";
 import { type ListenerEvents, micError, VoiceInput } from "./voice-input.ts";
 
-function setup(options: { failWith?: string; transcript?: string } = {}) {
+function setup(options: { failWith?: string; transcript?: string; tools?: string[] } = {}) {
   let events: ListenerEvents | null = null;
   const mic = { open: false, finished: 0 };
   const sent: Array<{ text: string; context: RequestContext }> = [];
@@ -28,6 +28,7 @@ function setup(options: { failWith?: string; transcript?: string } = {}) {
       return true;
     },
     context: () => ({ references: [], selection: [], groundPoint: null }),
+    command: (text) => (options.tools?.includes(text) ? `Tool ${text}` : null),
   });
   /** Speech starts and ends; the (async) transcription settles without moving the fake clock. */
   const speak = async () => {
@@ -42,6 +43,25 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe("VoiceInput", () => {
+  it("Say a tool name: the tool is picked at once, nothing is sent and the microphone is off", async () => {
+    const { voice, mic, sent, speak } = setup({ transcript: "measure", tools: ["measure"] });
+    await voice.start();
+    await speak();
+    expect(voice.getSnapshot()).toEqual({ phase: "picked", text: "measure", tool: "Tool measure" });
+    expect(mic.open).toBe(false);
+    vi.advanceTimersByTime(VOICE.sendDelayMs * 2);
+    expect(sent).toEqual([]);
+    voice.dismiss();
+    expect(voice.getSnapshot()).toEqual({ phase: "off" });
+  });
+
+  it("a transcript that is not a tool name goes to review as before", async () => {
+    const { voice, speak } = setup({ transcript: "measure the towers", tools: ["measure"] });
+    await voice.start();
+    await speak();
+    expect(voice.getSnapshot()).toMatchObject({ phase: "review", text: "measure the towers" });
+  });
+
   it("does nothing with the microphone until asked", () => {
     const { voice, mic } = setup();
     expect(voice.getSnapshot()).toEqual({ phase: "off" });
@@ -297,5 +317,156 @@ describe("listening for names", () => {
     expect(openNow()).toBe(0);
     expect(voice.getSnapshot()).toEqual({ phase: "off" });
     expect(voice.micState).toBe("off");
+  });
+});
+
+describe("a held pinch", () => {
+  const wall = { kind: "element" as const, id: "wall-1", type: "wall", name: "Wall 1" };
+
+  function held(options: { transcript?: string; tools?: string[] } = {}) {
+    let events: ListenerEvents | null = null;
+    const mic = { open: false };
+    const sent: Array<{ text: string; context: RequestContext }> = [];
+    const transcribed: number[] = [];
+    let stopped = 0;
+    const voice = new VoiceInput({
+      listen: async (e) => {
+        events = e;
+        mic.open = true;
+        return {
+          finish: () => e.speechEnd({ audio: new Float32Array(8000) }),
+          cancel: () => {
+            mic.open = false;
+          },
+        };
+      },
+      transcribe: async (audio) => {
+        transcribed.push(audio.length);
+        return options.transcript ?? "make this 300 thick";
+      },
+      send: (text, context) => {
+        sent.push({ text, context });
+        return true;
+      },
+      context: (recorder) => recorder.resolve(null, [], null),
+      command: (text) => (options.tools?.includes(text) ? `Tool ${text}` : null),
+      stopSent: () => stopped++,
+    });
+    const settle = async () => {
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    };
+    const spoken: string[] = [];
+    voice.onHeldSpeech((hand) => spoken.push(hand));
+    return {
+      voice,
+      mic,
+      sent,
+      transcribed,
+      spoken,
+      settle,
+      stopped: () => stopped,
+      events: () => events as ListenerEvents | null,
+    };
+  }
+
+  it("Listening from a held pinch: the microphone starts and the state names the hand", async () => {
+    const { voice, mic, settle } = held();
+    expect(voice.startHeld("Right", wall)).toBe(true);
+    await settle();
+    expect(mic.open).toBe(true);
+    expect(voice.getSnapshot()).toMatchObject({ phase: "listening", held: "Right" });
+    expect(voice.micOn).toBe(true);
+  });
+
+  it("Held request is sent on release: at once, without a countdown, with the locked target", async () => {
+    const { voice, sent, settle, events, spoken } = held();
+    voice.startHeld("Right", wall);
+    await settle();
+    events()?.speechStart();
+    expect(spoken).toEqual(["Right"]);
+    voice.releaseHeld(true);
+    await settle();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.text).toBe("make this 300 thick");
+    expect(sent[0]?.context.target).toEqual(wall);
+    expect(voice.getSnapshot()).toMatchObject({ phase: "sent", held: "Right" });
+  });
+
+  it("A pause during a held pinch: both parts are written down together, as one request", async () => {
+    const { voice, sent, transcribed, settle, events, mic } = held({ transcript: "copy this there" });
+    voice.startHeld("Left", null);
+    await settle();
+    events()?.speechStart();
+    events()?.speechEnd({ audio: new Float32Array(12_000) }); // "copy this", then a pause
+    expect(voice.getSnapshot()).toMatchObject({ phase: "listening", speaking: false, held: "Left" });
+    expect(mic.open).toBe(true); // a pause does not end a held request
+    vi.advanceTimersByTime(1500);
+    events()?.speechStart(); // "there"
+    voice.releaseHeld(true);
+    await settle();
+    expect(transcribed).toEqual([12_000 + 8000]);
+    expect(sent.map((s) => s.text)).toEqual(["copy this there"]);
+  });
+
+  it("Silent hold sends nothing, and Release ends listening at once", async () => {
+    const { voice, sent, settle, mic } = held();
+    voice.startHeld("Right", wall);
+    await settle();
+    voice.releaseHeld(true);
+    expect(mic.open).toBe(false);
+    expect(voice.getSnapshot()).toEqual({ phase: "off" });
+    expect(sent).toEqual([]);
+  });
+
+  it("a held pinch released without sending drops what was said", async () => {
+    const { voice, sent, settle, events } = held();
+    voice.startHeld("Right", wall);
+    await settle();
+    events()?.speechStart();
+    voice.releaseHeld(false);
+    await settle();
+    expect(sent).toEqual([]);
+    expect(voice.getSnapshot()).toEqual({ phase: "off" });
+  });
+
+  it("Shake stops a sent request within 1.5 s, and not after", async () => {
+    const first = held();
+    first.voice.startHeld("Right", wall);
+    await first.settle();
+    first.events()?.speechStart();
+    first.voice.releaseHeld(true);
+    await first.settle();
+    vi.advanceTimersByTime(1000);
+    expect(first.voice.stopSent()).toBe(true);
+    expect(first.stopped()).toBe(1);
+    expect(first.voice.getSnapshot()).toMatchObject({ phase: "stopped", held: "Right" });
+
+    const late = held();
+    late.voice.startHeld("Right", wall);
+    await late.settle();
+    late.events()?.speechStart();
+    late.voice.releaseHeld(true);
+    await late.settle();
+    vi.advanceTimersByTime(1600);
+    expect(late.voice.stopSent()).toBe(false);
+    expect(late.stopped()).toBe(0);
+  });
+
+  it("a held tool name picks the tool and sends nothing", async () => {
+    const { voice, sent, settle, events } = held({ transcript: "measure", tools: ["measure"] });
+    voice.startHeld("Right", null);
+    await settle();
+    events()?.speechStart();
+    voice.releaseHeld(true);
+    await settle();
+    expect(voice.getSnapshot()).toMatchObject({ phase: "picked", tool: "Tool measure", held: "Right" });
+    expect(sent).toEqual([]);
+  });
+
+  it("a second hold while one listens is refused", async () => {
+    const { voice, settle } = held();
+    expect(voice.startHeld("Right", null)).toBe(true);
+    await settle();
+    expect(voice.startHeld("Left", null)).toBe(false);
   });
 });

@@ -94,15 +94,15 @@ describe("InputRouter", () => {
     expect(log.at(-1)).toBe("palette.release");
   });
 
-  it("a long pinch opens the right hand's tools ring and the left hand's create ring", () => {
+  it("a silent long pinch shows the right hand's action ring and the left hand's reference ring", () => {
     const right = setup();
     right.router.handle(ev("pinch.drag.start"));
     right.router.handle(ev("pinch.hold"));
-    expect(right.log.at(-1)).toBe("palette.open:tools:Right");
+    expect(right.log.at(-1)).toBe("palette.open:action:Right");
     const left = setup();
     left.router.handle(ev("pinch.drag.start", "Left"));
     left.router.handle(ev("pinch.hold", "Left"));
-    expect(left.log.at(-1)).toBe("palette.open:create:Left");
+    expect(left.log.at(-1)).toBe("palette.open:reference:Left");
   });
 
   it("while one hand holds its ring open, the other hand still taps, drags and navigates", () => {
@@ -142,7 +142,7 @@ describe("InputRouter", () => {
       "tool.dragStart",
       "nav:pinch.drag.start",
       "nav:pinch.drag.end",
-      "palette.open:tools:Right",
+      "palette.open:action:Right",
     ]);
   });
 
@@ -391,13 +391,165 @@ describe("feature switches", () => {
     expect(log).toEqual(["tool.dragStart", "nav:pinch.drag.start"]);
   });
 
-  it("without the create tools, the left hand's long pinch opens no ring; the right hand's still does", () => {
+  it("without the create tools, both rings still open (their create tools are left out of them)", () => {
     const { router, log } = setup(false, { off: ["createTools"] });
     router.handle(ev("pinch.drag.start", "Left"));
     router.handle(ev("pinch.hold", "Left"));
-    expect(log.some((l) => l.startsWith("palette.open"))).toBe(false);
-    router.handle(ev("pinch.drag.start"));
-    router.handle(ev("pinch.hold"));
-    expect(log.at(-1)).toBe("palette.open:tools:Right");
+    expect(log.at(-1)).toBe("palette.open:reference:Left");
+  });
+});
+
+describe("hold to talk", () => {
+  function talkSetup(options: { canListen?: boolean; off?: FeatureId[] } = {}) {
+    const log: string[] = [];
+    let open = false;
+    let clock = 0;
+    let timers: Array<{ at: number; fn: () => void }> = [];
+    let speechListener: ((hand: Hand) => void) | null = null;
+    const targets: RouterTargets = {
+      palette: {
+        get isOpen() {
+          return open;
+        },
+        open: (_p, ring, hand, hidden) => {
+          open = true;
+          log.push(`palette.open:${ring}:${hand}${hidden ? ":hidden" : ""}`);
+        },
+        show: () => log.push("palette.show"),
+        aspect: () => 4 / 3,
+        steer: (p) => log.push(`palette.steer:${p[0].toFixed(2)}`),
+        release: () => {
+          open = false;
+          log.push("palette.release");
+        },
+        cancel: () => {
+          open = false;
+          log.push("palette.cancel");
+        },
+      },
+      tool: {
+        tap: () => log.push("tool.tap"),
+        dragStart: () => false,
+        drag: () => {},
+        dragEnd: () => {},
+        dragCancel: () => {},
+        nod: () => {},
+        shake: () => {},
+        clutch: () => {},
+        select: () => {},
+        undo: () => {},
+        redo: () => {},
+        cancel: () => {},
+      },
+      navigation: (e) => log.push(`nav:${e.type}`),
+    };
+    const reports: unknown[] = [];
+    const router = new InputRouter(targets, {
+      bindings: () => DEFAULT_BINDINGS,
+      enabled: (feature) => !options.off?.includes(feature),
+      talk: {
+        start: (_p, hand) => {
+          log.push(`talk.start:${hand}`);
+          return options.canListen ?? true;
+        },
+        move: () => log.push("talk.move"),
+        end: (hand, send) => log.push(`talk.end:${hand}:${send ? "send" : "drop"}`),
+        onSpeech: (listener) => {
+          speechListener = listener;
+          return () => {};
+        },
+      },
+      onHold: (report) => reports.push(report),
+      now: () => clock,
+      setTimer: (fn, ms) => {
+        timers.push({ at: clock + ms, fn });
+        return timers.length;
+      },
+      clearTimer: () => {
+        timers = [];
+      },
+    });
+    const advance = (ms: number) => {
+      clock += ms;
+      for (const t of timers.filter((t) => t.at <= clock)) t.fn();
+      timers = timers.filter((t) => t.at > clock);
+    };
+    const speak = (hand: Hand = "Right") => speechListener?.(hand);
+    const event = (type: string, position: Point2 = at, hand: Hand = "Right") =>
+      ({ type, ts: ts++, confidence: 1, hand, position, delta: [0, 0] }) as GestureEvent;
+    const hold = (hand: Hand = "Right") => {
+      router.handle(event("pinch.drag.start", at, hand));
+      router.handle(event("pinch.hold", at, hand));
+    };
+    return { router, log, reports, advance, speak, event, hold };
+  }
+
+  it("a long pinch starts listening, opens the hand's ring hidden, and ends the orbit it began as", () => {
+    const { log, hold } = talkSetup();
+    hold();
+    expect(log).toEqual([
+      "nav:pinch.drag.start",
+      "talk.start:Right",
+      "nav:pinch.drag.end",
+      "palette.open:action:Right:hidden",
+    ]);
+  });
+
+  it("Release with speech sends, and the ring never shows", () => {
+    const { log, reports, advance, speak, hold, router, event } = talkSetup();
+    hold();
+    speak();
+    advance(1000);
+    router.handle(event("pinch.drag.update", [0.62, 0.5]));
+    router.handle(event("pinch.drag.end", [0.62, 0.5]));
+    expect(log).toContain("palette.cancel");
+    expect(log).not.toContain("palette.show");
+    expect(log).not.toContain("palette.release");
+    expect(log.at(-1)).toBe("talk.end:Right:send");
+    expect(reports).toEqual([{ outcome: "send", ring: "action", spoke: true }]);
+  });
+
+  it("Silent flick picks a tool: the ring shows at once and the release chooses", () => {
+    const { log, reports, hold, router, event } = talkSetup();
+    hold("Left");
+    router.handle(event("pinch.drag.update", [0.62, 0.5], "Left"));
+    expect(log.slice(-3)).toEqual(["palette.steer:0.62", "palette.show", "talk.move"]);
+    router.handle(event("pinch.drag.end", [0.62, 0.5], "Left"));
+    expect(log.slice(-2)).toEqual(["palette.release", "talk.end:Left:drop"]);
+    expect(reports).toEqual([{ outcome: "choose", ring: "reference", spoke: false }]);
+  });
+
+  it("Ring fades in after silence: shown 600 ms after the hold, and a release in the centre cancels", () => {
+    const { log, reports, advance, hold, router, event } = talkSetup();
+    hold();
+    advance(599);
+    expect(log).not.toContain("palette.show");
+    advance(1);
+    expect(log.at(-1)).toBe("palette.show");
+    router.handle(event("pinch.drag.end"));
+    expect(log.slice(-2)).toEqual(["palette.cancel", "talk.end:Right:drop"]);
+    expect(reports).toEqual([{ outcome: "cancel", ring: "action", spoke: false }]);
+  });
+
+  it("when listening cannot start, the long pinch opens the ring as before", () => {
+    const { log, hold } = talkSetup({ canListen: false });
+    hold();
+    expect(log.at(-1)).toBe("palette.open:action:Right");
+  });
+
+  it("disengaging mid-hold drops what was said", () => {
+    const { log, speak, hold, router } = talkSetup();
+    hold();
+    speak();
+    router.handle({ type: "disengaged", ts: ts++, confidence: 1 } as GestureEvent);
+    expect(log).toContain("talk.end:Right:drop");
+  });
+
+  it("one hold at a time: the other hand's long pinch while one listens does nothing", () => {
+    const { log, hold } = talkSetup();
+    hold("Right");
+    log.length = 0;
+    hold("Left");
+    expect(log.filter((l) => l.startsWith("talk.start") || l.startsWith("palette.open"))).toEqual([]);
   });
 });

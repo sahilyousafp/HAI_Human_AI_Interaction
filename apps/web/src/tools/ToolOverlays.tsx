@@ -1,9 +1,11 @@
+import type { Hand } from "@hai/protocol";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { SceneClient } from "../scene/scene-client.ts";
-import { Segmented } from "../ui/controls.tsx";
+import { ListGroup, ListRow, Segmented } from "../ui/controls.tsx";
 import { redoTool, undoTool } from "./builtin.ts";
 import type { Ring, ToolController } from "./controller.ts";
 import { SLOT_COUNT, SLOT_NAMES } from "./palette.ts";
+import { spokenNames } from "./registry.ts";
 
 /** An x, for the controls that close or remove something. */
 const CLOSE_ICON = "M6 6l12 12M18 6 6 18";
@@ -30,12 +32,12 @@ export function ToolIcon({ path, size = 22 }: { path: string; size?: number }) {
 }
 
 /** What each ring is called on screen. */
-export const RING_NAMES: Record<Ring, string> = { tools: "Tools ring", create: "Create ring" };
+export const RING_NAMES: Record<Ring, string> = { action: "Action ring", reference: "Reference ring" };
 
 /** The radial palette: 8 slots around where it was opened, the highlighted one filled. */
 function Palette({ controller }: { controller: ToolController }) {
   const { palette, layouts } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
-  if (!palette) return null;
+  if (!palette || palette.hidden) return null;
   const layout = layouts[palette.ring];
   const highlightedId = palette.highlighted === null ? null : layout[palette.highlighted];
   const highlightedLabel = highlightedId ? controller.registry.get(highlightedId)?.label : undefined;
@@ -72,7 +74,9 @@ function Palette({ controller }: { controller: ToolController }) {
             {tool ? (
               <>
                 <ToolIcon path={tool.icon} />
-                <span className="palette-label">{tool.label}</span>
+                <span className="palette-label" title={tool.label}>
+                  {spokenNames(tool)[0]}
+                </span>
               </>
             ) : null}
           </div>
@@ -219,33 +223,53 @@ export function UndoStrip({ client }: { client: SceneClient }) {
   );
 }
 
-/** How each ring opens, for its settings tab. */
-const RING_HOW: Record<Ring, string> = {
-  tools: "right hand's long pinch, Space or hold right-click",
-  create: "left hand's long pinch, Shift+Space or Shift and hold right-click",
-};
+/** How each ring opens, for its settings tab: by the hand whose silent long pinch shows it, the keys and the mouse. */
+function ringHow(ring: Ring, dominant: Hand): string {
+  const hand = (ring === "action") === (dominant === "Right") ? "right" : "left";
+  return ring === "action"
+    ? `a silent long pinch of your ${hand} hand, Space or hold right-click`
+    : `a silent long pinch of your ${hand} hand, Shift+Space or Shift and hold right-click`;
+}
 
 /**
  * Which tools sit in which slot of each ring, one tab per ring; available tools include any registered at
  * runtime.
  */
 export function PaletteSettings({ controller }: { controller: ToolController }) {
-  const { layouts } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
-  const [ring, setRing] = useState<Ring>("tools");
+  const { layouts, dominantHand } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const [ring, setRing] = useState<Ring>("action");
   const layout = layouts[ring];
   const tools = controller.registry.list();
   return (
     <section className="palette-settings" aria-label="Tool palette">
+      <ListGroup>
+        <ListRow
+          label="Dominant hand"
+          detail="The hand you draw with: its silent long pinch shows the action ring, the other hand's the reference ring."
+          control={
+            <Segmented<Hand>
+              label="Dominant hand"
+              testId="dominant-hand"
+              value={dominantHand}
+              onChange={(hand) => controller.setDominantHand(hand)}
+              options={[
+                { value: "Right", label: "Right", testId: "dominant-hand-right" },
+                { value: "Left", label: "Left", testId: "dominant-hand-left" },
+              ]}
+            />
+          }
+        />
+      </ListGroup>
       <Segmented<Ring>
         label="Ring"
         value={ring}
         onChange={setRing}
         options={[
-          { value: "tools", label: RING_NAMES.tools, testId: "ring-tab-tools" },
-          { value: "create", label: RING_NAMES.create, testId: "ring-tab-create" },
+          { value: "action", label: RING_NAMES.action, testId: "ring-tab-action" },
+          { value: "reference", label: RING_NAMES.reference, testId: "ring-tab-reference" },
         ]}
       />
-      <p className="muted ring-how">Opens with the {RING_HOW[ring]}.</p>
+      <p className="muted ring-how">Opens with {ringHow(ring, dominantHand)}.</p>
       <div className="palette-settings-grid">
         {SLOT_NAMES.map((name, slot) => (
           <label key={name} className="field">

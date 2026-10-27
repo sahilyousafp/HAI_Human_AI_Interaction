@@ -25,7 +25,8 @@ test("listening for names: 'Hey Mochi' counts as the name, and the greeting is t
     await expect(transcript).toBeVisible({ timeout: 60_000 });
     expect((await transcript.inputValue()).toLowerCase()).toMatch(/what is everyone doing/);
     const request = page.getByTestId("agent-turn").first().locator(".agent-request");
-    await expect(request).toHaveText(/^what is everyone doing/i);
+    // The countdown alone is 5 s (VOICE.sendDelayMs), as long as the default wait.
+    await expect(request).toHaveText(/^what is everyone doing/i, { timeout: 15_000 });
   } finally {
     await bridge.stop();
   }

@@ -4,6 +4,11 @@ import type { Tool } from "./types.ts";
  * The tools available to the palette and the keyboard. New tools can be registered at any time. A tool whose feature
  * is switched off is unavailable: it is not listed, its shortcut does nothing, and it cannot be chosen.
  */
+/** What can be said to pick a tool: its own spoken names, else its label; the first is shown in the ring. */
+export function spokenNames(tool: Tool): string[] {
+  return tool.spoken && tool.spoken.length > 0 ? tool.spoken : [tool.label.toLowerCase()];
+}
+
 export class ToolRegistry {
   private readonly tools = new Map<string, Tool>();
   private readonly listeners = new Set<() => void>();

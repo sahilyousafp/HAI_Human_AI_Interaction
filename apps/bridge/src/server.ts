@@ -7,9 +7,11 @@ import type { AgentProvider } from "@hai/agent-core";
 import {
   type BridgeStatusMessage,
   type Message,
+  type MessageOf,
   OPEN_DATA_SOURCES,
   PROTOCOL_VERSION,
   parseMessage,
+  type RequestContext,
   type RhinoHello,
   TOKEN_PROTOCOL_PREFIX,
   WS_PATH,
@@ -37,6 +39,7 @@ import {
 import { AssetStore } from "./assets.ts";
 import { assertLoopback } from "./config.ts";
 import { createLogger, type Logger, silentLogger } from "./log.ts";
+import { MarkerStore } from "./markers.ts";
 import { AgentTokens } from "./mcp/agent-tokens.ts";
 import { createMcpHandler, MCP_PATH } from "./mcp/mcp-endpoint.ts";
 import { describeSources } from "./mcp/open-data-tools.ts";
@@ -196,6 +199,21 @@ export function createBridge(options: BridgeOptions): Bridge {
     broadcast,
     () => siteChanged(),
   );
+  const markers = new MarkerStore(() => scene.projectDir, broadcast);
+  /** What the latest request pointed out (a held pinch's target and points, the sketches), for get_user_context. */
+  let lastReferences: Pick<RequestContext, "target" | "points" | "sketches"> = {};
+  /** A request as the agent receives it: with the project's markers, and remembered for get_user_context. */
+  const withReferences = (message: MessageOf<"agent.send">): MessageOf<"agent.send"> => {
+    const { context } = message.payload;
+    lastReferences = {
+      ...(context?.target ? { target: context.target } : {}),
+      ...(context?.points ? { points: context.points } : {}),
+      ...(context?.sketches ? { sketches: context.sketches } : {}),
+    };
+    if (markers.markers.length === 0) return message;
+    const base = context ?? { references: [], selection: [], groundPoint: null };
+    return { ...message, payload: { ...message.payload, context: { ...base, markers: markers.markers } } };
+  };
   const context = new ContextStore(
     () => scene.projectDir,
     () => site.site,
@@ -301,6 +319,7 @@ export function createBridge(options: BridgeOptions): Bridge {
     approvals.announce();
     extensions.projectChanged();
     site.projectChanged();
+    markers.projectChanged();
   };
   const agent: Team | null = options.agent
     ? new Team(
@@ -357,7 +376,7 @@ export function createBridge(options: BridgeOptions): Bridge {
           },
           approve: (tool, input, toolUseId, agent) => approvals.decide(tool, input, toolUseId, agent),
           setSelection: (ids) => scene.select(ids),
-          userContext: () => view.current,
+          userContext: () => ({ ...view.current, ...lastReferences, markers: markers.markers }),
           captureView: (sun) => view.capture(sun),
           eyes,
           setView: (request) => view.setView(request),
@@ -633,6 +652,7 @@ export function createBridge(options: BridgeOptions): Bridge {
         scene.greet(send);
         settings.greet(send);
         site.greet(send);
+        markers.greet(send);
         context.greet(send);
         send(openDataRecordMessage());
         approvals.announce(send);
@@ -686,6 +706,7 @@ export function createBridge(options: BridgeOptions): Bridge {
         scene.handle(message, send) ||
         settings.handle(message) ||
         site.handle(message) ||
+        markers.handle(message) ||
         view.handle(message)
       )
         return;
@@ -696,7 +717,9 @@ export function createBridge(options: BridgeOptions): Bridge {
         extensions.handle(message, send)
       )
         return;
-      agent?.handle(message, send);
+      // A request is remembered (for get_user_context) and given the markers even when no agent is set up yet.
+      const routed = message.type === "agent.send" ? withReferences(message) : message;
+      agent?.handle(routed, send);
     });
     ws.on("close", () => {
       if (rhinoConnection) rhino.detach(rhinoConnection);

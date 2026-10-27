@@ -75,6 +75,7 @@ HAI was called AEX until week 12. Nothing is lost: when the bridge starts, an ol
 | 12 | Snapping at every height, Measure that snaps, new empty projects, save as 3dm |
 | 13 | Rhino 8 connector |
 | 14 | More modelling by hand: openings, roofs, arrays |
+| 14b | Hold to talk: a long pinch says "this" and listens; rings by role; sketches and markers for the agent; tool names by voice |
 | 15 | Reviewable agent turns: nod to keep, shake to revert |
 | 16-19 | More providers, overlay over Rhino, custom gestures, v0.1 |
 

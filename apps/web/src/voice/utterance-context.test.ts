@@ -83,3 +83,48 @@ describe("UtteranceContext (point and speak)", () => {
     expect(c.ids).toEqual([]);
   });
 });
+
+describe("a holding hand's points", () => {
+  it("Copy this there: a point rested on for 300 ms while speaking is captured once, with the locked target", () => {
+    const context = new UtteranceContext();
+    const column = { kind: "element" as const, id: "col-a", type: "column", name: "Column A" };
+    context.lock(column);
+    context.begin(0, null);
+    context.rest([8000, 4000, 0], 100);
+    context.rest([8100, 4050, 0], 300); // still resting (within 300 mm)
+    context.tick(450);
+    context.rest([8050, 4000, 0], 700); // the same place again: not a second point
+    context.tick(1100);
+    expect(context.points).toEqual([[8000, 4000, 0]]);
+    expect(context.resolve(null, [], null)).toEqual({
+      references: [],
+      selection: [],
+      groundPoint: null,
+      target: column,
+      points: [[8000, 4000, 0]],
+    });
+  });
+
+  it("Passing over is not captured: a hand that keeps moving rests nowhere", () => {
+    const context = new UtteranceContext();
+    context.begin(0, null);
+    for (let t = 0; t < 1000; t += 100) context.rest([t * 10, 0, 0], t);
+    context.end(1000);
+    expect(context.points).toEqual([]);
+  });
+
+  it("points before speech are not captured, and clearing forgets the target and the points", () => {
+    const context = new UtteranceContext();
+    context.lock({ kind: "point", point: [0, 0, 0], aid: null });
+    context.rest([5000, 0, 0], 0);
+    context.tick(500);
+    expect(context.points).toEqual([]);
+    context.begin(600, null);
+    context.rest([5000, 0, 0], 600);
+    context.tick(1000);
+    expect(context.points).toHaveLength(1);
+    context.clear();
+    expect(context.points).toEqual([]);
+    expect(context.target).toBeNull();
+  });
+});

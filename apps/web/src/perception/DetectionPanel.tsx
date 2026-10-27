@@ -116,6 +116,7 @@ export function DetectionPanel({
 }) {
   const snap = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { taps, drags, twoHand } = snap.counts;
+  const holds = snap.holds;
 
   return (
     <section className="detection" aria-label="Detection">
@@ -159,6 +160,16 @@ export function DetectionPanel({
         <div>
           <dt>Taps / drags / two-hand</dt>
           <dd data-testid="detect-pinches">{cameraOn ? `${taps} / ${drags} / ${twoHand}` : "-"}</dd>
+        </div>
+        <div>
+          <dt>Long pinches / spoken</dt>
+          <dd data-testid="detect-holds">{cameraOn ? `${holds.held} / ${holds.spoke}` : "-"}</dd>
+        </div>
+        <div>
+          <dt>Flicks action / reference / cancelled</dt>
+          <dd data-testid="detect-flicks">
+            {cameraOn ? `${holds.action} / ${holds.reference} / ${holds.cancelled}` : "-"}
+          </dd>
         </div>
         <div>
           <dt>Camera to gesture p90</dt>

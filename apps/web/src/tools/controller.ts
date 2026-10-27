@@ -4,8 +4,11 @@ import {
   type DrawingAids,
   type GestureEvent,
   type Hand,
+  type HeldTarget,
   type Point2,
   type Point3Mm,
+  type Ring,
+  ringFor,
   type SceneDocument,
   type SceneOp,
 } from "@hai/protocol";
@@ -20,6 +23,7 @@ import {
 } from "@hai/scene";
 import type { DragMode, RouterTargets } from "./input-router.ts";
 import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from "./palette.ts";
+import { ReferenceLayer } from "./reference-layer.ts";
 import type { ToolRegistry } from "./registry.ts";
 import { EMPTY_OVERLAY, type Hit, type Tool, type ToolContext, type ToolOverlay } from "./types.ts";
 
@@ -37,8 +41,7 @@ export const DEFAULT_TOOL = "select";
  */
 export const SCROLL_SLOP = 0.02;
 
-/** The two rings a long pinch opens: the right hand's tools and the left hand's create tools (by default). */
-export type Ring = "tools" | "create";
+export type { Ring };
 /** Who is pointing: a hand, or the mouse. Each has its own press, scroll and ring; one of them drags a tool. */
 export type PointerSource = Hand | "mouse";
 
@@ -103,8 +106,21 @@ export interface ToolSnapshot {
   activeId: string;
   /** Each ring's tool id per slot, clockwise from the top; null is an empty slot. */
   layouts: Record<Ring, Array<string | null>>;
-  /** Open palette, in viewer coordinates for drawing, with which ring it is and the hand that opened it. */
-  palette: { center: Point2; highlighted: number | null; ring: Ring; hand: Hand | null } | null;
+  /** The hand the user draws with: its silent long pinch shows the action ring, the other hand's the reference ring. */
+  dominantHand: Hand;
+  /**
+   * Open palette, in viewer coordinates for drawing, with which ring it is and the hand that opened it. A held pinch
+   * opens it `hidden`: it steers and chooses as usual, and is shown once the hold is silent or the hand flicks.
+   */
+  palette: {
+    center: Point2;
+    highlighted: number | null;
+    ring: Ring;
+    hand: Hand | null;
+    hidden: boolean;
+  } | null;
+  /** What a held pinch locked ("this"), shown until the hold ends, and the hand that holds it. */
+  held: { target: HeldTarget; hand: Hand } | null;
   overlay: ToolOverlay;
   /** The question waiting for a yes or no, if any. */
   question: string | null;
@@ -118,9 +134,12 @@ export interface ToolSnapshot {
  */
 export class ToolController {
   private readonly palette = new PaletteMachine();
+  /** Sketches and markers: what the user pointed out for the agent, beside the model. */
+  readonly references = new ReferenceLayer();
   private paletteSource: "hand" | "pointer" = "pointer";
-  private paletteRing: Ring = "tools";
+  private paletteRing: Ring = "action";
   private paletteHand: Hand | null = null;
+  private paletteHidden = false;
   private env: ToolEnvironment | null = null;
   /** What moved the pointer in the latest tap, hover or drag start: a hand snaps to models, the mouse does not. */
   private pickSource: PointerSource = "mouse";
@@ -137,6 +156,8 @@ export class ToolController {
   private readonly listeners = new Set<() => void>();
   /** Called when the user changes a ring's layout (to persist it). */
   onLayoutChange: (layout: Array<string | null>, ring: Ring) => void = () => {};
+  /** Called when the user changes the dominant hand (to persist it). */
+  onDominantHandChange: (hand: Hand) => void = () => {};
 
   constructor(
     readonly registry: ToolRegistry,
@@ -144,7 +165,9 @@ export class ToolController {
   ) {
     this.snapshot = {
       activeId: DEFAULT_TOOL,
-      layouts: { tools: normaliseLayout(layouts.tools), create: normaliseLayout(layouts.create) },
+      layouts: { action: normaliseLayout(layouts.action), reference: normaliseLayout(layouts.reference) },
+      dominantHand: "Right",
+      held: null,
       palette: null,
       overlay: EMPTY_OVERLAY,
       question: null,
@@ -190,14 +213,34 @@ export class ToolController {
     tool.activate?.(ctx);
   }
 
-  setLayout(layout: Array<string | null>, ring: Ring = "tools"): void {
+  setLayout(layout: Array<string | null>, ring: Ring = "action"): void {
     this.update({ layouts: { ...this.snapshot.layouts, [ring]: normaliseLayout(layout) } });
     this.onLayoutChange(this.snapshot.layouts[ring], ring);
   }
 
   /** Applies a layout that came from elsewhere (settings loaded from the bridge) without echoing it back. */
-  loadLayout(layout: Array<string | null>, ring: Ring = "tools"): void {
+  loadLayout(layout: Array<string | null>, ring: Ring = "action"): void {
     this.update({ layouts: { ...this.snapshot.layouts, [ring]: normaliseLayout(layout) } });
+  }
+
+  setDominantHand(hand: Hand): void {
+    this.update({ dominantHand: hand });
+    this.onDominantHandChange(hand);
+  }
+
+  /** Applies the dominant hand from the bridge's settings without echoing it back. */
+  loadDominantHand(hand: Hand): void {
+    this.update({ dominantHand: hand });
+  }
+
+  /** A hand position (camera frame, mirrored like the preview) as a viewer position. */
+  viewerOf(position: Point2): Point2 {
+    return this.env?.handToViewer(position) ?? position;
+  }
+
+  /** The ring a silent long pinch of this hand shows. */
+  ringOf(hand: Hand): Ring {
+    return ringFor(hand, this.snapshot.dominantHand);
   }
 
   // Palette
@@ -206,19 +249,81 @@ export class ToolController {
     return this.palette.isOpen;
   }
 
-  /** Opens a ring at a point; a hand that opens it gives up its own drag first. */
+  /** Opens a ring at a point (`hidden` until `showPalette`); a hand that opens it gives up its own drag first. */
   openPalette(
     space: PaletteSpace,
     source: "hand" | "pointer",
-    ring: Ring = "tools",
+    ring: Ring = "action",
     hand: Hand | null = null,
+    hidden = false,
   ): void {
     this.cancelDrag(hand ?? "mouse");
     this.paletteSource = source;
     this.paletteRing = ring;
     this.paletteHand = hand;
+    this.paletteHidden = hidden;
     this.palette.open(space);
     this.publishPalette();
+  }
+
+  /** Shows a ring a held pinch opened hidden. */
+  showPalette(): void {
+    if (!this.palette.isOpen || !this.paletteHidden) return;
+    this.paletteHidden = false;
+    this.publishPalette();
+  }
+
+  // Held pinch
+
+  /**
+   * What a held pinch at a viewer position means by "this": the element there (a hand's pointer snaps to the nearest
+   * model in reach), else the point the drawing aids resolve there, else the ground point. It is shown until
+   * `releaseTarget`. Null when the view points away from the ground and nothing is there.
+   */
+  lockTarget(at: Point2, hand: Hand): HeldTarget | null {
+    const env = this.env;
+    if (!env) return null;
+    const hit = env.pick(at, hand);
+    const element = hit ? env.doc()?.elements[hit.elementId] : undefined;
+    let target: HeldTarget | null = null;
+    if (element) {
+      target = { kind: "element", id: element.id, type: element.type, name: element.name };
+    } else {
+      const resolved = this.resolveSnap(env, at);
+      this.clearSnap();
+      const snapped = resolved && resolved.kind !== null && resolved.kind !== "grid" ? resolved.label : null;
+      const point = snapped && resolved ? resolved.point : env.ground(at);
+      if (point) {
+        const [x, y, z] = point;
+        target = {
+          kind: "point",
+          point: [Math.round(x), Math.round(y), Math.round(z)],
+          aid: snapped ?? null,
+        };
+      }
+    }
+    this.update({ held: target ? { target, hand } : null });
+    return target;
+  }
+
+  releaseTarget(): void {
+    if (this.snapshot.held) this.update({ held: null });
+  }
+
+  /**
+   * The point a hand rests on while it holds and speaks: the drawing aids' point there, in whole millimetres, and the
+   * element under it if there is one. Null when the view points away from the ground.
+   */
+  pointAt(at: Point2, hand: Hand): { point: Point3Mm; elementId: string | null } | null {
+    const env = this.env;
+    if (!env) return null;
+    const hit = env.pick(at, hand);
+    const resolved = this.resolveSnap(env, at);
+    this.clearSnap();
+    const point = resolved?.point ?? env.ground(at);
+    if (!point) return null;
+    const [x, y, z] = point;
+    return { point: [Math.round(x), Math.round(y), Math.round(z)], elementId: hit?.elementId ?? null };
   }
 
   steerPalette(point: Point2): void {
@@ -281,7 +386,11 @@ export class ToolController {
     if (this.palette.isOpen) this.cancelPalette();
     else if (this.answer) this.closeQuestion(false);
     else if (this.toolDragger !== null) this.cancelToolDrag();
-    else this.choose(DEFAULT_TOOL);
+    else {
+      const ctx = this.ctx();
+      if (ctx && this.active?.onCancel?.(ctx)) return;
+      this.choose(DEFAULT_TOOL);
+    }
   }
 
   /** The pointer whose drag the active tool has, if any. */
@@ -413,8 +522,16 @@ export class ToolController {
         get isOpen() {
           return controller.paletteOpen;
         },
-        open: (position, ring, hand) =>
-          this.openPalette({ center: position, aspect: this.env?.handAspect() ?? 4 / 3 }, "hand", ring, hand),
+        open: (position, ring, hand, hidden) =>
+          this.openPalette(
+            { center: position, aspect: this.env?.handAspect() ?? 4 / 3 },
+            "hand",
+            ring,
+            hand,
+            hidden ?? false,
+          ),
+        show: () => this.showPalette(),
+        aspect: () => this.env?.handAspect() ?? 4 / 3,
         steer: (position) => this.steerPalette(position),
         release: () => this.releasePalette(),
         cancel: () => this.cancelPalette(),
@@ -462,6 +579,17 @@ export class ToolController {
         this.update({ question });
       },
       askAgent: () => env.askAgent(),
+      references: this.references,
+      toScreen: (point) => {
+        const project = env.projector?.();
+        const out: [number, number] = [0, 0];
+        return project?.(point, out) ? out : null;
+      },
+      toPixels: ([x, y]) => {
+        const [width, height] = env.screenSize?.() ?? [1, 1];
+        return [x * width, y * height];
+      },
+      hand: () => (this.pickSource === "mouse" ? null : this.pickSource),
     };
   }
 
@@ -558,7 +686,13 @@ export class ToolController {
     const center =
       this.paletteSource === "hand" ? (this.env?.handToViewer(state.center) ?? state.center) : state.center;
     this.update({
-      palette: { center, highlighted: state.highlighted, ring: this.paletteRing, hand: this.paletteHand },
+      palette: {
+        center,
+        highlighted: state.highlighted,
+        ring: this.paletteRing,
+        hand: this.paletteHand,
+        hidden: this.paletteHidden,
+      },
     });
   }
 

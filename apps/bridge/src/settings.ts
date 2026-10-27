@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  DominantHand,
   DrawingAidChoices,
   FeatureChoices,
   type FeatureId,
@@ -9,6 +10,7 @@ import {
   type Message,
   type MessageOf,
   ModellingMode,
+  migrateRingSettings,
   OPEN_DATA_SOURCE_IDS,
   OPEN_DATA_SOURCES,
   PaletteLayout,
@@ -74,9 +76,10 @@ export class SettingsHub {
     /** A feature the user switched on or off (called once per switch). */
     private readonly featureChanged: (feature: FeatureId, on: boolean) => void = () => {},
   ) {
-    const stored = file ? readSettingsFile(file) : {};
+    const stored = file ? SettingsHub.migrated(file) : {};
     const palette = PaletteLayout.safeParse(stored.palette);
     const createPalette = PaletteLayout.safeParse(stored.createPalette);
+    const dominantHand = DominantHand.safeParse(stored.dominantHand);
     const gestures = GestureBindingsSchema.safeParse(stored.gestures);
     const speech = SpeechMode.safeParse(stored.speech);
     const replyVoice = ReplyVoice.safeParse(stored.replyVoice);
@@ -86,6 +89,7 @@ export class SettingsHub {
     this.settings = {
       palette: palette.success ? palette.data : null,
       createPalette: createPalette.success ? createPalette.data : null,
+      dominantHand: dominantHand.success ? dominantHand.data : "Right",
       gestures: gestures.success ? gestures.data : null,
       speech: speech.success ? speech.data : "device",
       listenForNames: stored.listenForNames === true,
@@ -103,6 +107,17 @@ export class SettingsHub {
       openDataAcknowledged: parseList(stored.openDataAcknowledged, (id) => OPEN_DATA_SOURCE_IDS.includes(id)),
       portalHosts: parseList(stored.portalHosts, (host) => PortalHost.safeParse(host).success),
     };
+  }
+
+  /**
+   * The settings file brought up to date (old default rings and long pinch take the new defaults), written back when
+   * that changed anything, so the file says what the app does.
+   */
+  private static migrated(file: string): Record<string, unknown> {
+    const stored = readSettingsFile(file);
+    const migrated = migrateRingSettings(stored);
+    if (JSON.stringify(migrated) !== JSON.stringify(stored)) updateSettingsFile(file, migrated);
+    return migrated;
   }
 
   /**
@@ -151,6 +166,7 @@ export class SettingsHub {
     const {
       palette,
       createPalette,
+      dominantHand,
       gestures,
       speech,
       listenForNames,
@@ -171,6 +187,7 @@ export class SettingsHub {
     const patch: Partial<Settings> = {
       ...(palette ? { palette } : {}),
       ...(createPalette ? { createPalette } : {}),
+      ...(dominantHand ? { dominantHand } : {}),
       ...(gestures ? { gestures } : {}),
       ...(speech ? { speech } : {}),
       ...(listenForNames !== undefined ? { listenForNames } : {}),

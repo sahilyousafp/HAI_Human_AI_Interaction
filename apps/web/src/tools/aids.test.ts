@@ -1,5 +1,7 @@
 import {
+  DEFAULT_ACTION_LAYOUT,
   DEFAULT_DRAWING_AIDS,
+  DEFAULT_REFERENCE_LAYOUT,
   type DrawingAids,
   type Element,
   type Point2,
@@ -7,9 +9,8 @@ import {
   type SceneOp,
 } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LAYOUT, registerBuiltinTools } from "./builtin.ts";
+import { registerBuiltinTools } from "./builtin.ts";
 import { ToolController, type ToolEnvironment } from "./controller.ts";
-import { DEFAULT_CREATE_LAYOUT } from "./create.ts";
 import { ToolRegistry } from "./registry.ts";
 
 // A flat stand-in for the 3D view: viewer x 0..1 spans 0..40 m east, y 0..1 spans 30..0 m north, so one
@@ -60,7 +61,10 @@ function setup(on: Partial<DrawingAids> = {}, extra: Element[] = []) {
   };
   const registry = new ToolRegistry();
   registerBuiltinTools(registry);
-  const controller = new ToolController(registry, { tools: DEFAULT_LAYOUT, create: DEFAULT_CREATE_LAYOUT });
+  const controller = new ToolController(registry, {
+    action: DEFAULT_ACTION_LAYOUT,
+    reference: DEFAULT_REFERENCE_LAYOUT,
+  });
   const applied: Array<{ label: string; ops: SceneOp[] }> = [];
   const aids = { ...DEFAULT_DRAWING_AIDS, ...on };
   const env: ToolEnvironment = {

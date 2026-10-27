@@ -1,10 +1,11 @@
-import type { Point3Mm, SceneDocument } from "@hai/protocol";
+import type { HeldTarget, Point3Mm, SceneDocument } from "@hai/protocol";
 import { elementBounds } from "@hai/scene";
 import { Html, Line } from "@react-three/drei";
-import { useThree } from "@react-three/fiber";
-import { useEffect, useMemo } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { SECTION_PAD_MM } from "../tools/builtin.ts";
+import type { ReferenceSnapshot } from "../tools/reference-layer.ts";
 import { MM } from "./geometry.ts";
 
 const toMetres = (p: Point3Mm): [number, number, number] => [p[0] * MM, p[1] * MM, p[2] * MM];
@@ -156,6 +157,217 @@ export function ReferenceMarkers({ ids, doc }: { ids: string[]; doc: SceneDocume
           </Html>
         );
       })}
+    </group>
+  );
+}
+
+/** The colour of what a hand drew, by hand (the mouse draws in the accent colour). */
+export type HandColors = Record<"Left" | "Right" | "mouse", string>;
+
+function SketchMark({
+  kind,
+  points,
+  label,
+  color,
+  draft,
+}: {
+  kind: "path" | "outline";
+  points: Point3Mm[];
+  label: string | null;
+  color: string;
+  draft?: boolean;
+}) {
+  const metres = points.map(toMetres);
+  const closed = kind === "outline" && metres.length > 2 && !draft;
+  const fill = useMemo(() => {
+    if (!closed) return null;
+    const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x * MM, y * MM)));
+    return new THREE.ShapeGeometry(shape);
+  }, [closed, points]);
+  useEffect(() => () => fill?.dispose(), [fill]);
+  const [first] = points;
+  if (metres.length < 2 || !first) return null;
+  const z = (points.reduce((sum, p) => sum + p[2], 0) / points.length) * MM;
+  return (
+    <group>
+      {fill && (
+        <mesh geometry={fill} position={[0, 0, z + 0.01]}>
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={0.12}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+      <Line
+        points={closed ? [...metres, metres[0] as [number, number, number]] : metres}
+        color={color}
+        lineWidth={2.5}
+        dashed
+        dashSize={0.5}
+        gapSize={0.3}
+        depthTest={false}
+      />
+      {label && (
+        <Html position={toMetres(first)} center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
+          <span
+            className="sketch-label"
+            data-testid="sketch-label"
+            data-kind={kind}
+            style={{ borderColor: color, color }}
+          >
+            {label}
+          </span>
+        </Html>
+      )}
+    </group>
+  );
+}
+
+/**
+ * What the user pointed out for the agent: sketches as dashed lines (outlines lightly filled) in the colour of the hand
+ * that drew them, labelled S1, S2 and so on, the sketch being drawn, and the lettered markers. None of it is the
+ * model, and agents' own pictures leave it out.
+ */
+export function ReferenceMarks({
+  references,
+  colors,
+}: {
+  references: ReferenceSnapshot;
+  colors: HandColors;
+}) {
+  const { sketches, draft, markers } = references;
+  // Markers are often there from the start (kept with the project). drei's Html moves its element to the canvas's event
+  // layer once that connects, unmounting its React root mid-render, which can leave a label empty and stall the frame
+  // loop; so nothing is drawn until the events are connected and the view has drawn its first frame.
+  const connected = useThree((state) => state.events.connected);
+  const [drawn, setDrawn] = useState(false);
+  useFrame(() => {
+    if (!drawn) setDrawn(true);
+  });
+  if (!connected || !drawn) return null;
+  return (
+    <group>
+      {sketches.map((s) => (
+        <SketchMark
+          key={s.label}
+          kind={s.kind}
+          points={s.points}
+          label={s.label}
+          color={colors[s.hand ?? "mouse"]}
+        />
+      ))}
+      {draft && (
+        <SketchMark
+          kind={draft.kind}
+          points={draft.points}
+          label={null}
+          color={colors[draft.hand ?? "mouse"]}
+          draft
+        />
+      )}
+      {markers.map((m) => (
+        <Html
+          key={m.letter}
+          position={toMetres(m.point)}
+          center
+          zIndexRange={[20, 0]}
+          style={{ pointerEvents: "none" }}
+        >
+          <span className="letter-marker" data-testid="letter-marker" data-letter={m.letter}>
+            <span className="letter-marker-letter">{m.letter}</span>
+          </span>
+        </Html>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * What a held pinch locked ("this"): an element's box outlined in the colour of the hand that holds it, or a point
+ * marked with a ring and, when a drawing aid placed it, the aid's name.
+ */
+export function HeldTargetMark({
+  target,
+  doc,
+  color,
+}: {
+  target: HeldTarget;
+  doc: SceneDocument | null;
+  color: string;
+}) {
+  const element = target.kind === "element" ? doc?.elements[target.id] : undefined;
+  const box = useMemo(() => {
+    if (!element) return null;
+    const { min, max } = elementBounds(element, doc?.levels ?? []);
+    const [x0, y0, z0] = toMetres(min);
+    const [x1, y1, z1] = toMetres(max);
+    const ring = (z: number): Array<[number, number, number]> => [
+      [x0, y0, z],
+      [x1, y0, z],
+      [x1, y1, z],
+      [x0, y1, z],
+      [x0, y0, z],
+    ];
+    const posts = [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+    ].map(
+      ([x = 0, y = 0]): Array<[number, number, number]> => [
+        [x, y, z0],
+        [x, y, z1],
+      ],
+    );
+    return [ring(z0), ring(z1), ...posts];
+  }, [element, doc]);
+  if (target.kind === "element") {
+    if (!box) return null;
+    return (
+      <group>
+        {box.map((points) => (
+          <Line
+            key={points.flat().join(",")}
+            points={points}
+            color={color}
+            lineWidth={2.5}
+            depthTest={false}
+          />
+        ))}
+      </group>
+    );
+  }
+  return (
+    <group position={toMetres(target.point)}>
+      <Html center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
+        <span className="held-target" data-testid="held-target" style={{ borderColor: color }}>
+          {target.aid && <span className="held-target-label">{target.aid}</span>}
+        </span>
+      </Html>
+    </group>
+  );
+}
+
+/** The points a holding hand rested on while speaking, labelled P1, P2 and so on until the request goes. */
+export function HeldPoints({ points }: { points: Point3Mm[] }) {
+  return (
+    <group>
+      {points.map((point, i) => (
+        <Html
+          key={point.join(",")}
+          position={toMetres(point)}
+          center
+          zIndexRange={[20, 0]}
+          style={{ pointerEvents: "none" }}
+        >
+          <span className="held-point" data-testid="held-point">
+            P{i + 1}
+          </span>
+        </Html>
+      ))}
     </group>
   );
 }

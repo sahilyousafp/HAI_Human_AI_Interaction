@@ -295,6 +295,25 @@ describe("the team with the fake Claude Code CLI", () => {
     await vi.waitFor(() => expect(task(team, "architect").status).toBe("stopped"), { timeout: 3000 });
   });
 
+  it("Shake stops a sent request: stopping one request stops its turn and its tasks, and leaves other work alone", async () => {
+    const { team, viewer } = await start();
+    // Earlier work that must keep running.
+    await team.request("delegate climate: work 8000");
+    await vi.waitFor(() => expect(task(team, "climate").status).toBe("running"));
+    viewer.send("agent.send", { text: "delegate architect: work 8000" }, "held-1");
+    await vi.waitFor(() => expect(task(team, "architect").status).toBe("running"));
+    viewer.send("agent.stopRequest", { requestId: "held-1" });
+    await vi.waitFor(() => expect(task(team, "architect").status).toBe("stopped"), { timeout: 3000 });
+    expect(task(team, "climate").status).toBe("running");
+    viewer.send("agent.send", { text: "slow" }, "held-2");
+    await vi.waitFor(() => expect(team.hub("mochi").runningTurn).not.toBeNull());
+    viewer.send("agent.stopRequest", { requestId: "held-2" });
+    await vi.waitFor(() => expect(team.hub("mochi").runningTurn).toBeNull(), { timeout: 3000 });
+    expect(task(team, "climate").status).toBe("running");
+    viewer.send("agent.stop", {});
+    await team.settled();
+  });
+
   it("stop everything: running and queued tasks stop, and no report follows", async () => {
     const { team, viewer } = await start();
     await team.request("delegate architect: work 8000 | product: work 100");

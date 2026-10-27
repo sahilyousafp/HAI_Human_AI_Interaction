@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 import { type AnswerTargets, answerYesNo } from "./answer.ts";
 
 /** The things that may wait for a yes or no, each recording what it was asked. */
-function setup(waiting: { transcript?: boolean; approvals?: number; offers?: number }) {
+function setup(waiting: { sent?: boolean; transcript?: boolean; approvals?: number; offers?: number }) {
   const log: string[] = [];
   const targets: AnswerTargets = {
     voice: {
       reviewing: waiting.transcript ?? false,
       confirm: () => log.push("transcript sent"),
       discard: () => log.push("transcript discarded"),
+      stopSent: () => {
+        if (waiting.sent) log.push("held request stopped");
+        return waiting.sent ?? false;
+      },
     },
     approvals: {
       waiting: waiting.approvals ?? 0,
@@ -30,6 +34,15 @@ function setup(waiting: { transcript?: boolean; approvals?: number; offers?: num
 }
 
 describe("answerYesNo", () => {
+  it("a shake right after a held request was sent stops it before anything else, and a nod leaves it", () => {
+    const shake = setup({ sent: true, approvals: 1, offers: 1 });
+    expect(answerYesNo(false, shake.targets)).toBe(true);
+    expect(shake.log).toEqual(["held request stopped"]);
+    const nod = setup({ sent: true, approvals: 1 });
+    expect(answerYesNo(true, nod.targets)).toBe(true);
+    expect(nod.log).toEqual(["approval allowed"]);
+  });
+
   it("a nod opens the panel when only the offer waits, and a shake skips it", () => {
     const nod = setup({ offers: 1 });
     expect(answerYesNo(true, nod.targets)).toBe(true);

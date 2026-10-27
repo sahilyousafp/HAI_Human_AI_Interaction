@@ -69,14 +69,24 @@ export function VoiceBar({ voice, nameOf }: { voice: VoiceInput; nameOf: (id: st
     return () => window.removeEventListener("keydown", key, { capture: true });
   }, [state.phase, voice]);
 
+  // A held pinch's request shows beside the hand, and its state ends on its own.
+  // A microphone error is shown here in full even for a held pinch: it says how to fix it.
+  const held = "held" in state && state.held && state.phase !== "error" ? state.held : null;
   useEffect(() => {
-    if (state.phase !== "discarded" && state.phase !== "sent") return;
+    if (held || (state.phase !== "discarded" && state.phase !== "sent" && state.phase !== "picked")) return;
     const id = setTimeout(() => voice.dismiss(), state.phase === "sent" ? 0 : DISCARDED_MS);
     return () => clearTimeout(id);
-  }, [state.phase, voice]);
+  }, [state.phase, held, voice]);
 
-  // Listening for names shows only in the header: speech without a name is never shown anywhere.
-  if (state.phase === "off" || state.phase === "sent" || (state.phase === "names" && !state.heard))
+  // Listening for names shows only in the header: speech without a name is never shown anywhere. A held pinch's
+  // request shows beside the hand instead.
+  if (
+    state.phase === "off" ||
+    state.phase === "sent" ||
+    state.phase === "stopped" ||
+    (state.phase === "names" && !state.heard) ||
+    held
+  )
     return null;
   const refs = references.length > 0 && (
     <ol className="voice-refs" data-testid="voice-refs" aria-label="What this refers to">
@@ -147,6 +157,11 @@ export function VoiceBar({ voice, nameOf }: { voice: VoiceInput; nameOf: (id: st
             </span>
           </div>
         </>
+      )}
+      {state.phase === "picked" && (
+        <p className="voice-status" data-testid="voice-picked">
+          <strong>{state.tool}</strong> picked. Nothing was sent to the agent.
+        </p>
       )}
       {state.phase === "discarded" && (
         <p className="voice-status voice-discarded" data-testid="voice-discarded">

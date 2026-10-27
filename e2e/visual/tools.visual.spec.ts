@@ -3,6 +3,19 @@ import type { Bridge } from "../../apps/bridge/src/server.ts";
 import { handAt, openViewer, startTestBridge } from "../viewer.ts";
 
 let bridge: Bridge | null = null;
+// A microphone that hears silence, for every page here: a long pinch listens, and a microphone error midway would
+// change what is shown. No camera starts, so nothing else in view changes.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      if (constraints?.video) throw new DOMException("No camera here", "NotFoundError");
+      const context = new AudioContext();
+      const silence = context.createMediaStreamDestination();
+      context.createConstantSource().connect(silence);
+      return silence.stream;
+    };
+  });
+});
 test.afterEach(async () => {
   await bridge?.stop();
   bridge = null;
@@ -26,7 +39,7 @@ async function settled(page: Page) {
 }
 
 for (const scheme of ["light", "dark"] as const) {
-  test(`open palette (${scheme})`, async ({ page }) => {
+  test(`the action ring (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     bridge = await startTestBridge(page);
     await openViewer(page);
@@ -38,13 +51,13 @@ for (const scheme of ["light", "dark"] as const) {
     await page.mouse.move(box.x + box.width * 0.45 + 80, box.y + box.height * 0.5 + 2, { steps: 3 });
     const palette = page.getByTestId("tool-palette");
     await expect(page.getByTestId("palette-slot-2")).toHaveAttribute("data-highlighted", "true");
-    await expect(palette).toHaveScreenshot(`palette-${scheme}.png`);
+    await expect(palette).toHaveScreenshot(`action-ring-${scheme}.png`);
     await page.keyboard.up(" ");
   });
 }
 
 for (const scheme of ["light", "dark"] as const) {
-  test(`the left hand's create ring (${scheme})`, async ({ page }) => {
+  test(`the left hand's reference ring (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     bridge = await startTestBridge(page);
     await openViewer(page);
@@ -59,10 +72,10 @@ for (const scheme of ["light", "dark"] as const) {
       );
     await send("pinch.drag.start", centre);
     await send("pinch.hold", centre);
-    await send("pinch.drag.update", [centre[0] + 0.08, centre[1]]); // toward Column, on the right
+    await send("pinch.drag.update", [centre[0] + 0.08, centre[1]]); // toward Place marker, on the right
     const ring = page.getByTestId("tool-palette");
     await expect(page.getByTestId("palette-slot-2")).toHaveAttribute("data-highlighted", "true");
-    await expect(ring).toHaveScreenshot(`create-ring-${scheme}.png`);
+    await expect(ring).toHaveScreenshot(`reference-ring-${scheme}.png`);
   });
 }
 
@@ -129,3 +142,110 @@ test("reference markers: two elements captured while speaking show markers 1 and
   await settled(page);
   await expect(page.getByTestId("viewer")).toHaveScreenshot("reference-markers.png");
 });
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`sketches and lettered markers (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    bridge = await startTestBridge(page);
+    await openViewer(page);
+    await settled(page);
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+    // An outline by the left hand and a path by the right, on open ground in front of the model, and two markers.
+    const ground = async (x: number, y: number) => {
+      const v = await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.project([x, y, 0]), [x, y] as const);
+      if (!v) throw new Error("not on screen");
+      return page.evaluate(([vx, vy]) => window.__HAI_VIEWER__?.handAt(vx, vy), v);
+    };
+    const gesture = async (hand: "Left" | "Right", type: string, x: number, y: number) =>
+      page.evaluate(
+        (e) =>
+          window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], ts: performance.now(), ...e }]),
+        { type, hand, position: await ground(x, y) },
+      );
+    await page.keyboard.press("e");
+    const outline: Array<[number, number]> = [
+      [-4000, -4000],
+      [4000, -4000],
+      [4000, -10_000],
+      [-4000, -10_000],
+      [-4000, -5000],
+    ];
+    for (const [n, [x, y]] of outline.entries()) {
+      const type =
+        n === 0 ? "pinch.drag.start" : n === outline.length - 1 ? "pinch.drag.end" : "pinch.drag.update";
+      if (type === "pinch.drag.end") await gesture("Left", "pinch.drag.update", x, y);
+      await gesture("Left", type, x, y);
+    }
+    await page.keyboard.press("l");
+    await gesture("Right", "pinch.drag.start", 8000, -4000);
+    await gesture("Right", "pinch.drag.update", 14_000, -4000);
+    await gesture("Right", "pinch.drag.update", 14_000, -9000);
+    await gesture("Right", "pinch.drag.end", 14_000, -9000);
+    await page.keyboard.press("k");
+    await gesture("Right", "pinch.tap", 0, -7000);
+    await gesture("Right", "pinch.tap", 11_000, -7000);
+    await page.keyboard.press("v");
+    await expect(page.getByTestId("letter-marker")).toHaveCount(2);
+    await expect(page.getByTestId("sketch-label")).toHaveCount(2);
+    await settled(page);
+    await expect(page.getByTestId("viewer")).toHaveScreenshot(`sketches-and-markers-${scheme}.png`);
+  });
+}
+
+for (const scheme of ["light", "dark"] as const) {
+  for (const width of [1280, 1920]) {
+    test(`hold to talk: the progress ring, then the silent hold's ring with the chip under it (${scheme}, ${width})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: width === 1280 ? 720 : 1080 });
+      await page.emulateMedia({ colorScheme: scheme });
+      bridge = await startTestBridge(page);
+      await openViewer(page);
+      await settled(page);
+      await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+      const hand = await handAt(page, [0.62, 0.42]);
+      const area = async () => {
+        const box = await page.getByTestId("viewer").boundingBox();
+        if (!box) throw new Error("viewer not laid out");
+        const [x, y] = [box.x + box.width * 0.62, box.y + box.height * 0.42];
+        return { x: x - 60, y: y - 60, width: 360, height: 120 };
+      };
+      // Fingers closing and the hand still: frames until the ring shows, so it is caught part-filled however slow
+      // the machine is (how far it filled varies a little, so this shot allows a larger difference).
+      const closing = () =>
+        page.evaluate(
+          (p) => window.__HAI_INPUT__?.pointer(p as [number, number], null, { Right: true }),
+          hand,
+        );
+      const progress = page.getByTestId("hold-progress-right");
+      for (let i = 0; i < 40 && !(await progress.isVisible()); i++) {
+        await closing();
+        await page.waitForTimeout(60);
+      }
+      await expect(page.getByTestId("hold-progress-right")).toBeVisible();
+      await expect(page).toHaveScreenshot(`hold-progress-${scheme}-${width}.png`, {
+        clip: await area(),
+        maxDiffPixelRatio: 0.06,
+      });
+      // The long pinch fires: the microphone glyph in the pointer, and the chip beside it.
+      const send = (type: string) =>
+        page.evaluate(
+          (e) =>
+            window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], hand: "Right", ...e } as never]),
+          { type, position: hand, ts: performance.now() },
+        );
+      await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p as [number, number]), hand);
+      await send("pinch.drag.start");
+      await send("pinch.hold");
+      // Silent: after 0.6 s the action ring shows around the hand, and the chip moves under it.
+      await expect(page.getByTestId("held-chip")).toHaveText("Listening. Speak now.", { timeout: 15_000 });
+      await expect(page.getByTestId("tool-palette")).toBeVisible();
+      await expect(page.getByTestId("held-chip")).toHaveAttribute("data-ring", "true");
+      const ring = await area();
+      await expect(page).toHaveScreenshot(`held-chip-${scheme}-${width}.png`, {
+        clip: { x: ring.x - 90, y: ring.y - 90, width: 330, height: 330 },
+      });
+      await send("pinch.drag.end");
+    });
+  }
+}

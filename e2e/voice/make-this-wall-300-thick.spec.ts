@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { fakeProvider } from "../../apps/bridge/test/fake-provider.ts";
+import { holdAt, releaseAt } from "../hands.ts";
 import { watchOutgoingData } from "../privacy.ts";
 import { closeSettings, openSettings } from "../settings.ts";
 import { findElementOnScreen, handAt, openViewer, startTestBridge } from "../viewer.ts";
@@ -103,6 +104,39 @@ test('"make this 300 thick" while pointing: the wall gets marker 1 and is the fi
     await page.keyboard.press("Enter");
     await expect.poll(() => received().at(-1) ?? "").toMatch(/^\[context\] references: 1\) wall wall-s "/);
     await expect(marker).toHaveCount(0); // markers clear once the request is sent
+  } finally {
+    await bridge.stop();
+  }
+});
+
+test("Held request is sent on release, and Shake stops a sent request: the stop goes to the bridge for that request", async ({
+  page,
+}) => {
+  const { bridge, received } = await start(page);
+  try {
+    const stops: string[] = [];
+    page.on("websocket", (ws) =>
+      ws.on("framesent", (frame) => {
+        if (typeof frame.payload === "string" && frame.payload.includes('"agent.stopRequest"'))
+          stops.push(frame.payload);
+      }),
+    );
+    await page.reload();
+    await openViewer(page);
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+    const at = await findElementOnScreen(page, "block-c");
+    await holdAt(page, at);
+    await expect(page.getByTestId("held-chip")).toContainText("Point at what you mean", { timeout: 60_000 });
+    await page.waitForTimeout(3000); // the rest of the sentence and the pause after it
+    await releaseAt(page, at);
+    await expect(page.getByTestId("held-chip")).toContainText("Sent - shake to stop", { timeout: 30_000 });
+    await expect(page.getByTestId("voice-transcript")).toHaveCount(0); // no countdown
+    await expect
+      .poll(() => received().find((t) => /thick/i.test(t)) ?? "")
+      .toMatch(/target \("this"\): massing block-c/);
+    await inject(page, "head.shake");
+    await expect(page.getByTestId("held-chip")).toHaveText("Stopped");
+    await expect.poll(() => stops.length).toBe(1);
   } finally {
     await bridge.stop();
   }

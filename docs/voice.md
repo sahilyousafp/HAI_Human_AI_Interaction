@@ -4,7 +4,8 @@ Speaking is the main way to ask the agent. Say what you want while you point at 
 
 ## Asking
 
-- **Press the microphone button** in the agent panel, or **hold the `` ` `` key** (the key left of 1; releasing it ends what you are saying). **Ask agent** in the tool palette starts listening too.
+- **Hold a pinch on what you mean** (hold to talk): the microphone listens while you hold, about what was under your hand, and what you said is sent the moment you let go, with no countdown. See [gestures.md](gestures.md#hold-to-talk).
+- **Press the microphone button** in the agent panel, or **hold the `` ` `` key** (the key left of 1; releasing it ends what you are saying). **Ask agent** (its A key) starts listening too.
 - Speak. The microphone indicator in the header shows **Mic on** while the microphone is live, and the bar above the input shows a level meter while you speak.
 - Start with a name to choose who does it: "Architect, add a stair core here". The name is taken out and Mochi hands the request to Architect ([agents.md](agents.md)).
 - Stop talking: after a short silence the request ends, the microphone stops, and the transcript appears.
@@ -19,6 +20,17 @@ Nod and shake here are the gestures bound to "Yes" and "No" in the Gestures sett
 
 **Listen for names** in the Voice settings keeps the microphone open so a request can start with just a name: "Mochi, what is everyone doing?" or "Hey Mochi, status?" It is off until you turn it on, and the header then shows **Listening for names**. Only transcripts that start with a team name go to review; everything else is dropped at once, in memory. If you say only the name ("Hey Mochi") and then pause, the microphone stays open for 5 seconds for the rest of the request, and the bar says so; the name and the request are one request. Say nothing more and the name alone goes to review. See [agents.md](agents.md#listen-for-names).
 
+## Tool names
+
+Say just a tool's name and that tool is picked at once, without the agent and without a countdown: "measure", "wall", "area", "undo". The bar says which tool was picked, and nothing is sent. A sentence that only starts with a tool's name ("measure the distance between these towers") is a request and goes to the agent as usual.
+
+- Every tool has one or more spoken names; the first is the word under its icon in the tool rings, so the rings show what to say. The full list is in [tools.md](tools.md#tools).
+- Case, punctuation and the words "use", "the" and "tool" around the name do not matter: "Use the wall tool" picks Wall.
+- A name of five letters or more may be one letter off ("measur" is Measure); shorter names must be exact.
+- Some names include how the on-device speech model hears them, measured: "undue" picks Undo, "scatch area" picks Sketch area.
+
+A tool from a plugin or the Rhino connector declares its own spoken names when it registers (`spoken: ["bake"]`, see [tools.md](tools.md#adding-a-tool)); without them its label is what you say. Nothing in voice input needs to change for it.
+
 ## Point and speak
 
 Select what you mean, then speak: the current selection is what "this" and "these" refer to. While you speak, every element you tap into the selection is captured too, in order, and shows a numbered marker in the model (1, 2, ...) until the request is sent or discarded, so you see what it will mean before it goes. A hand pointer snaps to the nearest model when you pinch close to it ([gestures.md](gestures.md)), so selecting does not take a pixel-exact pinch.
@@ -27,13 +39,13 @@ To have the hand pointer pick things out for you instead, turn on **Number what 
 
 - Every element the hand pointer rests on for 300 ms or more is captured, in order, and numbered. Passing over something briefly does not count.
 
-The agent receives the transcript with a short context block: the captured elements in order (type, id and name), the selection, and the point on the ground under your hand when you stopped speaking (millimetres). It can still read the full context with `get_user_context`.
+The agent receives the transcript with a short context block: the captured elements in order (type, id and name), the selection, and the point on the ground under your hand when you stopped speaking (millimetres). A held pinch adds what it locked ("this": an element, or a point with the drawing aid that placed it) and the points P1, P2 your hand rested on while you spoke. Every request, typed or spoken, also carries the sketches you drew (S1, S2, paths and outlines in millimetres, cleared once sent) and the project's lettered markers (A, B), so "a wall along S1" or "the entrance at marker B" need no more words. The agent can read the same with `get_user_context`. See [tools.md](tools.md#tools) for Sketch line, Sketch area and Place marker.
 
 ## Privacy
 
 - **On this laptop is the default.** Speech is turned into text on your machine by Moonshine (base, ONNX, MIT licence) running in a Web Worker on WebAssembly. Voice activity detection is Silero VAD (via vad-web) in an AudioWorklet.
 - **Audio never leaves the machine and is never stored.** The utterance is kept in memory only until its transcript exists, then dropped. Nothing goes to disk, the bridge or the network. An automated test plays a recorded phrase as the microphone and fails if any request or bridge message carries audio, and a negative control proves the check catches an injected audio upload.
-- **The microphone is off until you ask.** The page requests no microphone on load. It opens when you press the button, hold the key or choose Ask agent, and closes as soon as the utterance ends. Only **Listen for names** keeps it open, and only while you have it on.
+- **The microphone is off until you ask.** The page requests no microphone on load. It opens when you press the button, hold the key, hold a pinch or choose Ask agent, and closes as soon as the utterance ends (for a held pinch, as soon as you let go). Only **Listen for names** keeps it open, and only while you have it on.
 - **The model files are local.** `pnpm assets` downloads them once from a pinned revision, checks each against its SHA-256, and the app serves them itself. Nothing is fetched from a model hub or CDN while you use the app.
 - **Cloud speech is opt-in.** The Voice settings offer the browser's own speech service instead. Your browser then sends what you say to its vendor (Google for Chrome, Microsoft for Edge) to turn it into text. The setting says so, and it is off unless you choose it.
 

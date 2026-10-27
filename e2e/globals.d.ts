@@ -78,7 +78,14 @@ interface Window {
       question: string | null;
     };
     registry: {
-      register(tool: { id: string; label: string; icon: string; shortcut: string }): void;
+      register(tool: { id: string; label: string; icon: string; shortcut: string; spoken?: string[] }): void;
+    };
+    references: {
+      getSnapshot(): {
+        sketches: Array<{ label: string; kind: "path" | "outline"; points: number[][]; hand: string | null }>;
+        draft: { kind: string; points: number[][] } | null;
+        markers: Array<{ letter: string; point: number[] }>;
+      };
     };
   };
   __HAI_TRACKING__?: { frames: unknown[] };
