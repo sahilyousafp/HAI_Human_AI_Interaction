@@ -311,6 +311,12 @@ export function App() {
       ),
     [],
   );
+  // A long pinch goes by role (the dominant hand's ring, the other hand's talk), so the defaults follow that setting.
+  useEffect(() => {
+    const follow = () => gestureSettings.setDominant(tools.getSnapshot().dominantHand);
+    follow();
+    return tools.subscribe(follow);
+  }, [tools, gestureSettings]);
   // Voice is the main way to ask the agent: transcribed on this laptop unless the user opts into cloud speech.
   const [speech, setSpeech] = useState<SpeechMode>("device");
   const speechRef = useRef(speech);

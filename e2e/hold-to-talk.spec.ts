@@ -273,19 +273,19 @@ test.describe("hold to talk", () => {
     await start(page);
     await engage(page);
     const at = await findElementOnScreen(page, "block-c");
-    await pointAt(page, at);
-    await holdAt(page, at);
+    await pointAt(page, at, "Left");
+    await holdAt(page, at, "Left");
     await expect(mic(page)).toHaveAttribute("data-state", "on");
     expect((await toolSnapshot(page)).held).toMatchObject({
       target: { kind: "element", id: "block-c" },
-      hand: "Right",
+      hand: "Left",
     });
     await expect(page.getByTestId("held-chip")).toBeVisible();
-    await expect(page.getByTestId("held-chip")).toHaveAttribute("data-hand", "right");
-    await expect(page.getByTestId("hand-pointer-right")).toHaveAttribute("data-mode", "talk");
+    await expect(page.getByTestId("held-chip")).toHaveAttribute("data-hand", "left");
+    await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-mode", "talk");
     // The agent panel stays as it was: a held request shows beside the hand, not in the voice bar.
     await expect(page.getByTestId("voice-bar")).toHaveCount(0);
-    await releaseAt(page, at);
+    await releaseAt(page, at, "Left");
     await expect(mic(page)).toHaveAttribute("data-state", "off");
     expect((await toolSnapshot(page)).held).toBeNull();
     await expect(page.getByTestId("held-chip")).toHaveCount(0);
@@ -297,11 +297,11 @@ test.describe("hold to talk", () => {
     await engage(page);
     const [x, y] = await openGround(page, 2000, 2000, { empty: true });
     const at = (await viewerOf(page, [x + 1000, y + 1000])) as Point;
-    await holdAt(page, at);
+    await holdAt(page, at, "Left");
     const { held } = await toolSnapshot(page);
     expect(held?.target).toMatchObject({ kind: "point", aid: null });
     await expect(page.getByTestId("held-target")).toBeVisible();
-    await releaseAt(page, at);
+    await releaseAt(page, at, "Left");
     await expect(page.getByTestId("held-target")).toHaveCount(0);
   });
 
@@ -340,26 +340,30 @@ test.describe("hold to talk", () => {
     await expect.poll(() => bridge?.scene.scene.doc.elements["wall-hold"]).toBeDefined();
     const beside = (await viewerOf(page, [wall.end[0] + 250, wall.end[1]])) as Point;
     expect(await page.evaluate(([vx, vy]) => window.__HAI_VIEWER__?.pick(vx, vy), beside)).toBeNull();
-    await holdAt(page, beside);
+    await holdAt(page, beside, "Left");
     const { held } = await toolSnapshot(page);
     expect(held?.target).toEqual({ kind: "point", point: [wall.end[0], wall.end[1], 0], aid: "Endpoint" });
     await expect(page.getByTestId("held-target")).toContainText("Endpoint");
-    await releaseAt(page, beside);
+    await releaseAt(page, beside, "Left");
   });
 
-  test("Palette opens: a silent hold shows the action ring after 600 ms, and a release in the centre cancels", async ({
+  test("Palette opens: a silent hold of the talking hand shows its reference ring after 600 ms, and a release in the centre cancels", async ({
     page,
   }) => {
     await start(page);
     await engage(page);
     const [x, y] = await openGround(page, 2000, 2000);
     const at = (await viewerOf(page, [x + 1000, y + 1000])) as Point;
-    await holdAt(page, at);
-    expect((await toolSnapshot(page)).palette).toMatchObject({ ring: "action", hand: "Right", hidden: true });
+    await holdAt(page, at, "Left");
+    expect((await toolSnapshot(page)).palette).toMatchObject({
+      ring: "reference",
+      hand: "Left",
+      hidden: true,
+    });
     await expect(page.getByTestId("tool-palette")).toHaveCount(0);
     await expect(page.getByTestId("tool-palette")).toBeVisible();
-    await expect(page.getByTestId("tool-palette")).toHaveAttribute("data-ring", "action");
-    await releaseAt(page, at);
+    await expect(page.getByTestId("tool-palette")).toHaveAttribute("data-ring", "reference");
+    await releaseAt(page, at, "Left");
     await expect(page.getByTestId("tool-palette")).toHaveCount(0);
     await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "select");
     await expect(mic(page)).toHaveAttribute("data-state", "off");
@@ -394,21 +398,39 @@ test.describe("hold to talk", () => {
     await releaseAt(page, at, "Left");
   });
 
-  test("A binding opens a ring at once: with the long pinch set to the action ring, no microphone", async ({
+  test("The dominant hand opens its ring at once: the right hand's long pinch shows the action ring, no microphone", async ({
+    page,
+  }) => {
+    await start(page);
+    await engage(page);
+    const [x, y] = await openGround(page, 2000, 2000);
+    const at = (await viewerOf(page, [x + 1000, y + 1000])) as Point;
+    await pointAt(page, at);
+    await holdAt(page, at);
+    await expect(page.getByTestId("tool-palette")).toBeVisible();
+    await expect(page.getByTestId("tool-palette")).toHaveAttribute("data-ring", "action");
+    expect((await toolSnapshot(page)).palette?.hidden).toBe(false);
+    await page.waitForTimeout(500);
+    await expect(mic(page)).toHaveAttribute("data-state", "off");
+    await expect(page.getByTestId("hand-pointer-right")).not.toHaveAttribute("data-mode", "talk");
+    await releaseAt(page, at);
+  });
+
+  test("A binding opens a ring at once: with the left hand's long pinch set to the action ring, no microphone", async ({
     page,
   }) => {
     await start(page);
     await openSettings(page, "gestures");
-    await page.getByTestId("gesture-hold-right").selectOption("action-ring");
+    await page.getByTestId("gesture-hold-left").selectOption("action-ring");
     await closeSettings(page);
     await engage(page);
     const [x, y] = await openGround(page, 2000, 2000);
     const at = (await viewerOf(page, [x + 1000, y + 1000])) as Point;
-    await holdAt(page, at);
+    await holdAt(page, at, "Left");
     await expect(page.getByTestId("tool-palette")).toBeVisible();
     expect((await toolSnapshot(page)).palette?.hidden).toBe(false);
     await expect(mic(page)).toHaveAttribute("data-state", "off");
-    await releaseAt(page, at);
+    await releaseAt(page, at, "Left");
   });
 
   test("Hold on a control presses it: a long pinch on Undo undoes, and the microphone stays off", async ({
@@ -427,12 +449,9 @@ test.describe("hold to talk", () => {
       (box.x + box.width / 2 - viewer.x) / viewer.width,
       (box.y + box.height / 2 - viewer.y) / viewer.height,
     ];
-    await page.evaluate(
-      async (p) => window.__HAI_INPUT__?.pointer(p as [number, number]),
-      await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.handAt(x, y), at),
-    );
-    await holdAt(page, at);
-    await releaseAt(page, at);
+    await pointAt(page, at, "Left");
+    await holdAt(page, at, "Left");
+    await releaseAt(page, at, "Left");
     await expect.poll(() => bridge?.scene.scene.doc.elements["block-c"]?.name).toBe("Block C pavilion");
     await expect(mic(page)).toHaveAttribute("data-state", "off");
   });
@@ -472,8 +491,8 @@ test.describe("hold to talk", () => {
     page.on("websocket", (ws) => hosts.add(new URL(ws.url()).hostname));
     const [x, y] = await openGround(page, 2000, 2000);
     const at = (await viewerOf(page, [x + 1000, y + 1000])) as Point;
-    await holdAt(page, at);
-    await releaseAt(page, at);
+    await holdAt(page, at, "Left");
+    await releaseAt(page, at, "Left");
     await holdAt(page, at, "Left");
     await releaseAt(page, [at[0], at[1] - 0.15], "Left");
     const counts = await page.evaluate(
@@ -502,7 +521,7 @@ test.describe("listening while held", () => {
     const [x, y] = await openGround(page, 2000, 2000);
     const at = (await viewerOf(page, [x + 1000, y + 1000])) as Point;
     const position = await page.evaluate(([vx, vy]) => window.__HAI_VIEWER__?.handAt(vx, vy), at);
-    await page.evaluate((p) => window.__HAI_INPUT__?.pointer(p as Point), position);
+    await page.evaluate((p) => window.__HAI_INPUT__?.pointer(null, p as Point), position);
     // Times measured in the page: when the hold fired, when the chip said it listens, when the mic went off.
     await page.evaluate(() => {
       const marks: Record<string, number> = {};
@@ -516,16 +535,16 @@ test.describe("listening while held", () => {
       }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
     });
     // A first hold opens the microphone and builds the audio graph once; the one measured is the next.
-    await holdAt(page, at);
+    await holdAt(page, at, "Left");
     await expect(page.getByTestId("held-chip")).toContainText("Listening");
-    await releaseAt(page, at);
+    await releaseAt(page, at, "Left");
     await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "off");
     // Hold again, marking the moment the hold fires in the same step that sends it.
     const fired = await page.evaluate((p) => {
       const marks = (window as unknown as { __HOLD__: Record<string, number> }).__HOLD__;
       for (const key of Object.keys(marks)) delete marks[key];
       const now = performance.now();
-      const at = { hand: "Right", position: p, delta: [0, 0], confidence: 1, ts: now };
+      const at = { hand: "Left", position: p, delta: [0, 0], confidence: 1, ts: now };
       window.__HAI_INPUT__?.gestures([
         { type: "pinch.drag.start", ...at },
         { type: "pinch.hold", ...at },
@@ -539,7 +558,7 @@ test.describe("listening while held", () => {
       window.__HAI_INPUT__?.gestures([
         {
           type: "pinch.drag.end",
-          hand: "Right",
+          hand: "Left",
           position: p,
           delta: [0, 0],
           confidence: 1,

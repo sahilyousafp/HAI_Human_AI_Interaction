@@ -43,13 +43,17 @@ export const ACTION_LABELS: Record<GestureAction, string> = {
   none: "Nothing",
 };
 
+/** What a one-hand gesture does by role: for the dominant hand and for the other hand. */
+type RoleDefaults = { dominant: GestureAction; other: GestureAction };
+
 /** One-shot actions any discrete gesture can run. */
 const COMMANDS: GestureAction[] = ["undo", "redo", "cancel", "ask-agent", "stop-agent", "none"];
 
 /**
  * The hand and head gestures the app recognises that can be given an action, in the order the settings show them,
  * with what each does out of the box. One-hand gestures (`perHand`) are set for each hand on its own; `default` is
- * the same for both unless `defaults` says otherwise. Engaging (an open palm) is fixed and not listed.
+ * the same for both unless `roles` gives the dominant hand and the other hand their own (the Dominant hand setting
+ * decides which hand is which). Engaging (an open palm) is fixed and not listed.
  */
 export const GESTURE_SLOTS = {
   tap: {
@@ -64,8 +68,9 @@ export const GESTURE_SLOTS = {
     how: "Pinch and keep still for a moment",
     perHand: true,
     actions: ["talk", "action-ring", "reference-ring", "select", ...COMMANDS],
-    // Both hands talk; a silent hold shows the action ring for the dominant hand and the reference ring for the other.
+    // The dominant hand opens its action ring at once; the other hand talks, and held silent shows the reference ring.
     default: "talk",
+    roles: { dominant: "action-ring", other: "talk" },
   },
   drag: {
     label: "Pinch drag",
@@ -124,7 +129,7 @@ export const GESTURE_SLOTS = {
     perHand: boolean;
     actions: GestureAction[];
     default: GestureAction;
-    defaults?: Record<Hand, GestureAction>;
+    roles?: RoleDefaults;
   }
 >;
 
@@ -155,16 +160,26 @@ function slotOf(key: BindingKey): GestureSlot {
   return key.split(".")[0] as GestureSlot;
 }
 
-function defaultFor(key: BindingKey): GestureAction {
-  const slot: { default: GestureAction; defaults?: Record<Hand, GestureAction> } = GESTURE_SLOTS[slotOf(key)];
-  if (key.endsWith(".left")) return slot.defaults?.Left ?? slot.default;
-  if (key.endsWith(".right")) return slot.defaults?.Right ?? slot.default;
-  return slot.default;
+function handOf(key: BindingKey): Hand | null {
+  if (key.endsWith(".left")) return "Left";
+  if (key.endsWith(".right")) return "Right";
+  return null;
 }
 
-export const DEFAULT_BINDINGS = Object.fromEntries(
-  BINDING_KEYS.map((key) => [key, defaultFor(key)]),
-) as GestureBindings;
+function defaultFor(key: BindingKey, dominant: Hand): GestureAction {
+  const slot: { default: GestureAction; roles?: RoleDefaults } = GESTURE_SLOTS[slotOf(key)];
+  const hand = handOf(key);
+  if (!hand || !slot.roles) return slot.default;
+  return hand === dominant ? slot.roles.dominant : slot.roles.other;
+}
+
+/** What every gesture does out of the box, for a user whose dominant hand is `dominant`. */
+export function defaultBindings(dominant: Hand = "Right"): GestureBindings {
+  return Object.fromEntries(BINDING_KEYS.map((key) => [key, defaultFor(key, dominant)])) as GestureBindings;
+}
+
+/** The defaults for a right-handed user, the app's own default. */
+export const DEFAULT_BINDINGS = defaultBindings("Right");
 
 /** What a gesture does, for the hand that made it when it is set per hand. */
 export function actionFor(bindings: GestureBindings, slot: GestureSlot, hand?: Hand): GestureAction {
@@ -208,9 +223,15 @@ export const GestureBindingsSchema = z.record(z.string(), z.string()).superRefin
   }
 });
 
-/** Stored choices over the defaults, ignoring anything a gesture no longer offers. */
-export function resolveBindings(stored: Partial<Record<string, string>> | null | undefined): GestureBindings {
-  const bindings = { ...DEFAULT_BINDINGS };
+/**
+ * Stored choices over the defaults for the dominant hand, ignoring anything a gesture no longer offers. A gesture the
+ * user never set follows its role, so switching the dominant hand swaps what each hand's long pinch does.
+ */
+export function resolveBindings(
+  stored: Partial<Record<string, string>> | null | undefined,
+  dominant: Hand = "Right",
+): GestureBindings {
+  const bindings = defaultBindings(dominant);
   const take = (key: BindingKey, action: string | undefined) => {
     if (action && allowed(key, action)) bindings[key] = action as GestureAction;
   };
@@ -220,4 +241,12 @@ export function resolveBindings(stored: Partial<Record<string, string>> | null |
     for (const key of keys) take(key, stored?.[legacy]);
   for (const key of BINDING_KEYS) take(key, stored?.[key]);
   return bindings;
+}
+
+/** Only the choices that differ from the defaults for the dominant hand: what is stored, so defaults keep their role. */
+export function changedBindings(bindings: GestureBindings, dominant: Hand): Partial<GestureBindings> {
+  const defaults = defaultBindings(dominant);
+  return Object.fromEntries(
+    BINDING_KEYS.filter((k) => bindings[k] !== defaults[k]).map((k) => [k, bindings[k]]),
+  );
 }

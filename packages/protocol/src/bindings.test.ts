@@ -2,16 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   actionFor,
   BINDING_KEYS,
+  changedBindings,
   DEFAULT_BINDINGS,
+  defaultBindings,
   GESTURE_SLOTS,
   GestureBindingsSchema,
   resolveBindings,
 } from "./bindings.ts";
 
 describe("gesture bindings", () => {
-  it("defaults: a long pinch with either hand is hold to talk", () => {
-    expect(actionFor(DEFAULT_BINDINGS, "hold", "Right")).toBe("talk");
+  it("defaults: the dominant hand's long pinch opens the action ring, the other hand's is hold to talk", () => {
+    expect(actionFor(DEFAULT_BINDINGS, "hold", "Right")).toBe("action-ring");
     expect(actionFor(DEFAULT_BINDINGS, "hold", "Left")).toBe("talk");
+    const lefty = defaultBindings("Left");
+    expect(actionFor(lefty, "hold", "Left")).toBe("action-ring");
+    expect(actionFor(lefty, "hold", "Right")).toBe("talk");
     for (const hand of ["Left", "Right"] as const) {
       expect(actionFor(DEFAULT_BINDINGS, "tap", hand)).toBe("use-tool");
       expect(actionFor(DEFAULT_BINDINGS, "drag", hand)).toBe("tool-or-orbit");
@@ -44,7 +49,7 @@ describe("gesture bindings", () => {
     expect(actionFor(b, "fist", "Left")).toBe("undo");
     // The old single palette is no longer offered: each hand keeps the default.
     expect(actionFor(b, "hold", "Left")).toBe("talk");
-    expect(actionFor(b, "hold", "Right")).toBe("talk");
+    expect(actionFor(b, "hold", "Right")).toBe("action-ring");
     expect(actionFor(b, "stop")).toBe("none");
     // A newer per-hand choice wins over an older shared one.
     expect(actionFor(resolveBindings({ tap: "select", "tap.right": "undo" }), "tap", "Right")).toBe("undo");
@@ -66,6 +71,14 @@ describe("gesture bindings", () => {
     const b = resolveBindings(old);
     for (const hand of ["Left", "Right"] as const) expect(actionFor(b, "fistdrag", hand)).toBe("pan");
     expect(actionFor(b, "fist", "Right")).toBe("undo");
+  });
+
+  it("a gesture the user never set follows its role when the dominant hand changes; a chosen one stays", () => {
+    expect(actionFor(resolveBindings({}, "Left"), "hold", "Right")).toBe("talk");
+    expect(actionFor(resolveBindings({ "hold.left": "undo" }, "Left"), "hold", "Left")).toBe("undo");
+    const chosen = resolveBindings({ "tap.left": "select" }, "Left");
+    expect(changedBindings(chosen, "Left")).toEqual({ "tap.left": "select" });
+    expect(changedBindings(defaultBindings("Left"), "Left")).toEqual({});
   });
 
   it("ignores actions a gesture does not offer and unknown gestures", () => {

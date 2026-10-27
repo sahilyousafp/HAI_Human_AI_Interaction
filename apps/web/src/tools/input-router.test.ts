@@ -474,10 +474,10 @@ describe("hold to talk", () => {
       for (const t of timers.filter((t) => t.at <= clock)) t.fn();
       timers = timers.filter((t) => t.at > clock);
     };
-    const speak = (hand: Hand = "Right") => speechListener?.(hand);
-    const event = (type: string, position: Point2 = at, hand: Hand = "Right") =>
+    const speak = (hand: Hand = "Left") => speechListener?.(hand);
+    const event = (type: string, position: Point2 = at, hand: Hand = "Left") =>
       ({ type, ts: ts++, confidence: 1, hand, position, delta: [0, 0] }) as GestureEvent;
-    const hold = (hand: Hand = "Right") => {
+    const hold = (hand: Hand = "Left") => {
       router.handle(event("pinch.drag.start", at, hand));
       router.handle(event("pinch.hold", at, hand));
     };
@@ -489,10 +489,17 @@ describe("hold to talk", () => {
     hold();
     expect(log).toEqual([
       "nav:pinch.drag.start",
-      "talk.start:Right",
+      "talk.start:Left",
       "nav:pinch.drag.end",
-      "palette.open:action:Right:hidden",
+      "palette.open:reference:Left:hidden",
     ]);
+  });
+
+  it("the dominant hand's long pinch opens its action ring at once and never listens", () => {
+    const { log, advance, hold } = talkSetup();
+    hold("Right");
+    advance(1000);
+    expect(log).toEqual(["nav:pinch.drag.start", "nav:pinch.drag.end", "palette.open:action:Right"]);
   });
 
   it("Release with speech sends, and the ring never shows", () => {
@@ -505,8 +512,8 @@ describe("hold to talk", () => {
     expect(log).toContain("palette.cancel");
     expect(log).not.toContain("palette.show");
     expect(log).not.toContain("palette.release");
-    expect(log.at(-1)).toBe("talk.end:Right:send");
-    expect(reports).toEqual([{ outcome: "send", ring: "action", spoke: true }]);
+    expect(log.at(-1)).toBe("talk.end:Left:send");
+    expect(reports).toEqual([{ outcome: "send", ring: "reference", spoke: true }]);
   });
 
   it("Silent flick picks a tool: the ring shows at once and the release chooses", () => {
@@ -527,14 +534,14 @@ describe("hold to talk", () => {
     advance(1);
     expect(log.at(-1)).toBe("palette.show");
     router.handle(event("pinch.drag.end"));
-    expect(log.slice(-2)).toEqual(["palette.cancel", "talk.end:Right:drop"]);
-    expect(reports).toEqual([{ outcome: "cancel", ring: "action", spoke: false }]);
+    expect(log.slice(-2)).toEqual(["palette.cancel", "talk.end:Left:drop"]);
+    expect(reports).toEqual([{ outcome: "cancel", ring: "reference", spoke: false }]);
   });
 
   it("when listening cannot start, the long pinch opens the ring as before", () => {
     const { log, hold } = talkSetup({ canListen: false });
     hold();
-    expect(log.at(-1)).toBe("palette.open:action:Right");
+    expect(log.at(-1)).toBe("palette.open:reference:Left");
   });
 
   it("disengaging mid-hold drops what was said", () => {
@@ -542,14 +549,14 @@ describe("hold to talk", () => {
     hold();
     speak();
     router.handle({ type: "disengaged", ts: ts++, confidence: 1 } as GestureEvent);
-    expect(log).toContain("talk.end:Right:drop");
+    expect(log).toContain("talk.end:Left:drop");
   });
 
   it("one hold at a time: the other hand's long pinch while one listens does nothing", () => {
     const { log, hold } = talkSetup();
-    hold("Right");
-    log.length = 0;
     hold("Left");
+    log.length = 0;
+    hold("Right");
     expect(log.filter((l) => l.startsWith("talk.start") || l.startsWith("palette.open"))).toEqual([]);
   });
 });

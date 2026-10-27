@@ -5,12 +5,17 @@ Lets the user point with a held pinch and say what to do in the same gesture, so
 ## ADDED Requirements
 
 ### Requirement: A long pinch starts hold to talk
-While engaged and with the default binding, a pinch hold with either hand SHALL start hold to talk: a progress ring SHALL fill around the hand's pointer during the hold, and when the hold fires the target under the pinch SHALL be locked, the microphone SHALL start and a transcript chip SHALL show beside that hand in the hand's colour. A pinch hold on an on-screen control, or while the active tool holds something, SHALL keep doing that instead.
+While engaged and with the default bindings, a pinch hold with the non-dominant hand SHALL start hold to talk, and a pinch hold with the dominant hand SHALL open the action ring at once without listening. Hold to talk: a progress ring SHALL fill around the hand's pointer during the hold, and when the hold fires the target under the pinch SHALL be locked, the microphone SHALL start and a transcript chip SHALL show beside that hand in the hand's colour. A pinch hold on an on-screen control, or while the active tool holds something, SHALL keep doing that instead.
 
 #### Scenario: Hold on a wall
-- **GIVEN** the system is engaged and a wall is under the right hand's pointer
+- **GIVEN** the system is engaged, the right hand is the dominant hand and a wall is under the left hand's pointer
+- **WHEN** the left hand makes a pinch hold
+- **THEN** the wall is outlined as the locked target, the microphone indicator shows Mic on and a transcript chip appears beside the left hand
+
+#### Scenario: The dominant hand opens its ring
+- **GIVEN** the system is engaged and the right hand is the dominant hand
 - **WHEN** the right hand makes a pinch hold
-- **THEN** the wall is outlined as the locked target, the microphone indicator shows Mic on and a transcript chip appears beside the right hand
+- **THEN** the action ring shows at once, the microphone stays off and the hand pointer shows no microphone
 
 #### Scenario: Hold on a control presses it
 - **GIVEN** the pointer is on the Undo button
@@ -90,7 +95,7 @@ When no speech has started 600 ms after the hold fired, the ring for that hand S
 - **THEN** no tool is chosen and the transcript is sent with the hand's resting points
 
 ### Requirement: The dominant hand decides each hand's ring
-A Dominant hand setting (Right by default), kept by the bridge in the workspace settings, SHALL decide which ring each hand's hold falls back to: the action ring for the dominant hand and the reference ring for the other.
+A Dominant hand setting (Right by default), kept by the bridge in the workspace settings, SHALL decide each hand's role: the dominant hand's hold opens the action ring, and the other hand's hold talks and falls back to the reference ring. A hold binding the user never changed SHALL follow its role when the setting changes; one the user chose SHALL stay with its hand.
 
 #### Scenario: Left-handed user
 - **GIVEN** Dominant hand is set to Left

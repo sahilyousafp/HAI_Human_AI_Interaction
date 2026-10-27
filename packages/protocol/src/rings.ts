@@ -72,15 +72,30 @@ function migrateGestures(gestures: Record<string, unknown>): Record<string, unkn
 }
 
 /**
- * Brings settings saved before hold to talk up to date: a ring layout still equal to its old default and the old
- * default long pinch take the new defaults (null and no binding, so the app's defaults apply), and the old ring
- * binding values take the new names. Everything else is kept as it is. Running it again changes nothing.
+ * Hold to talk first shipped with both hands talking, and the app then stored every binding, defaults included. That
+ * default (talk on both hands) gives way to the long pinch by role: the dominant hand's ring, the other hand's talk.
+ */
+function migrateHoldRoles(gestures: Record<string, unknown>): Record<string, unknown> {
+  const hold = (hand: "left" | "right") => gestures[`hold.${hand}`] ?? gestures.hold ?? "talk";
+  if (hold("left") !== "talk" || hold("right") !== "talk") return gestures;
+  const { hold: _shared, "hold.left": _left, "hold.right": _right, ...rest } = gestures;
+  return rest;
+}
+
+/**
+ * Brings saved settings up to date. Settings from before hold to talk: a ring layout still equal to its old default
+ * and the old default long pinch take the new defaults (null and no binding, so the app's defaults apply), and the
+ * old ring binding values take the new names. Settings from before the long pinch went by role (`holdRoles` unset):
+ * talk on both hands takes the role defaults. Everything else is kept as it is. Running it again changes nothing.
  */
 export function migrateRingSettings(stored: Record<string, unknown>): Record<string, unknown> {
   const out = { ...stored };
   if (sameLayout(out.palette, OLD_TOOLS_LAYOUT)) out.palette = null;
   if (sameLayout(out.createPalette, OLD_CREATE_LAYOUT)) out.createPalette = null;
-  if (out.gestures && typeof out.gestures === "object" && !Array.isArray(out.gestures))
-    out.gestures = migrateGestures(out.gestures as Record<string, unknown>);
+  if (out.gestures && typeof out.gestures === "object" && !Array.isArray(out.gestures)) {
+    const gestures = migrateGestures(out.gestures as Record<string, unknown>);
+    out.gestures = out.holdRoles === true ? gestures : migrateHoldRoles(gestures);
+    out.holdRoles = true;
+  }
   return out;
 }

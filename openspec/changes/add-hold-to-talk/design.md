@@ -65,11 +65,12 @@ Point capture lives in `utterance-context.ts` beside element capture and uses th
 
 ### 5. Rings are the action ring and the reference ring, and storage keeps its keys
 
-`palette` and `createPalette` stay as the storage keys, for the action ring and the reference ring. The binding values are renamed to `action-ring` and `reference-ring` (the code says what the ring is), and the old `tools-ring` and `create-ring` are rewritten by the migration. The new binding value `talk` is the default for both holds. Which ring a `talk` hold falls back to comes from `dominantHand` (`Right` | `Left`), a new top-level setting.
+`palette` and `createPalette` stay as the storage keys, for the action ring and the reference ring. The binding values are renamed to `action-ring` and `reference-ring` (the code says what the ring is), and the old `tools-ring` and `create-ring` are rewritten by the migration. The long pinch defaults go by role, from `dominantHand` (`Right` | `Left`), a new top-level setting: `action-ring` for the dominant hand and `talk` for the other, whose silent hold falls back to the reference ring. (The first cut defaulted both hands to `talk`; on the drawing hand that opened the microphone on almost every still pinch.) Only the bindings the user changed are stored, so the defaults follow the role when the setting changes.
 
 The migration is a pure function in `packages/protocol` (`migrateRingSettings`), run by `apps/bridge/src/settings.ts` on load, which writes the file back when it changed anything:
 - A layout equal to a previous default becomes null, so the app's new default applies.
-- A long pinch that still does what the old defaults did (stored per hand, as the old shared key, or not stored at all) loses its stored value, so `talk` applies to both hands.
+- A long pinch that still does what the old defaults did (stored per hand, as the old shared key, or not stored at all) loses its stored value, so the role defaults apply.
+- Settings written before the role defaults (no `holdRoles: true`) with `talk` on both hands lose those two values once, and `holdRoles: true` is written so a later choice of talk on both hands is kept.
 - `tools-ring` and `create-ring` elsewhere become `action-ring` and `reference-ring`; everything else is kept as it is.
 
 *Rejected:*

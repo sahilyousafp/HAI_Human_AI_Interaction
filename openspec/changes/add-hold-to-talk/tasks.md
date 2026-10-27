@@ -41,6 +41,10 @@
 - [x] 6.3 Capture points the hand rests on for 300 ms while speaking, through the aids, with P markers; verify unit tests in `utterance-context.test.ts`, and E2E "Copy this there", "Passing over is not captured" and "Held target and points"
 - [x] 6.4 Document hold to talk in `docs/gestures.md` and `docs/voice.md` (the binding, the ring fallback, Dominant hand, how to get the old rings back); verify the `docs.test.ts` checks pass and every gesture listed is in the demo script
 
+## 6b. Long pinch by role
+
+- [x] 6b.1 Default the long pinch by role (the dominant hand's action ring at once, the other hand's hold to talk), store only changed bindings so defaults follow the Dominant hand setting, and migrate the first cut's talk on both hands once (`holdRoles`); verify `bindings.test.ts`, `rings.test.ts`, `gesture-settings.test.ts`, `input-router.test.ts`, and E2E "The dominant hand opens its ring at once" and the left-hand hold to talk cases in `hold-to-talk.spec.ts`
+
 ## 7. Counters and the hold-time spike
 
 - [x] 7.1 Add the hold counters to the HUD Detection card; verify E2E "Counts update", and "Counts stay local" by asserting no request leaves 127.0.0.1 during a held session

@@ -6,7 +6,7 @@ The long pinch and its two rings were designed when hands were the main way to b
 
 ## What Changes
 
-- **BREAKING (default behaviour):** a long pinch with either hand now starts **hold to talk about this**. A progress ring fills around the hand, the target under the pinch is locked (an element, else a snapped point, else the ground point), and the microphone listens only while the pinch is held. Releasing sends the request at once, with no countdown, because the hold was the deliberate act. A head shake within 1.5 s after sending stops it.
+- **BREAKING (default behaviour):** a long pinch with the non-dominant hand now starts **hold to talk about this**, and the dominant hand's long pinch opens its action ring at once (both hands talking opened the microphone on nearly every still pinch of the drawing hand). A progress ring fills around the hand, the target under the pinch is locked (an element, else a snapped point, else the ground point), and the microphone listens only while the pinch is held. Releasing sends the request at once, with no countdown, because the hold was the deliberate act. A head shake within 1.5 s after sending stops it.
 - While holding and speaking, the hand points: elements it rests on are captured as today, and so are the snapped **points** it rests on, so "copy this there" and "a canopy from here to here" work.
 - **The ring becomes the silent fallback inside the same hold.** If no speech starts within 600 ms of the hold, the ring fades in, and a flick with no speech picks a slot as before. Speech always wins: once speech starts, the ring hides and movement is pointing.
 - **The two rings are reorganised by role, not by element type**, following the non-dominant/dominant split of two-handed work:
