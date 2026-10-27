@@ -146,7 +146,11 @@ function dragToDraw(options: {
     },
     onDragStart(ctx, at) {
       const start = drawPoint(ctx, at);
-      if (!start || !ctx.doc()) return false;
+      if (!start || !ctx.doc()) {
+        // No ground under the pointer: a side view looks along it, and the sky has none.
+        if (!start) ctx.flash("Nothing to draw on there. Use the Top or the perspective view.");
+        return false;
+      }
       drag = { start, end: start };
       return true;
     },
@@ -283,6 +287,7 @@ export function lineTool(): Tool {
     id: "line",
     label: "Line",
     spoken: ["line", "polyline"],
+    drawsInView: true,
     feature: "createTools",
     icon: "M4 19 10 7l5 8 5-10M4 19h.01M10 7h.01M15 15h.01M20 5h.01",
     shortcut: "n",

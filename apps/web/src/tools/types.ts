@@ -122,6 +122,8 @@ export interface Tool {
   spoken?: string[];
   /** Instant tools (undo, redo, ask agent) run once and leave the previous tool active. */
   instant?: boolean;
+  /** The tool draws points in any view, in a side view's vertical plane too (Line); others need the ground in plan. */
+  drawsInView?: boolean;
   /** The feature that switches this tool on and off (Settings > Features); without one it is always available. */
   feature?: FeatureId;
   run?(ctx: ToolContext): void;

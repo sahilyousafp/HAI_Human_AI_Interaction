@@ -13,8 +13,16 @@ import {
   type SunSetting,
 } from "@hai/protocol";
 import type { MeshPart } from "@hai/scene";
-import { elementBounds, type Projector, sunLightDirection } from "@hai/scene";
-import { Edges, Grid } from "@react-three/drei";
+import {
+  elementBounds,
+  ORTHO_VIEWS,
+  type Projector,
+  sunLightDirection,
+  type ViewMode,
+  viewMatches,
+  workPlane,
+} from "@hai/scene";
+import { Edges, Grid, OrthographicCamera } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   createContext,
@@ -93,6 +101,7 @@ import {
   SnapMarker,
 } from "./ToolScene.tsx";
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
+import { ViewCube } from "./ViewCube.tsx";
 import { between, resolveView, VIEW_ANIMATION_MS } from "./view-request.ts";
 
 const FOV = 45;
@@ -465,6 +474,8 @@ interface Picking {
   /** Like `hit`, but a pointer that hits nothing snaps to the nearest model within reach (a hand's imprecise pinch). */
   near(x: number, y: number): Hit | null;
   ground(x: number, y: number, heightMm: number): Point3Mm | null;
+  /** Where the view ray meets the vertical plane `x = at` (a left or right view) or `y = at` (front or back), mm. */
+  workPoint(x: number, y: number, plane: "xz" | "yz", atMm: number): Point3Mm | null;
   project(point: Point3Mm): Point2;
   /** Where a scene point (mm) is on screen in px, for a view of this size; false when it is behind the camera. */
   projector(width: number, height: number): Projector;
@@ -475,6 +486,7 @@ const noPicking: Picking = {
   hit: () => null,
   near: () => null,
   ground: () => null,
+  workPoint: () => null,
   project: () => [0, 0],
   projector: () => () => false,
 };
@@ -500,7 +512,15 @@ function CameraRig({
   invalidateRef,
   rendersRef,
   view,
+  modeRef,
+  onLeaveView,
+  cubeRef,
 }: {
+  /** Which view the camera is in, and the way out once the user orbits away from an orthographic one. */
+  modeRef: React.RefObject<ViewMode>;
+  onLeaveView: () => void;
+  /** Turns the view cube with the camera. */
+  cubeRef: React.RefObject<((azimuth: number, elevation: number) => void) | null>;
   nav: React.RefObject<Turntable>;
   /** Hand navigation state; after a flick it holds the momentum the view coasts with. */
   navInput: React.RefObject<NavigationInput>;
@@ -583,10 +603,19 @@ function CameraRig({
       near,
       id: (x, y) => hit(x, y)?.elementId ?? null,
       ground: (x, y, heightMm) => {
+        // A side view looks along the ground: the plan has no point under the pointer there.
+        if (workPlane(modeRef.current) !== "xy") return null;
         cast(x, y);
         const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -heightMm * MM);
         const at = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
         return at ? [at.x / MM, at.y / MM, heightMm] : null;
+      },
+      workPoint: (x, y, plane, atMm) => {
+        cast(x, y);
+        // The plane stands square to the Y axis for a front or back view, to the X axis for a left or right one.
+        const normal = plane === "xz" ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+        const at = raycaster.ray.intersectPlane(new THREE.Plane(normal, -atMm * MM), new THREE.Vector3());
+        return at ? [at.x / MM, at.y / MM, at.z / MM] : null;
       },
       project: (point) => {
         const v = new THREE.Vector3(point[0] * MM, point[1] * MM, point[2] * MM).project(camera);
@@ -614,7 +643,7 @@ function CameraRig({
     return () => {
       scene.onAfterRender = () => {};
     };
-  }, [camera, scene, raycaster, size, pendingTs, latency, pickRef, sectionRef]);
+  }, [camera, scene, raycaster, size, pendingTs, latency, pickRef, sectionRef, modeRef]);
 
   // The agent's picture of the view: render the current frame, then read the canvas.
   useEffect(
@@ -638,6 +667,8 @@ function CameraRig({
     }
     const target = nav.current;
     if (!target) return;
+    // Orbiting (or framing, or the agent's view) away from an orthographic view returns to the perspective camera.
+    if (modeRef.current !== "perspective" && !viewMatches(modeRef.current, target)) onLeaveView();
     // After an idle spell the first delta is long; cap it so the camera still eases instead of jumping.
     const k =
       1 - Math.exp((-Math.min(delta, 0.05) * 1000) / (navInput.current.grabbing ? GRAB_EASE_MS : EASE_MS));
@@ -669,6 +700,19 @@ function CameraRig({
     });
     camera.position.set(...cameraPosition(next));
     camera.lookAt(...next.target);
+    cubeRef.current?.(next.azimuth, next.elevation);
+    const aspect = size.width / Math.max(1, size.height);
+    const ortho = camera as THREE.OrthographicCamera;
+    const perspective = camera as THREE.PerspectiveCamera;
+    if (ortho.isOrthographicCamera) {
+      // The same height at the target as the perspective view has, so switching keeps what is framed.
+      const half = next.distance * Math.tan((FOV * Math.PI) / 360);
+      [ortho.left, ortho.right, ortho.top, ortho.bottom] = [-half * aspect, half * aspect, half, -half];
+      ortho.updateProjectionMatrix();
+    } else if (perspective.isPerspectiveCamera && Math.abs(perspective.aspect - aspect) > 1e-6) {
+      perspective.aspect = aspect; // the window may have been resized while the orthographic camera was in use
+      perspective.updateProjectionMatrix();
+    }
   });
   return null;
 }
@@ -828,6 +872,36 @@ export function Viewer({
   }, [toolState.activeId, view]);
   const [colors, setColors] = useState<Colors>(readColors);
   const nav = useRef<Turntable>({ target: [20, 15, 3], azimuth: 305, elevation: 32, distance: 70 });
+  // Perspective, or one of six orthographic views (the view cube). Orbiting leaves an orthographic view.
+  const [viewMode, setViewMode] = useState<ViewMode>("perspective");
+  const viewModeRef = useRef<ViewMode>("perspective");
+  const perspectiveView = useRef<Turntable | null>(null);
+  const cubeRef = useRef<((azimuth: number, elevation: number) => void) | null>(null);
+  const showView = useCallback((mode: ViewMode) => {
+    const current = viewModeRef.current;
+    if (mode === current) return;
+    if (mode === "perspective") {
+      // Back to the camera that was looking before, at whatever is framed now.
+      const back = perspectiveView.current;
+      if (back) nav.current = { ...nav.current, azimuth: back.azimuth, elevation: back.elevation };
+      perspectiveView.current = null;
+    } else {
+      if (current === "perspective") perspectiveView.current = nav.current;
+      nav.current = {
+        ...nav.current,
+        azimuth: ORTHO_VIEWS[mode].azimuth,
+        elevation: ORTHO_VIEWS[mode].elevation,
+      };
+    }
+    viewModeRef.current = mode;
+    setViewMode(mode);
+    invalidateRef.current();
+  }, []);
+  const leaveView = useCallback(() => {
+    perspectiveView.current = null;
+    viewModeRef.current = "perspective";
+    setViewMode("perspective");
+  }, []);
   const navInput = useRef(initialInput());
   const pendingTs = useRef<number | null>(null);
   const pickRef = useRef<Picking>(noPicking);
@@ -1015,6 +1089,14 @@ export function Viewer({
         pickRef.current.projector(wrapper.current?.clientWidth || 1, wrapper.current?.clientHeight || 1),
       aids: () => aids.getSnapshot(),
       bounds: () => boundsRef.current,
+      plane: () => workPlane(viewModeRef.current),
+      workPoint: (at, through) => {
+        const plane = workPlane(viewModeRef.current);
+        if (plane === "xy") return null;
+        // Through the anchor, else through the point the camera looks at.
+        const [tx, ty] = through ?? [nav.current.target[0] / MM, nav.current.target[1] / MM];
+        return pickRef.current.workPoint(at[0], at[1], plane, plane === "xz" ? ty : tx);
+      },
       handToViewer: (p) => handPointer(wrapper.current, p).at,
       handAspect: () => handAspect.current,
       navigate: (event: GestureEvent, dragMode = "orbit") => {
@@ -1555,6 +1637,7 @@ export function Viewer({
       aria-label="3D model"
       data-testid="viewer"
       data-tool={toolState.activeId}
+      data-view={viewMode}
       data-section-hover={toolState.overlay.sectionHover}
     >
       {sun && (
@@ -1686,7 +1769,11 @@ export function Viewer({
           />
         </group>
         {cameraMarkers.length > 0 && <CameraMarkers markers={cameraMarkers} />}
+        <OrthographicCamera makeDefault={viewMode !== "perspective"} near={0.1} far={5000} />
         <CameraRig
+          modeRef={viewModeRef}
+          onLeaveView={leaveView}
+          cubeRef={cubeRef}
           nav={nav}
           navInput={navInput}
           pendingTs={pendingTs}
@@ -1761,6 +1848,7 @@ export function Viewer({
       <ToolOverlays controller={tools} />
       {/* The viewport's right column: the drawing constraints while Line or Wall is active. */}
       <div className="viewer-right">
+        <ViewCube mode={viewMode} onView={showView} cubeRef={cubeRef} initial={nav.current} />
         <ConstraintsPanel controller={tools} aids={aids} />
       </div>
       <UndoStrip client={client} />

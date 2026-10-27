@@ -378,6 +378,59 @@ describe("resolvePoint: lines", () => {
   });
 });
 
+describe("resolvePoint: a vertical plane (side views)", () => {
+  const empty = docOf();
+  /** A front view: the plane y = 5000, where the view ray meets it at (x, 5000, z). */
+  const inFront = (
+    on: Partial<DrawingAids>,
+    anchor: Point3Mm | null,
+    at: [number, number],
+    constraints?: { angleStepDeg?: number; lengthMm?: number | null },
+    plane: "xz" | "yz" = "xz",
+  ) => {
+    const { project } = view(1);
+    const hit: Point3Mm = plane === "xz" ? [at[0], 5000, at[1]] : [5000, at[0], at[1]];
+    const r = resolvePoint({
+      pointer: [0, 0],
+      ground: () => hit,
+      anchor,
+      aids: aids(on),
+      index: buildSnapIndex(empty),
+      project,
+      plane,
+      ...(constraints ? { constraints } : {}),
+    });
+    if (!r) throw new Error("no point");
+    return r;
+  };
+
+  it("Ortho holds a line to the plane's two axes: nearly flat draws flat, nearly upright draws upright", () => {
+    const flat = inFront({ ortho: true }, [0, 5000, 0], [4000, 200]);
+    expect(flat).toMatchObject({ point: [4000, 5000, 0], ortho: true });
+    const upright = inFront({ ortho: true, grid: true }, [0, 5000, 0], [150, 3900]);
+    expect(upright.point).toEqual([0, 5000, 3900]);
+    const diagonal = inFront({ ortho: true }, [0, 5000, 0], [3000, 2900]);
+    expect(diagonal.point[0]).toBeCloseTo(diagonal.point[2], 3);
+  });
+
+  it("a point stays in the plane through the anchor, whichever vertical plane it is", () => {
+    const side = inFront({ ortho: true }, [5000, 0, 0], [3000, 150], undefined, "yz");
+    expect(side.point).toEqual([5000, 3000, 0]);
+  });
+
+  it("a locked length fixes the segment in the plane", () => {
+    const r = inFront({ ortho: true }, [0, 5000, 1000], [9000, 9000], { lengthMm: 2000, angleStepDeg: 90 });
+    expect(r).toMatchObject({ kind: "length" });
+    const [x, , z] = r.point;
+    expect(Math.hypot(x, z - 1000)).toBeCloseTo(2000, 0);
+  });
+
+  it("the grid rounds both axes, and with nothing on the free point is kept", () => {
+    expect(inFront({ grid: true }, null, [1234, 5678]).point).toEqual([1200, 5000, 5700]);
+    expect(inFront({}, null, [1234.5, 5678.9]).point).toEqual([1234.5, 5000, 5678.9]);
+  });
+});
+
 describe("resolvePoint: ortho", () => {
   const empty = docOf();
   const origin: Point3Mm = [0, 0, 0];

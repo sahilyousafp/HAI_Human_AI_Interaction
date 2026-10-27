@@ -22,6 +22,7 @@ import {
   resolvePoint,
   type SnapIndex,
   type SnapKind,
+  type WorkPlane,
 } from "@hai/scene";
 import type { DragMode, RouterTargets } from "./input-router.ts";
 import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from "./palette.ts";
@@ -70,6 +71,10 @@ export interface ToolEnvironment {
   /** What is at a viewer position; for a hand (`source`) the nearest model in reach when none is exactly there. */
   pick(at: Point2, source?: PointerSource): Hit | null;
   ground(at: Point2, heightMm?: number): Point3Mm | null;
+  /** The plane points are drawn in: plan, unless a side view (front, back, left, right) is showing. */
+  plane?(): WorkPlane;
+  /** Where the view ray at a viewer position meets the vertical plane through a point (the anchor, else the view's target). */
+  workPoint?(at: Point2, through: Point3Mm | null): Point3Mm | null;
   /** The size of the view, px, and where a scene point is on it: the camera, for matching snaps on screen. */
   screenSize?(): Point2;
   projector?(): Projector | null;
@@ -674,10 +679,17 @@ export class ToolController {
       const out: [number, number] = [0, 0];
       if (project(probe, out)) pointer = out;
     }
+    // Only a tool that draws in a side view's plane gets it; the others find no ground there and place nothing.
+    const plane = this.active?.drawsInView ? (env.plane?.() ?? "xy") : "xy";
+    const anchor = options.anchor ?? null;
     const result = resolvePoint({
       pointer,
-      ground: (heightMm) => (probe ? [probe[0], probe[1], heightMm] : env.ground(at, heightMm)),
-      anchor: options.anchor ?? null,
+      ground:
+        plane === "xy"
+          ? (heightMm) => (probe ? [probe[0], probe[1], heightMm] : env.ground(at, heightMm))
+          : () => env.workPoint?.(at, anchor) ?? null,
+      plane,
+      anchor,
       aids,
       index: doc ? this.snapIndex(doc, options.exclude ?? []) : emptySnapIndex(),
       project,

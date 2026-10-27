@@ -1,5 +1,6 @@
 import type { DrawingAids, Element, Point2, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
 import { elementBase, elementBounds } from "./bounds.ts";
+import type { WorkPlane } from "./views.ts";
 
 /** What a point snapped to; `ortho` is a point only held on an axis, with nothing else near. */
 export type SnapKind =
@@ -186,6 +187,12 @@ export interface ResolveInput {
   index: SnapIndex;
   /** The camera; without one no existing geometry can be matched and only Ortho and Grid apply. */
   project: Projector | null;
+  /**
+   * The plane points are drawn in: plan (the default), or a vertical plane in a side view, where `ground` returns the
+   * point of the view ray on the plane through the anchor and only Ortho, a length, Endpoint, Midpoint, Centre and Grid
+   * apply (Perpendicular and Project work in plan).
+   */
+  plane?: WorkPlane;
   /** How a line being drawn is held; both are for the segment from `anchor`, and apply only with one. */
   constraints?: {
     /** The angles Ortho holds to, degrees (90, 45 or 15); 45 when left out. */
@@ -330,6 +337,7 @@ const snapped = (point: Point3Mm, kind: SnapKind, ortho: boolean): Resolved => (
  * snapped.
  */
 export function resolvePoint(input: ResolveInput): Resolved | null {
+  if (input.plane && input.plane !== "xy") return resolveInPlane(input, input.plane);
   const { pointer, anchor, aids, index, project } = input;
   const height = anchor ? anchor[2] : 0;
   const raw = input.ground(height);
@@ -462,4 +470,119 @@ export function resolvePoint(input: ResolveInput): Resolved | null {
   }
   if (raw) return { point: raw, kind: null, label: null, ortho: false };
   return null;
+}
+
+/** The two axes a vertical plane's points vary along, and the axis it stands square to. */
+const PLANE_AXES: Record<"xz" | "yz", [number, number, number]> = { xz: [0, 2, 1], yz: [1, 2, 0] };
+
+/**
+ * `resolvePoint` for a vertical plane (a side view): the same order of Ortho (a hard lock to the angle step, in the
+ * plane's two axes), a typed length, then the point snaps within reach on screen, then Grid, with the free point on the
+ * plane as the last resort. `input.ground` gives the view ray's point on the plane through the anchor.
+ */
+function resolveInPlane(input: ResolveInput, plane: "xz" | "yz"): Resolved | null {
+  const { pointer, anchor, aids, index, project } = input;
+  const [ia, ib, ni] = PLANE_AXES[plane];
+  const raw = input.ground(anchor ? (anchor[ni] as number) : 0);
+  if (!raw) return null;
+  const level = anchor ? (anchor[ni] as number) : (raw[ni] as number);
+  const make = (a: number, b: number): Point3Mm => {
+    const p: Point3Mm = [0, 0, 0];
+    p[ia] = a;
+    p[ib] = b;
+    p[ni] = level;
+    return p;
+  };
+  const along2 = (p: readonly number[], q: readonly number[]): [number, number] => [
+    (p[ia] as number) - (q[ia] as number),
+    (p[ib] as number) - (q[ib] as number),
+  ];
+
+  let dir: [number, number] | null = null;
+  if (anchor) {
+    const [da, db] = along2(raw, anchor);
+    const reach = Math.hypot(da, db);
+    if (aids.ortho && reach > 0) {
+      const step = ((input.constraints?.angleStepDeg ?? DEFAULT_ORTHO_STEP_DEG) * Math.PI) / 180;
+      const angle = Math.round(Math.atan2(db, da) / step) * step;
+      dir = [Math.cos(angle), Math.sin(angle)].map((v) => (Math.abs(v) < 1e-9 ? 0 : v)) as [number, number];
+    }
+    const lengthMm = input.constraints?.lengthMm;
+    if (lengthMm && lengthMm > 0 && (dir || reach > 0)) {
+      const [ua, ub] = dir ?? [da / reach, db / reach];
+      return {
+        point: round3(make((anchor[ia] as number) + ua * lengthMm, (anchor[ib] as number) + ub * lengthMm)),
+        kind: "length",
+        label: SNAP_LABELS.length,
+        ortho: dir !== null,
+      };
+    }
+  }
+  const ortho = dir !== null;
+  let held: Point3Mm = raw;
+  if (anchor && dir) {
+    const [da, db] = along2(raw, anchor);
+    const along = da * dir[0] + db * dir[1];
+    held = make((anchor[ia] as number) + dir[0] * along, (anchor[ib] as number) + dir[1] * along);
+  }
+  /** With Ortho holding a line, a candidate must lie on it, in its plane. */
+  const onLine = (p: Point3Mm) => {
+    if (!anchor || !dir) return true;
+    const [pa, pb] = along2(p, anchor);
+    return (
+      Math.abs(pa * dir[1] - pb * dir[0]) <= ON_RAY_MM && Math.abs((p[ni] as number) - level) <= ON_RAY_MM
+    );
+  };
+
+  if (project) {
+    const tol2 = SNAP_TOLERANCE_PX * SNAP_TOLERANCE_PX;
+    const px: [number, number] = [0, 0];
+    const reach: [number, number] = [pointer[0], pointer[1]];
+    if (ortho) project(held, reach);
+    const dist2 = (q: [number, number]) => (q[0] - reach[0]) ** 2 + (q[1] - reach[1]) ** 2;
+    const near = nearGroups(index, project, reach);
+    for (const kind of ["endpoint", "midpoint", "centre"] as const) {
+      if (!aids[kind]) continue;
+      let best: Point3Mm | null = null;
+      let bestDistance = tol2;
+      const list = index[kind];
+      for (const g of near) {
+        const [from, to] = kind === "centre" ? g.centres : g[kind];
+        for (let i = from; i < to; i++) {
+          const candidate = list[i] as Point3Mm;
+          if (!project(candidate, px)) continue;
+          const d = dist2(px);
+          if (d <= bestDistance && onLine(candidate)) {
+            best = candidate;
+            bestDistance = d;
+          }
+        }
+      }
+      if (best) return snapped(best, kind, ortho);
+    }
+  }
+
+  if (aids.grid) {
+    if (anchor && dir) {
+      // Step along the held line so its length lands on the grid, on both axes for a diagonal.
+      const step = GRID_MM / Math.max(Math.abs(dir[0]), Math.abs(dir[1]));
+      const [da, db] = along2(held, anchor);
+      const k = Math.round((da * dir[0] + db * dir[1]) / step);
+      return snapped(
+        round3(make((anchor[ia] as number) + dir[0] * k * step, (anchor[ib] as number) + dir[1] * k * step)),
+        "grid",
+        true,
+      );
+    }
+    return snapped(
+      make(
+        Math.round((held[ia] as number) / GRID_MM) * GRID_MM,
+        Math.round((held[ib] as number) / GRID_MM) * GRID_MM,
+      ),
+      "grid",
+      ortho,
+    );
+  }
+  if (dir) return { point: held, kind: "ortho", label: SNAP_LABELS.ortho, ortho: true };
+  return { point: raw, kind: null, label: null, ortho: false };
 }
