@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  DEFAULT_STRIP,
   DominantHand,
   DrawingAidChoices,
   FeatureChoices,
@@ -19,6 +20,7 @@ import {
   resolveFeatures,
   type Settings,
   SpeechMode,
+  StripLayout,
 } from "@hai/protocol";
 
 type Send = (message: Message) => void;
@@ -83,6 +85,7 @@ export class SettingsHub {
     const gestures = GestureBindingsSchema.safeParse(stored.gestures);
     const speech = SpeechMode.safeParse(stored.speech);
     const replyVoice = ReplyVoice.safeParse(stored.replyVoice);
+    const railStrip = StripLayout.safeParse(stored.railStrip);
     const features = FeatureChoices.safeParse(stored.features);
     const drawingAids = DrawingAidChoices.safeParse(stored.drawingAids);
     const modelling = ModellingMode.safeParse(stored.modelling);
@@ -95,6 +98,7 @@ export class SettingsHub {
       listenForNames: stored.listenForNames === true,
       speakReplies: stored.speakReplies !== false,
       replyVoice: replyVoice.success ? replyVoice.data : "af_heart",
+      railStrip: railStrip.success ? railStrip.data : DEFAULT_STRIP,
       features: features.success ? features.data : null,
       drawingAids: drawingAids.success ? drawingAids.data : null,
       showHands: stored.showHands === true,
@@ -172,6 +176,7 @@ export class SettingsHub {
       listenForNames,
       speakReplies,
       replyVoice,
+      railStrip,
       features,
       drawingAids,
       showHands,
@@ -193,6 +198,7 @@ export class SettingsHub {
       ...(listenForNames !== undefined ? { listenForNames } : {}),
       ...(speakReplies !== undefined ? { speakReplies } : {}),
       ...(replyVoice ? { replyVoice } : {}),
+      ...(railStrip ? { railStrip } : {}),
       // Feature choices merge, so switching one feature never resets the others.
       ...(features ? { features: { ...this.settings.features, ...features } } : {}),
       // Drawing aids merge the same way.

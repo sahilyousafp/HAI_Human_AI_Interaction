@@ -19,7 +19,23 @@ export interface VoiceEngine {
   synthesize?(text: string): Promise<{ audio: Float32Array; rate: number }>;
 }
 
+/** Only this many sentences of a reply are spoken; the rest is there to read. */
+export const MAX_SPOKEN_SENTENCES = 3;
+/** The most sentences "read the rest aloud" speaks. */
+const MAX_RESUMED_SENTENCES = 12;
+
+/** A reply the user talked over: where it was cut, for the chat to mark. */
+export interface CutOff {
+  turnId: string;
+  /** Words of it that had been said. */
+  words: number;
+}
+
+const wordCount = (text: string): number => text.split(/\s+/).filter(Boolean).length;
+
 export interface SpeakerStats {
+  /** The reply the user last talked over, until they have it read on or a new reply is spoken. */
+  cutOff: CutOff | null;
   /** What speaks: null until known, "none" when nothing on this device can. */
   engine: string | null;
   /** Time from a sentence being complete to its first sound, ms, for the last replies (newest last). */
@@ -28,20 +44,34 @@ export interface SpeakerStats {
 
 /**
  * Speaks Mochi's replies sentence by sentence as they stream in, on this machine. The next sentence is prepared
- * while the current one plays. Talking to the agent (or stop) interrupts at once; muted, nothing is spoken.
+ * while the current one plays. Listening comes first: while the user is talking (a held pinch, the mic button) the voice is
+ * stopped and stays quiet, and so does the rest of any reply it had begun; muted, nothing is spoken.
  */
 export class Speaker {
   private readonly splitters = new Map<string, SentenceSplitter>();
-  private queue: Array<{ speech: PreparedSpeech; at: number; first: boolean }> = [];
+  private queue: Array<{ speech: PreparedSpeech; at: number; first: boolean; text: string; turnId: string }> =
+    [];
   private current: PreparedSpeech | null = null;
+  /** What is being said now, to be able to say it again from the start. */
+  private currentSaid: { text: string; turnId: string } | null = null;
+  /** Sentences of a reply that have been queued, against the most that are spoken. */
+  private readonly sentences = new Map<string, number>();
+  /** Words of a reply that have been said in full. */
+  private readonly words = new Map<string, number>();
+  /** What is left of the reply the user talked over, to read on to them when they ask. */
+  private cut: { turnId: string; rest: string[]; splitter: SentenceSplitter; ended: boolean } | null = null;
   private generation = 0;
   private playing = false;
   private muted = false;
   /** Held back by the app (the voice models are still downloading), not by the user: the same as muted, apart. */
   private held = false;
+  /** The microphone is open for the user: nothing is spoken meanwhile. */
+  private micOpen = false;
+  /** Replies that were cut off (by stop, or by the user talking): what still arrives of them is not spoken. */
+  private readonly interrupted = new Set<string>();
   /** Turns whose first sentence has been queued (for the first-audio statistic). */
   private readonly started = new Set<string>();
-  private stats: SpeakerStats = { engine: null, firstAudio: [] };
+  private stats: SpeakerStats = { engine: null, firstAudio: [], cutOff: null };
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -85,38 +115,114 @@ export class Speaker {
     this.notify();
   }
 
+  /**
+   * The microphone is open for the user (or has just been closed). Opening it stops the voice at once, and the replies
+   * that were being spoken or arrive meanwhile are left unspoken: the user is talking, the text is in the chat.
+   */
+  setListening(listening: boolean): void {
+    if (this.micOpen === listening) return;
+    this.micOpen = listening;
+    if (listening) this.interrupt();
+    this.notify();
+  }
+
+  /** The user starts talking: the voice stops, and what was left of the reply it was saying is kept to read on. */
+  private interrupt(): void {
+    const said = this.currentSaid ?? this.queue[0];
+    const turnId = said?.turnId;
+    const pending = [this.currentSaid, ...this.queue].flatMap((s) =>
+      s && s.turnId === turnId ? [s.text] : [],
+    );
+    const splitter = turnId ? this.splitters.get(turnId) : undefined;
+    const words = turnId ? (this.words.get(turnId) ?? 0) : 0;
+    this.stop();
+    if (!turnId) return;
+    this.cut = { turnId, rest: pending, splitter: splitter ?? new SentenceSplitter(), ended: false };
+    this.update({ cutOff: { turnId, words } });
+  }
+
+  /** Reads on the reply the user talked over, from the sentence that was cut. */
+  resume(): void {
+    const cut = this.cut;
+    if (!cut || this.silenced) return;
+    this.cut = null;
+    this.update({ cutOff: null });
+    const sentences = [...cut.rest];
+    if (cut.ended) sentences.push(...cut.splitter.flush());
+    else {
+      // The reply is still arriving: what comes is spoken as it would have been.
+      this.interrupted.delete(cut.turnId);
+      this.splitters.set(cut.turnId, cut.splitter);
+    }
+    for (const sentence of sentences.slice(0, MAX_RESUMED_SENTENCES)) void this.enqueue(cut.turnId, sentence);
+  }
+
+  /** Whether the microphone is open for the user, so nothing is spoken. */
+  get listening(): boolean {
+    return this.micOpen;
+  }
+
   private get silenced(): boolean {
-    return this.muted || this.held;
+    return this.muted || this.held || this.micOpen;
   }
 
   /** A piece of a reply streaming in. */
   feed(turnId: string, text: string): void {
-    if (this.silenced) return;
+    if (this.cut?.turnId === turnId && this.interrupted.has(turnId)) {
+      this.cut.rest.push(...this.cut.splitter.push(text));
+      return;
+    }
+    if (this.interrupted.has(turnId)) return;
+    if (this.silenced) {
+      // Heard in part while the user talks: the rest of it would come out as a sentence from nowhere.
+      if (this.listening) this.interrupted.add(turnId);
+      return;
+    }
+    if (this.cut && this.cut.turnId !== turnId) {
+      this.cut = null;
+      this.update({ cutOff: null });
+    }
     let splitter = this.splitters.get(turnId);
     if (!splitter) {
       splitter = new SentenceSplitter();
       this.splitters.set(turnId, splitter);
     }
-    for (const sentence of splitter.push(text)) void this.enqueue(turnId, sentence);
+    for (const sentence of splitter.push(text)) this.speak(turnId, sentence);
+  }
+
+  /** Queues a sentence of a reply, unless that reply has had its share of the voice. */
+  private speak(turnId: string, sentence: string): void {
+    const count = this.sentences.get(turnId) ?? 0;
+    if (count >= MAX_SPOKEN_SENTENCES) return;
+    this.sentences.set(turnId, count + 1);
+    void this.enqueue(turnId, sentence);
   }
 
   /** The reply is complete: speak what is left of it. */
   end(turnId: string): void {
+    if (this.cut?.turnId === turnId) this.cut.ended = true;
+    this.interrupted.delete(turnId);
     const splitter = this.splitters.get(turnId);
     this.splitters.delete(turnId);
     this.started.delete(turnId);
+    this.sentences.delete(turnId);
+    this.words.delete(turnId);
     if (!splitter || this.silenced) return;
-    for (const sentence of splitter.flush()) void this.enqueue(turnId, sentence);
+    for (const sentence of splitter.flush()) this.speak(turnId, sentence);
   }
 
   /** Stops speaking now and drops what was waiting (the user talks, or stops the agent). */
   stop(): void {
     this.generation++;
+    for (const turnId of [...this.splitters.keys(), ...this.started]) this.interrupted.add(turnId);
     for (const { speech } of this.queue) speech.cancel();
     this.queue = [];
     this.current?.cancel();
     this.current = null;
+    this.currentSaid = null;
     this.playing = false;
+    this.cut = null;
+    if (this.stats.cutOff) this.update({ cutOff: null });
     this.splitters.clear();
     this.started.clear();
     this.notify();
@@ -128,7 +234,7 @@ export class Speaker {
     if (!engine || generation !== this.generation || this.silenced) return;
     const first = !this.started.has(turnId);
     this.started.add(turnId);
-    this.queue.push({ speech: engine.prepare(sentence), at: this.now(), first });
+    this.queue.push({ speech: engine.prepare(sentence), at: this.now(), first, text: sentence, turnId });
     this.notify();
     void this.run();
   }
@@ -142,6 +248,7 @@ export class Speaker {
       const next = this.queue.shift();
       if (!next) break;
       this.current = next.speech;
+      this.currentSaid = { text: next.text, turnId: next.turnId };
       try {
         await next.speech.ready;
       } catch {
@@ -151,10 +258,13 @@ export class Speaker {
       if (next.first)
         this.update({ firstAudio: [...this.stats.firstAudio.slice(-19), Math.round(this.now() - next.at)] });
       await next.speech.play();
+      if (generation === this.generation)
+        this.words.set(next.turnId, (this.words.get(next.turnId) ?? 0) + wordCount(next.text));
     }
     if (generation === this.generation) {
       this.playing = false;
       this.current = null;
+      this.currentSaid = null;
       this.notify();
     }
   }

@@ -276,6 +276,8 @@ test.describe("hold to talk", () => {
     await pointAt(page, at, "Left");
     await holdAt(page, at, "Left");
     await expect(mic(page)).toHaveAttribute("data-state", "on");
+    // Listening comes first: the agent's voice is silenced for as long as the pinch is held.
+    expect(await page.evaluate(() => window.__HAI_SPEECH__?.speaker.listening)).toBe(true);
     expect((await toolSnapshot(page)).held).toMatchObject({
       target: { kind: "element", id: "block-c" },
       hand: "Left",
@@ -287,6 +289,7 @@ test.describe("hold to talk", () => {
     await expect(page.getByTestId("voice-bar")).toHaveCount(0);
     await releaseAt(page, at, "Left");
     await expect(mic(page)).toHaveAttribute("data-state", "off");
+    expect(await page.evaluate(() => window.__HAI_SPEECH__?.speaker.listening)).toBe(false);
     expect((await toolSnapshot(page)).held).toBeNull();
     await expect(page.getByTestId("held-chip")).toHaveCount(0);
   });

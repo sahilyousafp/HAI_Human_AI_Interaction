@@ -1,6 +1,7 @@
 import {
   DEFAULT_ACTION_LAYOUT,
   DEFAULT_REFERENCE_LAYOUT,
+  DEFAULT_STRIP,
   type FeatureId,
   type Hand,
   type Message,
@@ -8,14 +9,16 @@ import {
   type ModellingMode,
   type ReplyVoice,
   type SpeechMode,
+  type StripLayout,
 } from "@hai/protocol";
 import { elementsInScope } from "@hai/scene";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { AgentPanel, AgentPermissions } from "./agent/AgentPanel.tsx";
+import { AgentPanel, AgentPermissions, toolLabel } from "./agent/AgentPanel.tsx";
 import { addressOf } from "./agent/addressing.ts";
-import { AgentClient } from "./agent/agent-client.ts";
+import { AgentClient, displayName } from "./agent/agent-client.ts";
 import { answerYesNo } from "./agent/answer.ts";
-import { agentColors, claimBoxes } from "./agent/owners.ts";
+import { approvalAnchor } from "./agent/approval-anchor.ts";
+import { agentColors, baseAgent, claimBoxes } from "./agent/owners.ts";
 import { ViewLink } from "./agent/view-link.ts";
 import {
   type BridgeConnection,
@@ -49,6 +52,7 @@ import { DrawingAidsSettings } from "./settings/DrawingAidsSettings.tsx";
 import { DrawingAidsStore } from "./settings/drawing-aids.ts";
 import { FeatureSettings } from "./settings/FeatureSettings.tsx";
 import { FeatureFlags } from "./settings/feature-flags.ts";
+import { RailSettings } from "./settings/RailSettings.tsx";
 import { SettingsPanel, type SettingsSection } from "./settings/SettingsPanel.tsx";
 import { FirstRun, useModelsState, useUpdateState } from "./setup/FirstRun.tsx";
 import { SetupSettings } from "./setup/SetupSettings.tsx";
@@ -59,6 +63,7 @@ import type { HoldReport, RouterTalk } from "./tools/input-router.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { PaletteSettings, ToolIcon } from "./tools/ToolOverlays.tsx";
 import { ListGroup, ListRow, Switch } from "./ui/controls.tsx";
+import type { ApprovalBadge } from "./viewer/ApprovalBadges.tsx";
 import { cameraMarkers } from "./viewer/camera-markers.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
 import { NO_OWNERS, type OwnerDisplay } from "./viewer/owner-display.tsx";
@@ -187,6 +192,7 @@ export function App() {
   // the panel lit. Only while Parallel modelling is on; the owner tint and boxes follow Show owners.
   // Outline and tint what agents own, and draw their region claims (Settings > Modelling > Show owners).
   const [showOwners, setShowOwners] = useState(true);
+  const [railStrip, setRailStrip] = useState<StripLayout>(DEFAULT_STRIP);
   // A small marker in the model for each camera an agent placed (Settings > Modelling > Show cameras).
   const [showCameras, setShowCameras] = useState(true);
   const [maxSessions, setMaxSessions] = useState(6);
@@ -209,6 +215,33 @@ export function App() {
       highlightColor: lit ? (team.members.find((m) => m.name === lit.agent)?.color ?? null) : null,
     };
   }, [agentTeam, highlightedClaim, featureState.parallelModelling, showOwners, sceneDoc]);
+  // Permission requests waiting for the user, as badges over what they concern.
+  const pendingApprovals = useSyncExternalStore(agent.subscribe, () => agent.getSnapshot().approvals);
+  const approvalBadges = useMemo<ApprovalBadge[]>(() => {
+    if (!sceneDoc) return [];
+    const waiting = pendingApprovals.filter((a) => !a.outcome);
+    return waiting.flatMap((a) => {
+      const anchor = approvalAnchor({ input: a.request.input, agent: a.request.agent }, sceneDoc);
+      if (!anchor) return [];
+      const name = a.request.agent ?? agent.lead;
+      const member = agentTeam?.members.find((m) => m.name === baseAgent(name.toLowerCase()));
+      const input = a.request.input as { code?: unknown } | null;
+      return [
+        {
+          id: a.request.id,
+          agent: a.request.agent ?? null,
+          agentName: displayName(name),
+          color: member?.color ?? "#8e8e93",
+          question: `Allow ${toolLabel(a.request.tool).tool}?`,
+          summary: a.request.summary,
+          installs: a.request.installs ?? [],
+          point: anchor.point,
+          review: typeof input?.code === "string" && input.code.length > 0,
+          nod: waiting.length === 1,
+        },
+      ];
+    });
+  }, [pendingApprovals, sceneDoc, agentTeam, agent]);
   const cameraMarkerList = useMemo(
     () => (showCameras && agentTeam ? cameraMarkers(agentTeam.cameras, agentTeam.members) : []),
     [showCameras, agentTeam],
@@ -447,6 +480,8 @@ export function App() {
   startVoiceRef.current = startVoice;
   const markers = useSyncExternalStore(voice.context.subscribe, () => voice.context.ids);
   const micState = useSyncExternalStore(voice.subscribe, () => voice.micState);
+  // Listening comes first: while the mic is open for a request (a held pinch included) the agent's voice is silent.
+  useEffect(() => speaker.setListening(micState === "on"), [speaker, micState]);
   const [listenForNames, setListenForNames] = useState(false);
   useEffect(() => voice.setHovered(pointedWhileSpeaking), [voice, pointedWhileSpeaking]);
   // Listening for names needs the voice feature on, and Claude chat: without it there is no agent to name.
@@ -643,6 +678,7 @@ export function App() {
         setSpeakReplies(message.payload.speakReplies);
         speaker.setMuted(!message.payload.speakReplies);
         setReplyVoice(message.payload.replyVoice);
+        setRailStrip(message.payload.railStrip);
       }
     });
     connection.current = conn;
@@ -707,6 +743,10 @@ export function App() {
   };
   const openWrittenInRhino = (path: string) => {
     connection.current?.send({ type: "rhino.open", id: crypto.randomUUID(), payload: { path } });
+  };
+  const changeRailStrip = (layout: StripLayout) => {
+    setRailStrip(layout);
+    saveSetting({ railStrip: layout });
   };
   const changeShowOwners = (on: boolean) => {
     setShowOwners(on);
@@ -781,6 +821,16 @@ export function App() {
       tint: "var(--tint-green)",
       detail: featureState.openData ? "On" : "Off",
       render: () => <OpenDataSettings store={openData} flags={features} />,
+    },
+    {
+      id: "chat-rail",
+      title: "Chat rail",
+      icon: "M4 4h6v16H4zM14 6h6M14 12h6M14 18h6",
+      tint: "var(--tint-blue)",
+      detail: { quiet: "Quiet", "needs-you": "Needs you first", team: "Team", custom: "Custom" }[
+        railStrip.preset
+      ],
+      render: () => <RailSettings layout={railStrip} onChange={changeRailStrip} />,
     },
     {
       id: "drawing-aids",
@@ -960,6 +1010,7 @@ export function App() {
             startVoice={startVoice}
             voiceOn={featureState.voice}
             voiceNotice={voiceReady ? null : voiceStatus.label}
+            strip={railStrip}
             nameOf={nameOf}
             speaker={speaker}
             speakReplies={speakReplies}
@@ -991,6 +1042,9 @@ export function App() {
             voice={voice}
             owners={owners}
             cameraMarkers={cameraMarkerList}
+            approvals={approvalBadges}
+            onDecide={(id, decision) => agent.decide(id, decision)}
+            onReviewApproval={() => agent.requestOpen()}
             context={contextState}
             showContext={openDataState.showContext}
           >
