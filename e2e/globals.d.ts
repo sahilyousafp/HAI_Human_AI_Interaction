@@ -8,6 +8,7 @@ interface Window {
   __HAI_VIEWER__?: {
     camera(): { target: [number, number, number]; azimuth: number; elevation: number; distance: number };
     meshCount(): number;
+    hiddenKept(): string[];
     pick(x: number, y: number): string | null;
     latencyP90(): number | null;
     hovered?(): string | null;

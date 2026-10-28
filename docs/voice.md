@@ -45,7 +45,7 @@ Say what to do to the selection and it is done at once, without the agent and wi
 | **move to marker** A | Takes the middle of what is selected, with its base, to the lettered marker |
 | **select** all, all walls, columns, level 2, none | Selects by type or level; "deselect" or "clear the selection" clears it |
 | **delete** this, all columns | Asks first: nod or press Enter to delete, shake or Escape to keep |
-| **hide**, **isolate**, **show all** | Takes elements out of the view (nothing is saved or undone) and brings them back |
+| **hide**, **isolate**, **show all** | Takes elements out of your view (nothing is saved or undone) and brings them back. Hidden elements are not drawn, picked or snapped to for you, but the agents' own pictures still show them |
 
 Commands chain with "and", "then" or a comma, and each step acts on what the one before left: "copy 3 m x then scale 0.5" makes a copy 3 m along and halves it. A copy leaves the original alone, and what follows it acts on the copies; what comes before it changes the original. A chain is one undo step named after what was said ("Copy, rotate 90 degrees"). A transcript starting with "select" can act on what it selected: "select all walls and move 2 m up".
 
@@ -53,7 +53,7 @@ All or nothing: if one word of what you said is not understood, the whole transc
 
 The agent has the same operations as `transform_elements` ([agent.md](agent.md)), so what you can say it can do too, on any element, and "copy this along the curve" is a request for it. Along a line you have drawn it can copy every so many centimetres, with a width that changes along the way (`geometry_array_along_curve`), and loft, sweep, combine and offset shapes with the OpenCascade kernel (see [Geometry kernel](agent.md#geometry-kernel)).
 
-With **Claude chat** off (Settings > Features) only commands run: a transcript that is not a command shows "Not a command: ..." and is sent nowhere, the chat panel is gone, listening for names is off, and a small microphone button and bar over the model take the chat's place.
+With **Claude chat** off (Settings > Features) only commands run: a transcript that is not a command shows "Not a command: ..." and is sent nowhere, the chat panel is gone, listening for names is off, and a small bar over the model takes the chat's place: a microphone button (with the voice feature on), a box to **type** a command (Enter runs it as though you had said it, on what is selected or pointed at), and what was understood.
 
 ## Point and speak
 

@@ -132,6 +132,13 @@ function shootOne(rig: ShotRig, request: ShotRequest, spec: AgentCamera): ShotIm
           object.visible = true;
         });
       }
+      // What the user hid ("hide", "isolate") is only hidden from their own view: the agents see the whole model.
+      if (object.userData.hiddenByUser === true && !object.visible) {
+        object.visible = true;
+        undo.push(() => {
+          object.visible = false;
+        });
+      }
       // The city context is shown in every picture, even when the user has hidden it from their own view.
       if (object.userData.contextLayer === true && !object.visible) {
         object.visible = true;

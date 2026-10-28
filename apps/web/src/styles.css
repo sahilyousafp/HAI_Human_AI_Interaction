@@ -3039,6 +3039,7 @@ kbd {
    panel that holds them is gone. */
 .command-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   max-width: min(420px, 100%);
@@ -3048,8 +3049,23 @@ kbd {
   background: var(--material);
   box-shadow: var(--shadow-1);
 }
-.command-bar .voice-bar {
+.command-form {
   flex: 1;
+  min-width: 140px;
+}
+.command-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+.command-bar .voice-bar {
+  /* What was heard goes on its own row under the box, so it has the width to read. */
+  flex: 1 1 100%;
   min-width: 0;
   min-height: 0;
   border: 0;

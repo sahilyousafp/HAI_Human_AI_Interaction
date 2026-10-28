@@ -20,6 +20,7 @@ interface Seen {
   sun: number;
   afterRender: boolean;
   grid: number[];
+  hiddenVisible: boolean;
 }
 
 function setup() {
@@ -36,6 +37,11 @@ function setup() {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(), material);
   mesh.userData = { elementId: "wall-1", cleanColor: "#cccccc" };
   scene.add(mesh);
+  // An element the user hid ("hide", "isolate"): not drawn for them, but in the agents' pictures.
+  const hiddenMesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial());
+  hiddenMesh.userData = { elementId: "wall-2", hiddenByUser: true };
+  hiddenMesh.visible = false;
+  scene.add(hiddenMesh);
   // The infinite grid: centred under whichever camera is drawing, through a uniform the viewer sets each frame.
   const gridMaterial = new THREE.ShaderMaterial({
     uniforms: { worldCamProjPosition: { value: new THREE.Vector3(7, 8, -0.31) } },
@@ -65,6 +71,7 @@ function setup() {
         sun: light.intensity,
         afterRender: scene.onAfterRender === hook,
         grid: gridMaterial.uniforms.worldCamProjPosition?.value.toArray() as number[],
+        hiddenVisible: hiddenMesh.visible,
       });
     },
   };
@@ -80,7 +87,7 @@ function setup() {
       return { png: async () => `png-${width}x${height}`, thumb: async () => "thumb" };
     },
   };
-  return { rig, seen, copies, gridMaterial, mark, material, light, hook, scene, userCamera, gl };
+  return { rig, seen, copies, gridMaterial, mark, material, light, hook, scene, userCamera, gl, hiddenMesh };
 }
 
 const request = { cameras: [camera], size: 1280, section: false, selection: false };
@@ -117,6 +124,14 @@ describe("pictures from an agent's camera", () => {
     expect(light.intensity).toBe(1.6);
     expect(gl.localClippingEnabled).toBe(true);
     expect(scene.onAfterRender).toBe(hook);
+  });
+
+  it("show what the user has hidden, and hide it again for them", async () => {
+    const { rig, seen, hiddenMesh } = setup();
+    await takeShots(rig, request);
+    expect(seen[0]?.hiddenVisible).toBe(true);
+    expect(seen[1]?.hiddenVisible).toBe(false);
+    expect(hiddenMesh.visible).toBe(false);
   });
 
   it("look from the camera the agent placed", async () => {

@@ -268,6 +268,8 @@ declare global {
     __HAI_VIEWER__?: {
       camera(): Turntable;
       meshCount(): number;
+      /** The elements the user has hidden that the scene still holds, for the agents' pictures. */
+      hiddenKept(): string[];
       /** The element a click or tap at this viewer position would hit (null under a HUD panel). */
       pick(x: number, y: number): string | null;
       latencyP90(): number | null;
@@ -387,6 +389,7 @@ function ElementMesh({
   offsetMm,
   sectionMm,
   draft = false,
+  hiddenByUser = false,
 }: {
   element: Element;
   doc: SceneDocument;
@@ -401,6 +404,8 @@ function ElementMesh({
   sectionMm: number | null;
   /** Not created yet (a create tool or Copy is placing it): see-through, and never picked. */
   draft?: boolean;
+  /** Hidden by the user ("hide", "isolate"): not drawn or picked for them, but kept for the agents' own pictures. */
+  hiddenByUser?: boolean;
 }) {
   const mesh = useModelPart(element);
   // An imported model is drawn from its asset's own arrays (millimetres), scaled and placed by the mesh; everything
@@ -476,7 +481,9 @@ function ElementMesh({
       scale={scale}
       castShadow
       receiveShadow
-      userData={{ elementId: element.id, cleanColor: clean }}
+      visible={!hiddenByUser}
+      {...(hiddenByUser ? { raycast: () => null } : {})}
+      userData={{ elementId: element.id, cleanColor: clean, ...(hiddenByUser ? { hiddenByUser: true } : {}) }}
     >
       <meshStandardMaterial
         color={color}
@@ -1575,6 +1582,7 @@ export function Viewer({
     window.__HAI_VIEWER__ = {
       camera: () => nav.current,
       meshCount: () => Object.keys(client.getSnapshot().doc?.elements ?? {}).length,
+      hiddenKept: () => [...hidden].filter((id) => client.getSnapshot().doc?.elements[id]),
       // What a user can actually hit there: nothing under a HUD panel, as for the mouse and the hand.
       pick: (x, y) => (overHud(wrapper.current, [x, y]) ? null : pickRef.current.id(x, y)),
       latencyP90: () => latency.p90(),
@@ -1619,7 +1627,7 @@ export function Viewer({
         }),
       engaged: (engaged) => bus.setEngaged(engaged),
     };
-  }, [bus, client, latency, tools, sectionOutlineOnScreen, view]);
+  }, [bus, client, hidden, latency, tools, sectionOutlineOnScreen, view]);
 
   // The hand pointer shows what a pinch would do here: press a button, steer the palette, grab the section, or the
   // active tool's own action (its icon).
@@ -1757,21 +1765,20 @@ export function Viewer({
           />
           <ModelAssetsContext.Provider value={modelAssets}>
             {shownDoc &&
-              Object.values(shownDoc.elements)
-                .filter((element) => !hidden.has(element.id))
-                .map((element) => (
-                  <ElementMesh
-                    key={element.id}
-                    element={element}
-                    doc={shownDoc as SceneDocument}
-                    colors={colors}
-                    selected={selection.has(element.id)}
-                    hovered={hoverId === element.id}
-                    marked={overlay.marked === element.id}
-                    offsetMm={previewOffset(element)}
-                    sectionMm={overlay.sectionMm}
-                  />
-                ))}
+              Object.values(shownDoc.elements).map((element) => (
+                <ElementMesh
+                  key={element.id}
+                  element={element}
+                  doc={shownDoc as SceneDocument}
+                  colors={colors}
+                  selected={selection.has(element.id)}
+                  hovered={hoverId === element.id}
+                  marked={overlay.marked === element.id}
+                  offsetMm={previewOffset(element)}
+                  sectionMm={overlay.sectionMm}
+                  hiddenByUser={hidden.has(element.id)}
+                />
+              ))}
           </ModelAssetsContext.Provider>
           <group userData={USER_ONLY}>
             <ClaimBoxes boxes={(owners ?? NO_OWNERS).boxes} />
