@@ -1,4 +1,5 @@
 import type { Element, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
+import { transformPatch } from "@hai/scene";
 import { movedOffset } from "./placement.ts";
 import type { Tool, ToolContext } from "./types.ts";
 
@@ -50,24 +51,7 @@ function snapNote(ctx: ToolContext): string {
 
 /** The same element moved by (dx, dy) in plan, whatever its type. */
 export function shifted(element: Element, dx: number, dy: number): Element {
-  const shift = ([x, y]: PointMm): PointMm => [x + dx, y + dy];
-  switch (element.type) {
-    case "massing":
-      return { ...element, origin: [element.origin[0] + dx, element.origin[1] + dy, element.origin[2]] };
-    case "column":
-      return { ...element, position: shift(element.position) };
-    case "wall":
-      return { ...element, start: shift(element.start), end: shift(element.end) };
-    case "slab":
-      return { ...element, outline: element.outline.map(shift) };
-    case "line":
-      return { ...element, points: element.points.map(([x, y, z]): Point3Mm => [x + dx, y + dy, z]) };
-    case "imported":
-      return {
-        ...element,
-        translation: [element.translation[0] + dx, element.translation[1] + dy, element.translation[2]],
-      };
-  }
+  return { ...element, ...transformPatch(element, { kind: "translate", by: [dx, dy, 0] }, []) } as Element;
 }
 
 /** The wall a drag from `start` to `end` draws (not yet created). */

@@ -1,5 +1,5 @@
 import type { SceneDocument } from "@hai/protocol";
-import { exportExtrusions, type MeshPart, prismMesh } from "@hai/scene";
+import { exportExtrusions, importedPlacement, type MeshPart, prismMesh } from "@hai/scene";
 import type { RhinoModule } from "rhino3dm";
 
 /** What goes into a Rhino file: the scene, and the triangles of each imported model it uses (millimetres). */
@@ -26,12 +26,24 @@ export type ExportResult =
  * Mesh arrays in the layout rhino3dm reads them: three.js axes (Y up), which it turns into Rhino's (Z up). A point
  * (x, y, z) of this app goes in as (x, z, -y) and comes out as itself.
  */
-function asThreeAxes(positions: Float32Array, translation: readonly number[] = [0, 0, 0]): Float32Array {
+function asThreeAxes(
+  positions: Float32Array,
+  placement: { offset: readonly number[]; scale: number; rotationDeg: number } = {
+    offset: [0, 0, 0],
+    scale: 1,
+    rotationDeg: 0,
+  },
+): Float32Array {
   const out = new Float32Array(positions.length);
+  const { offset, scale } = placement;
+  const cos = Math.cos((placement.rotationDeg * Math.PI) / 180);
+  const sin = Math.sin((placement.rotationDeg * Math.PI) / 180);
   for (let i = 0; i < positions.length; i += 3) {
-    const x = (positions[i] as number) + (translation[0] as number);
-    const y = (positions[i + 1] as number) + (translation[1] as number);
-    const z = (positions[i + 2] as number) + (translation[2] as number);
+    const px = positions[i] as number;
+    const py = positions[i + 1] as number;
+    const x = (offset[0] as number) + scale * (px * cos - py * sin);
+    const y = (offset[1] as number) + scale * (px * sin + py * cos);
+    const z = (offset[2] as number) + scale * (positions[i + 2] as number);
     out[i] = x;
     out[i + 1] = z;
     out[i + 2] = -y;
@@ -138,7 +150,7 @@ export function buildFile3dm(rhino: RhinoModule, { doc, assets }: ExportInput): 
         report.skipped.push(`${element.name}: its model file is missing`);
         continue;
       }
-      const positions = asThreeAxes(part.positions, element.translation);
+      const positions = asThreeAxes(part.positions, importedPlacement(element));
       const mesh = rhino.Mesh.createFromThreejsJSON({
         data: {
           attributes: { position: { itemSize: 3, type: "Float32Array", array: positions } },

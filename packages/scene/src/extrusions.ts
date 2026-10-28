@@ -1,5 +1,6 @@
 import type { PointMm, SceneDocument } from "@hai/protocol";
 import { elementBase } from "./bounds.ts";
+import { footprintOf } from "./placement.ts";
 
 /** The layer an element's type is saved on. */
 export const EXPORT_LAYERS = {
@@ -37,13 +38,6 @@ function signedArea2(points: PointMm[]): number {
 
 const counterClockwise = (points: PointMm[]): PointMm[] =>
   signedArea2(points) < 0 ? [...points].reverse() : points;
-
-const rectangle = (x0: number, y0: number, x1: number, y1: number): PointMm[] => [
-  [x0, y0],
-  [x1, y0],
-  [x1, y1],
-  [x0, y1],
-];
 
 /**
  * Every wall, slab, column and massing of a scene as the extrusion of its footprint, in the order of the scene. A wall is
@@ -92,26 +86,22 @@ export function exportExtrusions(doc: SceneDocument): ExtrusionExport[] {
         });
         break;
       case "column": {
-        const [x, y] = element.position;
-        const [w, d] = element.section;
         out.push({
           ...common,
           layer: EXPORT_LAYERS.column,
-          footprint: rectangle(x - w / 2, y - d / 2, x + w / 2, y + d / 2),
+          footprint: footprintOf(element) as PointMm[],
           baseMm: elementBase(element, doc.levels),
           heightMm: element.height,
         });
         break;
       }
       case "massing": {
-        const [x, y, z] = element.origin;
-        const [w, d, h] = element.size;
         out.push({
           ...common,
           layer: EXPORT_LAYERS.massing,
-          footprint: rectangle(x, y, x + w, y + d),
-          baseMm: z,
-          heightMm: h,
+          footprint: footprintOf(element) as PointMm[],
+          baseMm: element.origin[2],
+          heightMm: element.size[2],
         });
         break;
       }

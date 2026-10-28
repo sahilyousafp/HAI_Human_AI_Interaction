@@ -1,4 +1,5 @@
 import type { Element, Point3Mm, SceneOp } from "@hai/protocol";
+import { transformOp } from "@hai/scene";
 import { columnTool, copyTool, lineTool, slabTool, wallTool } from "./create.ts";
 import { snap } from "./grid.ts";
 import { movedOffset } from "./placement.ts";
@@ -33,35 +34,8 @@ const distanceMm = (a: Point3Mm, b: Point3Mm) => Math.hypot(a[0] - b[0], a[1] - 
 
 /** The operation that moves an element by (dx, dy) on the ground plane, whatever its type. */
 export function moveOp(element: Element, dx: number, dy: number): SceneOp {
-  const shift = ([x, y]: [number, number]): [number, number] => [x + dx, y + dy];
-  switch (element.type) {
-    case "massing":
-      return {
-        op: "update",
-        id: element.id,
-        patch: { origin: [element.origin[0] + dx, element.origin[1] + dy, element.origin[2]] },
-      };
-    case "column":
-      return { op: "update", id: element.id, patch: { position: shift(element.position) } };
-    case "wall":
-      return {
-        op: "update",
-        id: element.id,
-        patch: { start: shift(element.start), end: shift(element.end) },
-      };
-    case "slab":
-      return { op: "update", id: element.id, patch: { outline: element.outline.map(shift) } };
-    case "line":
-      return {
-        op: "update",
-        id: element.id,
-        patch: { points: element.points.map(([x, y, z]) => [x + dx, y + dy, z]) },
-      };
-    case "imported": {
-      const [x, y, z] = element.translation;
-      return { op: "update", id: element.id, patch: { translation: [x + dx, y + dy, z] } };
-    }
-  }
+  // A move in plan never needs the levels (they only matter to a change of height).
+  return transformOp(element, { kind: "translate", by: [dx, dy, 0] }, []) as SceneOp;
 }
 
 export const selectTool: Tool = {

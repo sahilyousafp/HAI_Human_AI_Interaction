@@ -15,6 +15,7 @@ import {
 import type { MeshPart } from "@hai/scene";
 import {
   elementBounds,
+  importedPlacement,
   ORTHO_VIEWS,
   type Projector,
   sunLightDirection,
@@ -74,7 +75,7 @@ import type { Hit } from "../tools/types.ts";
 import type { VoiceInput, VoiceState } from "../voice/voice-input.ts";
 import { SUN_DISTANCE, takeShots, USER_ONLY } from "./agent-shot.ts";
 import { type CameraMarker, CameraMarkers } from "./camera-markers.tsx";
-import { elementGeometry, MM, modelGeometry, sceneBounds } from "./geometry.ts";
+import { elementGeometry, MM, modelGeometry, radians, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
 import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
 import {
@@ -406,12 +407,16 @@ function ElementMesh({
   );
   const geometry = (model ?? built) as THREE.BufferGeometry;
   useEffect(() => () => geometry.dispose(), [geometry]);
-  const translation = model && element.type === "imported" ? element.translation : null;
+  // The model's triangles are in the asset's own millimetres: its placement turns, scales and moves them.
+  const placement = useMemo(
+    () => (model && element.type === "imported" ? importedPlacement(element) : null),
+    [model, element],
+  );
   const topMm = useMemo(() => {
     geometry.computeBoundingBox();
     const top = geometry.boundingBox?.max.z ?? 0;
-    return model ? top + (translation?.[2] ?? 0) : top / MM;
-  }, [geometry, model, translation]);
+    return placement ? placement.offset[2] + placement.scale * top : top / MM;
+  }, [geometry, placement]);
   // Edge lines clip per segment by its first point, so a cut element's vertical edges would stick up through the
   // section; cut elements are drawn without edges instead.
   // Imported models have no edge lines: finding them costs time proportional to the triangles (a model of a million
@@ -433,14 +438,26 @@ function ElementMesh({
   if (marked) color = colors.risk;
   useWear(element.id, color, showEdges ? (glow ?? owner) : null, glow);
   const offset: [number, number, number] = offsetMm ? [offsetMm[0] * MM, offsetMm[1] * MM, 0] : [0, 0, 0];
-  // A model sits at its translation, and its millimetres become metres by scale.
-  const placed: [number, number, number] = translation
-    ? [offset[0] + translation[0] * MM, offset[1] + translation[1] * MM, offset[2] + translation[2] * MM]
+  // A model sits at its placement, and its millimetres become metres by scale.
+  const placed: [number, number, number] = placement
+    ? [
+        offset[0] + placement.offset[0] * MM,
+        offset[1] + placement.offset[1] * MM,
+        offset[2] + placement.offset[2] * MM,
+      ]
     : offset;
-  const scale = model ? MM : 1;
+  const scale = model ? MM * (placement?.scale ?? 1) : 1;
+  const turned: [number, number, number] = [0, 0, radians(placement?.rotationDeg ?? 0)];
   if (draft) {
     return (
-      <mesh geometry={geometry} position={placed} scale={scale} raycast={() => null} renderOrder={1}>
+      <mesh
+        geometry={geometry}
+        position={placed}
+        rotation={turned}
+        scale={scale}
+        raycast={() => null}
+        renderOrder={1}
+      >
         <meshStandardMaterial color={colors.selected} transparent opacity={0.55} depthWrite={false} />
         {element.type !== "line" && <Edges threshold={20} color={colors.selected} />}
       </mesh>
@@ -450,6 +467,7 @@ function ElementMesh({
     <mesh
       geometry={geometry}
       position={placed}
+      rotation={turned}
       scale={scale}
       castShadow
       receiveShadow

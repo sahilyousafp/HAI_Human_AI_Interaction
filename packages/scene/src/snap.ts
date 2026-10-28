@@ -1,5 +1,6 @@
 import type { DrawingAids, Element, Point2, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
 import { elementBase, elementBounds } from "./bounds.ts";
+import { footprintOf } from "./placement.ts";
 import type { WorkPlane } from "./views.ts";
 
 /** What a point snapped to; `ortho` is a point only held on an axis, with nothing else near. */
@@ -146,7 +147,15 @@ function addElement(index: SnapIndex, element: Element, doc: SceneDocument): voi
       }
       return;
     }
-    case "massing":
+    case "massing": {
+      const centre: PointMm = [
+        element.origin[0] + element.size[0] / 2,
+        element.origin[1] + element.size[1] / 2,
+      ];
+      for (const z of [element.origin[2], element.origin[2] + element.size[2]])
+        addOutline(index, footprintOf(element) as PointMm[], z, centre);
+      return;
+    }
     case "imported": {
       const { min, max } = elementBounds(element, doc.levels);
       const centre: PointMm = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2];

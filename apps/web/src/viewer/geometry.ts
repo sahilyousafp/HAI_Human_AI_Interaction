@@ -1,10 +1,13 @@
 import type { Element, Level, Point3Mm } from "@hai/protocol";
-import { elementBase, type MeshPart } from "@hai/scene";
+import { elementBase, importedPlacement, type MeshPart } from "@hai/scene";
 import * as THREE from "three";
 import { polylineLength, tubeAlong, tubeRadiusMm } from "../import/curve-tube.ts";
 
 /** Scene units are millimetres; the viewer works in metres. */
 export const MM = 0.001;
+
+/** Degrees to radians. */
+export const radians = (deg: number): number => (deg * Math.PI) / 180;
 
 /**
  * Builds geometry for an element in metres, Z up.
@@ -21,6 +24,7 @@ export function elementGeometry(element: Element, levels: Level[]): THREE.Buffer
     case "massing": {
       const [w, d, h] = element.size;
       const g = new THREE.BoxGeometry(w * MM, d * MM, h * MM);
+      g.rotateZ(radians(element.rotationDeg ?? 0));
       g.translate(
         (element.origin[0] + w / 2) * MM,
         (element.origin[1] + d / 2) * MM,
@@ -46,6 +50,7 @@ export function elementGeometry(element: Element, levels: Level[]): THREE.Buffer
     case "column": {
       const [w, d] = element.section;
       const g = new THREE.BoxGeometry(w * MM, d * MM, element.height * MM);
+      g.rotateZ(radians(element.rotationDeg ?? 0));
       g.translate(element.position[0] * MM, element.position[1] * MM, (base + element.height / 2) * MM);
       return g;
     }
@@ -60,15 +65,15 @@ export function elementGeometry(element: Element, levels: Level[]): THREE.Buffer
       return g;
     }
     case "imported": {
-      const [tx, ty, tz] = element.translation;
-      // Without them (still loading, or the file is gone) the stored bounding box stands in.
+      // Without them (still loading, or the file is gone) the stored bounding box stands in, placed as the model is.
       const { min, max } = element.bounds;
-      const g = new THREE.BoxGeometry((max[0] - min[0]) * MM, (max[1] - min[1]) * MM, (max[2] - min[2]) * MM);
-      g.translate(
-        ((min[0] + max[0]) / 2 + tx) * MM,
-        ((min[1] + max[1]) / 2 + ty) * MM,
-        ((min[2] + max[2]) / 2 + tz) * MM,
-      );
+      const { offset, scale, rotationDeg } = importedPlacement(element);
+      const g = new THREE.BoxGeometry(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
+      g.translate((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2);
+      g.rotateZ(radians(rotationDeg));
+      g.scale(scale, scale, scale);
+      g.translate(offset[0], offset[1], offset[2]);
+      g.scale(MM, MM, MM);
       return g;
     }
   }
@@ -77,7 +82,7 @@ export function elementGeometry(element: Element, levels: Level[]): THREE.Buffer
 /**
  * The triangles of an imported model, as the asset holds them: millimetres, sharing the asset's arrays (nothing is
  * copied, so a model of millions of triangles costs the main thread no more than the upload to the graphics card).
- * The material shades each face flat. Draw it with a scale of `MM` at the element's translation.
+ * The material shades each face flat. Draw it at the element's placement (`importedPlacement`), scaled by `MM`.
  */
 export function modelGeometry(mesh: MeshPart): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();

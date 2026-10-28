@@ -116,8 +116,10 @@ describe("openSignInTerminal", () => {
       const program = join(folder, "claude.cmd");
       writeFileSync(program, `@echo off\r\necho %1 %2>"${marker}"\r\n`);
       await openSignInTerminal(program, { keepOpen: false });
-      for (let i = 0; i < 100 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 100));
-      expect(readFileSync(marker, "utf8").trim()).toBe("auth login");
+      // The shell creates the file when it opens the redirect, a moment before the text is in it: wait for the text.
+      const written = () => (existsSync(marker) ? readFileSync(marker, "utf8").trim() : "");
+      for (let i = 0; i < 100 && !written(); i++) await new Promise((r) => setTimeout(r, 100));
+      expect(written()).toBe("auth login");
     },
   );
 });
