@@ -27,6 +27,7 @@ import { rememberedShot } from "../viewer/agent-shot.ts";
 import type { Speaker } from "../voice/speaker.ts";
 import { MicButton, VoiceBar } from "../voice/VoiceBar.tsx";
 import type { VoiceInput } from "../voice/voice-input.ts";
+import { AgentFace } from "./AgentFace.tsx";
 import { AgentsView } from "./AgentsView.tsx";
 import {
   type AgentClient,
@@ -1245,7 +1246,7 @@ function TeamStrip({
         }
         onClick={() => task && onOpenTask(task.id)}
       >
-        <span className="team-dot" aria-hidden="true" />
+        <AgentFace name={member.name} state={state} color={member.color} />
         <span className="team-chip-name">{displayName(member.name)}</span>
         {!idle && <span className="team-chip-state">{shown ? shown.title : MEMBER_STATE_LABEL[state]}</span>}
         {!idle && shown && (shown.scope || shown.waitingFor) && (
