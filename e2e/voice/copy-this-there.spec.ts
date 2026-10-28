@@ -20,16 +20,16 @@ test("Copy this there, and A pause during a held pinch: one request, with the co
     const column = await findElementOnScreen(page, "col-a1");
     const [x, y] = await openGround(page, 2000, 2000, { empty: true });
     const there = (await viewerOf(page, [x + 1000, y + 1000])) as Point;
-    await holdAt(page, column);
+    await holdAt(page, column, "Left");
     await expect(page.getByTestId("held-chip")).toContainText("Point at what you mean", { timeout: 60_000 });
     // While speaking, the hand goes to the ground and rests there.
     for (let i = 0; i < 8; i++) {
-      await handEvent(page, "Right", "pinch.drag.update", there);
+      await handEvent(page, "Left", "pinch.drag.update", there);
       await page.waitForTimeout(100);
     }
     await expect(page.getByTestId("held-point")).toHaveText("P1");
     await page.waitForTimeout(4000); // "There." after the pause, and the silence after it
-    await handEvent(page, "Right", "pinch.drag.end", there);
+    await handEvent(page, "Left", "pinch.drag.end", there);
     await expect(page.getByTestId("held-chip")).toContainText("Sent - shake to stop", { timeout: 30_000 });
     // One request with both parts; the column is "this" and the rested point is P1, in millimetres.
     const sent = await expect

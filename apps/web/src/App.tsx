@@ -71,7 +71,7 @@ import { Viewer } from "./viewer/Viewer.tsx";
 import { Visibility } from "./viewer/visibility.ts";
 import { voiceAvailability, voicePillText } from "./voice/availability.ts";
 import { CommandBar } from "./voice/CommandBar.tsx";
-import { listenInCloud, listenOnDevice, preloadOnDevice } from "./voice/listeners.ts";
+import { detectorLoaded, listenInCloud, listenOnDevice, preloadOnDevice } from "./voice/listeners.ts";
 import { bestEngine, resample, Speaker } from "./voice/speaker.ts";
 import { toolNamed } from "./voice/tool-commands.ts";
 import { Transcriber } from "./voice/transcriber.ts";
@@ -85,7 +85,12 @@ declare global {
     __HAI_MIRROR__?: RhinoMirror;
     __HAI_CAMERA__?: TrackingSession;
     __HAI_VOICE__?: VoiceInput;
-    __HAI_SPEECH__?: { speaker: Speaker; roundTrip(text: string): Promise<string | null> };
+    __HAI_SPEECH__?: {
+      speaker: Speaker;
+      /** Resolves once the speech detector and the transcriber are loaded: the microphone then loses no speech. */
+      warm(): Promise<void>;
+      roundTrip(text: string): Promise<string | null>;
+    };
   }
 }
 
@@ -639,6 +644,9 @@ export function App() {
     if (!import.meta.env.DEV) return;
     window.__HAI_SPEECH__ = {
       speaker,
+      warm: async () => {
+        await Promise.all([detectorLoaded(), transcriber.whenReady()]);
+      },
       roundTrip: async (text) => {
         const spoken = await speaker.synthesize(text);
         return spoken ? transcriber.transcribe(resample(spoken.audio, spoken.rate, 16_000)) : null;

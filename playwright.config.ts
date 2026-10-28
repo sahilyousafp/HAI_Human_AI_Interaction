@@ -76,6 +76,8 @@ export default defineConfig({
     baseURL: E2E_BASE_URL,
     trace: "retain-on-failure",
   },
+  // Waiting for something to appear: a shared CI runner takes several times longer than a laptop.
+  expect: { timeout: isCI ? 15_000 : 5_000 },
   projects: [
     {
       name: "chromium",
@@ -99,7 +101,10 @@ export default defineConfig({
               ...devices["Desktop Chrome"],
               channel,
               viewport: { width: 1280, height: 800 },
-              launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] },
+              // A fake microphone and camera: the screens do not depend on what the machine has plugged in.
+              launchOptions: {
+                args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", ...fakeCamera],
+              },
             },
             expect: {
               toHaveScreenshot: { maxDiffPixelRatio: 0.02, threshold: 0.25, animations: "disabled" as const },

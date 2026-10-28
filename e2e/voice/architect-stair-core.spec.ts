@@ -42,10 +42,10 @@ test("Addressing still works: a held pinch on a column, then the specialist's na
   try {
     await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const at = await findElementOnScreen(page, "col-a1");
-    await holdAt(page, at);
+    await holdAt(page, at, "Left");
     await expect(page.getByTestId("held-chip")).toContainText("Point at what you mean", { timeout: 60_000 });
     await page.waitForTimeout(3500); // the rest of the sentence and the pause after it
-    await releaseAt(page, at);
+    await releaseAt(page, at, "Left");
     // Sent at once, without the review countdown.
     await expect(page.getByTestId("held-chip")).toContainText("Sent - shake to stop", { timeout: 30_000 });
     await expect(page.getByTestId("voice-transcript")).toHaveCount(0);

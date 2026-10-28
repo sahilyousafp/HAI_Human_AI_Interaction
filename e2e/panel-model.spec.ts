@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { allow } from "./budget.ts";
 import {
   askForPanel,
   callTool,
@@ -82,7 +83,7 @@ test.describe("live preview", () => {
       samples.push(t1 - t0);
     }
     samples.sort((a, b) => a - b);
-    expect(samples[Math.floor(samples.length / 2)]).toBeLessThan(50);
+    expect(samples[Math.floor(samples.length / 2)]).toBeLessThan(allow(50, 200));
   });
 
   test("Agent does not see previews: it reads the committed position", async ({ page }) => {

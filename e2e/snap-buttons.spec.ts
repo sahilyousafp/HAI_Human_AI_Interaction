@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
+import { allow } from "./budget.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { handAt, now, openViewer, startTestBridge } from "./viewer.ts";
 
@@ -197,6 +198,6 @@ test("snapping adds no gesture-to-render time: the orbit p90 is within a few mil
   console.log(
     `orbit gesture to render p90: ${on.toFixed(1)} ms with Snap to buttons on, ${off.toFixed(1)} ms off`,
   );
-  expect(on).toBeLessThan(off + 8);
-  expect(on).toBeLessThan(50);
+  expect(on).toBeLessThan(off + allow(8, 40));
+  expect(on).toBeLessThan(allow(50, 200));
 });

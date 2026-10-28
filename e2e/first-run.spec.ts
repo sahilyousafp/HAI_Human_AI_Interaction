@@ -1,6 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
 import type { ModelsState } from "../packages/protocol/src/desktop.ts";
 import { openSettings } from "./settings.ts";
+import { startTestBridge } from "./viewer.ts";
 
 // The first-run screen for the voice models. It belongs to the desktop app, so the page here gets a stand-in for the
 // `window.haiDesktop` object the desktop app's preload script provides, and the test decides what the models' state is.
@@ -33,6 +38,19 @@ const failed = (reason: "offline" | "server" | "rejected"): ModelsState => ({
 });
 
 type Fake = { set(state: ModelsState): void; calls: string[] };
+
+let bridge: Awaited<ReturnType<typeof startTestBridge>> | null = null;
+test.afterEach(async () => {
+  await bridge?.stop();
+  bridge = null;
+});
+
+/** A bridge with an agent that is there: without Claude Code on the machine the microphone is off for want of one. */
+async function withAgent(page: Page) {
+  bridge = await startTestBridge(page, {
+    agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-e2e-first-run-"))),
+  });
+}
 
 /** Gives the page a stand-in desktop app whose models state the test controls through `window.__fake`. */
 async function installDesktop(page: Page, initial: ModelsState) {
@@ -225,6 +243,7 @@ test.describe("the voice controls while the models are missing", () => {
   test("say so, show progress, and come alive when the models are in place, with no reload", async ({
     page,
   }) => {
+    await withAgent(page);
     await installDesktop(page, needed);
     await page.goto("/");
     await action(page, "skip").click(); // go on without voice for now
@@ -266,6 +285,8 @@ test.describe("the voice controls while the models are missing", () => {
   });
 
   test("a browser has no such notice: the microphone is just the microphone", async ({ page }) => {
+    // With an agent to talk to (without Claude Code on the machine the microphone is off for want of one).
+    await withAgent(page);
     await page.goto("/");
     await expect(page.getByTestId("mic-indicator")).toHaveText("Mic off");
     await expect(page.getByTestId("mic-button")).toBeEnabled();

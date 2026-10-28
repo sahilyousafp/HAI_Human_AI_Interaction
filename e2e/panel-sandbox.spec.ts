@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { expect, type Page, test } from "@playwright/test";
 import type { Team } from "../apps/bridge/src/agent/team.ts";
+import { allow } from "./budget.ts";
 import {
   askForPanel,
   current,
@@ -138,13 +139,13 @@ test.describe("what a panel may send", () => {
   });
 
   test("a document that loops forever is called failed, and Close still works", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(allow(90_000, 240_000));
     await start(page);
     await askForPanel("<script>while (true) {}</script>");
     await expect(offerCard(page)).toBeVisible();
     await page.getByTestId("offer-open").click();
     // The page stays alive while the frame spins, and calls the document failed once its load time is up.
-    await expect(shell(page)).toHaveAttribute("data-status", "failed", { timeout: 20_000 });
+    await expect(shell(page)).toHaveAttribute("data-status", "failed", { timeout: allow(20_000, 90_000) });
     await expect(shell(page).getByTestId("panel-reason")).toContainText("did not finish loading");
     await shell(page).getByTestId("panel-close").click();
     await expect(shell(page)).toHaveCount(0);

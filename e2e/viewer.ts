@@ -103,12 +103,18 @@ export async function findElementOnScreen(page: Page, elementId: string): Promis
         [-60, 0],
       ].every(([dx = 0, dy = 0]) => canvasAt(px + dx, py + dy));
     };
-    const hits: [number, number][] = [];
-    for (let y = 0.05; y < 1; y += 0.025) {
-      for (let x = 0.05; x < 1; x += 0.025) {
-        if (window.__HAI_VIEWER__?.pick(x, y) === id && visible(x, y)) hits.push([x, y]);
+    // A coarse scan finds anything of size; a thin element (a column seen from a distance) needs a finer one.
+    const scan = (step: number) => {
+      const found: [number, number][] = [];
+      for (let y = 0.05; y < 1; y += step) {
+        for (let x = 0.05; x < 1; x += step) {
+          if (window.__HAI_VIEWER__?.pick(x, y) === id && visible(x, y)) found.push([x, y]);
+        }
       }
-    }
+      return found;
+    };
+    const coarse = scan(0.025);
+    const hits = coarse.length > 0 ? coarse : scan(0.008);
     if (hits.length === 0) return null;
     // The middle of what is visible, not an edge a HUD panel may grow over a moment later.
     const cx = hits.reduce((s, h) => s + h[0], 0) / hits.length;

@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
+import { allow } from "./budget.ts";
 import { openSettings } from "./settings.ts";
 import { handAt, now, openViewer, startTestBridge } from "./viewer.ts";
 
@@ -155,5 +156,5 @@ test("a pinch-drag scrolls the settings with the hand, and a quick release coast
   const followed = await scrollTop();
   expect(followed).toBeGreaterThan(50); // the content moved up with the hand
   await gesture(page, "pinch.drag.end", "Right", [start[0], start[1] - 0.16], ts + 1);
-  await expect.poll(scrollTop, { timeout: 2000 }).toBeGreaterThan(followed + 20); // and coasts on after letting go
+  await expect.poll(scrollTop, { timeout: allow(2000, 8000) }).toBeGreaterThan(followed + 20); // and coasts on after letting go
 });

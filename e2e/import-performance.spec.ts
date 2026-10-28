@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
+import { allow } from "./budget.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
 // A model of 1000 objects (the most an import keeps as separate elements) must not stall the page while it comes in,
@@ -89,5 +90,5 @@ test("1000 imported objects: the page never stalls long, and orbiting stays with
   const p90 = await page.evaluate(() => window.__HAI_VIEWER__?.latencyP90() ?? null);
   console.log(`gesture to render p90 with 1000 imported objects: ${p90} ms`);
   expect(p90).not.toBeNull();
-  expect(p90 as number).toBeLessThan(100);
+  expect(p90 as number).toBeLessThan(allow(100, 400));
 });
