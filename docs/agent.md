@@ -39,6 +39,8 @@ The `hai` MCP server gives each agent the tools its definition lists, from these
 | `get_user_context` | The selection, the element under your hand pointer, and the camera |
 | `create_elements`, `update_elements`, `delete_elements` | Change the scene. Each batch is checked as a whole: if one element is invalid, nothing changes and the error names it |
 | `transform_elements` | Moves, turns, scales or mirrors elements, or makes copies of them (`copies: N` puts each copy through the steps once more than the one before: a linear array). Steps run in order, each on what the one before left, and turn or scale about the elements' centre unless a point is named |
+| `geometry_array_along_curve` | Copies an element along a curve (a line element or a sketch): every spacing, or a count, with its width or size changing from a value at the first copy to a value at the last ("every 30 cm, the width starting at 15 cm and tapering to 5 cm"). The copies are ordinary elements. Needs no extra software (every agent that changes the model) |
+| `geometry_loft`, `geometry_sweep`, `geometry_boolean`, `geometry_offset` | Loft through sections, sweep a profile along a rail, union, subtract or intersect solids, offset a curve - with the OpenCascade geometry kernel, which HAI installs in the project's Python environment the first time one is used, after you have agreed. The result is made in the model at once as one undo step: a mesh you can move, turn, scale and delete (an offset makes line elements). See [Geometry kernel](#geometry-kernel) (every agent that changes the model) |
 | `set_tags` | Sets or removes the agent's own tags on elements. Names starting with `hai.` (`hai.owner`, `hai.part`, `hai.source`) belong to the system and are refused (every agent that changes the model) |
 | `set_selection` | Select elements for everyone |
 | `confirm_plan` | Shows the user how the lead means to split a request (agent, title and scope of each part) before it hands anything out; the user removes parts and confirms, or skips, and the lead hands out only the confirmed parts (the lead only; see [agents.md](agents.md#workers)) |
@@ -153,3 +155,15 @@ User-level servers and skills stay yours to manage in Claude Code itself.
 | A server shows "failed" | Check its command or URL in the Extensions tab; remove and add it again with the fix |
 | A card timed out | Ask again; or choose Always allow if you trust that tool in this project |
 | "Session recovered" | The agent process ended unexpectedly and the conversation was resumed; nothing to do |
+
+## Geometry kernel
+
+Lofts, sweeps, booleans and offsets need a real geometry kernel, which the scene's own elements and rhino3dm (the file format library) do not have. HAI uses [OpenCascade](https://dev.opencascade.org/) through Python (`cadquery-ocp`, pinned to the release HAI's recipes are tested with). It is not shipped with HAI: the first `geometry_loft`, `geometry_sweep`, `geometry_boolean` or `geometry_offset` shows a card that lists what would be installed, in the project's `.hai/python` environment, and runs after you agree. It is a large download (several hundred MB with its dependencies). After that, the tools run without asking.
+
+- **Loft**: closed sections make a solid, open ones a surface; `ruled` keeps the sides straight. Sections can be line elements or points, anywhere in space.
+- **Sweep**: a profile along a rail; draw the profile across the rail at its start. `smooth` fits one smooth curve through the rail's points.
+- **Boolean**: massings, columns, walls and slabs are combined as the extrusions of their footprints. Imported meshes cannot be combined.
+- **Offset**: a flat curve sideways by a distance. Closed curves grow for a positive distance; open ones move to the right of the way they run.
+
+A request is written to `.hai/geometry` and runs as a kept script in `.hai/scripts`, like any `python_run`. If the operating system refuses to load OpenCascade's native library (Windows Smart App Control does this on some machines), the tool says so and changes nothing. `geometry_array_along_curve` never needs the kernel.
+

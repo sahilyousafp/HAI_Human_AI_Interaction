@@ -249,6 +249,14 @@ export const HAI_TOOLS = {
   tags: ["set_tags"],
   /** Starting a worker for a part of the agent's own task; granted to the specialists that change the model. */
   workers: ["spawn_worker"],
+  /** Copies along a curve, and lofts, sweeps, booleans and offsets through OpenCascade; granted to the agents that change the model. */
+  geometry: [
+    "geometry_array_along_curve",
+    "geometry_loft",
+    "geometry_sweep",
+    "geometry_boolean",
+    "geometry_offset",
+  ],
   /** Runs Python in the managed environment; granted to the agents that change the model, and to any agent whose file lists it. */
   python: ["python_run"],
   /** Runs Python inside the open Rhino document; granted to the agents that change the model. */

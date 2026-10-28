@@ -1,3 +1,5 @@
+import { KERNEL_PACKAGES } from "../geometry/kernel.ts";
+
 /**
  * What the Python workbench can and cannot model without Rhino, as `rhino3dm` (openNURBS for Python) exposes it. Both
  * lists are checked against the installed `rhino3dm` by a test, so the description the agent reads cannot drift from
@@ -38,7 +40,7 @@ Other agents may be working in the same project at the same time. Always list th
 
 Packages: rhino3dm, ladybug-core and numpy are installed on first use. For anything else name it in "packages" (for example "shapely" or "ifcopenshell"); the user approves the list, and it is installed on their machine from PyPI. A package name may carry one version rule ("numpy==2.1.0"); nothing else is accepted.
 
-MODELLING WITHOUT RHINO (rhino3dm, the openNURBS library): you can build NURBS curves and surfaces from control points and knots, Breps from surfaces, revolves, boxes, spheres and cylinders, planar trimmed shapes and extrusions (${WORKBENCH_CAN.join(", ")}), with layers, names and colours, and write or read a .3dm file. You CANNOT loft, sweep, boolean (union, difference, intersection), fillet, offset or intersect Breps, or mesh a Brep (${WORKBENCH_CANNOT.join(", ")} do not exist here). When the task needs those, build the shape from control points yourself, or say so and, if Rhino is connected, use rhino_run_python, which has all of RhinoCommon.
+MODELLING WITHOUT RHINO (rhino3dm, the openNURBS library): you can build NURBS curves and surfaces from control points and knots, Breps from surfaces, revolves, boxes, spheres and cylinders, planar trimmed shapes and extrusions (${WORKBENCH_CAN.join(", ")}), with layers, names and colours, and write or read a .3dm file. rhino3dm itself CANNOT loft, sweep, boolean (union, difference, intersection), fillet, offset or intersect Breps, or mesh a Brep (${WORKBENCH_CANNOT.join(", ")} do not exist here). For a loft, sweep, boolean or offset of the model's own elements and lines, use the geometry_loft, geometry_sweep, geometry_boolean and geometry_offset tools (OpenCascade), which make the result directly in the model with no file; geometry_array_along_curve copies an element along a curve. For other kernel work (fillets, shells, free-form solids) name "${KERNEL_PACKAGES[0]}" in packages and use OCP (OpenCascade for Python) in your script, mesh the result and add it as an rhino3dm Mesh with hai_3dm; or, if Rhino is connected, use rhino_run_python, which has all of RhinoCommon.
 
 SAVING GEOMETRY SO THE USER CAN SEE IT: HAI's viewer draws only the render meshes a file stores, and rhino3dm stores none. Save through the helper, which adds them (a planar face is triangulated from its outline, an untrimmed surface is meshed on a grid) and then writes the file:
     import rhino3dm as r, hai_3dm

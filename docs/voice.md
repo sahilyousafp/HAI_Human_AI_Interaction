@@ -50,7 +50,7 @@ Commands chain with "and", "then" or a comma, and each step acts on what the one
 
 All or nothing: if one word of what you said is not understood, the whole transcript goes to the agent as a request, and nothing is guessed. A whole type is only deleted when you say "all" ("remove the wall" is for the agent). A tool's own name ("copy", "move", "delete") still picks that tool.
 
-The agent has the same operations as `transform_elements` ([agent.md](agent.md)), so what you can say it can do too, on any element, and "copy this along the curve" is a request for it.
+The agent has the same operations as `transform_elements` ([agent.md](agent.md)), so what you can say it can do too, on any element, and "copy this along the curve" is a request for it. Along a line you have drawn it can copy every so many centimetres, with a width that changes along the way (`geometry_array_along_curve`), and loft, sweep, combine and offset shapes with the OpenCascade kernel (see [Geometry kernel](agent.md#geometry-kernel)).
 
 With **Claude chat** off (Settings > Features) only commands run: a transcript that is not a command shows "Not a command: ..." and is sent nowhere, the chat panel is gone, listening for names is off, and a small microphone button and bar over the model take the chat's place.
 

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   type AgentCamera,
   type Element,
@@ -30,6 +29,7 @@ import { countByTag } from "../agent/ownership.ts";
 import type { PanelResult } from "../agent/panels.ts";
 import type { Caller } from "./agent-tokens.ts";
 import { type ContextTools, registerContextTools } from "./context-tools.ts";
+import { type GeometryTools, registerGeometryTools } from "./geometry-tools.ts";
 import { type OpenDataTools, registerOpenDataTools } from "./open-data-tools.ts";
 import { openPanelDescription } from "./panel-api.ts";
 import { pythonRunDescription } from "./python-api.ts";
@@ -41,6 +41,7 @@ import {
   type SurfaceTools,
 } from "./simulation-tools.ts";
 import { failure, text } from "./tool-results.ts";
+import { freshId, stopSignal } from "./tool-util.ts";
 import { registerUrbanTools, type UrbanTools } from "./urban-tools.ts";
 import { registerWeatherTools, type WeatherTools } from "./weather-tools.ts";
 
@@ -79,6 +80,8 @@ export interface SceneToolDeps {
   rhino?: RhinoContext;
   /** The Python workbench: runs a script in the managed environment. */
   python?: PythonTools;
+  /** The geometry tools (array along a curve, and OpenCascade's loft, sweep, boolean and offset). */
+  geometry?: GeometryTools;
   /** Python in the open Rhino document; present while the agent models with Rhino. */
   rhinoPython?: RhinoPythonTools;
   /** Aborted when the agent ends the request before it is answered (Stop): long tool calls end their work. */
@@ -222,10 +225,6 @@ export interface TeamTools {
   cancel(taskId: string): { ok: true; status: string } | { ok: false; error: string };
 }
 
-/** Aborted when either the protocol cancels the call or the agent ends the HTTP request. */
-const stopSignal = (...signals: Array<AbortSignal | undefined>): AbortSignal =>
-  AbortSignal.any(signals.filter((s): s is AbortSignal => s !== undefined));
-
 const brief = (e: Element) => ({
   id: e.id,
   name: e.name,
@@ -252,13 +251,6 @@ const COMPASS = [
   "NW",
   "NNW",
 ];
-/** An id nobody has: generated ones are checked against the model and this batch, never assumed to be free. */
-function freshId(type: unknown, taken: ReadonlySet<string>): string {
-  for (;;) {
-    const id = `${String(type ?? "element")}-${randomUUID().slice(0, 8)}`;
-    if (!taken.has(id)) return id;
-  }
-}
 
 /** The tool's steps as the scene package takes them (a move may leave out its height). */
 const stepsOf = (steps: Array<Record<string, unknown>>): TransformStep[] =>
@@ -900,6 +892,18 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
   if (deps.simulation) registerSimulationGeometry(register, deps.simulation);
   if (deps.surface) registerSurfaceTemperature(register, deps.surface);
   if (deps.context) registerContextTools(register, deps.context, (ops) => deps.apply(ops, caller.agent));
+
+  if (deps.geometry)
+    registerGeometryTools(
+      register,
+      {
+        doc: deps.doc,
+        apply: deps.apply,
+        geometry: deps.geometry,
+        requestSignal: deps.requestSignal,
+      },
+      caller,
+    );
 
   const { python, rhinoPython } = deps;
   if (python) {
