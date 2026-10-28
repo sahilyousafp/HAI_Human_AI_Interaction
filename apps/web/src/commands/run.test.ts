@@ -1,4 +1,10 @@
-import { type Element, Element as ElementSchema, type SceneDocument, type SceneOp } from "@hai/protocol";
+import {
+  type Element,
+  Element as ElementSchema,
+  type LetterMarker,
+  type SceneDocument,
+  type SceneOp,
+} from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { Visibility } from "../viewer/visibility.ts";
 import { type CommandHost, runCommand } from "./run.ts";
@@ -27,7 +33,7 @@ const doc = {
   elements: { block, wall },
 } as unknown as SceneDocument;
 
-function host(applied = true) {
+function host(applied = true, markers: LetterMarker[] = []) {
   const calls = {
     applied: [] as Array<{ label: string; ops: SceneOp[] }>,
     selected: [] as string[][],
@@ -44,6 +50,7 @@ function host(applied = true) {
     select: (ids) => calls.selected.push(ids),
     ask: (question, answer) => calls.asked.push({ question, answer }),
     flash: (message) => calls.flashed.push(message),
+    markers: () => markers,
     visibility,
   };
   return { host: value, calls, visibility };

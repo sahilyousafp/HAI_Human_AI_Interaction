@@ -1220,6 +1220,8 @@ export function Viewer({
   useEffect(
     () =>
       view.onViewRequest((request) => {
+        // A named view switches at once (the cube's faces do the same); framing and distance then animate from it.
+        if (request.view) showView(request.view);
         const doc = client.getSnapshot().doc;
         const boxOf = (ids: string[]) => {
           const boxes = ids.flatMap((id) => {
@@ -1248,7 +1250,7 @@ export function Viewer({
         };
         requestAnimationFrame(step);
       }),
-    [view, client, mirror],
+    [view, client, mirror, showView],
   );
 
   // Hand input: the router sends each gesture to the palette, the active tool or navigation (never the bridge).

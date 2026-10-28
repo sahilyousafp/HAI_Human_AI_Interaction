@@ -330,6 +330,7 @@ export function App() {
       select: (ids) => sceneClient.select(ids),
       ask: (question, answer) => tools.confirm(question, answer),
       flash: (message) => tools.flash(message),
+      markers: () => tools.references.markers,
       visibility,
     }),
     [sceneClient, tools, visibility],

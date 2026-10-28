@@ -88,6 +88,10 @@ export const RhinoSelected = z.strictObject({
 });
 export type RhinoSelected = z.infer<typeof RhinoSelected>;
 
+/** The ways the viewer looks at the model: the turntable perspective, and six true orthographic views. */
+export const VIEW_MODES = ["perspective", "top", "bottom", "front", "back", "left", "right"] as const;
+export type ViewMode = (typeof VIEW_MODES)[number];
+
 /** The camera the agent asks for. At least one thing must be given; what is left out stays as it is. */
 export const ViewRequest = z
   .strictObject({
@@ -101,15 +105,22 @@ export const ViewRequest = z
     target: Point3Mm.optional(),
     /** Elements (or mirrored Rhino objects) to frame. */
     frame: z.array(ElementId).min(1).max(200).optional(),
+    /** A named view, as the view cube's faces: an orthographic view, or back to perspective. */
+    view: z.enum(VIEW_MODES).optional(),
   })
   .refine(
+    (v) => v.view === undefined || (v.azimuth === undefined && v.elevation === undefined),
+    "A named view sets the direction itself: leave out azimuth and elevation",
+  )
+  .refine(
     (v) =>
+      v.view !== undefined ||
       v.azimuth !== undefined ||
       v.elevation !== undefined ||
       v.distance !== undefined ||
       v.target !== undefined ||
       v.frame !== undefined,
-    "Give at least one of azimuth, elevation, distance, target or frame",
+    "Give at least one of view, azimuth, elevation, distance, target or frame",
   );
 export type ViewRequest = z.infer<typeof ViewRequest>;
 

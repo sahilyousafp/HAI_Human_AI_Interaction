@@ -140,3 +140,44 @@ test("Wall draws in plan: in a side view its drag places nothing", async ({ page
   await page.waitForTimeout(300);
   expect(Object.keys(bridge?.scene.scene.doc.elements ?? {}).length).toBe(before);
 });
+
+/** The agent's set_view: a JSON-RPC call to the bridge's MCP server with a token issued to it. */
+async function agentSetView(args: Record<string, unknown>): Promise<{ isError?: boolean }> {
+  if (!bridge) throw new Error("no bridge");
+  const token = bridge.agentTokens.issue({ agent: "reviewer", tools: new Set(["set_view"]) });
+  const res = await fetch(`http://127.0.0.1:${bridge.port}/mcp`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "set_view", arguments: args },
+    }),
+  });
+  const body = await res.text();
+  const data = body
+    .split("\n")
+    .filter((l) => l.startsWith("data:"))
+    .at(-1);
+  return JSON.parse(data ? data.slice(5) : body).result;
+}
+
+test("the agent can ask for Front, and for perspective again", async ({ page }) => {
+  await start(page);
+  expect((await agentSetView({ view: "front" })).isError).toBeFalsy();
+  await expect(viewer(page)).toHaveAttribute("data-view", "front");
+  await expect(page.getByTestId("view-front")).toHaveAttribute("aria-pressed", "true");
+  expect((await agentSetView({ view: "perspective" })).isError).toBeFalsy();
+  await expect(viewer(page)).toHaveAttribute("data-view", "perspective");
+});
+
+test("the agent cannot name a view and a direction together", async ({ page }) => {
+  await start(page);
+  expect((await agentSetView({ view: "top", azimuth: 90 })).isError).toBe(true);
+  await expect(viewer(page)).toHaveAttribute("data-view", "perspective");
+});

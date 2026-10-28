@@ -180,3 +180,34 @@ describe("requests for the agent", () => {
     expect(parseCommand(text)).toBeNull();
   });
 });
+
+describe("markers", () => {
+  it("rotates, scales and mirrors about a marker", () => {
+    expect(clauses("rotate 45 about marker B")).toEqual([{ kind: "rotate", deg: 45, about: "B" }]);
+    expect(clauses("scale half about marker a")).toEqual([{ kind: "scale", factor: 0.5, about: "A" }]);
+    expect(clauses("mirror x at marker c")).toEqual([{ kind: "mirror", axis: "x", about: "C" }]);
+  });
+
+  it("moves to a marker", () => {
+    expect(clauses("move to marker A")).toEqual([{ kind: "moveTo", marker: "A" }]);
+    // The copy is the one that goes: "copy and move to marker b".
+    expect(clauses("copy and move to marker b")).toEqual([
+      { kind: "copy", count: 1, by: null },
+      { kind: "moveTo", marker: "B" },
+    ]);
+  });
+
+  it("chains with the other clauses", () => {
+    expect(clauses("copy and rotate 90 about marker B")).toEqual([
+      { kind: "copy", count: 1, by: null },
+      { kind: "rotate", deg: 90, about: "B" },
+    ]);
+  });
+
+  it("is the agent's when the marker is not one letter or the verb takes none", () => {
+    expect(clauses("rotate 45 about marker")).toBeNull();
+    expect(clauses("rotate 45 about marker bee")).toBeNull();
+    expect(clauses("delete marker a")).toBeNull();
+    expect(clauses("move to marker a and b")).toBeNull();
+  });
+});

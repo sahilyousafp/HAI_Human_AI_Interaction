@@ -81,6 +81,8 @@ interface Window {
       register(tool: { id: string; label: string; icon: string; shortcut: string; spoken?: string[] }): void;
     };
     references: {
+      /** Sets the project's lettered markers, as the bridge does when a project opens. */
+      loadMarkers(markers: Array<{ letter: string; point: number[] }>): void;
       getSnapshot(): {
         sketches: Array<{ label: string; kind: "path" | "outline"; points: number[][]; hand: string | null }>;
         draft: { kind: string; points: number[][] } | null;

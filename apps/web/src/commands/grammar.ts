@@ -11,11 +11,13 @@ export type Selector =
 /** One thing the user said to do. Distances are millimetres and angles degrees, counter-clockwise from above. */
 export type Clause =
   | { kind: "translate"; by: Point3Mm }
+  /** Takes what is acted on to a lettered marker ("move to marker A"). */
+  | { kind: "moveTo"; marker: string }
   /** `count` copies, each `by` further along than the one before (in place when `by` is null); what follows acts on the copies. */
   | { kind: "copy"; count: number; by: Point3Mm | null }
-  | { kind: "rotate"; deg: number }
-  | { kind: "scale"; factor: number }
-  | { kind: "mirror"; axis: "x" | "y" }
+  | { kind: "rotate"; deg: number; about?: string }
+  | { kind: "scale"; factor: number; about?: string }
+  | { kind: "mirror"; axis: "x" | "y"; about?: string }
   | { kind: "select"; selector: Selector }
   | { kind: "delete" | "hide" | "isolate"; selector: Selector | null }
   | { kind: "showAll" };
@@ -208,7 +210,10 @@ function parseCopy(args: string[]): Clause | null {
   return by ? { kind: "copy", count, by } : null;
 }
 
-function parseRotate(args: string[]): Clause | null {
+/** What a marker is called in a clause: its letter, "marker B", set apart from the words round it. */
+type MarkerWord = string | null;
+
+function parseRotate(args: string[], about: MarkerWord): Clause | null {
   const anti = args.some((w) => w === "anticlockwise" || w === "counterclockwise" || w === "counter");
   const clockwise = !anti && args.includes("clockwise");
   const rest = args.filter(
@@ -216,42 +221,46 @@ function parseRotate(args: string[]): Clause | null {
   );
   const number = readNumber(rest, 0);
   if (!number || number.next !== rest.length || number.value === 0) return null;
-  return { kind: "rotate", deg: clockwise ? -number.value : number.value };
+  return { kind: "rotate", deg: clockwise ? -number.value : number.value, ...(about ? { about } : {}) };
 }
 
-function parseScale(args: string[]): Clause | null {
+function parseScale(args: string[], about: MarkerWord): Clause | null {
   const keyword: Record<string, number> = { double: 2, triple: 3 };
   const named = keyword[args[0] ?? ""];
-  if (args.length === 1 && named !== undefined) return { kind: "scale", factor: named };
+  if (args.length === 1 && named !== undefined)
+    return { kind: "scale", factor: named, ...(about ? { about } : {}) };
   const number = readNumber(args, 0);
   if (!number) return null;
   const tail = args.slice(number.next);
   let factor = number.value;
   if (tail.length === 1 && tail[0] === "percent") factor /= 100;
   else if (!(tail.length === 0 || (tail.length === 1 && tail[0] === "times"))) return null;
-  return factor > 0 && factor !== 1 ? { kind: "scale", factor } : null;
+  return factor > 0 && factor !== 1 ? { kind: "scale", factor, ...(about ? { about } : {}) } : null;
 }
 
-function parseMirror(args: string[]): Clause | null {
+function parseMirror(args: string[], about: MarkerWord): Clause | null {
   const direction = args.length === 1 ? AXES[args[0] as string] : undefined;
   if (!direction || direction.axis === 2) return null;
-  return { kind: "mirror", axis: direction.axis === 0 ? "x" : "y" };
+  return { kind: "mirror", axis: direction.axis === 0 ? "x" : "y", ...(about ? { about } : {}) };
 }
 
-function parseClause(verb: string, args: string[]): Clause | null {
+function parseClause(verb: string, args: string[], marker: MarkerWord): Clause | null {
+  // A marker is the pivot of a rotate, scale or mirror and the place of a move; nothing else takes one.
+  if (marker && !["move", "rotate", "scale", "mirror"].includes(verb)) return null;
   switch (verb) {
     case "move": {
+      if (marker) return args.length === 0 ? { kind: "moveTo", marker } : null;
       const by = readOffset(args);
       return by ? { kind: "translate", by } : null;
     }
     case "copy":
       return parseCopy(args);
     case "rotate":
-      return parseRotate(args);
+      return parseRotate(args, marker);
     case "scale":
-      return parseScale(args);
+      return parseScale(args, marker);
     case "mirror":
-      return parseMirror(args);
+      return parseMirror(args, marker);
     case "deselect":
       return args.length === 0 ? { kind: "select", selector: { kind: "none" } } : null;
     case "show":
@@ -273,6 +282,22 @@ function parseClause(verb: string, args: string[]): Clause | null {
     }
   }
   return null;
+}
+
+/** Words that introduce a marker: "rotate 45 about marker B", "move to marker A". */
+const MARKER_LEADS = new Set(["about", "around", "at", "to", "onto", "from"]);
+
+/**
+ * A clause's words without "marker B" (and the word that led to it), and the marker's letter. Null when "marker" is not
+ * followed by a single letter, which makes the transcript the agent's. A letter said as a name ("bee") is not heard.
+ */
+function takeMarker(words: string[]): { rest: string[]; marker: string | null } | null {
+  const at = words.indexOf("marker");
+  if (at < 0) return { rest: words, marker: null };
+  const letter = words[at + 1];
+  if (!letter || !/^[a-z]$/.test(letter)) return null;
+  const from = MARKER_LEADS.has(words[at - 1] ?? "") ? at - 1 : at;
+  return { rest: [...words.slice(0, from), ...words.slice(at + 2)], marker: letter.toUpperCase() };
 }
 
 /** Whether a sequence of clauses can run together: an optional select, then changes of place or one final action. */
@@ -317,9 +342,11 @@ export function parseCommand(text: string): Command | null {
     if (part.length === 0) continue;
     const [head, ...tail] = part;
     const verb = head === undefined ? undefined : VERBS[head];
-    const args = tail.filter((w) => !FILLER.has(w));
+    const named = takeMarker(tail);
+    if (!named) return null;
+    const args = named.rest.filter((w) => !FILLER.has(w));
     if (verb) {
-      const clause = parseClause(verb, args);
+      const clause = parseClause(verb, args, named.marker);
       if (!clause) return null;
       clauses.push(clause);
       continue;

@@ -133,7 +133,9 @@ export type TransformStep =
   | { kind: "translate"; by: Point3Mm }
   | { kind: "rotate"; deg: number; about?: PointMm }
   | { kind: "scale"; factor: number; about?: Point3Mm }
-  | { kind: "mirror"; axis: "x" | "y"; at?: number };
+  | { kind: "mirror"; axis: "x" | "y"; at?: number }
+  /** Takes the group's plan centre, at its lowest height, to this point. */
+  | { kind: "moveTo"; to: Point3Mm };
 
 export type StepsResult =
   | { ok: true; patches: Record<string, Record<string, unknown>> }
@@ -175,6 +177,11 @@ function resolveStep(step: TransformStep, centre: PointMm, lowest: number): Tran
       return { kind: "mirror", axis: step.axis, at: step.at ?? centre[step.axis === "x" ? 0 : 1] };
     case "translate":
       return step;
+    case "moveTo":
+      return {
+        kind: "translate",
+        by: [step.to[0] - centre[0], step.to[1] - centre[1], step.to[2] - lowest],
+      };
   }
 }
 
