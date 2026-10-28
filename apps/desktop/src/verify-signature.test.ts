@@ -62,5 +62,6 @@ describe.runIf(process.platform === "win32")("readSignatures (Windows)", () => {
     expect(signed?.signer).toContain("Microsoft");
     expect(unsigned?.file).toBe(process.execPath);
     expect(typeof unsigned?.status).toBe("string");
-  });
+    // It starts PowerShell and asks Windows to check two files: a shared CI runner takes about 20 s.
+  }, 120_000);
 });
