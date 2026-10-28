@@ -21,6 +21,8 @@ const say = (page: Page, text: string) => page.evaluate((t) => window.__HAI_VOIC
 const select = (page: Page, ...ids: string[]) => page.evaluate((i) => window.__HAI_SCENE__?.select(i), ids);
 const elements = () =>
   Object.values(bridge?.scene.scene.doc.elements ?? {}) as Array<Record<string, unknown>>;
+const rotationOf = (id: string) =>
+  (bridge?.scene.scene.doc.elements[id] as { rotationDeg?: number } | undefined)?.rotationDeg;
 const massings = () => elements().filter((e) => e.type === "massing");
 
 test("copy 2 times 6 m along y makes two copies in one undo step, selected", async ({ page }) => {
@@ -57,9 +59,7 @@ test("rotate 90 turns what is selected about its centre", async ({ page }) => {
   const before = bridge?.scene.scene.doc.elements["block-b"] as { origin: number[]; size: number[] };
   await select(page, "block-b");
   await say(page, "rotate 90");
-  await expect
-    .poll(() => (bridge?.scene.scene.doc.elements["block-b"] as { rotationDeg?: number }).rotationDeg)
-    .toBe(90);
+  await expect.poll(() => rotationOf("block-b")).toBe(90);
   const after = bridge?.scene.scene.doc.elements["block-b"] as { origin: number[]; size: number[] };
   const centre = (e: { origin: number[]; size: number[] }) => [
     (e.origin[0] ?? 0) + (e.size[0] ?? 0) / 2,
@@ -102,7 +102,5 @@ test("with Claude chat off, the chat is gone and what is not a command is not se
   // A command still works.
   await select(page, "block-b");
   await say(page, "rotate 90");
-  await expect
-    .poll(() => (bridge?.scene.scene.doc.elements["block-b"] as { rotationDeg?: number }).rotationDeg)
-    .toBe(90);
+  await expect.poll(() => rotationOf("block-b")).toBe(90);
 });
