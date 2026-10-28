@@ -14,9 +14,12 @@ export function MicButton({
   onStart,
   disabled = false,
   notice = null,
+  purpose = "the agent",
 }: {
   voice: VoiceInput;
   onStart: () => void;
+  /** What speaking is for, in the button's name: "the agent", or "a command" when there is no chat. */
+  purpose?: string;
   /** No agent to send to (not installed or not signed in). */
   disabled?: boolean;
   /** Why the microphone cannot be used yet (the voice models are downloading), or null. */
@@ -34,8 +37,8 @@ export function MicButton({
       aria-pressed={live}
       data-voice={notice ? "preparing" : "ready"}
       disabled={(disabled || notice !== null) && !live}
-      aria-label={live ? "Stop listening" : (notice ?? "Speak to the agent")}
-      title={live ? "Stop listening" : (notice ?? "Speak to the agent (or hold the ` key)")}
+      aria-label={live ? "Stop listening" : (notice ?? `Speak to ${purpose}`)}
+      title={live ? "Stop listening" : (notice ?? `Speak to ${purpose} (or hold the \` key)`)}
       onClick={() => (live ? voice.finish() : onStart())}
     >
       <ToolIcon path={live ? STOP_ICON : MIC_ICON} size={20} />
@@ -160,7 +163,10 @@ export function VoiceBar({ voice, nameOf }: { voice: VoiceInput; nameOf: (id: st
       )}
       {state.phase === "picked" && (
         <p className="voice-status" data-testid="voice-picked">
-          <strong>{state.tool}</strong> picked. Nothing was sent to the agent.
+          <strong>{state.tool}</strong>
+          <span>
+            {state.ran ? "Nothing was sent to the agent." : "picked. Nothing was sent to the agent."}
+          </span>
         </p>
       )}
       {state.phase === "discarded" && (

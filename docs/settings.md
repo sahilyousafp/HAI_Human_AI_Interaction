@@ -34,7 +34,7 @@ Every feature can be switched off on its own, so a demo or a release shows exact
 | Nod and shake | Head gestures answer nothing |
 | Stop gesture | Both fists then open hands do not stop the agents |
 | Voice | No microphone button or indicator, the talk key does nothing, listening for names is off |
-| Agent | No agent panel; Ask agent says the agent is switched off |
+| Claude chat | No chat panel and no agent session: Ask agent says the chat is switched off, listening for names is off, and only spoken and gesture commands run. A transcript that is not a command shows "Not a command" and is sent nowhere ([voice.md](voice.md#spoken-commands)) |
 | Snap to models | A hand pointer must be exactly on a model to select it, and no model lights up before the pinch |
 | Number what I point at | Off by default. When on, elements your hand rests on while you speak get numbered markers and count as what you mean |
 | Generated panels | The agent is not offered the panel tools, and an open panel closes and drops its preview |

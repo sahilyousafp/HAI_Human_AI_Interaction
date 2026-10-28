@@ -28,7 +28,7 @@ function setup(options: { failWith?: string; transcript?: string; tools?: string
       return true;
     },
     context: () => ({ references: [], selection: [], groundPoint: null }),
-    command: (text) => (options.tools?.includes(text) ? `Tool ${text}` : null),
+    command: (text) => (options.tools?.includes(text) ? { label: `Tool ${text}` } : null),
   });
   /** Speech starts and ends; the (async) transcription settles without moving the fake clock. */
   const speak = async () => {
@@ -349,7 +349,7 @@ describe("a held pinch", () => {
         return true;
       },
       context: (recorder) => recorder.resolve(null, [], null),
-      command: (text) => (options.tools?.includes(text) ? `Tool ${text}` : null),
+      command: (text) => (options.tools?.includes(text) ? { label: `Tool ${text}` } : null),
       stopSent: () => stopped++,
     });
     const settle = async () => {

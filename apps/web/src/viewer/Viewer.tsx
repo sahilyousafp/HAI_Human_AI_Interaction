@@ -104,6 +104,7 @@ import {
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 import { ViewCube } from "./ViewCube.tsx";
 import { between, resolveView, VIEW_ANIMATION_MS } from "./view-request.ts";
+import type { Visibility } from "./visibility.ts";
 
 const FOV = 45;
 const NO_MARKERS: CameraMarker[] = [];
@@ -142,7 +143,7 @@ function heldChipText(state: VoiceState, listening: boolean): string | null {
     case "stopped":
       return "Stopped";
     case "picked":
-      return `${state.tool} picked`;
+      return state.ran ? state.tool : `${state.tool} picked`;
     case "error":
       return MIC_PROBLEM[state.error];
     default:
@@ -804,6 +805,7 @@ export function Viewer({
   latency,
   tools,
   view,
+  visibility,
   askAgent,
   gestures,
   features,
@@ -827,6 +829,8 @@ export function Viewer({
   /** Gesture-to-render latency, shared with the Detection card. */
   latency: LatencyTracker;
   tools: ToolController;
+  /** Which elements the user has hidden ("hide", "isolate"): not drawn, picked or snapped to. */
+  visibility: Visibility;
   /** The agent's view of what the user sees and points at. */
   view: ViewLink;
   /** Opens the agent panel for a request ("Ask agent" in the palette); returns why it cannot, or null. */
@@ -866,6 +870,7 @@ export function Viewer({
 }) {
   const software = useMemo(isSoftwareRenderer, []);
   const scene = useSyncExternalStore(client.subscribe, client.getSnapshot);
+  const hidden = useSyncExternalStore(visibility.subscribe, visibility.getSnapshot);
   // A generated panel's preview is laid over the scene for drawing only: tools and the bridge see the committed one.
   useSyncExternalStore(panels.subscribe, () => panels.getSnapshot().previewVersion);
   const shownDoc = panels.shownDoc(scene.doc);
@@ -1078,6 +1083,7 @@ export function Viewer({
   useEffect(() => {
     tools.attach({
       doc: () => client.getSnapshot().doc,
+      hidden: () => visibility.getSnapshot(),
       apply: (label, ops) => void client.apply(label, ops),
       undo: () => void client.undo(),
       redo: () => void client.redo(),
@@ -1182,7 +1188,19 @@ export function Viewer({
       },
       askAgent: () => askAgentRef.current(),
     });
-  }, [tools, client, sectionOutlineOnScreen, features, aids, controlFor, shapeOf, panels, inFrame, mirror]);
+  }, [
+    tools,
+    client,
+    visibility,
+    sectionOutlineOnScreen,
+    features,
+    aids,
+    controlFor,
+    shapeOf,
+    panels,
+    inFrame,
+    mirror,
+  ]);
 
   // When a whole Rhino document has arrived, frame it once (as a project is framed when it opens).
   const syncedSeen = useRef(rhinoSynced);
@@ -1726,19 +1744,21 @@ export function Viewer({
           />
           <ModelAssetsContext.Provider value={modelAssets}>
             {shownDoc &&
-              Object.values(shownDoc.elements).map((element) => (
-                <ElementMesh
-                  key={element.id}
-                  element={element}
-                  doc={shownDoc as SceneDocument}
-                  colors={colors}
-                  selected={selection.has(element.id)}
-                  hovered={hoverId === element.id}
-                  marked={overlay.marked === element.id}
-                  offsetMm={previewOffset(element)}
-                  sectionMm={overlay.sectionMm}
-                />
-              ))}
+              Object.values(shownDoc.elements)
+                .filter((element) => !hidden.has(element.id))
+                .map((element) => (
+                  <ElementMesh
+                    key={element.id}
+                    element={element}
+                    doc={shownDoc as SceneDocument}
+                    colors={colors}
+                    selected={selection.has(element.id)}
+                    hovered={hoverId === element.id}
+                    marked={overlay.marked === element.id}
+                    offsetMm={previewOffset(element)}
+                    sectionMm={overlay.sectionMm}
+                  />
+                ))}
           </ModelAssetsContext.Provider>
           <group userData={USER_ONLY}>
             <ClaimBoxes boxes={(owners ?? NO_OWNERS).boxes} />

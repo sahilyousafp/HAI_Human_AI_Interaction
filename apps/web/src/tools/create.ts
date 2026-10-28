@@ -11,7 +11,7 @@ export const SLAB = { thickness: 200, minSide: 300 };
 export const COLUMN = { section: [400, 400] as [number, number], height: 3000 };
 
 /** A new, unique element id for a type. */
-const newId = (type: Element["type"]): string => `${type}-${crypto.randomUUID().slice(0, 8)}`;
+export const newId = (type: Element["type"]): string => `${type}-${crypto.randomUUID().slice(0, 8)}`;
 
 /** The id and name a new element of a type gets, numbered after those of its type already in the model. */
 function newIdentity(doc: SceneDocument, type: Element["type"], label: string): { id: string; name: string } {

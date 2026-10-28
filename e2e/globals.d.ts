@@ -90,6 +90,8 @@ interface Window {
   };
   __HAI_TRACKING__?: { frames: unknown[] };
   __HAI_VOICE__?: {
+    /** Text as though it had just been spoken. */
+    hear(text: string): void;
     context: {
       begin(now: number, hoveredId: string | null): void;
       hover(id: string | null, now: number): void;

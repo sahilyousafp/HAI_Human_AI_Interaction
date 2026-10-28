@@ -64,6 +64,8 @@ type Grab =
 /** What the viewer provides: the scene, picking, and how to turn hand positions into viewer positions. */
 export interface ToolEnvironment {
   doc(): SceneDocument | null;
+  /** Elements the user has hidden: not drawn, so not picked, and not snapped to either. */
+  hidden?(): ReadonlySet<string>;
   apply(label: string, ops: SceneOp[]): void;
   undo(): void;
   redo(): void;
@@ -536,6 +538,13 @@ export class ToolController {
     this.closeQuestion(yes);
   }
 
+  /** Asks a question that a nod or Enter answers yes and a shake or Escape answers no (a question open already is dropped). */
+  confirm(question: string, answer: (yes: boolean) => void): void {
+    this.closeQuestion(false);
+    this.answer = answer;
+    this.update({ question });
+  }
+
   /**
    * A nod or Enter: answers the question waiting, else lets the active tool finish what it is drawing. True when it
    * did something.
@@ -633,11 +642,7 @@ export class ToolController {
       overlay: () => this.snapshot.overlay,
       setOverlay: (partial) => this.setOverlay(partial),
       flash: (message) => this.flash(message),
-      confirm: (question, answer) => {
-        this.closeQuestion(false);
-        this.answer = answer;
-        this.update({ question });
-      },
+      confirm: (question, answer) => this.confirm(question, answer),
       askAgent: () => env.askAgent(),
       references: this.references,
       toScreen: (point) => {
@@ -691,7 +696,9 @@ export class ToolController {
       plane,
       anchor,
       aids,
-      index: doc ? this.snapIndex(doc, options.exclude ?? []) : emptySnapIndex(),
+      index: doc
+        ? this.snapIndex(doc, [...(options.exclude ?? []), ...(env.hidden?.() ?? [])])
+        : emptySnapIndex(),
       project,
       constraints: this.snapshot.constraints,
     });
@@ -728,7 +735,8 @@ export class ToolController {
     this.update({ overlay: { ...this.snapshot.overlay, ...partial } });
   }
 
-  private flash(message: string): void {
+  /** Shows a short notice that goes by itself. */
+  flash(message: string): void {
     if (this.flashTimer) clearTimeout(this.flashTimer);
     this.setOverlay({ notice: message });
     this.flashTimer = setTimeout(() => {

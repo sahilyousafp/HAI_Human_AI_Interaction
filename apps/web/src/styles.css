@@ -2921,6 +2921,30 @@ kbd {
   border-radius: var(--r-m) var(--r-m) 0 0;
   background: color-mix(in srgb, var(--accent) 6%, var(--bg));
 }
+/* The microphone and what it heard, in the stack down the model's left side, when Claude chat is off and the chat
+   panel that holds them is gone. */
+.command-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, 100%);
+  padding: 6px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--material);
+  box-shadow: var(--shadow-1);
+}
+.command-bar .voice-bar {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: var(--r-s);
+  background: transparent;
+}
+.command-bar .voice-bar:empty {
+  display: none;
+}
 .voice-status {
   display: flex;
   align-items: center;
