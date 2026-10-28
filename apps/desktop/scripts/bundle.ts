@@ -77,7 +77,7 @@ export async function bundleBridge(
     external: ["bufferutil", "utf-8-validate"],
   });
   cpSync(join(bridgeRoot, "samples"), join(outdir, "samples"), { recursive: true });
-  // The scripts the Python workbench runs scripts with (hai_run.py, hai_3dm.py).
+  // The scripts the Python workbench runs scripts with (hai_run.py, hai_3dm.py, hai_occ.py).
   cpSync(join(bridgeRoot, "python"), join(outdir, "python"), { recursive: true });
 }
 

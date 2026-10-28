@@ -2,12 +2,19 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ApprovalOutcome, ApprovalRequest, Message } from "@hai/protocol";
+import { KERNEL_TOOL_NAMES } from "../geometry/kernel.ts";
 import type { Logger } from "../log.ts";
 import { packageName } from "../python/python-env.ts";
 import { HAI_SERVER } from "./agent-config.ts";
 
 /** The tools that run code: they always show a card with the script and its packages, however the scene tools are treated. */
 export const CODE_TOOLS = [`mcp__${HAI_SERVER}__python_run`, `mcp__${HAI_SERVER}__rhino_run_python`] as const;
+
+/**
+ * The geometry tools that need OpenCascade, a large package: they ask once, listing what would be installed, and run
+ * without asking once it is there.
+ */
+export const KERNEL_TOOLS: readonly string[] = KERNEL_TOOL_NAMES.map((name) => `mcp__${HAI_SERVER}__${name}`);
 
 type Send = (message: Message) => void;
 
@@ -51,6 +58,12 @@ export function summarizeInput(tool: string, input: Record<string, unknown>): st
 /** A one-line card summary of a code run: its title (the card shows the script and what it would install below). */
 function summarizeCode(input: Record<string, unknown>): string {
   return typeof input.title === "string" && input.title ? input.title : "Python script";
+}
+
+/** The card for a geometry tool that must first install OpenCascade: what it is for (the card lists the packages). */
+function summarizeKernel(tool: string): string {
+  const name = tool.replace(/^mcp__.+?__geometry_/, "");
+  return `Install the OpenCascade geometry kernel, to ${name === "boolean" ? "combine solids" : name} with it`;
 }
 
 /** The project's "always allow" list, kept in the project's git-ignored `.hai` folder. */
@@ -139,6 +152,7 @@ export class ApprovalBroker {
       return this.alwaysAllowed.includes(tool) && installs.every((spec) => approved.has(packageName(spec)));
     }
     if (ASK_EVERY_TIME.includes(tool)) return false;
+    if (KERNEL_TOOLS.includes(tool)) return installs.length === 0;
     return tool.startsWith(`mcp__${HAI_SERVER}__`) || this.alwaysAllowed.includes(tool);
   }
 
@@ -155,7 +169,8 @@ export class ApprovalBroker {
     agent?: string | null,
   ): Promise<PermissionDecision> {
     const isCode = (CODE_TOOLS as readonly string[]).includes(tool);
-    const installs = isCode ? (this.options.pythonInstalls?.(tool, input) ?? []) : [];
+    const installing = isCode || KERNEL_TOOLS.includes(tool);
+    const installs = installing ? (this.options.pythonInstalls?.(tool, input) ?? []) : [];
     if (this.isPreApproved(tool, installs))
       return Promise.resolve({ behavior: "allow", updatedInput: input });
     const timeoutMs = this.options.timeoutMs ?? APPROVAL_TIMEOUT_MS;
@@ -163,9 +178,13 @@ export class ApprovalBroker {
       id: randomUUID(),
       tool,
       source: toolSource(tool),
-      summary: isCode ? summarizeCode(input) : summarizeInput(tool, input),
+      summary: isCode
+        ? summarizeCode(input)
+        : KERNEL_TOOLS.includes(tool)
+          ? summarizeKernel(tool)
+          : summarizeInput(tool, input),
       input,
-      ...(isCode ? { installs } : {}),
+      ...(installing ? { installs } : {}),
       ...(ASK_EVERY_TIME.includes(tool) ? { once: true } : {}),
       ...(toolUseId ? { toolUseId } : {}),
       ...(agent ? { agent } : {}),

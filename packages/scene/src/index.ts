@@ -1,3 +1,4 @@
+export * from "./along-curve.ts";
 export * from "./bounds.ts";
 export * from "./claim-scope.ts";
 export * from "./extrusions.ts";

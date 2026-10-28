@@ -151,3 +151,35 @@ describe("Python approvals", () => {
     await again;
   });
 });
+
+describe("Geometry kernel approvals", () => {
+  const LOFT = "mcp__hai__geometry_loft";
+  const ARRAY = "mcp__hai__geometry_array_along_curve";
+
+  it("the first loft asks, listing what would be installed, and says what it is for", async () => {
+    const t = setup(() => ["cadquery-ocp==8.0.1.1.0"]);
+    const input = { sections: ["a", "b"] };
+    const decision = t.broker.decide(LOFT, input);
+    expect(t.lastCard()).toMatchObject({
+      tool: LOFT,
+      installs: ["cadquery-ocp==8.0.1.1.0"],
+      summary: "Install the OpenCascade geometry kernel, to loft with it",
+    });
+    t.decide(t.lastCard().id, "allow");
+    expect(await decision).toEqual({ behavior: "allow", updatedInput: input });
+  });
+
+  it("once the kernel is installed a loft runs without asking", async () => {
+    const t = setup(() => []);
+    const input = { sections: ["a", "b"] };
+    expect(await t.broker.decide(LOFT, input)).toEqual({ behavior: "allow", updatedInput: input });
+    expect(t.cards()).toHaveLength(0);
+  });
+
+  it("copying along a curve never asks: it needs no kernel", async () => {
+    const t = setup(() => ["cadquery-ocp==8.0.1.1.0"]);
+    const input = { element: "a", rail: "b", count: 3 };
+    expect(await t.broker.decide(ARRAY, input)).toEqual({ behavior: "allow", updatedInput: input });
+    expect(t.cards()).toHaveLength(0);
+  });
+});

@@ -84,6 +84,7 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
     tools: [
       ...hai(HAI_TOOLS.read),
       ...hai(HAI_TOOLS.write),
+      ...hai(HAI_TOOLS.geometry),
       ...hai(HAI_TOOLS.panel),
       ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.cameras),
@@ -101,6 +102,7 @@ columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIAL
     tools: [
       ...hai(HAI_TOOLS.read),
       ...hai(HAI_TOOLS.write),
+      ...hai(HAI_TOOLS.geometry),
       ...hai(HAI_TOOLS.panel),
       ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.cameras),
@@ -385,6 +387,7 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
     ? []
     : [
         ...HAI_TOOLS.write,
+        ...HAI_TOOLS.geometry,
         ...HAI_TOOLS.tags,
         ...HAI_TOOLS.rhino,
         ...HAI_TOOLS.workers,
@@ -400,6 +403,7 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
   if (member.writes)
     for (const tool of [
       ...HAI_TOOLS.tags,
+      ...HAI_TOOLS.geometry,
       ...HAI_TOOLS.python,
       ...HAI_TOOLS.rhino,
       ...HAI_TOOLS.workers,
