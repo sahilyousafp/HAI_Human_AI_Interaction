@@ -165,7 +165,7 @@ export function VoiceBar({ voice, nameOf }: { voice: VoiceInput; nameOf: (id: st
         <p className="voice-status" data-testid="voice-picked">
           <strong>{state.tool}</strong>
           <span>
-            {state.ran ? "Nothing was sent to the agent." : "picked. Nothing was sent to the agent."}
+            {state.ran ? " Nothing was sent to the agent." : " picked. Nothing was sent to the agent."}
           </span>
         </p>
       )}

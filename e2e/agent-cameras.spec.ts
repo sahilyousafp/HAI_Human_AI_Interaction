@@ -278,6 +278,43 @@ test.describe("seeing what agents look at", () => {
   }
 });
 
+test("the thumbnails show only the selected agent: open its thread and the others' pictures go, Mochi's chat shows all", async ({
+  page,
+}) => {
+  const bridge = await startTestBridge(page, {
+    agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-e2e-cam-"))),
+  });
+  try {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await openViewer(page);
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+    await callTool(bridge, "architect", "camera_capture", { preset: "iso", size: 512 });
+    await callTool(bridge, "product", "camera_capture", { preset: "top", size: 512 });
+    const architect = page.getByTestId("team-shot-architect");
+    const product = page.getByTestId("team-shot-product");
+    // Mochi's chat: nobody is selected, everyone's last picture is there.
+    await expect(architect).toBeVisible();
+    await expect(product).toBeVisible();
+
+    await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
+    await page.getByTestId("agent-input").fill("delegate architect: work 8000");
+    await page.getByTestId("agent-input").press("Enter");
+    const chip = page.getByTestId("team-chip-architect");
+    await expect(chip).toBeEnabled();
+    await chip.click();
+    // Architect's thread: only Architect's picture, and its chip says it is the selected one.
+    await expect(chip).toHaveAttribute("data-selected", "true");
+    await expect(architect).toBeVisible();
+    await expect(product).toHaveCount(0);
+
+    await page.getByTestId("task-back").click();
+    await expect(product).toBeVisible();
+    await expect(architect).toBeVisible();
+  } finally {
+    await bridge.stop();
+  }
+});
+
 test.describe("the speed of it", () => {
   test("a picture takes under 400 ms, a set of eight under 3 s, and the user's frames keep coming", async ({
     page,

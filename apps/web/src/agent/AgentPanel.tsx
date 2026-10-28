@@ -1206,6 +1206,7 @@ function TeamStrip({
   onOpenTask,
   approvals,
   onlyPendingId,
+  selected,
 }: {
   team: TeamView;
   client: AgentClient;
@@ -1213,7 +1214,10 @@ function TeamStrip({
   /** The cards waiting for the user: a worker's waits under its specialist's chip. */
   approvals: ApprovalView[];
   onlyPendingId: string | null;
+  /** The agent whose thread is open: only its pictures are shown. Null while Mochi's chat is open: everyone's are. */
+  selected: string | null;
 }) {
+  const shots = selected ? team.shots.filter((s) => baseAgent(s.agent) === baseAgent(selected)) : team.shots;
   const specialists = team.members.filter((m) => !m.lead);
   const working = team.tasks.filter(isActive).length;
   const queued = team.tasks.filter((t) => t.status === "queued").length;
@@ -1230,6 +1234,7 @@ function TeamStrip({
         className="team-chip"
         data-testid={`team-chip-${member.name}`}
         data-state={state}
+        data-selected={selected && baseAgent(selected) === member.name ? "true" : undefined}
         data-hand-press
         style={colorOf(member)}
         disabled={!task}
@@ -1292,7 +1297,7 @@ function TeamStrip({
           </>
         )}
       </div>
-      {team.shots.length > 0 && <ShotsStrip team={team} />}
+      {shots.length > 0 && <ShotsStrip team={team} shots={shots} />}
       {team.claims.length > 0 && <PartsList team={team} client={client} />}
     </section>
   );
@@ -1355,14 +1360,14 @@ function WorkerRows({
 }
 
 /** What each agent last looked at from one of its own cameras: a thumbnail each, and the picture larger on click. */
-function ShotsStrip({ team }: { team: TeamView }) {
+function ShotsStrip({ team, shots }: { team: TeamView; shots: TeamShot[] }) {
   const [open, setOpen] = useState<string | null>(null);
-  const shot = team.shots.find((s) => s.agent === open);
+  const shot = shots.find((s) => s.agent === open);
   const member = (name: string) => team.members.find((m) => m.name === name);
   return (
     <>
       <div className="team-shots" data-testid="team-shots">
-        {team.shots.map((s) => (
+        {shots.map((s) => (
           <button
             key={s.agent}
             type="button"
@@ -1757,6 +1762,7 @@ export function AgentPanel({
               onOpenTask={setOpenTask}
               approvals={pending}
               onlyPendingId={onlyPendingId}
+              selected={task?.agent ?? null}
             />
           )}
           {team && !task && latestPlan && (

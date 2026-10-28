@@ -1647,6 +1647,10 @@ kbd {
 .team-chip:disabled {
   cursor: default;
 }
+.team-chip[data-selected="true"] {
+  outline: 2px solid var(--member, var(--accent));
+  outline-offset: 1px;
+}
 .team-chip[data-state="idle"] {
   color: var(--muted);
 }
