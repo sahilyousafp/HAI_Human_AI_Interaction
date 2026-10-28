@@ -1,4 +1,5 @@
-import type { Element, Level, Point3Mm } from "@hai/protocol";
+import type { Element, Level, Point3Mm, PointMm } from "@hai/protocol";
+import { footprintOf, importedWorld } from "./placement.ts";
 
 export interface BoundsMm {
   min: Point3Mm;
@@ -22,6 +23,21 @@ export function elementBase(element: Element, levels: Level[]): number {
   return levelElevation(levels, element.level);
 }
 
+/** The smallest box around some points. */
+function boxOf(points: Point3Mm[]): BoundsMm {
+  return {
+    min: [0, 1, 2].map((i) => Math.min(...points.map((p) => p[i] as number))) as Point3Mm,
+    max: [0, 1, 2].map((i) => Math.max(...points.map((p) => p[i] as number))) as Point3Mm,
+  };
+}
+
+/** The box over a footprint, from height `lo` to height `hi`. */
+function planBounds(footprint: PointMm[], lo: number, hi: number): BoundsMm {
+  const xs = footprint.map((p) => p[0]);
+  const ys = footprint.map((p) => p[1]);
+  return { min: [Math.min(...xs), Math.min(...ys), lo], max: [Math.max(...xs), Math.max(...ys), hi] };
+}
+
 /**
  * Axis-aligned bounds of an element in millimetres, matching how the viewer builds its geometry: massing from its
  * origin corner, slabs extruded down from their level, walls centred on their baseline and columns on their
@@ -32,9 +48,8 @@ export function elementBounds(element: Element, levels: Level[]): BoundsMm {
   const base = elementBase(element, levels);
   switch (element.type) {
     case "massing": {
-      const [x, y, z] = element.origin;
-      const [w, d, h] = element.size;
-      return { min: [x, y, z], max: [x + w, y + d, z + h] };
+      const z = element.origin[2];
+      return planBounds(footprintOf(element) as PointMm[], z, z + element.size[2]);
     }
     case "slab": {
       const xs = element.outline.map((p) => p[0]);
@@ -56,11 +71,8 @@ export function elementBounds(element: Element, levels: Level[]): BoundsMm {
         max: [Math.max(x0, x1) + ox, Math.max(y0, y1) + oy, base + element.height],
       };
     }
-    case "column": {
-      const [x, y] = element.position;
-      const [w, d] = element.section;
-      return { min: [x - w / 2, y - d / 2, base], max: [x + w / 2, y + d / 2, base + element.height] };
-    }
+    case "column":
+      return planBounds(footprintOf(element) as PointMm[], base, base + element.height);
     case "line": {
       const xs = element.points.map((p) => p[0]);
       const ys = element.points.map((p) => p[1]);
@@ -71,9 +83,12 @@ export function elementBounds(element: Element, levels: Level[]): BoundsMm {
       };
     }
     case "imported": {
-      const [tx, ty, tz] = element.translation;
+      // The corners of its stored box, where its translation, rotation and scale put them.
       const { min, max } = element.bounds;
-      return { min: [min[0] + tx, min[1] + ty, min[2] + tz], max: [max[0] + tx, max[1] + ty, max[2] + tz] };
+      const corners = [min[0], max[0]].flatMap((x) =>
+        [min[1], max[1]].flatMap((y) => [min[2], max[2]].map((z) => importedWorld(element, [x, y, z]))),
+      );
+      return boxOf(corners);
     }
   }
 }

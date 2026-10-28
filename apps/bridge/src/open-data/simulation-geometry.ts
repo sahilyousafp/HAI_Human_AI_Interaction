@@ -1,5 +1,5 @@
 import type { ContextBuilding, ContextItem, Level, SceneDocument, Site } from "@hai/protocol";
-import { elementBase } from "@hai/scene";
+import { elementBase, elementBounds, footprintOf } from "@hai/scene";
 
 type Pt = [number, number];
 
@@ -53,14 +53,6 @@ export interface SimulationGeometry {
 const m = (mm: number) => Math.round(mm) / 1000;
 const pt = ([x, y]: readonly [number, number]): Pt => [m(x), m(y)];
 
-/** A rectangle's plan, counter-clockwise from its minimum corner. */
-const rect = (x: number, y: number, w: number, d: number): Pt[] => [
-  [m(x), m(y)],
-  [m(x + w), m(y)],
-  [m(x + w), m(y + d)],
-  [m(x), m(y + d)],
-];
-
 /** The Rhino objects the mirror knows only by their boxes. */
 export interface MirroredBox {
   id: string;
@@ -110,22 +102,34 @@ export function simulationGeometry(input: {
         });
         break;
       case "column":
-        objects.push({
-          id: element.id,
-          name: element.name,
-          kind: "column",
-          position: pt(element.position),
-          sectionM: [m(element.section[0]), m(element.section[1])],
-          baseM: m(base),
-          heightM: m(element.height),
-        });
+        // A column turned off the axes is a turned footprint, which only a massing can say.
+        objects.push(
+          element.rotationDeg
+            ? {
+                id: element.id,
+                name: element.name,
+                kind: "massing",
+                footprint: (footprintOf(element) ?? []).map(pt),
+                baseM: m(base),
+                heightM: m(element.height),
+              }
+            : {
+                id: element.id,
+                name: element.name,
+                kind: "column",
+                position: pt(element.position),
+                sectionM: [m(element.section[0]), m(element.section[1])],
+                baseM: m(base),
+                heightM: m(element.height),
+              },
+        );
         break;
       case "massing":
         objects.push({
           id: element.id,
           name: element.name,
           kind: "massing",
-          footprint: rect(element.origin[0], element.origin[1], element.size[0], element.size[1]),
+          footprint: (footprintOf(element) ?? []).map(pt),
           baseM: m(element.origin[2]),
           heightM: m(element.size[2]),
         });
@@ -134,14 +138,14 @@ export function simulationGeometry(input: {
         break; // a curve casts no shadow and holds no sun
       case "imported": {
         imported++;
-        const [tx, ty, tz] = element.translation;
+        const { min, max } = elementBounds(element, doc.levels);
         objects.push({
           id: element.id,
           name: element.name,
           kind: "box",
           of: "imported model",
-          min: [m(element.bounds.min[0] + tx), m(element.bounds.min[1] + ty), m(element.bounds.min[2] + tz)],
-          max: [m(element.bounds.max[0] + tx), m(element.bounds.max[1] + ty), m(element.bounds.max[2] + tz)],
+          min: [m(min[0]), m(min[1]), m(min[2])],
+          max: [m(max[0]), m(max[1]), m(max[2])],
         });
         break;
       }

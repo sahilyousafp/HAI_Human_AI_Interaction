@@ -171,6 +171,7 @@ describe("MCP endpoint access", () => {
         "set_view",
         "simulation_geometry",
         "sun_study",
+        "transform_elements",
         "update_elements",
         "update_panel",
       ].sort(),
@@ -839,5 +840,68 @@ describe("reading the model by owner, part and tag", () => {
       owners: { architect: 1, product: 1 },
       parts: { garden: 1, hall: 1 },
     });
+  });
+});
+
+describe("transform_elements", () => {
+  it("moves, turns and scales elements in one change, whatever their type", async () => {
+    const address = await start();
+    const agent = await mcp(address);
+    const before = json(await agent.callTool({ name: "get_elements", arguments: { ids: ["block-b"] } }))
+      .elements[0];
+    const moved = await agent.callTool({
+      name: "transform_elements",
+      arguments: {
+        ids: ["block-b"],
+        steps: [
+          { kind: "translate", by: [1000, 2000] },
+          { kind: "rotate", deg: 90 },
+        ],
+      },
+    });
+    expect(moved.isError).toBeFalsy();
+    const after = json(await agent.callTool({ name: "get_elements", arguments: { ids: ["block-b"] } }))
+      .elements[0];
+    expect(after.rotationDeg).toBe(90);
+    // The box was moved and then turned about its own centre, so its centre is where the move put it.
+    type Box = { origin: [number, number, number]; size: [number, number, number] };
+    const centre = (e: Box): [number, number] => [e.origin[0] + e.size[0] / 2, e.origin[1] + e.size[1] / 2];
+    const [bx, by] = centre(before);
+    const [ax, ay] = centre(after);
+    expect(ax).toBeCloseTo(bx + 1000, 6);
+    expect(ay).toBeCloseTo(by + 2000, 6);
+  });
+
+  it("makes copies, each put through the steps once more than the one before, and keeps the original", async () => {
+    const address = await start();
+    const agent = await mcp(address);
+    const result = json(
+      await agent.callTool({
+        name: "transform_elements",
+        arguments: { ids: ["block-b"], steps: [{ kind: "translate", by: [0, 6000] }], copies: 3 },
+      }),
+    );
+    expect(result.created).toHaveLength(3);
+    const original = json(await agent.callTool({ name: "get_elements", arguments: { ids: ["block-b"] } }))
+      .elements[0];
+    const copies = json(
+      await agent.callTool({ name: "get_elements", arguments: { ids: result.created } }),
+    ).elements;
+    expect(
+      copies.map((c: { origin: number[] }) => (c.origin[1] ?? 0) - (original.origin[1] as number)),
+    ).toEqual([6000, 12000, 18000]);
+    expect(
+      json(await agent.callTool({ name: "get_elements", arguments: { ids: ["block-b"] } })).elements[0],
+    ).toEqual(original);
+  });
+
+  it("changes nothing when an id is unknown", async () => {
+    const address = await start();
+    const agent = await mcp(address);
+    const refused = await agent.callTool({
+      name: "transform_elements",
+      arguments: { ids: ["block-b", "nope"], steps: [{ kind: "translate", by: [1, 1] }] },
+    });
+    expect(refused.isError).toBe(true);
   });
 });

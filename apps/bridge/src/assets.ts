@@ -60,6 +60,7 @@ export class AssetStore {
     mkdirSync(join(target, ".."), { recursive: true });
     const temporary = `${target}.${randomUUID().slice(0, 8)}.tmp`;
     let received = 0;
+    const out = createWriteStream(temporary);
     try {
       await pipeline(
         body,
@@ -70,7 +71,7 @@ export class AssetStore {
             yield chunk;
           }
         },
-        createWriteStream(temporary),
+        out,
       );
       const checked = await checkAsset(temporary, received);
       if (!checked.ok) {
@@ -80,6 +81,8 @@ export class AssetStore {
       await rename(temporary, target);
       return { ok: true };
     } catch (error) {
+      // A stream that failed may still be opening its file: remove the file only once it is closed, or it appears after.
+      if (!out.closed) await new Promise<void>((done) => out.once("close", () => done()));
       await rm(temporary, { force: true });
       if (error instanceof TooLarge) {
         return {

@@ -222,7 +222,7 @@ export type TeamMemberInfo = z.infer<typeof TeamMemberInfo>;
 /** The app's own MCP server's tools (`mcp__hai__<name>`), grouped by what they let an agent do. */
 export const HAI_TOOLS = {
   read: ["get_scene_summary", "get_elements", "get_user_context", "capture_view"],
-  write: ["create_elements", "update_elements", "delete_elements", "set_selection"],
+  write: ["create_elements", "update_elements", "transform_elements", "delete_elements", "set_selection"],
   /** Offering and showing a generated panel; granted to every agent (a reader's panel is information only). */
   panel: ["offer_panel", "open_panel", "update_panel", "close_panel"],
   /** What the city context layer holds, and its items near a point; every agent (reading changes nothing). */

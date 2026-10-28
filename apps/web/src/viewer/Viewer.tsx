@@ -15,6 +15,7 @@ import {
 import type { MeshPart } from "@hai/scene";
 import {
   elementBounds,
+  importedPlacement,
   ORTHO_VIEWS,
   type Projector,
   sunLightDirection,
@@ -74,7 +75,7 @@ import type { Hit } from "../tools/types.ts";
 import type { VoiceInput, VoiceState } from "../voice/voice-input.ts";
 import { SUN_DISTANCE, takeShots, USER_ONLY } from "./agent-shot.ts";
 import { type CameraMarker, CameraMarkers } from "./camera-markers.tsx";
-import { elementGeometry, MM, modelGeometry, sceneBounds } from "./geometry.ts";
+import { elementGeometry, MM, modelGeometry, radians, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
 import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
 import {
@@ -103,6 +104,7 @@ import {
 import { cameraPosition, frameBox, orbit, pan, type Turntable, zoom } from "./turntable.ts";
 import { ViewCube } from "./ViewCube.tsx";
 import { between, resolveView, VIEW_ANIMATION_MS } from "./view-request.ts";
+import type { Visibility } from "./visibility.ts";
 
 const FOV = 45;
 const NO_MARKERS: CameraMarker[] = [];
@@ -141,7 +143,7 @@ function heldChipText(state: VoiceState, listening: boolean): string | null {
     case "stopped":
       return "Stopped";
     case "picked":
-      return `${state.tool} picked`;
+      return state.ran ? state.tool : `${state.tool} picked`;
     case "error":
       return MIC_PROBLEM[state.error];
     default:
@@ -406,12 +408,16 @@ function ElementMesh({
   );
   const geometry = (model ?? built) as THREE.BufferGeometry;
   useEffect(() => () => geometry.dispose(), [geometry]);
-  const translation = model && element.type === "imported" ? element.translation : null;
+  // The model's triangles are in the asset's own millimetres: its placement turns, scales and moves them.
+  const placement = useMemo(
+    () => (model && element.type === "imported" ? importedPlacement(element) : null),
+    [model, element],
+  );
   const topMm = useMemo(() => {
     geometry.computeBoundingBox();
     const top = geometry.boundingBox?.max.z ?? 0;
-    return model ? top + (translation?.[2] ?? 0) : top / MM;
-  }, [geometry, model, translation]);
+    return placement ? placement.offset[2] + placement.scale * top : top / MM;
+  }, [geometry, placement]);
   // Edge lines clip per segment by its first point, so a cut element's vertical edges would stick up through the
   // section; cut elements are drawn without edges instead.
   // Imported models have no edge lines: finding them costs time proportional to the triangles (a model of a million
@@ -433,14 +439,26 @@ function ElementMesh({
   if (marked) color = colors.risk;
   useWear(element.id, color, showEdges ? (glow ?? owner) : null, glow);
   const offset: [number, number, number] = offsetMm ? [offsetMm[0] * MM, offsetMm[1] * MM, 0] : [0, 0, 0];
-  // A model sits at its translation, and its millimetres become metres by scale.
-  const placed: [number, number, number] = translation
-    ? [offset[0] + translation[0] * MM, offset[1] + translation[1] * MM, offset[2] + translation[2] * MM]
+  // A model sits at its placement, and its millimetres become metres by scale.
+  const placed: [number, number, number] = placement
+    ? [
+        offset[0] + placement.offset[0] * MM,
+        offset[1] + placement.offset[1] * MM,
+        offset[2] + placement.offset[2] * MM,
+      ]
     : offset;
-  const scale = model ? MM : 1;
+  const scale = model ? MM * (placement?.scale ?? 1) : 1;
+  const turned: [number, number, number] = [0, 0, radians(placement?.rotationDeg ?? 0)];
   if (draft) {
     return (
-      <mesh geometry={geometry} position={placed} scale={scale} raycast={() => null} renderOrder={1}>
+      <mesh
+        geometry={geometry}
+        position={placed}
+        rotation={turned}
+        scale={scale}
+        raycast={() => null}
+        renderOrder={1}
+      >
         <meshStandardMaterial color={colors.selected} transparent opacity={0.55} depthWrite={false} />
         {element.type !== "line" && <Edges threshold={20} color={colors.selected} />}
       </mesh>
@@ -450,6 +468,7 @@ function ElementMesh({
     <mesh
       geometry={geometry}
       position={placed}
+      rotation={turned}
       scale={scale}
       castShadow
       receiveShadow
@@ -786,6 +805,7 @@ export function Viewer({
   latency,
   tools,
   view,
+  visibility,
   askAgent,
   gestures,
   features,
@@ -809,6 +829,8 @@ export function Viewer({
   /** Gesture-to-render latency, shared with the Detection card. */
   latency: LatencyTracker;
   tools: ToolController;
+  /** Which elements the user has hidden ("hide", "isolate"): not drawn, picked or snapped to. */
+  visibility: Visibility;
   /** The agent's view of what the user sees and points at. */
   view: ViewLink;
   /** Opens the agent panel for a request ("Ask agent" in the palette); returns why it cannot, or null. */
@@ -848,6 +870,7 @@ export function Viewer({
 }) {
   const software = useMemo(isSoftwareRenderer, []);
   const scene = useSyncExternalStore(client.subscribe, client.getSnapshot);
+  const hidden = useSyncExternalStore(visibility.subscribe, visibility.getSnapshot);
   // A generated panel's preview is laid over the scene for drawing only: tools and the bridge see the committed one.
   useSyncExternalStore(panels.subscribe, () => panels.getSnapshot().previewVersion);
   const shownDoc = panels.shownDoc(scene.doc);
@@ -1060,6 +1083,7 @@ export function Viewer({
   useEffect(() => {
     tools.attach({
       doc: () => client.getSnapshot().doc,
+      hidden: () => visibility.getSnapshot(),
       apply: (label, ops) => void client.apply(label, ops),
       undo: () => void client.undo(),
       redo: () => void client.redo(),
@@ -1164,7 +1188,19 @@ export function Viewer({
       },
       askAgent: () => askAgentRef.current(),
     });
-  }, [tools, client, sectionOutlineOnScreen, features, aids, controlFor, shapeOf, panels, inFrame, mirror]);
+  }, [
+    tools,
+    client,
+    visibility,
+    sectionOutlineOnScreen,
+    features,
+    aids,
+    controlFor,
+    shapeOf,
+    panels,
+    inFrame,
+    mirror,
+  ]);
 
   // When a whole Rhino document has arrived, frame it once (as a project is framed when it opens).
   const syncedSeen = useRef(rhinoSynced);
@@ -1708,19 +1744,21 @@ export function Viewer({
           />
           <ModelAssetsContext.Provider value={modelAssets}>
             {shownDoc &&
-              Object.values(shownDoc.elements).map((element) => (
-                <ElementMesh
-                  key={element.id}
-                  element={element}
-                  doc={shownDoc as SceneDocument}
-                  colors={colors}
-                  selected={selection.has(element.id)}
-                  hovered={hoverId === element.id}
-                  marked={overlay.marked === element.id}
-                  offsetMm={previewOffset(element)}
-                  sectionMm={overlay.sectionMm}
-                />
-              ))}
+              Object.values(shownDoc.elements)
+                .filter((element) => !hidden.has(element.id))
+                .map((element) => (
+                  <ElementMesh
+                    key={element.id}
+                    element={element}
+                    doc={shownDoc as SceneDocument}
+                    colors={colors}
+                    selected={selection.has(element.id)}
+                    hovered={hoverId === element.id}
+                    marked={overlay.marked === element.id}
+                    offsetMm={previewOffset(element)}
+                    sectionMm={overlay.sectionMm}
+                  />
+                ))}
           </ModelAssetsContext.Provider>
           <group userData={USER_ONLY}>
             <ClaimBoxes boxes={(owners ?? NO_OWNERS).boxes} />

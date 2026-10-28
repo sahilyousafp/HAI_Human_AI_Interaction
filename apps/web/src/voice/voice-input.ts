@@ -32,15 +32,22 @@ export interface VoiceDeps {
   /** Whether a transcript is only a team name and a greeting ("Hey Mochi"), with no request after it. */
   isBareName?(text: string): boolean;
   /**
-   * A transcript that is only a tool's spoken name picks that tool here, without the agent: returns the tool's label
-   * when it did, null for a request.
+   * A transcript that is only a tool's spoken name, or a command the grammar fully understands, is handled here
+   * without the agent: returns what to show for it when it was, null for a request. `context` is what "this" means.
    */
-  command?(text: string): string | null;
+  command?(text: string, context: RequestContext): CommandPick | null;
   /** Stops the request a held pinch just sent (a shake within `HELD_STOP_MS`). */
   stopSent?(): void;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
+}
+
+/** What the voice input shows for a transcript that was handled locally: a tool picked, or a command run. */
+export interface CommandPick {
+  label: string;
+  /** A command was run (or refused) rather than a tool picked. */
+  ran?: boolean;
 }
 
 export type MicError = "denied" | "not-found" | "failed";
@@ -64,8 +71,8 @@ export type VoiceState =
   | { phase: "sent"; text: string; held?: Hand }
   /** A held request was stopped by a shake right after it was sent. */
   | { phase: "stopped"; text: string; held: Hand }
-  /** The transcript was a tool's name: that tool was picked, and nothing was sent. */
-  | { phase: "picked"; text: string; tool: string; held?: Hand }
+  /** The transcript was a tool's name or a command: it was handled here, and nothing was sent. */
+  | { phase: "picked"; text: string; tool: string; ran?: boolean; held?: Hand }
   | { phase: "discarded"; text: string }
   /** `held`: the microphone failed for a held pinch, so the chip beside that hand says so too. */
   | { phase: "error"; error: MicError; message: string; held?: Hand };
@@ -238,6 +245,11 @@ export class VoiceInput {
     else this.cancel();
   }
 
+  /** Takes text as though it had just been spoken: a command runs, a request is shown for sending. */
+  hear(text: string): void {
+    void this.ended(this.session, { text });
+  }
+
   /** Stops listening without sending anything. */
   cancel(): void {
     this.session++;
@@ -376,10 +388,16 @@ export class VoiceInput {
       this.update({ phase: "off" });
       return;
     }
-    const tool = this.deps.command?.(text);
-    if (tool) {
+    const pick = this.deps.command?.(text, this.deps.context(this.context));
+    if (pick) {
       this.context.clear();
-      this.update({ phase: "picked", text, tool, held: hand });
+      this.update({
+        phase: "picked",
+        text,
+        tool: pick.label,
+        ...(pick.ran ? { ran: true } : {}),
+        held: hand,
+      });
       return;
     }
     // The hold was the deliberate act: no countdown.
@@ -477,12 +495,12 @@ export class VoiceInput {
     this.review(text);
   }
 
-  /** A transcript that is only a tool's name picks the tool at once: no countdown, nothing sent. */
+  /** A transcript that is a tool's name or a command is handled at once: no countdown, nothing sent. */
   private picked(text: string): boolean {
-    const tool = this.deps.command?.(text);
-    if (!tool) return false;
+    const pick = this.deps.command?.(text, this.deps.context(this.context));
+    if (!pick) return false;
     this.context.clear();
-    this.update({ phase: "picked", text, tool });
+    this.update({ phase: "picked", text, tool: pick.label, ...(pick.ran ? { ran: true } : {}) });
     return true;
   }
 

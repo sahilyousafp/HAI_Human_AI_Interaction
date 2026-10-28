@@ -53,8 +53,9 @@ export const FEATURES = [
   },
   {
     id: "agent",
-    label: "Agent",
-    description: "The agent panel and Ask agent.",
+    label: "Claude chat",
+    description:
+      "The chat with Claude and Ask agent. Off: only spoken and gesture commands run, and nothing is sent to Claude.",
   },
   {
     id: "snapToModels",

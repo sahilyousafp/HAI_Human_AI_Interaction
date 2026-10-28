@@ -51,6 +51,8 @@ export const MassingElement = z.strictObject({
   origin: Point3Mm,
   /** Width (x), depth (y), height (z), mm. */
   size: z.tuple([positiveMm, positiveMm, positiveMm]),
+  /** Turned this many degrees about its centre in plan, counter-clockwise; absent is 0. */
+  rotationDeg: z.number().optional(),
 });
 
 export const SlabElement = z.strictObject({
@@ -84,6 +86,8 @@ export const ColumnElement = z.strictObject({
   /** Section width (x) and depth (y), mm. */
   section: z.tuple([positiveMm, positiveMm]),
   height: positiveMm,
+  /** Turned this many degrees about its centre in plan, counter-clockwise; absent is 0. */
+  rotationDeg: z.number().optional(),
 });
 
 /**
@@ -120,6 +124,10 @@ export const ImportedElement = z.strictObject({
     .refine(({ min, max }) => min.every((v, i) => v <= (max[i] ?? v)), "min must not exceed max"),
   /** How far the element has been moved from where the file put it, mm. */
   translation: Point3Mm.default([0, 0, 0]),
+  /** Turned this many degrees about the centre of its box in plan, counter-clockwise; absent is 0. */
+  rotationDeg: z.number().optional(),
+  /** Scaled by this factor about the foot of its box centre, after the rotation; absent is 1. */
+  scale: positiveMm.optional(),
   /** The layer name in the source file. */
   layer: z.string().min(1).optional(),
   /** Display colour, #rrggbb. */

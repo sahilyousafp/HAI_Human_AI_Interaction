@@ -20,7 +20,7 @@ import {
   type ViewCamera,
   ViewRequest,
 } from "@hai/protocol";
-import { elementBounds, sunPosition, unionBounds } from "@hai/scene";
+import { applySteps, elementBounds, sunPosition, type TransformStep, unionBounds } from "@hai/scene";
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { HAI_SERVER } from "../agent/agent-config.ts";
@@ -252,6 +252,24 @@ const COMPASS = [
   "NW",
   "NNW",
 ];
+/** An id nobody has: generated ones are checked against the model and this batch, never assumed to be free. */
+function freshId(type: unknown, taken: ReadonlySet<string>): string {
+  for (;;) {
+    const id = `${String(type ?? "element")}-${randomUUID().slice(0, 8)}`;
+    if (!taken.has(id)) return id;
+  }
+}
+
+/** The tool's steps as the scene package takes them (a move may leave out its height). */
+const stepsOf = (steps: Array<Record<string, unknown>>): TransformStep[] =>
+  steps.map((step) => {
+    if (step.kind === "translate") {
+      const [x = 0, y = 0, z = 0] = step.by as number[];
+      return { kind: "translate", by: [x, y, z] };
+    }
+    return step as unknown as TransformStep;
+  });
+
 /** The name an agent's cameras are kept under. */
 const callerName = (caller: Caller) => caller.agent ?? "agent";
 
@@ -259,12 +277,12 @@ const callerName = (caller: Caller) => caller.agent ?? "agent";
 const compass = (azimuth: number) => COMPASS[Math.round(azimuth / 22.5) % 16] as string;
 
 const ELEMENT_SHAPES = `Lengths are millimetres, Z up. Element shapes (id is optional when creating):
-- massing: { type: "massing", name, level?, origin: [x, y, z] (minimum corner), size: [width, depth, height] }
+- massing: { type: "massing", name, level?, origin: [x, y, z] (minimum corner), size: [width, depth, height], rotationDeg? (turned counter-clockwise about its centre in plan) }
 - wall: { type: "wall", name, level?, start: [x, y], end: [x, y], height, thickness } (centred on its baseline, rising from its level)
-- column: { type: "column", name, level?, position: [x, y], section: [width, depth], height }
+- column: { type: "column", name, level?, position: [x, y], section: [width, depth], height, rotationDeg? (about its position) }
 - slab: { type: "slab", name, level?, outline: [[x, y], ...] (counter-clockwise), thickness } (extruded down from its level)
 - line: { type: "line", name, level?, points: [[x, y, z], ...] (at least 2, at their real heights), closed? } (a polyline the user drew or a curve for you to use as a path, a rail or a guide; it is a curve, not a solid)
-- imported: reference geometry from the user's Rhino file: { type: "imported", name, layer?, color?, bounds: { min: [x, y, z], max: [x, y, z] } (before translation), translation: [x, y, z] }. You see its box, never its triangles. Move it by changing translation; delete it as any element; copy it by creating another with the same asset, part and bounds. You cannot change its shape.
+- imported: reference geometry from the user's Rhino file: { type: "imported", name, layer?, color?, bounds: { min: [x, y, z], max: [x, y, z] } (before translation), translation: [x, y, z], rotationDeg? (about the centre of its box in plan), scale? (about the foot of its box centre) }. You see its box, never its triangles. Move, turn and scale it with transform_elements (or change translation, rotationDeg and scale); delete it as any element; copy it by creating another with the same asset, part and bounds. You cannot change its shape.
 Walls, slabs and columns may also have base: the height of their base in millimetres, which wins over their level's elevation (for elements placed off any level, such as on a roof).
 All may have properties: { key: string | number | boolean }.`;
 
@@ -439,16 +457,9 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
     async ({ elements }) => {
       const doc = deps.doc();
       const taken = new Set(Object.keys(doc.elements));
-      // An id nobody has: generated ones are checked against the model and this batch, never assumed to be free.
-      const freshId = (type: unknown) => {
-        for (;;) {
-          const id = `${String(type ?? "element")}-${randomUUID().slice(0, 8)}`;
-          if (!taken.has(id)) return id;
-        }
-      };
       const created: Array<Record<string, unknown> & { id: string }> = [];
       for (const e of elements) {
-        const id = typeof e.id === "string" && e.id ? e.id : freshId(e.type);
+        const id = typeof e.id === "string" && e.id ? e.id : freshId(e.type, taken);
         const existing = doc.elements[id];
         if (existing || created.some((c) => c.id === id)) {
           const owner = existing?.tags?.[TAG_OWNER];
@@ -481,6 +492,76 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
         caller.agent,
       );
       return result.ok ? text({ updated: updates.map((u) => u.id) }) : failure(result.error);
+    },
+  );
+
+  register(
+    "transform_elements",
+    {
+      description:
+        "Moves, turns, scales or mirrors elements, whatever their type, in one change. Steps run in order, each on what the one before left. A rotate, scale or mirror turns about the centre of the elements together unless it names a point. With copies: N the originals stay and N copies are made, copy i being the originals put through the steps i times (copy 4 times 6 m along y: one translate step of [0, 6000, 0] and copies 4). Lengths are millimetres, angles degrees counter-clockwise seen from above. An imported model cannot be mirrored.",
+      inputSchema: z.object({
+        ids: z.array(z.string()).min(1),
+        steps: z
+          .array(
+            z.discriminatedUnion("kind", [
+              z.object({ kind: z.literal("translate"), by: z.array(z.number()).min(2).max(3) }),
+              z.object({
+                kind: z.literal("rotate"),
+                deg: z.number(),
+                about: z.array(z.number()).length(2).optional(),
+              }),
+              z.object({
+                kind: z.literal("scale"),
+                factor: z.number().positive(),
+                about: z.array(z.number()).length(3).optional(),
+              }),
+              z.object({ kind: z.literal("mirror"), axis: z.enum(["x", "y"]), at: z.number().optional() }),
+            ]),
+          )
+          .min(1),
+        copies: z.number().int().min(1).max(200).optional(),
+      }),
+    },
+    async ({ ids, steps, copies }) => {
+      const doc = deps.doc();
+      const elements = ids.map((id) => doc.elements[id]);
+      const missing = ids.filter((_, i) => !elements[i]);
+      if (missing.length) return failure(`Nothing was changed: no element ${missing.join(", ")}.`);
+      const found = elements as Element[];
+      const run = (times: number) =>
+        applySteps(found, Array.from({ length: times }, () => stepsOf(steps)).flat(), doc.levels);
+      if (!copies) {
+        const done = run(1);
+        if (!done.ok) return failure(`Nothing was changed: ${done.error}`);
+        const result = deps.apply(
+          Object.entries(done.patches).map(([id, patch]): SceneOp => ({ op: "update", id, patch })),
+          caller.agent,
+        );
+        return result.ok ? text({ transformed: ids }) : failure(result.error);
+      }
+      const taken = new Set(Object.keys(doc.elements));
+      const created: SceneOp[] = [];
+      const createdIds: string[] = [];
+      for (let i = 1; i <= copies; i++) {
+        const done = run(i);
+        if (!done.ok) return failure(`Nothing was changed: ${done.error}`);
+        for (const element of found) {
+          const id = freshId(element.type, taken);
+          taken.add(id);
+          createdIds.push(id);
+          // The copy is the agent's own: the system's tags (owner, part, source) are not carried over.
+          const tags = Object.fromEntries(
+            Object.entries(element.tags ?? {}).filter(([name]) => !name.startsWith(RESERVED_TAG_PREFIX)),
+          );
+          created.push({
+            op: "create",
+            element: { ...element, ...done.patches[element.id], id, tags } as Element,
+          });
+        }
+      }
+      const result = deps.apply(created, caller.agent);
+      return result.ok ? text({ created: createdIds }) : failure(result.error);
     },
   );
 

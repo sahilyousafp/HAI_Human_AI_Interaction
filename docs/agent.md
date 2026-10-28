@@ -38,6 +38,7 @@ The `hai` MCP server gives each agent the tools its definition lists, from these
 | `get_elements` | Full details, with tags, by id, or by type, level, owner, part or tag. An element you changed by hand since the agent last read it is marked `changedByUser` |
 | `get_user_context` | The selection, the element under your hand pointer, and the camera |
 | `create_elements`, `update_elements`, `delete_elements` | Change the scene. Each batch is checked as a whole: if one element is invalid, nothing changes and the error names it |
+| `transform_elements` | Moves, turns, scales or mirrors elements, or makes copies of them (`copies: N` puts each copy through the steps once more than the one before: a linear array). Steps run in order, each on what the one before left, and turn or scale about the elements' centre unless a point is named |
 | `set_tags` | Sets or removes the agent's own tags on elements. Names starting with `hai.` (`hai.owner`, `hai.part`, `hai.source`) belong to the system and are refused (every agent that changes the model) |
 | `set_selection` | Select elements for everyone |
 | `confirm_plan` | Shows the user how the lead means to split a request (agent, title and scope of each part) before it hands anything out; the user removes parts and confirms, or skips, and the lead hands out only the confirmed parts (the lead only; see [agents.md](agents.md#workers)) |

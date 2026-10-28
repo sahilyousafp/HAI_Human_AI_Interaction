@@ -31,6 +31,29 @@ Say just a tool's name and that tool is picked at once, without the agent and wi
 
 A tool from a plugin or the Rhino connector declares its own spoken names when it registers (`spoken: ["bake"]`, see [tools.md](tools.md#adding-a-tool)); without them its label is what you say. Nothing in voice input needs to change for it.
 
+## Spoken commands
+
+Say what to do to the selection and it is done at once, without the agent and without a countdown: "move 3 m east", "rotate 90", "copy 4 times 6 m along y", "copy and rotate 90". The bar says what was done, and nothing is sent. What a command acts on is "this": what you pointed at while you spoke, else what is selected; with neither, it says "Select something first." and changes nothing.
+
+| Say | What happens |
+|---|---|
+| **move** 3 m along x, up 2000, 30 cm west | Moves by a distance in a direction. x and east are +X, y and north +Y, up and down are Z. Distances take mm, cm or m (millimetres when no unit is said). Two distances join: "move 2 m up and 3 m east" |
+| **copy**, copy 6 m y, copy 4 times 6 m along y | Copies in place, once at a distance, or as a line of copies each one step further than the one before. The copies are selected afterwards |
+| **rotate** 90, 45 clockwise, minus 30 | Turns about the centre of what is selected, counter-clockwise seen from above unless you say clockwise |
+| **scale** 2, 0.5, 50 percent, half, double | Scales in plan and in height about the centre of what is selected, at its lowest height |
+| **mirror** x, mirror y | Flips across x or y about the centre of what is selected. Imported models cannot be mirrored |
+| **select** all, all walls, columns, level 2, none | Selects by type or level; "deselect" or "clear the selection" clears it |
+| **delete** this, all columns | Asks first: nod or press Enter to delete, shake or Escape to keep |
+| **hide**, **isolate**, **show all** | Takes elements out of the view (nothing is saved or undone) and brings them back |
+
+Commands chain with "and", "then" or a comma, and each step acts on what the one before left: "copy 3 m x then scale 0.5" makes a copy 3 m along and halves it. A copy leaves the original alone, and what follows it acts on the copies; what comes before it changes the original. A chain is one undo step named after what was said ("Copy, rotate 90 degrees"). A transcript starting with "select" can act on what it selected: "select all walls and move 2 m up".
+
+All or nothing: if one word of what you said is not understood, the whole transcript goes to the agent as a request, and nothing is guessed. A whole type is only deleted when you say "all" ("remove the wall" is for the agent). A tool's own name ("copy", "move", "delete") still picks that tool.
+
+The agent has the same operations as `transform_elements` ([agent.md](agent.md)), so what you can say it can do too, on any element, and "copy this along the curve" is a request for it.
+
+With **Claude chat** off (Settings > Features) only commands run: a transcript that is not a command shows "Not a command: ..." and is sent nowhere, the chat panel is gone, listening for names is off, and a small microphone button and bar over the model take the chat's place.
+
 ## Point and speak
 
 Select what you mean, then speak: the current selection is what "this" and "these" refer to. While you speak, every element you tap into the selection is captured too, in order, and shows a numbered marker in the model (1, 2, ...) until the request is sent or discarded, so you see what it will mean before it goes. A hand pointer snaps to the nearest model when you pinch close to it ([gestures.md](gestures.md)), so selecting does not take a pixel-exact pinch.

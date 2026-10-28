@@ -23,6 +23,7 @@ import {
   type ConnectionState,
   connectToBridge,
 } from "./bridge/connection.ts";
+import { type CommandHost, runCommand } from "./commands/run.ts";
 import { ContextLegend } from "./context/ContextLegend.tsx";
 import { ContextClient } from "./context/context-client.ts";
 import { ProjectExporter } from "./export/exporter.ts";
@@ -62,7 +63,9 @@ import { cameraMarkers } from "./viewer/camera-markers.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
 import { NO_OWNERS, type OwnerDisplay } from "./viewer/owner-display.tsx";
 import { Viewer } from "./viewer/Viewer.tsx";
+import { Visibility } from "./viewer/visibility.ts";
 import { voiceAvailability, voicePillText } from "./voice/availability.ts";
+import { CommandBar } from "./voice/CommandBar.tsx";
 import { listenInCloud, listenOnDevice, preloadOnDevice } from "./voice/listeners.ts";
 import { bestEngine, resample, Speaker } from "./voice/speaker.ts";
 import { toolNamed } from "./voice/tool-commands.ts";
@@ -318,6 +321,19 @@ export function App() {
   const speechRef = useRef(speech);
   speechRef.current = speech;
   const transcriber = useMemo(() => new Transcriber(), []);
+  // Which elements "hide" and "isolate" have taken out of the view, and what a spoken command can reach.
+  const visibility = useMemo(() => new Visibility(), []);
+  const commandHost = useMemo<CommandHost>(
+    () => ({
+      doc: () => sceneClient.getSnapshot().doc,
+      apply: (label, ops) => sceneClient.apply(label, ops),
+      select: (ids) => sceneClient.select(ids),
+      ask: (question, answer) => tools.confirm(question, answer),
+      flash: (message) => tools.flash(message),
+      visibility,
+    }),
+    [sceneClient, tools, visibility],
+  );
   // Mochi's replies are spoken on this laptop: Kokoro on WebGPU, else a voice installed on the computer.
   const [speakReplies, setSpeakReplies] = useState(true);
   const [replyVoice, setReplyVoice] = useState<ReplyVoice>("af_heart");
@@ -359,7 +375,7 @@ export function App() {
           return listenOnDevice(events);
         },
         transcribe: (audio) => transcriber.transcribe(audio),
-        send: (text, context) => agent.ask(text, context),
+        send: (text, context) => features.on("agent") && agent.ask(text, context),
         context: (recorder) => {
           const { doc, selection } = sceneClient.getSnapshot();
           return recorder.resolve(doc, selection, viewLink.groundPoint());
@@ -369,19 +385,32 @@ export function App() {
           !speaker.speaking && addressOf(text, agent.getSnapshot().team?.members ?? []).agent !== null,
         // A shake right after a held request was sent stops it: its turn and what it handed out.
         stopSent: () => agent.stopLastRequest(),
-        // A transcript that is only a tool's name ("measure", "sketch area") picks the tool, without the agent.
-        command: (text) => {
+        // A transcript that is only a tool's name ("measure", "sketch area") picks the tool, and one the command
+        // grammar fully understands ("copy and rotate 90") runs on what "this" is: neither goes to the agent.
+        command: (text, context) => {
           const tool = toolNamed(text, tools.registry.list());
-          if (!tool) return null;
-          tools.choose(tool.id);
-          return tool.label;
+          if (tool) {
+            tools.choose(tool.id);
+            return { label: tool.label };
+          }
+          const run = runCommand(
+            text,
+            commandHost,
+            context.references.map((reference) => reference.id),
+          );
+          if (run) return { label: run.label, ran: true };
+          // With Claude chat off nothing is a request: what is not a command is said so, and goes nowhere.
+          if (features.on("agent")) return null;
+          const notCommand = `Not a command: ${text}`;
+          tools.flash(notCommand);
+          return { label: notCommand, ran: true };
         },
         isBareName: (text) => {
           const { agent: named, text: rest } = addressOf(text, agent.getSnapshot().team?.members ?? []);
           return named !== null && rest.trim() === "";
         },
       }),
-    [transcriber, agent, sceneClient, viewLink, speaker, tools],
+    [transcriber, agent, sceneClient, viewLink, speaker, tools, commandHost, features],
   );
   // In the desktop app the voice models are downloaded after install: until they are in place the voice says so, the
   // speaker stays quiet and nothing asks for them. When they verify, voice starts without a reload.
@@ -419,9 +448,9 @@ export function App() {
   const micState = useSyncExternalStore(voice.subscribe, () => voice.micState);
   const [listenForNames, setListenForNames] = useState(false);
   useEffect(() => voice.setHovered(pointedWhileSpeaking), [voice, pointedWhileSpeaking]);
-  // Listening for names needs the voice feature on.
+  // Listening for names needs the voice feature on, and Claude chat: without it there is no agent to name.
   useEffect(
-    () => voice.setListenForNames(listenForNames && featureState.voice && voiceReady),
+    () => voice.setListenForNames(listenForNames && featureState.voice && featureState.agent && voiceReady),
     [voice, listenForNames, featureState, voiceReady],
   );
 
@@ -945,6 +974,7 @@ export function App() {
             bus={bus}
             latency={renderLatency}
             tools={tools}
+            visibility={visibility}
             view={viewLink}
             askAgent={askAgent}
             gestures={gestures}
@@ -964,6 +994,14 @@ export function App() {
             showContext={openDataState.showContext}
           >
             <ContextLegend state={contextState} visible={openDataState.showContext} />
+            {!featureState.agent && featureState.voice && (
+              <CommandBar
+                voice={voice}
+                startVoice={startVoice}
+                notice={voiceReady ? null : voiceStatus.label}
+                nameOf={nameOf}
+              />
+            )}
           </Viewer>
           <CameraView session={session} />
           {label.hint && <p className="hint">{label.hint}</p>}
