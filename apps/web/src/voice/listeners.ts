@@ -56,6 +56,11 @@ export function preloadOnDevice(): void {
   loadDetector().catch(() => {}); // a failure is reported when listening starts
 }
 
+/** Resolves once the speech detector is loaded (it starts loading it if nothing has). */
+export async function detectorLoaded(): Promise<void> {
+  await loadDetector();
+}
+
 /**
  * Listens on this machine: the speech detector finds where speech starts and ends and hands over the utterance as
  * 16 kHz samples. The model and ONNX runtime are served by the app (scripts/fetch-assets.mjs). The microphone stream

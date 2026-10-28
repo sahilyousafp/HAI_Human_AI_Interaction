@@ -119,6 +119,7 @@ interface Window {
       feed(turnId: string, text: string): void;
       end(turnId: string): void;
     };
+    warm(): Promise<void>;
     roundTrip(text: string): Promise<string | null>;
   };
 }

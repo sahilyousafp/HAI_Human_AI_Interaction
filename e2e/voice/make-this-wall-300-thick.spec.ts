@@ -125,10 +125,10 @@ test("Held request is sent on release, and Shake stops a sent request: the stop 
     await openViewer(page);
     await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
     const at = await findElementOnScreen(page, "block-c");
-    await holdAt(page, at);
+    await holdAt(page, at, "Left");
     await expect(page.getByTestId("held-chip")).toContainText("Point at what you mean", { timeout: 60_000 });
     await page.waitForTimeout(3000); // the rest of the sentence and the pause after it
-    await releaseAt(page, at);
+    await releaseAt(page, at, "Left");
     await expect(page.getByTestId("held-chip")).toContainText("Sent - shake to stop", { timeout: 30_000 });
     await expect(page.getByTestId("voice-transcript")).toHaveCount(0); // no countdown
     await expect

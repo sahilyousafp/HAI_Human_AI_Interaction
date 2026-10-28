@@ -32,6 +32,19 @@ export class Transcriber {
     this.ensure();
   }
 
+  /** Resolves once the model is loaded and ready to transcribe (it starts loading it if nothing has). */
+  whenReady(): Promise<void> {
+    this.ensure();
+    if (this.stats.backend !== null) return Promise.resolve();
+    return new Promise((resolve) => {
+      const off = this.subscribe(() => {
+        if (this.stats.backend === null) return;
+        off();
+        resolve();
+      });
+    });
+  }
+
   transcribe(audio: Float32Array): Promise<string> {
     const worker = this.ensure();
     const id = this.nextId++;

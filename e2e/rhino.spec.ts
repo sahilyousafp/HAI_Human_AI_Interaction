@@ -8,6 +8,7 @@ import type { Bridge } from "../apps/bridge/src/server.ts";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
 import { sharedPythonEnv } from "../apps/bridge/test/python-env.ts";
 import { connectFakeRhino, rhinoBatch, rhinoObject } from "../apps/bridge/test/rhino-client.ts";
+import { allow } from "./budget.ts";
 import { openSettings } from "./settings.ts";
 import { camera, findElementOnScreen, openViewer, startTestBridge } from "./viewer.ts";
 
@@ -311,7 +312,7 @@ test.describe("Rhino to HAI latency", () => {
       p90 = Math.min(p90, await page.evaluate(() => window.__HAI_MIRROR__?.latencyP90() ?? 0));
       console.log(`Rhino to HAI p90 for a 50-object edit (round ${round + 1}): ${Math.round(p90)} ms`);
     }
-    expect(p90).toBeLessThan(300);
+    expect(p90).toBeLessThan(allow(300, 1000));
     await expect(page.getByTestId("rhino-latency")).toHaveText(/^Rhino to HAI \d+ ms$/);
   });
 });

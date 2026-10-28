@@ -12,6 +12,10 @@ export async function startVoice(page: Page) {
   const bridge = await startTestBridge(page, { agent: fakeProvider(state) });
   await openViewer(page);
   await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
+  // Engaged, as a user who speaks to the app is, and with the speech models loaded: the fake microphone plays its phrase
+  // once from the moment listening starts, so a model still loading then would lose the start of it.
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+  await page.evaluate(() => window.__HAI_SPEECH__?.warm());
   const received = () =>
     readdirSync(state)
       .filter((f) => !f.startsWith("start-") && f.endsWith(".json"))

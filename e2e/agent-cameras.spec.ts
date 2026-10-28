@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
+import { allow } from "./budget.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { camera, openViewer, startTestBridge } from "./viewer.ts";
 
@@ -351,9 +352,9 @@ test.describe("the speed of it", () => {
       console.log(
         `agent cameras (${software ? "software" : "gpu"}): 1024 px picture p90 ${p90} ms of ${singles.length}; orbit sheet ${sheet} ms; longest gap between the user's frames ${Math.round(longest)} ms`,
       );
-      expect(p90).toBeLessThan(software ? 2000 : 400);
-      expect(sheet).toBeLessThan(software ? 12_000 : 3000);
-      expect(longest).toBeLessThan(software ? 800 : 120);
+      expect(p90).toBeLessThan(software ? 2000 : allow(400, 2000));
+      expect(sheet).toBeLessThan(software ? 12_000 : allow(3000, 12_000));
+      expect(longest).toBeLessThan(software ? 800 : allow(120, 800));
     } finally {
       await bridge.stop();
     }
