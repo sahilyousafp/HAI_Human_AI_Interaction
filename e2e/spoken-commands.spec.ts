@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
 import { openSettings } from "./settings.ts";
-import { openViewer, startTestBridge } from "./viewer.ts";
+import { findElementOnScreen, openViewer, startTestBridge } from "./viewer.ts";
 
 // Spoken commands: a transcript the grammar fully understands runs on what is selected as one undo step, without the
 // agent; anything else is the agent's, or, with Claude chat off, "Not a command".
@@ -134,4 +134,49 @@ test("a marker that has not been placed is said so, and nothing moves", async ({
   await say(page, "move to marker Q");
   await expect(page.getByTestId("tool-notice")).toContainText("There is no marker Q");
   expect(JSON.stringify(bridge?.scene.scene.doc.elements["block-b"])).toBe(before);
+});
+
+test("with Claude chat off, a command can be typed, with or without the microphone", async ({ page }) => {
+  await start(page);
+  await openSettings(page, "features");
+  await page.getByTestId("feature-agent").click();
+  await expect(page.getByTestId("agent-panel")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  const input = page.getByTestId("command-input");
+  await select(page, "block-b");
+  await input.fill("rotate 90");
+  await input.press("Enter");
+  await expect.poll(() => rotationOf("block-b")).toBe(90);
+  await expect(input).toHaveValue("");
+  await expect(page.getByTestId("voice-picked")).toContainText("Rotate 90");
+
+  await input.fill("make the building taller");
+  await input.press("Enter");
+  await expect(page.getByTestId("voice-picked")).toContainText("Not a command: make the building taller");
+
+  // Without the voice feature there is no microphone, and the box is still there.
+  await openSettings(page, "features");
+  await page.getByTestId("feature-voice").click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("command-bar").getByTestId("mic-button")).toHaveCount(0);
+  await input.fill("rotate 90");
+  await input.press("Enter");
+  await expect.poll(() => rotationOf("block-b")).toBe(180);
+});
+
+test("hide takes an element out of the user's view and picking, and it comes back with show all", async ({
+  page,
+}) => {
+  await start(page);
+  const at = await findElementOnScreen(page, "block-b");
+  expect(await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x, y), at)).toBe("block-b");
+  await select(page, "block-b");
+  await say(page, "hide");
+  await expect.poll(() => page.evaluate(() => window.__HAI_VIEWER__?.hiddenKept())).toEqual(["block-b"]);
+  // The scene still holds it, so the agents' own pictures show it; the user can neither see nor pick it.
+  expect(await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x, y), at)).not.toBe("block-b");
+  await say(page, "show all");
+  await expect.poll(() => page.evaluate(() => window.__HAI_VIEWER__?.hiddenKept())).toEqual([]);
+  expect(await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x, y), at)).toBe("block-b");
 });

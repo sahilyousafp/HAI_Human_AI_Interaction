@@ -1049,10 +1049,11 @@ export function App() {
             showContext={openDataState.showContext}
           >
             <ContextLegend state={contextState} visible={openDataState.showContext} />
-            {!featureState.agent && featureState.voice && (
+            {!featureState.agent && (
               <CommandBar
                 voice={voice}
                 startVoice={startVoice}
+                voiceOn={featureState.voice}
                 notice={voiceReady ? null : voiceStatus.label}
                 nameOf={nameOf}
               />
