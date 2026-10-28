@@ -58,6 +58,33 @@ export type SpeechMode = z.infer<typeof SpeechMode>;
 export const ReplyVoice = z.enum(["af_heart", "am_michael"]);
 export type ReplyVoice = z.infer<typeof ReplyVoice>;
 
+/** What the collapsed chat rail can show; the order of the ones chosen is their priority, top to bottom. */
+export const STRIP_ITEMS = ["waiting", "state", "team", "name", "lastLine", "mic"] as const;
+export const StripItem = z.enum(STRIP_ITEMS);
+export type StripItem = z.infer<typeof StripItem>;
+
+/** The ready-made choices of the collapsed rail. */
+export const STRIP_PRESETS = {
+  /** The chevron, the state, the name, what waits for the user, and the microphone. */
+  quiet: ["state", "name", "waiting", "mic"],
+  /** What waits for the user takes the strip over; otherwise just the state and the microphone. */
+  "needs-you": ["waiting", "state", "mic"],
+  /** One dot per agent, then what waits for the user, and the microphone. */
+  team: ["team", "waiting", "mic"],
+} as const satisfies Record<string, readonly StripItem[]>;
+
+/** The collapsed rail: a preset, or the user's own list (`custom`). `items` is what is shown, in priority order. */
+export const StripLayout = z.strictObject({
+  preset: z.enum(["quiet", "needs-you", "team", "custom"]),
+  items: z
+    .array(StripItem)
+    .max(STRIP_ITEMS.length)
+    .refine((items) => new Set(items).size === items.length, "an item is listed twice"),
+});
+export type StripLayout = z.infer<typeof StripLayout>;
+
+export const DEFAULT_STRIP: StripLayout = { preset: "needs-you", items: [...STRIP_PRESETS["needs-you"]] };
+
 /** User settings kept by the bridge in .hai/settings.json. */
 export const Settings = z.strictObject({
   /** The action ring (the dominant hand's); null until the user changes it: the app's default applies. */
@@ -75,6 +102,8 @@ export const Settings = z.strictObject({
   /** Whether Mochi's replies are spoken (on by default; muting is remembered). */
   speakReplies: z.boolean().default(true),
   replyVoice: ReplyVoice.default("af_heart"),
+  /** What the chat rail shows when it is collapsed, and in what order of priority. */
+  railStrip: StripLayout.default(DEFAULT_STRIP),
   /** Features the user switched on or off; the rest are on. */
   features: FeatureChoices.nullable().default(null),
   /** Drawing aids the user switched on or off; the rest keep their defaults (only Grid is on). */
@@ -463,6 +492,7 @@ export const SettingsSetMessage = message(
     listenForNames: z.boolean().optional(),
     speakReplies: z.boolean().optional(),
     replyVoice: ReplyVoice.optional(),
+    railStrip: StripLayout.optional(),
     features: FeatureChoices.optional(),
     drawingAids: DrawingAidChoices.optional(),
     showHands: z.boolean().optional(),

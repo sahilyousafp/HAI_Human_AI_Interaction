@@ -73,6 +73,7 @@ import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
 import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
 import type { Hit } from "../tools/types.ts";
 import type { VoiceInput, VoiceState } from "../voice/voice-input.ts";
+import { type ApprovalBadge, ApprovalBadges } from "./ApprovalBadges.tsx";
 import { SUN_DISTANCE, takeShots, USER_ONLY } from "./agent-shot.ts";
 import { type CameraMarker, CameraMarkers } from "./camera-markers.tsx";
 import { elementGeometry, MM, modelGeometry, radians, sceneBounds } from "./geometry.ts";
@@ -108,6 +109,9 @@ import type { Visibility } from "./visibility.ts";
 
 const FOV = 45;
 const NO_MARKERS: CameraMarker[] = [];
+const NO_APPROVALS: ApprovalBadge[] = [];
+const noDecision = (): void => {};
+const noReview = (): void => {};
 const NO_CONTEXT: ContextState = { items: [], stale: false, credits: [] };
 /** The pan pointer's icon: arrows in the four directions. */
 const PAN_ICON = "M12 2v20M2 12h20M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3";
@@ -820,6 +824,9 @@ export function Viewer({
   voice,
   owners,
   cameraMarkers = NO_MARKERS,
+  approvals = NO_APPROVALS,
+  onDecide = noDecision,
+  onReviewApproval = noReview,
   context = NO_CONTEXT,
   showContext = true,
   children,
@@ -861,6 +868,10 @@ export function Viewer({
   owners?: OwnerDisplay;
   /** The cameras agents placed, as small markers in the model (not in agents' own pictures). */
   cameraMarkers?: CameraMarker[];
+  /** Permission requests agents wait on, as badges over what they concern, and how they are answered. */
+  approvals?: ApprovalBadge[];
+  onDecide?: (id: string, decision: "allow" | "deny") => void;
+  onReviewApproval?: () => void;
   /** The city context (buildings, trees, ground data), drawn read-only beside the model. */
   context?: ContextState;
   /** Whether the user's view shows the context (agents' own pictures always do). */
@@ -1809,6 +1820,9 @@ export function Viewer({
           />
         </group>
         {cameraMarkers.length > 0 && <CameraMarkers markers={cameraMarkers} />}
+        {approvals.length > 0 && (
+          <ApprovalBadges badges={approvals} onDecide={onDecide} onReview={onReviewApproval} />
+        )}
         <OrthographicCamera makeDefault={viewMode !== "perspective"} near={0.1} far={5000} />
         <CameraRig
           modeRef={viewModeRef}

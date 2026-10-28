@@ -30,6 +30,45 @@ describe("SettingsHub modelling mode", () => {
   });
 });
 
+describe("SettingsHub collapsed rail", () => {
+  it("starts on Needs you first, keeps the choice, and falls back when the file holds nonsense", () => {
+    const file = settingsFile(tempRoot());
+    const hub = new SettingsHub(file, () => {});
+    const sent: Message[] = [];
+    const watched = new SettingsHub(file, (m) => sent.push(m));
+    expect(
+      hub.handle(setSettings({ railStrip: { preset: "team", items: ["team", "waiting", "mic"] } })),
+    ).toBe(true);
+    expect(new SettingsHub(file, () => {}).handle(setSettings({}))).toBe(true);
+    const reread = JSON.parse(readFileSync(file, "utf8"));
+    expect(reread.railStrip).toEqual({ preset: "team", items: ["team", "waiting", "mic"] });
+    watched.handle(setSettings({ railStrip: { preset: "custom", items: ["lastLine", "mic"] } }));
+    const last = sent.at(-1);
+    expect(last?.type === "settings.snapshot" && last.payload.railStrip).toEqual({
+      preset: "custom",
+      items: ["lastLine", "mic"],
+    });
+    writeFileSync(file, JSON.stringify({ railStrip: { preset: "wide", items: ["x"] } }));
+    const fresh = new SettingsHub(file, (m) => sent.push(m));
+    fresh.handle(setSettings({ showHands: true }));
+    const after = sent.at(-1);
+    expect(after?.type === "settings.snapshot" && after.payload.railStrip.preset).toBe("needs-you");
+  });
+
+  it("refuses an item listed twice, or one it does not know", () => {
+    for (const items of [["mic", "mic"], ["sparkle"]]) {
+      const parsed = parseMessage(
+        JSON.stringify({
+          type: "settings.set",
+          id: "m",
+          payload: { railStrip: { preset: "custom", items } },
+        }),
+      );
+      expect(parsed.ok).toBe(false);
+    }
+  });
+});
+
 describe("SettingsHub rings from before hold to talk", () => {
   const OLD_TOOLS = ["select", "ask-agent", "measure", "section", "move", "massing", "delete", "undo"];
 
@@ -99,6 +138,7 @@ describe("SettingsHub", () => {
           listenForNames: false,
           speakReplies: true,
           replyVoice: "af_heart",
+          railStrip: { preset: "needs-you", items: ["waiting", "state", "mic"] },
           features: null,
           drawingAids: null,
           showHands: false,
@@ -182,6 +222,7 @@ describe("SettingsHub", () => {
           listenForNames: false,
           speakReplies: true,
           replyVoice: "af_heart",
+          railStrip: { preset: "needs-you", items: ["waiting", "state", "mic"] },
           features: null,
           drawingAids: null,
           showHands: false,

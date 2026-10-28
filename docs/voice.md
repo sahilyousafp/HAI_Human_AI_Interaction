@@ -90,7 +90,7 @@ The Voice settings show where transcription runs and the 90th percentile of the 
 
 ## Mochi's voice
 
-Mochi answers out loud, in a voice generated on this laptop (Kokoro on WebGPU, or a voice installed on the computer). Talking to Mochi interrupts it; the speaker button beside the microphone mutes it. See [agents.md](agents.md#spoken-replies).
+Mochi answers out loud, in a voice generated on this laptop (Kokoro on WebGPU, or a voice installed on the computer). Listening comes first: the moment the microphone opens (a held pinch, the microphone button, the talk key) the voice stops, and the rest of that reply is not read out. The chat marks where it was cut ("Interrupted after 11 words") with **Read the rest aloud**, which speaks it when you have finished talking. Only the first three sentences of a reply are spoken; the rest is there to read. The speaker button beside the microphone mutes it. See [agents.md](agents.md#spoken-replies).
 
 ## When the microphone does not work
 

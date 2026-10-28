@@ -11,6 +11,7 @@ The first page lists the sections; each opens its own page with a back button, a
 | **Features** | One switch per feature: see below |
 | **Modelling** | How the agent models: Automatic, Rhino or Python only, and what is connected now: see below |
 | **Open data** | The Open data switch, each source with its host and licence, the portals, the project's site, Show context and the requests made ([open-data.md](open-data.md)) |
+| **Chat rail** | What the collapsed chat rail shows and in what order of priority: Quiet, Needs you first, Team or Custom (tick the items, move them up or down). When the strip is short the lower items drop first ([agent.md](agent.md)) |
 | **Drawing aids** | Grid, Ortho (with its angle step), Endpoint, Midpoint, Centre, Project and Perpendicular for the create tools, Line and Move ([tools.md](tools.md)) |
 | **Gestures** | What each gesture does, for each hand where a gesture belongs to one, including what a fist drag does (pan by default) and what a still fist does (cancel) ([gestures.md](gestures.md)) |
 | **Tool rings** | Dominant hand, and the eight slots of the action ring and of the reference ring ([tools.md](tools.md)) |

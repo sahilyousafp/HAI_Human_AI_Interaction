@@ -109,6 +109,7 @@ Some tool calls need your say-so.
   - Head gestures only decide a card while it is the only one waiting.
   - A shake that answers a card does not also cancel the active tool.
 - **Unanswered cards are denied after 60 seconds**, and the card says it timed out.
+- **The request is also in the model.** A pulsing badge, in the asking agent's colour, sits on top of what the request concerns: the elements its input names, else the ones that agent owns, else the middle of the model. A pinch (or a click) on the badge opens a small tag next to it with the question, a short summary and **Allow** and **Deny**; the nod and shake still answer without opening it. A request that runs a script (`python_run`, `rhino_run_python`) shows **Show it in the chat** instead, so the whole script is read in the card first. Always allow stays on the card.
 - **Always allow** pre-approves that tool in this project, kept in `.hai/approvals.json`. Remove it under **Settings > Agent permissions**, and the next call asks again.
 
 ## Extensions
@@ -137,7 +138,8 @@ User-level servers and skills stay yours to manage in Claude Code itself.
 - Replies stream in as they are written. Each tool call is a chip showing running, needs approval, done, failed or denied. Click a chip to see its input and its result or error. Several calls in a row fold into one line, such as "3 steps, done" or "Bash needs approval": it is open while a call runs, waits or failed, and folded once all are done.
 - Files the agent's scripts wrote, and reports of scripts that went outside their claim, wait in one **Files and runs** row above the input. It opens when a new one arrives.
 - The status shows Mochi's state: Unavailable, Starting, Ready, Working or Recovering.
-- Collapse the panel with its arrow button: it becomes a narrow strip with the status, how many approvals are waiting, and the microphone.
+- Collapse the panel with its arrow button: it becomes a narrow strip. What it shows, and in what order of priority, is **Settings > Chat rail**: Quiet (state, name, what waits, microphone), Needs you first (the default: bare, until something waits for you, which then takes the strip over in the alert colour), Team (a dot for each agent, ringed while it works) or your own list of the six items. When the strip is short the lower items drop off first and the microphone stays.
+- Replies are short: the agent is told to answer in one or two plain sentences with no lists and no recap, and a finished reply longer than about 320 characters shows its first sentences with **Show more**. Only the first three sentences of a reply are spoken.
 
 ## Privacy and logs
 

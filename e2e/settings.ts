@@ -9,6 +9,7 @@ export type SettingsSection =
   | "drawing-aids"
   | "gestures"
   | "rings"
+  | "chat-rail"
   | "voice"
   | "setup"
   | "permissions";

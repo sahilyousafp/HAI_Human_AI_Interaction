@@ -41,3 +41,26 @@ test("editing an agent", async ({ page }) => {
   await expect(page.getByTestId("agent-form")).toBeVisible();
   await expect(page.getByTestId("agent-panel")).toHaveScreenshot("agent-form-light.png");
 });
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`the collapsed rail waiting for you (${scheme})`, async ({ page }) => {
+    await withTeam(page, scheme);
+    await page.getByTestId("agent-input").fill("shell: echo hi");
+    await page.getByTestId("agent-input").press("Enter");
+    await expect(page.getByTestId("approval-card")).toHaveAttribute("data-outcome", "pending");
+    await page.getByRole("button", { name: "Hide the agent panel" }).click();
+    await expect(page.getByTestId("agent-strip")).toHaveAttribute("data-alert", "true");
+    await expect(page.getByTestId("agent-strip")).toHaveScreenshot(`rail-strip-waiting-${scheme}.png`);
+  });
+
+  test(`a permission request opened in the model (${scheme})`, async ({ page }) => {
+    await withTeam(page, scheme);
+    await page.getByTestId("agent-input").fill("shell: echo hi");
+    await page.getByTestId("agent-input").press("Enter");
+    await page.getByTestId("approval-badge").click();
+    await expect(page.getByTestId("approval-tag")).toBeVisible();
+    await page.mouse.move(5, 5);
+    // The badge pulses: the open one stands still, and the tag is what is compared.
+    await expect(page.getByTestId("approval-tag")).toHaveScreenshot(`approval-tag-${scheme}.png`);
+  });
+}

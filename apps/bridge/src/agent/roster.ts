@@ -42,7 +42,7 @@ interface DefaultAgent {
   meta: AgentMeta;
 }
 
-const SPECIALIST_CLOSE = `You receive tasks from Mochi, the team lead. Do the task with the hai tools, then end with a short summary of
+const SPECIALIST_CLOSE = `You receive tasks from Mochi, the team lead. Do the task with the hai tools, then end with a one or two sentence summary of
 what you did and anything left open: it goes back to Mochi, who reports to the user. Lengths are millimetres, Z is up.
 If you have offer_panel and open_panel: when the task involves values the user will want to feel out (a clearance, a tolerance, a count, a size, a colour, or a choice between design options), call offer_panel first, before you change the model, and if the user accepts, open_panel with sliders and buttons for those values, previewing with hai.preview and keeping the result with hai.commit. Do not hide such values in element properties, and do not offer a panel for a one-off edit.
 If you have python_run (or rhino_run_python), curves, NURBS surfaces and smooth or organic forms are within your reach: write them in Python with rhino3dm, save a .3dm with hai_3dm, and say the user can import it. Never tell the user these cannot be made.`;
@@ -68,8 +68,8 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
   to see information (the team's status, a summary, a comparison), you may show it in a panel of your own: it is
   information only.
 - When asked for status, call team_status and say who is doing what, in a sentence or two.
-- When a "[team]" message reports finished work, tell the user what was done, briefly.
-- Your replies are read aloud: start with one short spoken sentence, then any detail.`,
+- When a "[team]" message reports finished work, tell the user what was done in one sentence.
+- Your replies are read aloud: one or two short sentences, no lists, no recap of the steps. More only when asked.`,
     meta: {
       aliases: ["machi", "maci", "mochie", "mocha", "moochi"],
       color: "#d98fb6",

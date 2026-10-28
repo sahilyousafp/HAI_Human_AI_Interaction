@@ -1,7 +1,9 @@
 import {
   type AgentStatus,
+  DEFAULT_STRIP,
   PANEL_OFFER_TIMEOUT_MS,
   type PanelOfferState,
+  type StripLayout,
   type TeamMemberInfo,
   type TeamShot,
   type TeamTask,
@@ -9,8 +11,10 @@ import {
 import {
   type CSSProperties,
   type FormEvent,
+  Fragment,
   type KeyboardEvent,
   memo,
+  type ReactNode,
   useEffect,
   useRef,
   useState,
@@ -38,6 +42,8 @@ import {
 } from "./agent-client.ts";
 import { ExtensionsView } from "./ExtensionsView.tsx";
 import { baseAgent, scopeLabel } from "./owners.ts";
+import { planStrip } from "./rail-strip.ts";
+import { clampReply } from "./reply-clamp.ts";
 
 const STATUS_LABEL: Record<AgentStatus["state"] | "connecting", string> = {
   connecting: "Connecting",
@@ -88,6 +94,8 @@ const RAIL_DEFAULT = 380;
 const RAIL_STEPS = [RAIL_DEFAULT, 460, RAIL_MAX];
 const CHEVRON_LEFT = "M15 6l-6 6 6 6";
 const CHEVRON_RIGHT = "M9 6l6 6-6 6";
+/** What the collapsed strip keeps for itself, pixels: its padding, the chevron button and the gap after it. */
+const CHEVRON_ROOM = 8 + 8 + 40 + 12;
 const TRAY_ICON = "M6 15l6-6 6 6";
 const STOP_ICON = "M7 7h10v10H7z";
 const SEND_ICON = "M5 12h13M13 6l6 6-6 6";
@@ -444,6 +452,28 @@ function ApprovalCard({
         </>
       )}
     </section>
+  );
+}
+
+/** A piece of the agent's reply. A long one, once finished, shows its first sentences and a way to read the rest. */
+function ReplyText({ text, settled, lead }: { text: string; settled: boolean; lead: boolean }) {
+  const [open, setOpen] = useState(false);
+  const { shown, clipped } = settled && !open ? clampReply(text) : { shown: text, clipped: false };
+  return (
+    <p className="agent-text" data-testid="agent-text" data-lead={lead ? "true" : undefined}>
+      {shown}
+      {clipped && (
+        <button
+          type="button"
+          className="agent-text-more"
+          data-testid="agent-text-more"
+          data-hand-press
+          onClick={() => setOpen(true)}
+        >
+          Show more
+        </button>
+      )}
+    </p>
   );
 }
 
@@ -921,14 +951,12 @@ function TurnItems({
           const lead = firstText;
           firstText = false;
           return (
-            <p
+            <ReplyText
               key={segment.index}
-              className="agent-text"
-              data-testid="agent-text"
-              data-lead={lead && turn.kind !== "digest" ? "true" : undefined}
-            >
-              {item.text}
-            </p>
+              text={item.text}
+              settled={turn.ended !== undefined}
+              lead={lead && turn.kind !== "digest"}
+            />
           );
         }
         if (item?.kind === "error")
@@ -959,6 +987,182 @@ function TurnItems({
         <p className="agent-ended">Stopped. Changes made so far are kept as one undo step.</p>
       )}
     </li>
+  );
+}
+
+/**
+ * Where the user's voice cut a spoken reply off (they held to talk while it was speaking): the reply stays whole in the
+ * chat, and the rest can be read aloud when they have finished.
+ */
+function CutOffMark({ turnId, speaker }: { turnId: string; speaker: Speaker }) {
+  const cut = useSyncExternalStore(speaker.subscribe, () => speaker.getSnapshot().cutOff);
+  const listening = useSyncExternalStore(speaker.subscribe, () => speaker.listening);
+  if (cut?.turnId !== turnId) return null;
+  return (
+    <li className="agent-cut" data-testid="agent-cut">
+      <span className="agent-cut-note">
+        Interrupted{cut.words > 0 ? ` after ${cut.words} ${cut.words === 1 ? "word" : "words"}` : ""}
+      </span>
+      <button
+        type="button"
+        className="agent-text-more"
+        data-testid="agent-cut-resume"
+        data-hand-press
+        disabled={listening}
+        onClick={() => speaker.resume()}
+      >
+        Read the rest aloud
+      </button>
+    </li>
+  );
+}
+
+/** The end of the agent's latest reply, one line: what the collapsed rail can say at a glance. */
+function lastReplyLine(turns: TurnView[]): string | null {
+  for (const turn of [...turns].reverse()) {
+    const texts = turn.items.filter((i): i is Extract<TurnItem, { kind: "text" }> => i.kind === "text");
+    const text = texts.at(-1)?.text.trim();
+    if (text) return clampReply(text.replace(/\s+/g, " "), 90).shown;
+  }
+  return null;
+}
+
+/**
+ * The rail when it is collapsed: a 52 px strip. What it shows and in what order of priority is the user's choice
+ * (Settings > Chat rail); `planStrip` fits that to the height the strip has.
+ */
+function CollapsedStrip({
+  layout,
+  toggle,
+  statusOutput,
+  title,
+  toApprove,
+  team,
+  lastLine,
+  waitingFor,
+  onOpen,
+  mic,
+}: {
+  layout: StripLayout;
+  toggle: ReactNode;
+  statusOutput: ReactNode;
+  title: ReactNode;
+  toApprove: number;
+  team: TeamView | null;
+  lastLine: string | null;
+  /** How many requests an agent has waiting. */
+  waitingFor: (agent: string) => number;
+  onOpen: () => void;
+  mic: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(600);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setHeight(el.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const members = team?.members.filter((m) => !m.lead) ?? [];
+  const stateOf = (name: string) => (team ? memberTask(team, name).state : "idle");
+  const active = (name: string) => stateOf(name) !== "idle" || waitingFor(name) > 0;
+  // The chevron, the padding and the gaps are taken off what the strip has.
+  const room = height - CHEVRON_ROOM;
+  const { parts, alert } = planStrip(
+    layout,
+    {
+      waiting: toApprove,
+      lastLine,
+      teamSize: members.length,
+      teamActive: members.filter((m) => active(m.name)).length,
+    },
+    room,
+  );
+  return (
+    <div className="agent-strip" ref={ref} data-alert={alert ? "true" : undefined} data-testid="agent-strip">
+      {toggle}
+      {parts.map((part) => {
+        switch (part.kind) {
+          case "waiting":
+            return (
+              <span key="waiting" className="agent-strip-waiting" data-loud={part.loud ? "true" : undefined}>
+                <span
+                  className="agent-badge"
+                  data-testid="agent-pending-badge"
+                  title={`${toApprove} to approve`}
+                >
+                  {toApprove}
+                  <span className="visually-hidden"> to approve</span>
+                </span>
+                {part.loud && <span className="agent-strip-label">needs you</span>}
+              </span>
+            );
+          case "state":
+            return (
+              <span
+                key="state"
+                className="agent-strip-part agent-strip-state"
+                data-compact={part.compact ? "true" : undefined}
+              >
+                {statusOutput}
+              </span>
+            );
+          case "name":
+            return (
+              <span key="name" className="agent-strip-part">
+                {title}
+              </span>
+            );
+          case "lastLine":
+            return (
+              <span
+                key="lastLine"
+                className="agent-strip-line"
+                data-testid="agent-strip-line"
+                title={lastLine ?? ""}
+              >
+                {lastLine}
+              </span>
+            );
+          case "team":
+            return (
+              <span key="team" className="agent-strip-team" data-testid="agent-strip-team">
+                {members
+                  .filter((m) => !part.compact || active(m.name))
+                  .map((m) => (
+                    <button
+                      key={m.name}
+                      type="button"
+                      className="agent-strip-member"
+                      data-testid="agent-strip-member"
+                      data-state={stateOf(m.name)}
+                      data-hand-press
+                      style={{ "--member": m.color } as CSSProperties}
+                      aria-label={`${displayName(m.name)}: ${MEMBER_STATE_LABEL[stateOf(m.name)]}`}
+                      title={`${displayName(m.name)}: ${MEMBER_STATE_LABEL[stateOf(m.name)]}`}
+                      onClick={onOpen}
+                    >
+                      {displayName(m.name).charAt(0)}
+                      {waitingFor(m.name) > 0 && (
+                        <span className="agent-strip-pip">{waitingFor(m.name)}</span>
+                      )}
+                    </button>
+                  ))}
+              </span>
+            );
+          case "mic":
+            return mic ? (
+              <span key="mic" className="agent-strip-mic">
+                {mic}
+              </span>
+            ) : null;
+        }
+        return null;
+      })}
+    </div>
   );
 }
 
@@ -1340,6 +1544,7 @@ export function AgentPanel({
   speaker,
   speakReplies,
   onSpeakReplies,
+  strip = DEFAULT_STRIP,
   rhinoConnected = false,
   onImportFile,
   onOpenInRhino,
@@ -1360,6 +1565,8 @@ export function AgentPanel({
   speaker: Speaker;
   speakReplies: boolean;
   onSpeakReplies: (on: boolean) => void;
+  /** What the collapsed rail shows, in what order of priority (Settings > Chat rail). */
+  strip?: StripLayout;
   /** Rhino is connected: written files can be opened in it. */
   rhinoConnected?: boolean;
   /** Brings a file the agent wrote (a path in the project) into the viewer. */
@@ -1486,25 +1693,29 @@ export function AgentPanel({
       style={{ "--rail-w": `${width}px` } as CSSProperties}
     >
       {collapsed ? (
-        <div className="agent-strip">
-          {toggle}
-          {statusOutput}
-          {title}
-          {toApprove > 0 && (
-            <span className="agent-badge" data-testid="agent-pending-badge" title={`${toApprove} to approve`}>
-              {toApprove}
-              <span className="visually-hidden"> to approve</span>
-            </span>
-          )}
-          {voiceOn && (
-            <MicButton
-              voice={voice}
-              onStart={startVoice}
-              disabled={status === "unavailable"}
-              notice={voiceNotice}
-            />
-          )}
-        </div>
+        <CollapsedStrip
+          layout={strip}
+          toggle={toggle}
+          statusOutput={statusOutput}
+          title={title}
+          toApprove={toApprove}
+          team={team}
+          lastLine={lastReplyLine(state.turns)}
+          waitingFor={(name) =>
+            pending.filter((a) => a.request.agent && baseAgent(a.request.agent) === name).length
+          }
+          onOpen={() => setPanelCollapsed(false)}
+          mic={
+            voiceOn ? (
+              <MicButton
+                voice={voice}
+                onStart={startVoice}
+                disabled={status === "unavailable"}
+                notice={voiceNotice}
+              />
+            ) : null
+          }
+        />
       ) : (
         <header className="agent-head">
           <div className="agent-head-row">
@@ -1602,25 +1813,28 @@ export function AgentPanel({
             )}
             {!task &&
               state.turns.map((turn) => (
-                <Turn
-                  key={turn.id}
-                  turn={turn}
-                  approvals={state.approvals.filter((a) => a.turnId === turn.id)}
-                  client={client}
-                  onlyPendingId={onlyPendingId}
-                  panels={panels}
-                  offers={offersOf(turn.id)}
-                  onlyOfferId={onlyOfferId}
-                  {...(team
-                    ? {
-                        agent: client.lead,
-                        team,
-                        onOpenTask: setOpenTask,
-                        taskApprovals: state.approvals,
-                        taskOffers: offers,
-                      }
-                    : {})}
-                />
+                <Fragment key={turn.id}>
+                  <Turn
+                    key={turn.id}
+                    turn={turn}
+                    approvals={state.approvals.filter((a) => a.turnId === turn.id)}
+                    client={client}
+                    onlyPendingId={onlyPendingId}
+                    panels={panels}
+                    offers={offersOf(turn.id)}
+                    onlyOfferId={onlyOfferId}
+                    {...(team
+                      ? {
+                          agent: client.lead,
+                          team,
+                          onOpenTask: setOpenTask,
+                          taskApprovals: state.approvals,
+                          taskOffers: offers,
+                        }
+                      : {})}
+                  />
+                  <CutOffMark turnId={turn.id} speaker={speaker} />
+                </Fragment>
               ))}
           </ol>
           {trayCount > 0 && (

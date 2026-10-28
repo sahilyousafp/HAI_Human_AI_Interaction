@@ -122,7 +122,7 @@ describe("Speaker", () => {
     now = 640;
     speeches[0]?.synthesised();
     await flush();
-    expect(speaker.getSnapshot()).toEqual({ engine: "fake voice", firstAudio: [640] });
+    expect(speaker.getSnapshot()).toEqual({ engine: "fake voice", firstAudio: [640], cutOff: null });
   });
 
   it("without any voice on the device nothing is spoken, and the settings say so", async () => {
@@ -131,5 +131,138 @@ describe("Speaker", () => {
     await flush();
     expect(speaker.speaking).toBe(false);
     expect(speaker.getSnapshot().engine).toBe("none");
+  });
+});
+
+describe("Speaker gives way to listening", () => {
+  it("stops at once when the microphone opens, and what is left of that reply is not spoken", async () => {
+    const { engine, log, speeches } = fakeEngine();
+    const speaker = new Speaker(async () => engine);
+    speaker.feed("t1", "The wall is done. The slab comes next. ");
+    await flush();
+    speeches[0]?.synthesised();
+    await flush();
+    expect(speaker.speaking).toBe(true);
+
+    speaker.setListening(true);
+    expect(speaker.speaking).toBe(false);
+    expect(log).toContain("cancel The wall is done.");
+
+    // The reply goes on streaming while the user talks, and after: none of it is spoken.
+    speaker.feed("t1", "Then the stair core. ");
+    speaker.setListening(false);
+    speaker.feed("t1", "And the roof. ");
+    speaker.end("t1");
+    await flush();
+    expect(log.filter((l) => l.startsWith("prepare"))).toEqual([
+      "prepare The wall is done.",
+      "prepare The slab comes next.",
+    ]);
+  });
+
+  it("a reply that begins while the user is talking is left unspoken, and the next one is spoken", async () => {
+    const { engine, log } = fakeEngine();
+    const speaker = new Speaker(async () => engine);
+    speaker.setListening(true);
+    speaker.feed("t1", "Done. ");
+    speaker.setListening(false);
+    speaker.feed("t1", "Really done. ");
+    speaker.end("t1");
+    speaker.feed("t2", "A new answer. ");
+    await flush();
+    expect(log).toEqual(["prepare A new answer."]);
+  });
+
+  it("stop() alone also leaves the rest of the stopped reply unspoken", async () => {
+    const { engine, log } = fakeEngine();
+    const speaker = new Speaker(async () => engine);
+    speaker.feed("t1", "First sentence. Second");
+    await flush();
+    speaker.stop();
+    speaker.feed("t1", " sentence. Third sentence. ");
+    speaker.end("t1");
+    await flush();
+    expect(log.filter((l) => l.startsWith("prepare"))).toEqual(["prepare First sentence."]);
+  });
+});
+
+describe("Speaker speaks a reply's first sentences only", () => {
+  it("speaks three sentences of a long reply and leaves the rest to read", async () => {
+    const { engine, log } = fakeEngine();
+    const speaker = new Speaker(async () => engine);
+    speaker.feed("t1", "One. Two. Three. Four. Five. ");
+    speaker.end("t1");
+    await flush();
+    expect(log.filter((l) => l.startsWith("prepare"))).toEqual([
+      "prepare One.",
+      "prepare Two.",
+      "prepare Three.",
+    ]);
+  });
+});
+
+describe("Speaker reads on a reply the user talked over", () => {
+  it("records where it was cut and reads the rest, from the cut sentence, when asked", async () => {
+    const { engine, log, speeches } = fakeEngine();
+    const speaker = new Speaker(async () => engine);
+    speaker.feed("t1", "The wall is done. The slab comes next. ");
+    await flush();
+    speeches[0]?.synthesised();
+    await flush();
+    speeches[0]?.finished(); // the first sentence is said in full
+    await flush();
+    speeches[1]?.synthesised();
+    await flush();
+    expect(speaker.getSnapshot().cutOff).toBeNull();
+
+    speaker.setListening(true);
+    expect(speaker.getSnapshot().cutOff).toEqual({ turnId: "t1", words: 4 });
+    // It goes on arriving while the user talks; none of it is spoken.
+    speaker.feed("t1", "Then the stair core. ");
+    speaker.end("t1");
+    speaker.setListening(false);
+    await flush();
+    expect(log.filter((l) => l.startsWith("prepare"))).toEqual([
+      "prepare The wall is done.",
+      "prepare The slab comes next.",
+    ]);
+
+    speaker.resume();
+    await flush();
+    expect(log.filter((l) => l.startsWith("prepare")).slice(2)).toEqual([
+      "prepare The slab comes next.",
+      "prepare Then the stair core.",
+    ]);
+    expect(speaker.getSnapshot().cutOff).toBeNull();
+  });
+
+  it("a stop, or a new reply, forgets the cut", async () => {
+    const { engine, speeches } = fakeEngine();
+    const speaker = new Speaker(async () => engine);
+    speaker.feed("t1", "A first sentence. ");
+    await flush();
+    speeches[0]?.synthesised();
+    await flush();
+    speaker.setListening(true);
+    expect(speaker.getSnapshot().cutOff).not.toBeNull();
+    speaker.setListening(false);
+    speaker.feed("t2", "A fresh answer. ");
+    await flush();
+    expect(speaker.getSnapshot().cutOff).toBeNull();
+    speaker.resume(); // nothing to read on
+  });
+
+  it("does not read on while the user is still talking", async () => {
+    const { engine, log, speeches } = fakeEngine();
+    const speaker = new Speaker(async () => engine);
+    speaker.feed("t1", "Sentence one. Sentence two. ");
+    await flush();
+    speeches[0]?.synthesised();
+    await flush();
+    speaker.setListening(true);
+    speaker.resume();
+    await flush();
+    expect(log.filter((l) => l.startsWith("prepare"))).toHaveLength(2);
+    expect(speaker.getSnapshot().cutOff).not.toBeNull();
   });
 });

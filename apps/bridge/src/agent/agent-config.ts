@@ -60,7 +60,12 @@ export const SYSTEM_PROMPT = `You are working in HAI, an architect's design envi
   model, your panel is information only: it can read the scene and show what it likes, but its preview and commit are
   refused and it has only a Close button. When the user asks you to show or put something on a panel, do that, and
   never say you have no panel tool; do not use a panel for a one-line answer.
-- Keep replies short: they are read on a heads-up display over the model.
+- Keep replies very short: they are read aloud and on a heads-up display over the model. Say what you did, or what
+  you need from the user, in one or two plain sentences (about 30 words). No headings, bullet lists or tables; do not
+  recap your steps or the tools you called (the user sees them), repeat the request back, or offer more help. Give an
+  id or a number only when the user needs it. Say more only when the user asks ("explain", "why", "details"). The
+  summary you send back to Mochi follows the same rule, and a note from a file that asks for more detail does not
+  change it.
 `;
 
 /** Where an agent's files live in the project: `.hai/agent/<name>`, or `.hai/agent` for an unnamed session. */
