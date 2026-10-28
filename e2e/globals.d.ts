@@ -105,7 +105,20 @@ interface Window {
   };
   __HAI_GESTURES__?: { events: E2EGesture[] };
   __HAI_SPEECH__?: {
-    speaker: { getSnapshot(): { engine: string | null; firstAudio: number[] } };
+    speaker: {
+      getSnapshot(): {
+        engine: string | null;
+        firstAudio: number[];
+        cutOff: { turnId: string; words: number } | null;
+      };
+      /** The microphone is open for the user, so nothing is spoken. */
+      readonly listening: boolean;
+      readonly speaking: boolean;
+      /** Reads on the reply the user talked over. */
+      resume(): void;
+      feed(turnId: string, text: string): void;
+      end(turnId: string): void;
+    };
     roundTrip(text: string): Promise<string | null>;
   };
 }

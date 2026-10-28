@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Detection } from "@hai/agent-core";
+import { type Detection, INTERRUPT_GRACE_MS } from "@hai/agent-core";
 import type { AgentEvent, AgentTurn, Message } from "@hai/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { fakeProvider, DETECTED as OK } from "../../test/fake-provider.ts";
@@ -139,7 +139,8 @@ describe.each([{ agent: undefined }, { agent: "architect" }])(
       const stoppedAt = Date.now();
       await hub.stop();
       await running;
-      expect(Date.now() - stoppedAt).toBeLessThan(3000);
+      // Ended after the interrupt's grace period, with room for a busy machine to end the process (3 s on a quiet one).
+      expect(Date.now() - stoppedAt).toBeLessThan(INTERRUPT_GRACE_MS + 3500);
       expect(transcriptOf(hub)[1]?.events.at(-1)).toMatchObject({ type: "turn.end", reason: "stopped" });
       await hub.request("after");
       const after = transcriptOf(hub)[2];

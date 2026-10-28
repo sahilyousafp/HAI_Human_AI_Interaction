@@ -11,6 +11,10 @@ import { connectClient } from "../../test/ws-client.ts";
 import { type Bridge, createBridge } from "../server.ts";
 import type { Team } from "./team.ts";
 
+/** A worker is a process, and a busy machine takes longer to start one: every wait here allows for that. */
+const waitFor = <T>(check: () => T | Promise<T>, options: { timeout?: number } = {}) =>
+  vi.waitFor(check, { timeout: 15_000, ...options });
+
 const ORIGIN = "http://localhost:5173";
 const TOKEN = "workers-test-token-0123456789";
 const temp = (prefix: string) => mkdtempSync(join(tmpdir(), prefix));
@@ -83,7 +87,7 @@ describe("a specialist starts workers", () => {
     await team.request(
       `${PAVILION}spawn dome[pavilion/dome]: columns 3 every 150 ;; minarets[pavilion/minarets]: columns 3 every 250`,
     );
-    await vi.waitFor(() => expect(workers(team)).toHaveLength(2));
+    await waitFor(() => expect(workers(team)).toHaveLength(2));
     const [dome, minarets] = workers(team) as [TeamTask, TeamTask];
     const parent = taskOf(team, "architect");
     expect([dome.agent, minarets.agent]).toEqual(["architect.2", "architect.3"]);
@@ -91,14 +95,14 @@ describe("a specialist starts workers", () => {
     expect(dome.scope).toEqual({ part: "pavilion/dome" });
 
     // Each worker has its claim, cut from the parent's.
-    await vi.waitFor(() => expect(team.claims.all).toHaveLength(3));
+    await waitFor(() => expect(team.claims.all).toHaveLength(3));
     expect(team.claims.all.filter((c) => c.parent === parent.id).map((c) => c.agent)).toEqual([
       "architect.2",
       "architect.3",
     ]);
 
     // The parent's own turn is over, but its task is not: it waits for its workers.
-    await vi.waitFor(() => expect(taskOf(team, "architect.2").status).toBe("running"));
+    await waitFor(() => expect(taskOf(team, "architect.2").status).toBe("running"));
     expect(taskOf(team, "architect").status).toBe("running");
     await team.settled();
 
@@ -138,7 +142,7 @@ describe("a specialist starts workers", () => {
     expect(owned(scene, "architect.3")).toHaveLength(0);
     expect(owned(scene, "architect.2")).toHaveLength(3);
     viewer.send("scene.undo", {});
-    await vi.waitFor(() => expect(owned(scene, "architect.2")).toHaveLength(0));
+    await waitFor(() => expect(owned(scene, "architect.2")).toHaveLength(0));
 
     // Each worker was its own process, started under its name with its own configuration.
     const starts = readdirSync(stateDir)
@@ -166,14 +170,14 @@ describe("a specialist starts workers", () => {
       .filter((s) => ["architect.2", "architect.3"].includes(flagOf(s.args, "--agent") ?? ""))
       .map((s) => s.pid);
     expect(pids).toHaveLength(2);
-    await vi.waitFor(() => expect(pids.map(alive)).toEqual([false, false]), { timeout: 4000 });
+    await waitFor(() => expect(pids.map(alive)).toEqual([false, false]), { timeout: 4000 });
     expect(readdirSync(join(projectDir, ".hai", "agent")).filter((d) => d.includes("."))).toEqual([]);
   });
 
   it("a worker's own tools cannot start workers, and a worker that tries is refused", async () => {
     const { team } = await start();
     await team.request(`${PAVILION}spawn dome[pavilion/dome]: work 400`);
-    await vi.waitFor(() => expect(workers(team)).toHaveLength(1));
+    await waitFor(() => expect(workers(team)).toHaveLength(1));
     expect(
       team.spawnWorker("architect.2", { title: "x", instruction: "y", scope: { part: "pavilion/x" } }),
     ).toEqual({
@@ -236,7 +240,8 @@ describe("a worker's scope is cut from its parent's claim", () => {
   it("the parent cannot change the worker's part while it runs, and the part returns when the worker ends", async () => {
     const { team, scene, mcp } = await start();
     await team.request(`${PAVILION}spawn dome[pavilion/dome]: columns 2 every 500`);
-    await vi.waitFor(() => expect(owned(scene, "architect.2")).toHaveLength(1));
+    // A worker is a process: starting one takes longer when the machine is busy.
+    await waitFor(() => expect(owned(scene, "architect.2")).toHaveLength(1));
     const element = owned(scene, "architect.2")[0];
     const parent = await mcp("architect");
     const refused = await parent.callTool({
@@ -254,10 +259,10 @@ describe("stopping", () => {
   it("stopping the parent stops its workers and frees every claim within 3 seconds", async () => {
     const { team } = await start();
     await team.request(`${PAVILION}spawn a[pavilion/a]: work 20000 ;; b[pavilion/b]: work 20000`);
-    await vi.waitFor(() => expect(workers(team).filter((w) => w.status === "running")).toHaveLength(2));
+    await waitFor(() => expect(workers(team).filter((w) => w.status === "running")).toHaveLength(2));
     const started = Date.now();
     team.cancel(taskOf(team, "architect").id);
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(team.board.every((t) => t.status === "stopped")).toBe(true);
         expect(team.claims.all).toHaveLength(0);
@@ -270,10 +275,10 @@ describe("stopping", () => {
   it("a worker that ignores the interrupt is ended for the parent within the limit", async () => {
     const { team } = await start();
     await team.request(`${PAVILION}spawn a[pavilion/a]: stubborn ;; b[pavilion/b]: work 20000`);
-    await vi.waitFor(() => expect(workers(team).filter((w) => w.status === "running")).toHaveLength(2));
+    await waitFor(() => expect(workers(team).filter((w) => w.status === "running")).toHaveLength(2));
     const started = Date.now();
     team.cancel(taskOf(team, "architect").id);
-    await vi.waitFor(
+    await waitFor(
       () => {
         expect(team.board.every((t) => t.status === "stopped")).toBe(true);
         expect(team.claims.all).toHaveLength(0);
@@ -290,9 +295,9 @@ describe("stopping", () => {
     await team.request(
       `${PAVILION}spawn a[pavilion/a]: work 20000 ;; b[pavilion/b]: work 20000 ;; c[pavilion/c]: work 20000`,
     );
-    await vi.waitFor(() => expect(workers(team)).toHaveLength(3));
+    await waitFor(() => expect(workers(team)).toHaveLength(3));
     await team.stopAll();
-    await vi.waitFor(() => expect(team.board.every((t) => t.status === "stopped")).toBe(true), {
+    await waitFor(() => expect(team.board.every((t) => t.status === "stopped")).toBe(true), {
       timeout: 3500,
     });
     expect(team.claims.all).toHaveLength(0);
@@ -306,7 +311,7 @@ describe("the limit on sessions", () => {
     viewer.send("settings.set", { maxSessions: 3 });
     await new Promise((r) => setTimeout(r, 100));
     await team.request(`${PAVILION}spawn a[pavilion/a]: work 500 ;; b[pavilion/b]: work 100`);
-    await vi.waitFor(() => expect(workers(team)).toHaveLength(2));
+    await waitFor(() => expect(workers(team)).toHaveLength(2));
     const [first, second] = workers(team) as [TeamTask, TeamTask];
     expect(first.status).toBe("running");
     expect(second.status).toBe("queued");
@@ -328,7 +333,7 @@ describe("the limit on sessions", () => {
   it("is a setting that the team snapshot reports", async () => {
     const { team, viewer } = await start();
     viewer.send("settings.set", { maxSessions: 4 });
-    await vi.waitFor(() => expect(team.maxSessions).toBe(4));
+    await waitFor(() => expect(team.maxSessions).toBe(4));
     const snapshot = await viewer.waitFor("team.snapshot", (m) => m.payload.maxSessions === 4);
     expect(snapshot.payload.sessions).toBeGreaterThanOrEqual(1);
   });

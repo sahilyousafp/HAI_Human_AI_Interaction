@@ -3,7 +3,7 @@ import type { Bridge } from "../apps/bridge/src/server.ts";
 import { camera, openViewer, startTestBridge } from "./viewer.ts";
 
 // The view cube at the viewport's right: true orthographic views, drawing in a side view's plane, and the way back.
-let bridge: Bridge | null = null;
+let bridge: (Bridge & { port: number }) | null = null;
 test.afterEach(async () => {
   await bridge?.stop();
   bridge = null;
