@@ -16,6 +16,7 @@ import {
   TAG_OWNER,
   TAG_PART,
   TaskScope,
+  VIEW_MODES,
   type ViewCamera,
   ViewRequest,
 } from "@hai/protocol";
@@ -1020,7 +1021,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
     "set_view",
     {
       description:
-        "Moves the user's camera in the 3D view: turn it (azimuth in degrees around the target, counter-clockwise from east: 0 from the east, 90 from the north, 180 from the west, 270 from the south, 225 from the south-west), tilt it (elevation 5 to 89 degrees above the horizon), move it nearer or further (distance in millimetres from the target), look at a point (target, millimetres) or frame elements (their ids, including Rhino objects). Give at least one; what you leave out stays. The view animates there over under a second and gives way at once if the user orbits. It changes nothing in the model. This moves the USER's camera: use it only to show the user something they asked to see. To look at the model yourself, use your own cameras (camera_set, camera_capture), which leave the user's view alone.",
+        "Moves the user's camera in the 3D view: turn it (azimuth in degrees around the target, counter-clockwise from east: 0 from the east, 90 from the north, 180 from the west, 270 from the south, 225 from the south-west), tilt it (elevation 5 to 89 degrees above the horizon), move it nearer or further (distance in millimetres from the target), look at a point (target, millimetres) or frame elements (their ids, including Rhino objects), or switch to a named view (view: top, bottom, front, back, left or right for the true orthographic views of the view cube - a plan is Top, an elevation is Front or Right - or perspective to go back; it sets the direction itself, so do not give azimuth or elevation with it). Give at least one; what you leave out stays. The view animates there over under a second and gives way at once if the user orbits. It changes nothing in the model. This moves the USER's camera: use it only to show the user something they asked to see. To look at the model yourself, use your own cameras (camera_set, camera_capture), which leave the user's view alone.",
       inputSchema: z.object({
         azimuth: z
           .number()
@@ -1033,6 +1034,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
           .optional()
           .describe("A point to look at, millimetres"),
         frame: z.array(z.string()).optional().describe("Element or Rhino object ids to bring into view"),
+        view: z.enum(VIEW_MODES).optional().describe("A named view: top, front, right... or perspective"),
       }),
     },
     async (input) => {

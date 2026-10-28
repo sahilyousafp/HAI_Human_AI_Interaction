@@ -104,3 +104,34 @@ test("with Claude chat off, the chat is gone and what is not a command is not se
   await say(page, "rotate 90");
   await expect.poll(() => rotationOf("block-b")).toBe(90);
 });
+
+test("rotate 90 about marker A turns the block about the marker, not about itself", async ({ page }) => {
+  await start(page);
+  const block = bridge?.scene.scene.doc.elements["block-b"] as { origin: number[]; size: number[] };
+  const centre = [
+    (block.origin[0] ?? 0) + (block.size[0] ?? 0) / 2,
+    (block.origin[1] ?? 0) + (block.size[1] ?? 0) / 2,
+  ];
+  const marker = [(centre[0] ?? 0) + 10000, centre[1] ?? 0, 0];
+  await page.evaluate(
+    (point) => window.__HAI_TOOLS__?.references.loadMarkers([{ letter: "A", point }]),
+    marker,
+  );
+  await select(page, "block-b");
+  await say(page, "rotate 90 about marker A");
+  await expect.poll(() => rotationOf("block-b")).toBe(90);
+  const turned = bridge?.scene.scene.doc.elements["block-b"] as { origin: number[]; size: number[] };
+  // The centre was 10 m west of the marker; a quarter turn counter-clockwise puts it 10 m south of it.
+  expect((turned.origin[0] ?? 0) + (turned.size[0] ?? 0) / 2).toBeCloseTo(marker[0] ?? 0, 0);
+  expect((turned.origin[1] ?? 0) + (turned.size[1] ?? 0) / 2).toBeCloseTo((marker[1] ?? 0) - 10000, 0);
+  await expect(page.getByTestId("voice-picked")).toContainText("Rotate 90° about marker A");
+});
+
+test("a marker that has not been placed is said so, and nothing moves", async ({ page }) => {
+  await start(page);
+  const before = JSON.stringify(bridge?.scene.scene.doc.elements["block-b"]);
+  await select(page, "block-b");
+  await say(page, "move to marker Q");
+  await expect(page.getByTestId("tool-notice")).toContainText("There is no marker Q");
+  expect(JSON.stringify(bridge?.scene.scene.doc.elements["block-b"])).toBe(before);
+});

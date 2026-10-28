@@ -1,4 +1,4 @@
-import type { Element, Point3Mm, SceneDocument, SceneOp } from "@hai/protocol";
+import type { Element, LetterMarker, Point3Mm, SceneDocument, SceneOp } from "@hai/protocol";
 import { applySteps, type TransformStep } from "@hai/scene";
 import { newId } from "../tools/create.ts";
 import type { Clause, Command, Selector } from "./grammar.ts";
@@ -57,20 +57,24 @@ function selectorText(selector: Selector): string {
   }
 }
 
+const aboutText = (marker: string | undefined) => (marker ? ` about marker ${marker}` : "");
+
 function clauseText(clause: Clause): string {
   switch (clause.kind) {
     case "translate":
       return `move ${offsetText(clause.by)}`;
+    case "moveTo":
+      return `move to marker ${clause.marker}`;
     case "copy": {
       const times = clause.count > 1 ? ` ${clause.count} times` : "";
       return `copy${times}${clause.by ? ` ${offsetText(clause.by)}` : ""}`;
     }
     case "rotate":
-      return `rotate ${clause.deg}°`;
+      return `rotate ${clause.deg}°${aboutText(clause.about)}`;
     case "scale":
-      return `scale ${clause.factor}`;
+      return `scale ${clause.factor}${aboutText(clause.about)}`;
     case "mirror":
-      return `mirror ${clause.axis}`;
+      return `mirror ${clause.axis}${aboutText(clause.about)}`;
     case "select":
       return clause.selector.kind === "none"
         ? "clear the selection"
@@ -114,32 +118,69 @@ function resolveSelector(selector: Selector, doc: SceneDocument): { ids: string[
   }
 }
 
-function stepsOf(clauses: Clause[]): TransformStep[] {
-  return clauses.flatMap((clause): TransformStep[] => {
+/** The marker a clause names, as a pivot or as a place to move to. */
+function markerOf(clause: Clause): string | undefined {
+  switch (clause.kind) {
+    case "moveTo":
+      return clause.marker;
+    case "rotate":
+    case "scale":
+    case "mirror":
+      return clause.about;
+    default:
+      return undefined;
+  }
+}
+
+/** The steps a run of clauses comes to, or what is wrong with them (a marker that is not placed). */
+function stepsOf(clauses: Clause[], markers: LetterMarker[]): TransformStep[] | string {
+  const steps: TransformStep[] = [];
+  for (const clause of clauses) {
+    const marker = markerOf(clause);
+    const point = marker ? markers.find((m) => m.letter === marker)?.point : undefined;
+    if (marker && !point) return `There is no marker ${marker}.`;
     switch (clause.kind) {
       case "translate":
-        return [{ kind: "translate", by: clause.by }];
+        steps.push({ kind: "translate", by: clause.by });
+        break;
+      case "moveTo":
+        steps.push({ kind: "moveTo", to: point as Point3Mm });
+        break;
       case "rotate":
-        return [{ kind: "rotate", deg: clause.deg }];
+        steps.push({ kind: "rotate", deg: clause.deg, ...(point ? { about: [point[0], point[1]] } : {}) });
+        break;
       case "scale":
-        return [{ kind: "scale", factor: clause.factor }];
+        steps.push({ kind: "scale", factor: clause.factor, ...(point ? { about: point } : {}) });
+        break;
       case "mirror":
-        return [{ kind: "mirror", axis: clause.axis }];
-      default:
-        return [];
+        steps.push({
+          kind: "mirror",
+          axis: clause.axis,
+          ...(point ? { at: point[clause.axis === "x" ? 0 : 1] } : {}),
+        });
+        break;
     }
-  });
+  }
+  return steps;
 }
 
 const namesOf = (doc: SceneDocument, ids: string[]) =>
   ids.length === 1 ? (doc.elements[ids[0] as string] as Element).name : `${ids.length} elements`;
 
 /** The changes of place a command asks for, as `update` ops, and `create` ops for the copies. */
-function planEdit(clauses: Clause[], doc: SceneDocument, ids: string[], label: string): Plan {
+function planEdit(
+  clauses: Clause[],
+  doc: SceneDocument,
+  ids: string[],
+  label: string,
+  markers: LetterMarker[],
+): Plan {
   const elements = ids.map((id) => doc.elements[id] as Element);
   const copyAt = clauses.findIndex((c) => c.kind === "copy");
   if (copyAt < 0) {
-    const done = applySteps(elements, stepsOf(clauses), doc.levels);
+    const steps = stepsOf(clauses, markers);
+    if (typeof steps === "string") return { kind: "error", message: steps };
+    const done = applySteps(elements, steps, doc.levels);
     if (!done.ok) return { kind: "error", message: done.error };
     const ops = Object.entries(done.patches).map(([id, patch]): SceneOp => ({ op: "update", id, patch }));
     return { kind: "edit", label, ops, select: null };
@@ -152,7 +193,8 @@ function planEdit(clauses: Clause[], doc: SceneDocument, ids: string[], label: s
   }
   const ops: SceneOp[] = [];
   let working = elements;
-  const before = stepsOf(clauses.slice(0, copyAt));
+  const before = stepsOf(clauses.slice(0, copyAt), markers);
+  if (typeof before === "string") return { kind: "error", message: before };
   if (before.length > 0) {
     const moved = applySteps(elements, before, doc.levels);
     if (!moved.ok) return { kind: "error", message: moved.error };
@@ -160,7 +202,8 @@ function planEdit(clauses: Clause[], doc: SceneDocument, ids: string[], label: s
     working = elements.map((e) => ({ ...e, ...moved.patches[e.id] }) as Element);
   }
   const unit: TransformStep[] = copy.by ? [{ kind: "translate", by: copy.by }] : [];
-  const after = stepsOf(clauses.slice(copyAt + 1));
+  const after = stepsOf(clauses.slice(copyAt + 1), markers);
+  if (typeof after === "string") return { kind: "error", message: after };
   const created: string[] = [];
   for (let i = 1; i <= copy.count; i++) {
     const steps = [...Array.from({ length: i }, () => unit).flat(), ...after];
@@ -187,7 +230,12 @@ function planEdit(clauses: Clause[], doc: SceneDocument, ids: string[], label: s
  * Checks a command against the model: what it acts on (`thisIds`: what the user pointed at or has selected, unless the
  * command names its own with a leading select) and what it comes to. Nothing is changed here.
  */
-export function planCommand(command: Command, doc: SceneDocument, thisIds: string[]): Plan {
+export function planCommand(
+  command: Command,
+  doc: SceneDocument,
+  thisIds: string[],
+  markers: LetterMarker[] = [],
+): Plan {
   const label = commandLabel(command.clauses);
   let rest = command.clauses;
   let ids = thisIds.filter((id) => doc.elements[id]);
@@ -217,7 +265,7 @@ export function planCommand(command: Command, doc: SceneDocument, thisIds: strin
     case "isolate":
       return { kind: action.kind, label, ids };
     default: {
-      const planned = planEdit(rest, doc, ids, label);
+      const planned = planEdit(rest, doc, ids, label, markers);
       // A leading select also leaves the selection on what the command acted on.
       return first?.kind === "select" && planned.kind === "edit" && planned.select === null
         ? { ...planned, select: ids }

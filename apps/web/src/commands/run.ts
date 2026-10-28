@@ -1,4 +1,4 @@
-import type { SceneDocument, SceneOp } from "@hai/protocol";
+import type { LetterMarker, SceneDocument, SceneOp } from "@hai/protocol";
 import type { Visibility } from "../viewer/visibility.ts";
 import { parseCommand } from "./grammar.ts";
 import { planCommand } from "./plan.ts";
@@ -12,6 +12,8 @@ export interface CommandHost {
   /** Asks a question a nod or Enter answers yes. */
   ask(question: string, answer: (yes: boolean) => void): void;
   flash(message: string): void;
+  /** The project's lettered markers ("rotate 45 about marker B"). */
+  markers(): LetterMarker[];
   visibility: Visibility;
 }
 
@@ -29,7 +31,7 @@ export function runCommand(text: string, host: CommandHost, thisIds: string[]): 
   if (!command) return null;
   const doc = host.doc();
   if (!doc) return { label: "The model is not loaded yet." };
-  const plan = planCommand(command, doc, thisIds);
+  const plan = planCommand(command, doc, thisIds, host.markers());
   switch (plan.kind) {
     case "error":
       host.flash(plan.message);

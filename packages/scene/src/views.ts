@@ -1,6 +1,7 @@
+import type { ViewMode } from "@hai/protocol";
+
 /** The ways the viewer looks at the model: the turntable perspective, and six true orthographic views. */
-export const VIEW_MODES = ["perspective", "top", "bottom", "front", "back", "left", "right"] as const;
-export type ViewMode = (typeof VIEW_MODES)[number];
+export { VIEW_MODES, type ViewMode } from "@hai/protocol";
 export type OrthoView = Exclude<ViewMode, "perspective">;
 
 /** The plane a point is drawn in: plan, or a vertical plane (x with z, or y with z). */

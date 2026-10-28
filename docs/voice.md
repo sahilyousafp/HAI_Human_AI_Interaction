@@ -39,9 +39,10 @@ Say what to do to the selection and it is done at once, without the agent and wi
 |---|---|
 | **move** 3 m along x, up 2000, 30 cm west | Moves by a distance in a direction. x and east are +X, y and north +Y, up and down are Z. Distances take mm, cm or m (millimetres when no unit is said). Two distances join: "move 2 m up and 3 m east" |
 | **copy**, copy 6 m y, copy 4 times 6 m along y | Copies in place, once at a distance, or as a line of copies each one step further than the one before. The copies are selected afterwards |
-| **rotate** 90, 45 clockwise, minus 30 | Turns about the centre of what is selected, counter-clockwise seen from above unless you say clockwise |
-| **scale** 2, 0.5, 50 percent, half, double | Scales in plan and in height about the centre of what is selected, at its lowest height |
-| **mirror** x, mirror y | Flips across x or y about the centre of what is selected. Imported models cannot be mirrored |
+| **rotate** 90, 45 clockwise, minus 30 | Turns about the centre of what is selected, counter-clockwise seen from above unless you say clockwise. "Rotate 45 about marker B" turns about that [marker](tools.md) instead |
+| **scale** 2, 0.5, 50 percent, half, double | Scales in plan and in height about the centre of what is selected, at its lowest height; "scale half about marker A" scales about the marker |
+| **mirror** x, mirror y | Flips across x or y about the centre of what is selected ("mirror x at marker C": across the marker's x). Imported models cannot be mirrored |
+| **move to marker** A | Takes the middle of what is selected, with its base, to the lettered marker |
 | **select** all, all walls, columns, level 2, none | Selects by type or level; "deselect" or "clear the selection" clears it |
 | **delete** this, all columns | Asks first: nod or press Enter to delete, shake or Escape to keep |
 | **hide**, **isolate**, **show all** | Takes elements out of the view (nothing is saved or undone) and brings them back |

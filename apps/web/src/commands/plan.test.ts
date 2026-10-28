@@ -196,3 +196,51 @@ describe("the words for what happened", () => {
     expect(commandLabel(command?.clauses ?? [])).toBe("Copy 4 times 6 m north, scale 0.5, mirror x");
   });
 });
+
+describe("markers", () => {
+  const markers = [
+    { letter: "A", point: [10000, 0, 0] as [number, number, number] },
+    { letter: "B", point: [0, 5000, 0] as [number, number, number] },
+  ];
+  const plan = (text: string, ids = ["block"]) => {
+    const command = parseCommand(text);
+    if (!command) throw new Error(`not a command: ${text}`);
+    return planCommand(command, doc(block), ids, markers);
+  };
+  const patchOf = (planned: Plan, id = "block") => {
+    if (planned.kind !== "edit") throw new Error(`not an edit: ${JSON.stringify(planned)}`);
+    const op = planned.ops.find((o) => o.op === "update" && o.id === id);
+    return op?.op === "update" ? op.patch : null;
+  };
+
+  it("rotates about the marker, not about the block", () => {
+    // A 4 x 2 m block with its centre at (2000, 1000), turned 90 degrees about (10000, 0): the centre goes to (9000, -8000).
+    const patch = patchOf(plan("rotate 90 about marker A"));
+    const origin = patch?.origin as number[];
+    const size = block.type === "massing" ? block.size : [0, 0, 0];
+    expect((origin[0] ?? 0) + (size[0] ?? 0) / 2).toBeCloseTo(9000);
+    expect((origin[1] ?? 0) + (size[1] ?? 0) / 2).toBeCloseTo(-8000);
+    expect(patch?.rotationDeg).toBe(90);
+  });
+
+  it("moves the block's centre to the marker", () => {
+    const origin = patchOf(plan("move to marker A"))?.origin as number[];
+    expect(origin).toEqual([10000 - 2000, 0 - 1000, 0]);
+  });
+
+  it("says when the marker has not been placed, and changes nothing", () => {
+    const command = parseCommand("rotate 45 about marker Z");
+    if (!command) throw new Error("not a command");
+    expect(planCommand(command, doc(block), ["block"], markers)).toEqual({
+      kind: "error",
+      message: "There is no marker Z.",
+    });
+  });
+
+  it("is named in the label", () => {
+    expect(commandLabel(parseCommand("rotate 45 about marker B")?.clauses ?? [])).toBe(
+      "Rotate 45° about marker B",
+    );
+    expect(commandLabel(parseCommand("move to marker A")?.clauses ?? [])).toBe("Move to marker A");
+  });
+});

@@ -215,3 +215,12 @@ describe("steps in a chain", () => {
     expect(result).toEqual({ ok: false, error: expect.stringContaining("cannot be mirrored") });
   });
 });
+
+describe("moveTo", () => {
+  it("takes the group's plan centre and base to the point", () => {
+    const done = applySteps([massing()], [{ kind: "moveTo", to: [10000, 5000, 500] }], levels);
+    if (!done.ok) throw new Error(done.error);
+    // 4000 x 2000 about its centre (2000, 1000), base 0: the centre lands on (10000, 5000) with its base at 500.
+    expect(done.patches.m?.origin).toEqual([8000, 4000, 500]);
+  });
+});

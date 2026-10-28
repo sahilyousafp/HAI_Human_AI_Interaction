@@ -671,6 +671,21 @@ describe("set_view", () => {
     expect((await browser.waitFor("view.set")).payload.frame).toEqual(["col-a1", "wall-n"]);
   });
 
+  it("asks for a named view, and refuses one together with a direction", async () => {
+    const address = await start();
+    const browser = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    const agent = await mcp(address);
+    expect(json(await agent.callTool({ name: "set_view", arguments: { view: "front" } }))).toMatchObject({
+      status: "moving",
+      view: "front",
+    });
+    expect((await browser.waitFor("view.set")).payload).toMatchObject({ view: "front" });
+    const both = await agent.callTool({ name: "set_view", arguments: { view: "top", azimuth: 90 } });
+    expect(both.isError).toBe(true);
+    expect(textOf(both)).toMatch(/leave out azimuth and elevation/);
+    expect((await agent.callTool({ name: "set_view", arguments: { view: "sideways" } })).isError).toBe(true);
+  });
+
   it("asking for nothing, or for an impossible view, is refused", async () => {
     const address = await start();
     await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
