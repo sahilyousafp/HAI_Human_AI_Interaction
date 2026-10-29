@@ -560,6 +560,24 @@ test.describe("hand UX regressions", () => {
     await expect(page.getByTestId("section-status")).toHaveCount(0);
   });
 
+  test("the section's Remove button is never under the status bar, so a hand can always press it", async ({
+    page,
+  }) => {
+    // The status bar grows with what it says and wraps in a narrow view, which used to run it over a readout that sat
+    // at the bottom centre.
+    await page.setViewportSize({ width: 900, height: 560 });
+    await start(page);
+    await page.keyboard.press("s");
+    const remove = page.getByTestId("section-clear");
+    await expect(remove).toBeVisible();
+    const covered = await remove.evaluate((button) => {
+      const box = button.getBoundingClientRect();
+      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return !top || !button.contains(top);
+    });
+    expect(covered).toBe(false);
+  });
+
   test("the Delete tool removes the section when tapping the plane", async ({ page }) => {
     await start(page);
     await page.keyboard.press("s");

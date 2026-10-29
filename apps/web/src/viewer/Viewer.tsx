@@ -70,7 +70,7 @@ import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
 import { ConstraintsPanel } from "../tools/ConstraintsPanel.tsx";
 import type { PointerSource, ToolController } from "../tools/controller.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
-import { ActiveTool, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
+import { ActiveTool, SectionStatus, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
 import type { Hit } from "../tools/types.ts";
 import type { VoiceInput, VoiceState } from "../voice/voice-input.ts";
 import { type ApprovalBadge, ApprovalBadges } from "./ApprovalBadges.tsx";
@@ -1998,22 +1998,25 @@ export function Viewer({
       </div>
       <ImportDropZone importer={importer} />
 
-      <div className="viewer-status" data-hud>
-        <ActiveTool controller={tools} />
-        <span data-testid="selection-status">
-          {selected ? `${selected.name} (${selected.type})` : "Nothing selected"}
-        </span>
-        <span data-testid="aids-status">
-          Aids:{" "}
-          {DRAWING_AIDS.filter((a) => aidState[a.id])
-            .map((a) => a.label)
-            .join(", ") || "none"}
-        </span>
-        {featureState.latencyReadout && (
-          <span data-testid="hud-latency">
-            {p90 === null ? "Gesture to render: -" : `Gesture to render p90: ${Math.round(p90)} ms`}
+      <div className="viewer-bottom">
+        <SectionStatus controller={tools} />
+        <div className="viewer-status" data-hud>
+          <ActiveTool controller={tools} />
+          <span data-testid="selection-status">
+            {selected ? `${selected.name} (${selected.type})` : "Nothing selected"}
           </span>
-        )}
+          <span data-testid="aids-status">
+            Aids:{" "}
+            {DRAWING_AIDS.filter((a) => aidState[a.id])
+              .map((a) => a.label)
+              .join(", ") || "none"}
+          </span>
+          {featureState.latencyReadout && (
+            <span data-testid="hud-latency">
+              {p90 === null ? "Gesture to render: -" : `Gesture to render p90: ${Math.round(p90)} ms`}
+            </span>
+          )}
+        </div>
       </div>
     </section>
   );

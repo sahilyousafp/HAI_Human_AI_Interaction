@@ -112,21 +112,25 @@ test.describe("who holds what", () => {
   test("a task waiting on a claim says whose it waits for, and starts when it ends", async ({ page }) => {
     await start(page);
     await seed(page);
-    await team().request("delegate architect[dome]: work 2500 | product[dome]: work 100");
+    // Architect's task works until it is stopped, so a slow page cannot see it end before it has seen Product wait.
+    await team().request("delegate architect[dome]: work 60000 | product[dome]: work 100");
     await expect(page.getByTestId("team-chip-scope-product")).toHaveText("waits for Architect's task");
     await expect(page.getByTestId("part-waiting")).toContainText("waits for Architect's task");
     // When Architect's task ends the claim is released and Product's starts.
-    await expect(page.getByTestId("part-waiting")).toHaveCount(0, { timeout: 8000 });
+    const architect = team().board.find((task) => task.agent === "architect");
+    team().cancel(architect?.id ?? "");
+    await expect(page.getByTestId("part-waiting")).toHaveCount(0, { timeout: 15_000 });
     await expect(page.getByTestId("team-chip-product")).toHaveAttribute("data-state", /working|idle/);
   });
 
   test("a region claim is drawn as a box until its task ends", async ({ page }) => {
     await start(page);
     await seed(page);
-    await team().request("delegate architect(-5000,-9000,12000,2000): work 3000");
+    // The task works until it is stopped, so a slow page cannot see it end before it has seen the box.
+    await team().request("delegate architect(-5000,-9000,12000,2000): work 60000");
     await expect.poll(() => page.evaluate(() => window.__HAI_VIEWER__?.claimBoxes?.().length)).toBe(1);
     await expect(page.getByTestId("part-row")).toContainText("region");
-    await team().settled();
+    await team().stopAll();
     await expect.poll(() => page.evaluate(() => window.__HAI_VIEWER__?.claimBoxes?.().length)).toBe(0);
   });
 

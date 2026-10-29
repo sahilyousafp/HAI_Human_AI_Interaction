@@ -211,18 +211,32 @@ for (const scheme of ["light", "dark"] as const) {
         const [x, y] = [box.x + box.width * 0.62, box.y + box.height * 0.42];
         return { x: x - 60, y: y - 60, width: 360, height: 120 };
       };
-      // The left hand (the one that talks): fingers closing and the hand still: frames until the ring shows, so it is caught part-filled however slow
-      // the machine is (how far it filled varies a little, so this shot allows a larger difference).
-      const closing = () =>
-        page.evaluate(
-          (p) => window.__HAI_INPUT__?.pointer(null, p as [number, number], { Left: true }),
-          hand,
-        );
-      const progress = page.getByTestId("hold-progress-left");
-      for (let i = 0; i < 40 && !(await progress.isVisible()); i++) {
-        await closing();
-        await page.waitForTimeout(60);
-      }
+      // The left hand (the one that talks): fingers closing and the hand still. The ring shows only between 150 and
+      // 800 ms of that, by the page's clock, so the frames are sent from inside the page (a round trip per frame on a
+      // slow machine can miss the whole window) until it shows, and start over if the window passes. The ring stays
+      // drawn once the frames stop, so it is caught part-filled however slow the machine is (how far it filled varies
+      // a little, so this shot allows a larger difference).
+      await page.evaluate(
+        (p) =>
+          new Promise<void>((resolve, reject) => {
+            const point = p as [number, number];
+            const input = window.__HAI_INPUT__;
+            const giveUpAt = performance.now() + 20_000;
+            let closedAt = performance.now();
+            const frame = () => {
+              if (document.querySelector('[data-testid="hold-progress-left"]')) return resolve();
+              if (performance.now() > giveUpAt) return reject(new Error("the hold ring never showed"));
+              if (performance.now() - closedAt > 700) {
+                input?.pointer(null, point); // fingers open: the charge starts over
+                closedAt = performance.now();
+              }
+              input?.pointer(null, point, { Left: true });
+              setTimeout(frame, 16);
+            };
+            frame();
+          }),
+        hand,
+      );
       await expect(page.getByTestId("hold-progress-left")).toBeVisible();
       await expect(page).toHaveScreenshot(`hold-progress-${scheme}-${width}.png`, {
         clip: await area(),
