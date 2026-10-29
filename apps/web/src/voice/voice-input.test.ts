@@ -3,7 +3,9 @@ import type { RequestContext } from "./utterance-context.ts";
 import { VOICE } from "./voice-config.ts";
 import { type ListenerEvents, micError, VoiceInput } from "./voice-input.ts";
 
-function setup(options: { failWith?: string; transcript?: string; tools?: string[] } = {}) {
+function setup(
+  options: { failWith?: string; transcript?: string; tools?: string[]; tooShort?: boolean } = {},
+) {
   let events: ListenerEvents | null = null;
   const mic = { open: false, finished: 0 };
   const sent: Array<{ text: string; context: RequestContext }> = [];
@@ -15,7 +17,8 @@ function setup(options: { failWith?: string; transcript?: string; tools?: string
       return {
         finish: () => {
           mic.finished++;
-          e.speechEnd({ audio: new Float32Array(16_000) });
+          if (options.tooShort) e.misfire?.();
+          else e.speechEnd({ audio: new Float32Array(16_000) });
         },
         cancel: () => {
           mic.open = false;
@@ -60,6 +63,28 @@ describe("VoiceInput", () => {
     await voice.start();
     await speak();
     expect(voice.getSnapshot()).toMatchObject({ phase: "review", text: "measure the towers" });
+  });
+
+  it("A sound too short to count: listening goes back to waiting, and gives up if nothing is said", async () => {
+    const { voice, mic, events } = setup();
+    await voice.start();
+    events()?.speechStart();
+    expect(voice.getSnapshot()).toMatchObject({ phase: "listening", speaking: true });
+    events()?.misfire?.();
+    expect(voice.getSnapshot()).toMatchObject({ phase: "listening", speaking: false });
+    expect(mic.open).toBe(true);
+    vi.advanceTimersByTime(VOICE.noSpeechMs);
+    expect(voice.getSnapshot()).toEqual({ phase: "off" });
+    expect(mic.open).toBe(false);
+  });
+
+  it("Ending a request during a sound too short to count stops the microphone", async () => {
+    const { voice, mic, events } = setup({ tooShort: true });
+    await voice.start();
+    events()?.speechStart();
+    voice.finish();
+    expect(mic.open).toBe(false);
+    expect(voice.getSnapshot()).toEqual({ phase: "off" });
   });
 
   it("does nothing with the microphone until asked", () => {
@@ -323,7 +348,7 @@ describe("listening for names", () => {
 describe("a held pinch", () => {
   const wall = { kind: "element" as const, id: "wall-1", type: "wall", name: "Wall 1" };
 
-  function held(options: { transcript?: string; tools?: string[] } = {}) {
+  function held(options: { transcript?: string; tools?: string[]; tooShort?: boolean } = {}) {
     let events: ListenerEvents | null = null;
     const mic = { open: false };
     const sent: Array<{ text: string; context: RequestContext }> = [];
@@ -334,7 +359,8 @@ describe("a held pinch", () => {
         events = e;
         mic.open = true;
         return {
-          finish: () => e.speechEnd({ audio: new Float32Array(8000) }),
+          // Letting go delivers the speech so far; a sound too short to count is reported as a misfire instead.
+          finish: () => (options.tooShort ? e.misfire?.() : e.speechEnd({ audio: new Float32Array(8000) })),
           cancel: () => {
             mic.open = false;
           },
@@ -416,6 +442,33 @@ describe("a held pinch", () => {
     expect(mic.open).toBe(false);
     expect(voice.getSnapshot()).toEqual({ phase: "off" });
     expect(sent).toEqual([]);
+  });
+
+  it("Release during a sound too short to count: nothing was said, so the microphone stops and nothing is sent", async () => {
+    const { voice, sent, settle, events, mic } = held({ tooShort: true });
+    voice.startHeld("Right", wall);
+    await settle();
+    events()?.speechStart();
+    voice.releaseHeld(true);
+    await settle();
+    expect(mic.open).toBe(false);
+    expect(voice.micOn).toBe(false);
+    expect(voice.getSnapshot()).toEqual({ phase: "off" });
+    expect(sent).toEqual([]);
+  });
+
+  it("A too-short sound while the pinch is still held: listening goes on, and what is said next is sent", async () => {
+    const { voice, sent, settle, events, mic } = held();
+    voice.startHeld("Right", wall);
+    await settle();
+    events()?.speechStart();
+    events()?.misfire?.();
+    expect(mic.open).toBe(true);
+    expect(voice.getSnapshot()).toMatchObject({ phase: "listening", speaking: false, held: "Right" });
+    events()?.speechStart();
+    voice.releaseHeld(true);
+    await settle();
+    expect(sent.map((x) => x.text)).toEqual(["make this 300 thick"]);
   });
 
   it("a held pinch released without sending drops what was said", async () => {

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
-import { allow } from "./budget.ts";
+import { allow, drawsInSoftware } from "./budget.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { camera, openViewer, startTestBridge } from "./viewer.ts";
 
@@ -322,7 +322,7 @@ test.describe("the speed of it", () => {
   }) => {
     const bridge = await start(page);
     try {
-      const software = (await page.locator("canvas").first().getAttribute("data-renderer")) === "software";
+      const software = await drawsInSoftware(page);
       const time = async (args: Record<string, unknown>) => {
         const started = Date.now();
         await callTool(bridge, "architect", "camera_capture", args);

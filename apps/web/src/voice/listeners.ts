@@ -38,6 +38,7 @@ function loadDetector(): NonNullable<typeof detector> {
       submitUserSpeechOnPause: true,
       onSpeechStart: () => route.events?.speechStart(),
       onSpeechEnd: (audio) => route.events?.speechEnd({ audio }),
+      onVADMisfire: () => route.events?.misfire?.(),
       onFrameProcessed: (probabilities) => route.events?.level(probabilities.isSpeech),
       ortConfig: (ort) => {
         ort.env.logLevel = "error";

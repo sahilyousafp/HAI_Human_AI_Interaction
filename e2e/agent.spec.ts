@@ -53,6 +53,12 @@ async function startWithFakeAgent(page: Page, detection?: Parameters<typeof fake
 const panel = (page: Page) => page.getByTestId("agent-panel");
 const status = (page: Page) => page.getByTestId("agent-status");
 const lastTurn = (page: Page) => page.getByTestId("agent-turn").last();
+// The turn that holds a hand-off. Once the specialist is done Mochi adds a report turn after it, so the last turn is not it.
+const handedOffTurn = (page: Page) =>
+  page
+    .getByTestId("agent-turn")
+    .filter({ has: page.getByTestId("handoff-chip") })
+    .last();
 
 async function ask(page: Page, text: string) {
   await expect(status(page)).toHaveAttribute("data-state", "idle");
@@ -170,7 +176,7 @@ test.describe("agent panel", () => {
     const bridge = await startWithFakeAgent(page);
     try {
       await ask(page, "delegate architect: bad column");
-      await lastTurn(page).getByTestId("handoff-chip").click();
+      await handedOffTurn(page).getByTestId("handoff-chip").click();
       const chip = page.getByTestId("task-transcript").getByTestId("tool-chip");
       await expect(chip.getByTestId("tool-chip-agent")).toHaveText("Architect");
       await expect(chip).toHaveAttribute("data-outcome", "failed");
@@ -389,8 +395,8 @@ test.describe("addressing by name", () => {
     const bridge = await startWithFakeAgent(page);
     try {
       await ask(page, "Machi, ask Climate to work 100");
-      await expect(lastTurn(page).locator(".agent-request")).toHaveText("ask Climate to work 100");
-      await expect(lastTurn(page).getByTestId("handoff-chip")).toContainText("Climate");
+      await expect(handedOffTurn(page).locator(".agent-request")).toHaveText("ask Climate to work 100");
+      await expect(handedOffTurn(page).getByTestId("handoff-chip")).toContainText("Climate");
     } finally {
       await bridge.stop();
     }
