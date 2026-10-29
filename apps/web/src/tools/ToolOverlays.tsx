@@ -86,9 +86,30 @@ function Palette({ controller }: { controller: ToolController }) {
   );
 }
 
+/** The section's height with its clear control, which a hand can press as well as the mouse. */
+export function SectionStatus({ controller }: { controller: ToolController }) {
+  const { overlay } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  if (overlay.sectionMm === null) return null;
+  return (
+    <div className="section-status" data-testid="section-status">
+      <span>Section at {overlay.sectionMm} mm</span>
+      <button
+        type="button"
+        className="secondary"
+        data-testid="section-clear"
+        data-hand-press
+        aria-label="Remove the section"
+        onClick={() => controller.clearSection()}
+      >
+        <ToolIcon path={CLOSE_ICON} size={13} /> Remove
+      </button>
+    </div>
+  );
+}
+
 /**
- * Everything tools show over the 3D view: the palette, the current instruction or message, the yes-or-no question
- * for a deletion, and the section readout with its clear control.
+ * Everything tools show over the 3D view: the palette, the current instruction or message and the yes-or-no
+ * question for a deletion. The section readout is `SectionStatus`, beside the status bar.
  */
 export function ToolOverlays({ controller }: { controller: ToolController }) {
   const { overlay, question } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
@@ -123,21 +144,6 @@ export function ToolOverlays({ controller }: { controller: ToolController }) {
           </p>
         ) : null}
       </div>
-      {overlay.sectionMm !== null && (
-        <div className="section-status" data-testid="section-status">
-          <span>Section at {overlay.sectionMm} mm</span>
-          <button
-            type="button"
-            className="secondary"
-            data-testid="section-clear"
-            data-hand-press
-            aria-label="Remove the section"
-            onClick={() => controller.clearSection()}
-          >
-            <ToolIcon path={CLOSE_ICON} size={13} /> Remove
-          </button>
-        </div>
-      )}
       <Palette controller={controller} />
     </>
   );

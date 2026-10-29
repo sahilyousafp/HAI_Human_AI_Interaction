@@ -145,16 +145,34 @@ test("a pinch-drag scrolls the settings with the hand, and a quick release coast
     el.scrollTop = 0;
   });
   const start = await handAt(page, at);
-  let ts = await now(page);
-  await gesture(page, "pinch.drag.start", "Right", start, ts);
-  // The hand moves up quickly: about a fifth of the view's height in 80 ms.
-  for (let i = 1; i <= 4; i++) {
-    ts += 20;
-    await page.waitForTimeout(20);
-    await gesture(page, "pinch.drag.update", "Right", [start[0], start[1] - 0.04 * i], ts);
-  }
-  const followed = await scrollTop();
+  // The hand moves up quickly (about a fifth of the view's height in 80 ms) and lets go. The coast follows how fast the
+  // hand moved in the last 100 ms, by the page's clock, so the whole gesture runs in one task of the page, 20 ms
+  // apart by a spin on that clock: a timer or a round trip between the moves, or before the release, can bunch up or
+  // stretch on a slow machine and make the hand look still.
+  const followed = await page.evaluate((from) => {
+    const send = (type: string, position: number[]) =>
+      window.__HAI_INPUT__?.gestures([
+        {
+          type,
+          hand: "Right",
+          position,
+          ts: performance.timeOrigin + performance.now(),
+          confidence: 1,
+          delta: [0, 0],
+        } as never,
+      ]);
+    const [x, y] = from as [number, number];
+    send("pinch.drag.start", [x, y]);
+    for (let i = 1; i <= 4; i++) {
+      for (const until = performance.now() + 20; performance.now() < until; ) {
+        // spin
+      }
+      send("pinch.drag.update", [x, y - 0.04 * i]);
+    }
+    const scrolled = document.querySelector(".settings-body")?.scrollTop ?? 0;
+    send("pinch.drag.end", [x, y - 0.16]);
+    return scrolled;
+  }, start);
   expect(followed).toBeGreaterThan(50); // the content moved up with the hand
-  await gesture(page, "pinch.drag.end", "Right", [start[0], start[1] - 0.16], ts + 1);
   await expect.poll(scrollTop, { timeout: allow(2000, 8000) }).toBeGreaterThan(followed + 20); // and coasts on after letting go
 });

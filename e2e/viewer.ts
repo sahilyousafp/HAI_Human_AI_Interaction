@@ -16,6 +16,14 @@ export type Camera = {
 
 let nextPort = 4900;
 
+/** Ports Chromium refuses to connect to (ERR_UNSAFE_PORT): a bridge on one never reaches the page. */
+const UNSAFE_PORTS = new Set([5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080]);
+
+function freshPort(): number {
+  while (UNSAFE_PORTS.has(nextPort)) nextPort++;
+  return nextPort++;
+}
+
 /**
  * Starts a private bridge with a throwaway project folder and pins the page to it, so viewer tests never touch
  * the developer's own project and can stop the bridge mid-test.
@@ -34,7 +42,7 @@ export async function startTestBridge(
     openData?: BridgeOptions["openData"];
   } = {},
 ): Promise<Bridge & { port: number }> {
-  const port = nextPort++;
+  const port = freshPort();
   const token = `viewer-e2e-${port}-0123456789`;
   const root = options.root ?? mkdtempSync(join(tmpdir(), "hai-e2e-"));
   const projectDir = join(root, "project");
