@@ -5,6 +5,8 @@ import { E2E_BASE_URL, E2E_BRIDGE_PORT, E2E_ORIGINS, E2E_WEB_PORT, E2E_WORKSPACE
 import { buildClips } from "./scripts/convert-clips.mjs";
 
 const isCI = Boolean(process.env.CI);
+// Waiting for something to appear: a shared CI runner takes several times longer than a laptop.
+const expectTimeout = isCI ? 15_000 : 5_000;
 
 // Chromium's fake camera lets tracking tests run without a person or a webcam.
 const fakeCamera = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"];
@@ -79,8 +81,7 @@ export default defineConfig({
     baseURL: E2E_BASE_URL,
     trace: "retain-on-failure",
   },
-  // Waiting for something to appear: a shared CI runner takes several times longer than a laptop.
-  expect: { timeout: isCI ? 15_000 : 5_000 },
+  expect: { timeout: expectTimeout },
   projects: [
     {
       name: "chromium",
@@ -113,7 +114,9 @@ export default defineConfig({
                 args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", ...fakeCamera],
               },
             },
+            // A project's own `expect` replaces the global one, timeout included.
             expect: {
+              timeout: expectTimeout,
               toHaveScreenshot: { maxDiffPixelRatio: 0.02, threshold: 0.25, animations: "disabled" as const },
             },
           },

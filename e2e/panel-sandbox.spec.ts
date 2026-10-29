@@ -126,7 +126,8 @@ test.describe("what a panel may send", () => {
     await start(page);
     await openCustomPanel(
       page,
-      "<p>ok</p><script>setTimeout(() => { throw new Error('late failure'); }, 150)</script>",
+      // After the page has loaded, and long enough after it for a slow runner to have called the panel ready first.
+      "<p>ok</p><script>addEventListener('load', () => setTimeout(() => { throw new Error('late failure'); }, 1000))</script>",
     );
     await expect(shell(page).getByTestId("panel-failed")).toBeVisible();
     await expect(shell(page).getByTestId("panel-reason")).toContainText("late failure");

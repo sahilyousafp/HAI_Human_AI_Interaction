@@ -8,7 +8,7 @@ import type { Team } from "../apps/bridge/src/agent/team.ts";
 import type { Bridge } from "../apps/bridge/src/server.ts";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
 import { connectFakeRhino, rhinoBatch, rhinoObject } from "../apps/bridge/test/rhino-client.ts";
-import { allow } from "./budget.ts";
+import { allow, drawsInSoftware } from "./budget.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
@@ -213,6 +213,7 @@ test.describe("the speed of it", () => {
     delays.sort((a, b) => a - b);
     const p90 = delays[Math.floor(delays.length * 0.9) - 1] ?? delays.at(-1) ?? 0;
     console.log(`claim to panel p90: ${Math.round(p90)} ms over ${delays.length} runs`);
-    expect(p90).toBeLessThan(allow(200, 1000));
+    // Drawing in software takes the page seconds a frame, and the row waits for one.
+    expect(p90).toBeLessThan((await drawsInSoftware(page)) ? 5000 : allow(200, 1000));
   });
 });

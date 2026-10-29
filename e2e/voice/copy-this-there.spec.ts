@@ -34,7 +34,8 @@ test("Copy this there, and A pause during a held pinch: one request, with the co
     // One request with both parts; the column is "this" and the rested point is P1, in millimetres.
     const sent = await expect
       .poll(() => received().find((t) => /copy this/i.test(t)) ?? "")
-      .toMatch(/copy this\W+there/i)
+      // The speech model sometimes hears "there" as "dare" or "their"; what is tested is what the request carries.
+      .toMatch(/copy this\W+(there|dare|their)/i)
       .then(() => received().find((t) => /copy this/i.test(t)) ?? "");
     expect(sent).toContain('target ("this"): column col-a1');
     expect(sent).toMatch(/points: P1 -?\d+, -?\d+, 0 mm/);
