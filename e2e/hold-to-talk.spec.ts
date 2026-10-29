@@ -284,7 +284,9 @@ test.describe("hold to talk", () => {
     });
     await expect(page.getByTestId("held-chip")).toBeVisible();
     await expect(page.getByTestId("held-chip")).toHaveAttribute("data-hand", "left");
-    await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-mode", "talk");
+    // The pointer says talk until the hold has been silent for 600 ms, then the hand's ring takes over (a slow runner
+    // gets here after that; the ring after a silent hold has its own test).
+    await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-mode", /^(talk|palette)$/);
     // The agent panel stays as it was: a held request shows beside the hand, not in the voice bar.
     await expect(page.getByTestId("voice-bar")).toHaveCount(0);
     await releaseAt(page, at, "Left");

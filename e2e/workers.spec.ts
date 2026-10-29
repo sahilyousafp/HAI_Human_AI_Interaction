@@ -53,8 +53,9 @@ test.describe("workers", () => {
     }, testInfo) => {
       await page.emulateMedia({ colorScheme: scheme });
       await start(page);
+      // Slow columns: the checks below need the workers to still be running when a slow runner gets to them.
       await team().request(
-        `${PAVILION}spawn dome[pavilion/dome]: columns 5 every 400 ;; minarets[pavilion/minarets]: columns 5 every 400`,
+        `${PAVILION}spawn dome[pavilion/dome]: columns 5 every 2000 ;; minarets[pavilion/minarets]: columns 5 every 2000`,
       );
       const rows = page.getByTestId("team-workers-architect");
       await expect(rows.getByTestId("team-worker-architect.2")).toBeVisible();
