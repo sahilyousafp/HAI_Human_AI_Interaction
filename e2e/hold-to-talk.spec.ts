@@ -467,9 +467,10 @@ test.describe("hold to talk", () => {
     const [x, y] = await openGround(page, 2000, 2000);
     const at = (await viewerOf(page, [x + 1000, y + 1000])) as Point;
     const hand = await page.evaluate(([vx, vy]) => window.__HAI_VIEWER__?.handAt(vx, vy), at);
-    // Tracking sends the pointer every frame while the fingers close.
+    // Tracking sends the pointer every frame while the fingers close. Counted in time, not in frames: a slow runner
+    // takes longer per frame, and the ring is only there between 150 ms and the hold's 800 ms.
     const frames = async (ms: number, p = hand) => {
-      for (let t = 0; t < ms; t += 33) {
+      for (const started = Date.now(); Date.now() - started < ms; ) {
         await page.evaluate(
           (q) => window.__HAI_INPUT__?.pointer(q as [number, number], null, { Right: true }),
           p,

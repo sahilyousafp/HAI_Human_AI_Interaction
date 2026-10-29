@@ -24,6 +24,12 @@ async function start(page: Page) {
 const rail = (page: Page) => page.getByTestId("agent-panel");
 const handle = (page: Page) => page.getByTestId("agent-rail-resize");
 const lastTurn = (page: Page) => page.getByTestId("agent-turn").last();
+// The turn that holds a hand-off. Once the specialist is done Mochi adds a report turn after it, so the last turn is not it.
+const handedOffTurn = (page: Page) =>
+  page
+    .getByTestId("agent-turn")
+    .filter({ has: page.getByTestId("handoff-chip") })
+    .last();
 
 async function ask(page: Page, text: string) {
   await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
@@ -115,7 +121,7 @@ test("Collapsed, the rail is a 52 px strip with the status and the microphone, a
 /** Hands a request to Architect and opens its thread, where its own tool calls are. */
 async function architectDoes(page: Page, request: string) {
   await ask(page, `delegate architect: ${request}`);
-  await lastTurn(page).getByTestId("handoff-chip").click();
+  await handedOffTurn(page).getByTestId("handoff-chip").click();
   return page.getByTestId("task-transcript").getByTestId("agent-turn").last();
 }
 

@@ -8,6 +8,9 @@ const isCI = Boolean(process.env.CI);
 
 // Chromium's fake camera lets tracking tests run without a person or a webcam.
 const fakeCamera = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"];
+// The headless shell Playwright runs on CI keeps a sandboxed frame in its parent's process, so a panel that loops
+// forever freezes the app. Chrome and Edge, which people use, put it in its own: ask for that here too.
+const siteIsolation = ["--site-per-process"];
 const channel = process.env.HAI_E2E_CHANNEL ?? (isCI ? undefined : "msedge"); // locally, drive installed Edge
 
 // One project per recorded clip in test-assets/clips (MP4 in git, .y4m generated into .hai/clips).
@@ -85,7 +88,11 @@ export default defineConfig({
       // Starting the camera loads MediaPipe in a fresh browser context each test (about 17 s on a CPU-only Windows
       // runner) and startCamera allows 45 s for frames, so the test needs more than the default 30 s.
       timeout: 60_000,
-      use: { ...devices["Desktop Chrome"], channel, launchOptions: { args: fakeCamera } },
+      use: {
+        ...devices["Desktop Chrome"],
+        channel,
+        launchOptions: { args: [...fakeCamera, ...siteIsolation] },
+      },
     },
     ...clipProjects,
     ...voiceProjects,

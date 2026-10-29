@@ -14,6 +14,8 @@ export interface ListenerEvents {
   speechStart(): void;
   /** The utterance ended: 16 kHz samples for on-device transcription, or text from the cloud speech service. */
   speechEnd(result: { audio: Float32Array } | { text: string }): void;
+  /** A sound that began like speech ended too soon to count, so nothing was said (only the on-device detector knows). */
+  misfire?(): void;
   /** Speech probability or input level, 0..1, for the level meter. */
   level(value: number): void;
 }
@@ -93,12 +95,17 @@ export function micError(error: unknown): MicError {
   return "failed";
 }
 
-/**
- * Voice requests to the agent: listens only when asked (the microphone button, the talk key, or Ask agent),
- * ends the utterance on silence, transcribes it, and shows the transcript for `VOICE.sendDelayMs` before sending,
- * so a nod or Enter sends it at once and a shake or Escape discards it. What the user points at while speaking
- * is recorded alongside.
- */
+/** A held pinch that is listening: what has been heard so far and where the pinch is. */
+interface HeldRequest {
+  hand: Hand;
+  session: number;
+  audio: Float32Array[];
+  texts: string[];
+  speaking: boolean;
+  spoke: boolean;
+  releasing: boolean;
+}
+
 /** One buffer of all the samples, in order. */
 function joined(parts: Float32Array[]): Float32Array {
   const all = new Float32Array(parts.reduce((n, p) => n + p.length, 0));
@@ -110,6 +117,12 @@ function joined(parts: Float32Array[]): Float32Array {
   return all;
 }
 
+/**
+ * Voice requests to the agent: listens only when asked (the microphone button, the talk key, or Ask agent),
+ * ends the utterance on silence, transcribes it, and shows the transcript for `VOICE.sendDelayMs` before sending,
+ * so a nod or Enter sends it at once and a shake or Escape discards it. What the user points at while speaking
+ * is recorded alongside.
+ */
 export class VoiceInput {
   readonly context = new UtteranceContext();
   private state: VoiceState = { phase: "off" };
@@ -122,6 +135,8 @@ export class VoiceInput {
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (handle: unknown) => void;
   private namesWanted = false;
+  /** The request was ended by the user while speech was being heard: the microphone is closing, not listening on. */
+  private finishing = false;
   /** The open microphone while listening for names, and the session it belongs to. */
   private namesListener: Listener | null = null;
   private namesSession = 0;
@@ -136,15 +151,7 @@ export class VoiceInput {
    * A held pinch is listening: what it heard so far, across pauses, until the pinch is released (`releasing`: it was,
    * with speech, and the last words are on their way).
    */
-  private held: {
-    hand: Hand;
-    session: number;
-    audio: Float32Array[];
-    texts: string[];
-    speaking: boolean;
-    spoke: boolean;
-    releasing: boolean;
-  } | null = null;
+  private held: HeldRequest | null = null;
   private readonly heldSpeech = new Set<(hand: Hand) => void>();
 
   constructor(private readonly deps: VoiceDeps) {
@@ -202,6 +209,7 @@ export class VoiceInput {
     if (phase === "review") this.discard();
     this.stopNames();
     const session = ++this.session;
+    this.finishing = false;
     this.context.clear();
     this.update({ phase: "starting" });
     this.holdNames = false;
@@ -216,6 +224,12 @@ export class VoiceInput {
           this.update({ phase: "listening", speaking: true, level: 1 });
         },
         speechEnd: (result) => void this.ended(session, result),
+        misfire: () => {
+          if (session !== this.session) return;
+          // Ended while the sound was too short to count: nothing is coming. Otherwise listening goes on.
+          if (this.finishing) this.cancel();
+          else this.waitForSpeech();
+        },
         level: (value) => {
           if (session === this.session && this.state.phase === "listening")
             this.update({ ...this.state, level: value });
@@ -226,10 +240,7 @@ export class VoiceInput {
         return;
       }
       this.listener = listener;
-      this.update({ phase: "listening", speaking: false, level: 0 });
-      this.after(VOICE.noSpeechMs, () => {
-        if (this.state.phase === "listening" && !this.state.speaking) this.cancel();
-      });
+      this.waitForSpeech();
     } catch (error) {
       if (session !== this.session) return;
       const kind = micError(error);
@@ -237,12 +248,23 @@ export class VoiceInput {
     }
   }
 
+  /** Listening with nothing heard yet: gives up when no one speaks for `VOICE.noSpeechMs`. */
+  private waitForSpeech(): void {
+    this.clearTimers();
+    this.update({ phase: "listening", speaking: false, level: 0 });
+    this.after(VOICE.noSpeechMs, () => {
+      if (this.state.phase === "listening" && !this.state.speaking) this.cancel();
+    });
+  }
+
   /** The talk key was released or the microphone button pressed again: end the utterance now. */
   finish(): void {
     if (this.state.phase === "starting") this.cancel(); // stopped before the microphone was even open
     if (this.state.phase !== "listening") return;
-    if (this.state.speaking) this.listener?.finish();
-    else this.cancel();
+    if (this.state.speaking) {
+      this.finishing = true;
+      this.listener?.finish();
+    } else this.cancel();
   }
 
   /** Takes text as though it had just been spoken: a command runs, a request is shown for sending. */
@@ -313,6 +335,10 @@ export class VoiceInput {
           this.update({ phase: "listening", speaking: true, level: 1, held: hand });
         },
         speechEnd: (result) => this.heardHeld(session, result),
+        misfire: () => {
+          const held = this.held;
+          if (session === this.session && held) this.segmentOver(held);
+        },
         level: (value) => {
           if (session === this.session && this.state.phase === "listening")
             this.update({ ...this.state, level: value });
@@ -340,9 +366,21 @@ export class VoiceInput {
     if (session !== this.session || !held) return;
     if ("text" in result) held.texts.push(result.text);
     else held.audio.push(result.audio);
+    this.segmentOver(held);
+  }
+
+  /**
+   * A stretch of speech in a held request is over, said or too short to count: listening goes on, unless the pinch
+   * was let go meanwhile, which sends what was said (or stops, if nothing was).
+   */
+  private segmentOver(held: HeldRequest): void {
     held.speaking = false;
-    if (held.releasing) void this.finishHeld();
-    else this.update({ phase: "listening", speaking: false, level: 0, held: held.hand });
+    if (!held.releasing) {
+      this.update({ phase: "listening", speaking: false, level: 0, held: held.hand });
+      return;
+    }
+    if (held.audio.length + held.texts.length > 0) void this.finishHeld();
+    else this.cancel();
   }
 
   /**
@@ -352,7 +390,8 @@ export class VoiceInput {
   releaseHeld(send: boolean): void {
     const held = this.held;
     if (!held) return;
-    if (!send || !held.spoke) {
+    const said = held.audio.length + held.texts.length > 0;
+    if (!send || !(held.speaking || said)) {
       this.cancel();
       return;
     }

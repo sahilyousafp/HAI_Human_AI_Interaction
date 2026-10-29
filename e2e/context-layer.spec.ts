@@ -5,7 +5,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { Team } from "../apps/bridge/src/agent/team.ts";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
 import { type ContextItem, Site } from "../packages/protocol/src/index.ts";
-import { allow } from "./budget.ts";
+import { allow, drawsInSoftware } from "./budget.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { findElementOnScreen, openViewer, startTestBridge } from "./viewer.ts";
 
@@ -200,7 +200,7 @@ test("2000 buildings on screen: they arrive in a moment and the user's own frame
   page,
 }) => {
   const b = await start(page);
-  const software = (await page.locator("canvas").first().getAttribute("data-renderer")) === "software";
+  const software = await drawsInSoftware(page);
   const many = Array.from({ length: 2000 }, (_, i) =>
     building(
       `way/${i}`,
@@ -252,7 +252,7 @@ test("a neighbour south of the model casts its shadow on it in a sun-study pictu
 }, testInfo) => {
   const b = await start(page);
   // A software renderer draws no shadows (they cost seconds a frame there), so there is nothing to compare.
-  const software = (await page.locator("canvas").first().getAttribute("data-renderer")) === "software";
+  const software = await drawsInSoftware(page);
   test.skip(software, "this machine draws in software, which leaves shadows out");
   const picture = async () => {
     const token = b.agentTokens.issue({ agent: "climate", tools: new Set(["sun_study"]) });
