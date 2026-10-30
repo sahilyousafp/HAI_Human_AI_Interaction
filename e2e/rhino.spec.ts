@@ -380,15 +380,16 @@ test.describe("the agent sets the view", () => {
       [x, y],
     );
     await ask(team, '{"elevation":85}');
-    // A few more frames of the hand, covering the whole animation after the request was delivered.
-    await page.waitForTimeout(600);
+    // The hand keeps moving until the request has been delivered (the agent is told "View set."), and for the whole
+    // animation after it: on a slow runner the request can arrive long after the ask returned.
+    await expect(page.getByText(/View set\./).first()).toBeVisible();
+    await page.waitForTimeout(allow(600, 1500));
     await page.evaluate(() => {
       (window as unknown as { __orbiting?: boolean }).__orbiting = false;
     });
     await page.mouse.up();
     await page.waitForTimeout(600);
     // The request did reach the viewer (the agent was told "View set."), and still the user's hand won.
-    await expect(page.getByText(/View set\./).first()).toBeVisible();
     expect((await camera(page)).elevation).toBeLessThan(60);
   });
 });
