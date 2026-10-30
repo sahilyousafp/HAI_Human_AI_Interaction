@@ -141,9 +141,14 @@ test.describe("Done and Close", () => {
     await shell(page).getByTestId("panel-done").click();
     await expect(shell(page)).toHaveCount(0);
     await expect.poll(() => committedColumnX()).toBe(4400);
-    const wall = current().scene.scene.doc.elements["wall-n"];
-    expect(wall?.type === "wall" && wall.height).toBe(2800);
-    expect(await lastLabel(page)).toBe("Clearance");
+    // The page learns of the commit a moment after the bridge applies it, so its undo label is polled for.
+    await expect
+      .poll(() => {
+        const wall = current().scene.scene.doc.elements["wall-n"];
+        return wall?.type === "wall" && wall.height;
+      })
+      .toBe(2800);
+    await expect.poll(() => lastLabel(page)).toBe("Clearance");
     // Exactly one undo step: one undo reverts both, and nothing more can be undone.
     await page.evaluate(() => window.__HAI_SCENE__?.undo());
     await expect.poll(() => committedColumnX()).toBe(COLUMN);
