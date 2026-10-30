@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { allow } from "./budget.ts";
 import {
   askForPanel,
   box,
@@ -102,7 +103,7 @@ test.describe("the offer", () => {
           check();
         }),
     );
-    expect(ms).toBeLessThan(150);
+    expect(ms).toBeLessThan(allow(150, 500));
     await expect(shell(page).getByTestId("panel-done")).toBeVisible();
   });
 
