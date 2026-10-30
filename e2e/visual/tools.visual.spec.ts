@@ -3,16 +3,17 @@ import type { Bridge } from "../../apps/bridge/src/server.ts";
 import { handAt, openViewer, startTestBridge } from "../viewer.ts";
 
 let bridge: Bridge | null = null;
-// A microphone that hears silence, for every page here: a long pinch listens, and a microphone error midway would
-// change what is shown. No camera starts, so nothing else in view changes.
+// A microphone that hears silence (the project's fake one plays a silent file), for every page here: a long pinch
+// listens, and a microphone error midway would change what is shown. No camera starts, so nothing else in view
+// changes. The page's own audio graph is not used for it: on a CPU-only runner its stream slowed the page to a crawl
+// once the speech detector started.
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    navigator.mediaDevices.getUserMedia = async (constraints) => {
+    const devices = navigator.mediaDevices;
+    const original = devices.getUserMedia.bind(devices);
+    devices.getUserMedia = async (constraints) => {
       if (constraints?.video) throw new DOMException("No camera here", "NotFoundError");
-      const context = new AudioContext();
-      const silence = context.createMediaStreamDestination();
-      context.createConstantSource().connect(silence);
-      return silence.stream;
+      return original(constraints);
     };
   });
 });

@@ -121,7 +121,12 @@ export default defineConfig({
               viewport: { width: 1280, height: 800 },
               // A fake microphone and camera: the screens do not depend on what the machine has plugged in.
               launchOptions: {
-                args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", ...fakeCamera],
+                args: [
+                  "--use-angle=swiftshader",
+                  "--enable-unsafe-swiftshader",
+                  ...fakeCamera,
+                  `--use-file-for-fake-audio-capture=${join(speechDir, "silence.wav")}`,
+                ],
               },
             },
             // A project's own `expect` replaces the global one, timeout included.
