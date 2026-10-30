@@ -38,9 +38,12 @@ test.describe("several agents", () => {
     // Closing it shows the waiting offer.
     await shell(page).getByTestId("panel-done").click();
     await expect(page.getByTestId("offer-card")).toHaveCount(2);
-    await expect(page.getByTestId("offer-agent").last()).toHaveText(other);
-    await expect(page.getByTestId("offer-open").last()).toBeVisible();
-    await page.getByTestId("offer-skip").last().click();
+    // The cards follow the order the agents' turns arrived in, which is not the order they were shown in: the waiting
+    // one is the card that still has Open.
+    const waiting = page.getByTestId("offer-card").filter({ has: page.getByTestId("offer-open") });
+    await expect(waiting).toHaveCount(1);
+    await expect(waiting.getByTestId("offer-agent")).toHaveText(other);
+    await waiting.getByTestId("offer-skip").click();
     await team().settled();
   });
 });

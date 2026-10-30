@@ -92,7 +92,15 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         channel,
-        launchOptions: { args: [...fakeCamera, ...siteIsolation] },
+        // The fake microphone plays silence: left alone it beeps now and then, and the speech detector sometimes takes a
+        // beep for a voice, which turns a silent hold into one that spoke.
+        launchOptions: {
+          args: [
+            ...fakeCamera,
+            `--use-file-for-fake-audio-capture=${join(speechDir, "silence.wav")}`,
+            ...siteIsolation,
+          ],
+        },
       },
     },
     ...clipProjects,
@@ -104,7 +112,9 @@ export default defineConfig({
           {
             name: "visual",
             testMatch: "visual/**",
-            timeout: 60_000,
+            // A CPU-only Windows runner stalls a page for 10 to 20 s while it loads the camera and the voice models,
+            // and a hold-to-talk shot waits through that twice.
+            timeout: isCI ? 120_000 : 60_000,
             use: {
               ...devices["Desktop Chrome"],
               channel,

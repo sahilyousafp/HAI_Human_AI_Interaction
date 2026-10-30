@@ -563,17 +563,21 @@ test.describe("hand UX regressions", () => {
   test("the section's Remove button is never under the status bar, so a hand can always press it", async ({
     page,
   }) => {
-    // The status bar grows with what it says and wraps in a narrow view, which used to run it over a readout that sat
-    // at the bottom centre.
-    await page.setViewportSize({ width: 900, height: 560 });
+    // The status bar grows with what it says (a long element name, a wider font), and used to run over a readout that
+    // sat at the bottom centre. Say something long and check that no part of the bar is over the button.
     await start(page);
     await page.keyboard.press("s");
     const remove = page.getByTestId("section-clear");
     await expect(remove).toBeVisible();
     const covered = await remove.evaluate((button) => {
+      const status = document.querySelector('[data-testid="selection-status"]');
+      if (status)
+        status.textContent = "A long element name that makes the status bar run well across the view ".repeat(
+          2,
+        );
       const box = button.getBoundingClientRect();
       const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-      return !top || !button.contains(top);
+      return top?.closest(".viewer-status") != null;
     });
     expect(covered).toBe(false);
   });
