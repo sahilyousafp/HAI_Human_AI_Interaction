@@ -228,6 +228,43 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+/**
+ * What the page is doing while a test waits on it, written to the log: the longest stretch the page's own timer was
+ * held up since the last mark (a page starved of its main thread shows here), and how many frames it drew. A page that
+ * does not answer in 5 s is said to be stuck. The hold-ring tests have run out of time on one CI runner without a
+ * reason in their error; this is what to read next time.
+ */
+async function watchPage(page: Page, name: string) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __watch: { worst: number; last: number; frames: number } };
+    w.__watch = { worst: 0, last: performance.now(), frames: 0 };
+    setInterval(() => {
+      const now = performance.now();
+      w.__watch.worst = Math.max(w.__watch.worst, now - w.__watch.last - 50);
+      w.__watch.last = now;
+    }, 50);
+    const frame = () => {
+      w.__watch.frames += 1;
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+  const started = Date.now();
+  return async (step: string) => {
+    const report = await Promise.race([
+      page.evaluate(() => {
+        const w = window as unknown as { __watch: { worst: number; frames: number } };
+        const out = { worst: Math.round(w.__watch.worst), frames: w.__watch.frames };
+        w.__watch.worst = 0;
+        w.__watch.frames = 0;
+        return `worst stall ${out.worst} ms, ${out.frames} frames`;
+      }),
+      new Promise<string>((resolve) => setTimeout(() => resolve("the page did not answer in 5 s"), 5000)),
+    ]).catch((error: Error) => `no report: ${error.message.slice(0, 120)}`);
+    console.log(`[page watch] ${name} - ${step} at ${Date.now() - started} ms: ${report}`);
+  };
+}
+
 for (const scheme of ["light", "dark"] as const) {
   for (const width of [1280, 1920]) {
     test(`hold to talk: the progress ring, then the silent hold's ring with the chip under it (${scheme}, ${width})`, async ({
@@ -238,7 +275,9 @@ for (const scheme of ["light", "dark"] as const) {
       bridge = await startTestBridge(page);
       await openViewer(page);
       await settled(page);
+      const mark = await watchPage(page, `hold ring ${scheme} ${width}`);
       await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+      await mark("engaged");
       const hand = await handAt(page, [0.62, 0.42]);
       const area = async () => {
         const box = await page.getByTestId("viewer").boundingBox();
@@ -273,6 +312,7 @@ for (const scheme of ["light", "dark"] as const) {
         hand,
       );
       await expect(page.getByTestId("hold-progress-left")).toBeVisible();
+      await mark("progress ring showing");
       await expect(page).toHaveScreenshot(`hold-progress-${scheme}-${width}.png`, {
         clip: await area(),
         maxDiffPixelRatio: 0.06,
@@ -285,12 +325,17 @@ for (const scheme of ["light", "dark"] as const) {
           { type, position: hand, ts: performance.now() },
         );
       await page.evaluate((p) => window.__HAI_INPUT__?.pointer(null, p as [number, number]), hand);
+      await mark("progress ring shot taken");
       await send("pinch.drag.start");
       await send("pinch.hold");
+      await mark("hold sent");
       // The left hand talks. Silent: after 0.6 s its reference ring shows around the hand, and the chip moves under it.
       await expect(page.getByTestId("held-chip")).toHaveText("Listening. Speak now.", { timeout: 15_000 });
+      await mark("listening");
       await expect(page.getByTestId("tool-palette")).toBeVisible();
+      await mark("ring open");
       await expect(page.getByTestId("held-chip")).toHaveAttribute("data-ring", "true");
+      await mark("chip under the ring");
       const ring = await area();
       await expect(page).toHaveScreenshot(`held-chip-${scheme}-${width}.png`, {
         clip: { x: ring.x - 90, y: ring.y - 90, width: 330, height: 330 },

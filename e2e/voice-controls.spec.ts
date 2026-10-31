@@ -43,6 +43,42 @@ test("no microphone on load: nothing is requested and the indicator shows the mi
   await expect(page.getByTestId("listen-for-names")).not.toBeChecked(); // listening for names is opt-in
 });
 
+test("the audio worklet is ready before the microphone opens, so no first words fall in the gap", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __order: string[] };
+    w.__order = [];
+    const addModule = AudioWorklet.prototype.addModule;
+    AudioWorklet.prototype.addModule = async function (...args) {
+      const result = await addModule.apply(this, args);
+      w.__order.push("worklet");
+      return result;
+    };
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      if (constraints?.audio) w.__order.push("microphone");
+      return original(constraints);
+    };
+  });
+  bridge = await startTestBridge(page, { agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-ask-"))) });
+  await openViewer(page);
+  await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true)); // the speech detector loads at first engagement
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __order: string[] }).__order.includes("worklet")))
+    .toBe(true);
+  await page.keyboard.press("a"); // Ask agent opens the microphone
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __order: string[] }).__order.includes("microphone")),
+    )
+    .toBe(true);
+  const order = await page.evaluate(() => (window as unknown as { __order: string[] }).__order);
+  expect(order.indexOf("worklet")).toBeGreaterThanOrEqual(0);
+  expect(order.indexOf("worklet")).toBeLessThan(order.indexOf("microphone"));
+});
+
 test("listening from the palette: Ask agent starts the microphone and the indicator shows it", async ({
   page,
 }) => {
