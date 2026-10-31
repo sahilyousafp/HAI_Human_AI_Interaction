@@ -70,7 +70,14 @@ import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
 import { ConstraintsPanel } from "../tools/ConstraintsPanel.tsx";
 import type { PointerSource, ToolController } from "../tools/controller.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
-import { ActiveTool, SectionStatus, ToolIcon, ToolOverlays, UndoStrip } from "../tools/ToolOverlays.tsx";
+import {
+  ActiveTool,
+  Palette,
+  SectionStatus,
+  ToolIcon,
+  ToolMessages,
+  UndoStrip,
+} from "../tools/ToolOverlays.tsx";
 import type { Hit } from "../tools/types.ts";
 import type { VoiceInput, VoiceState } from "../voice/voice-input.ts";
 import { type ApprovalBadge, ApprovalBadges } from "./ApprovalBadges.tsx";
@@ -1906,7 +1913,7 @@ export function Viewer({
         </p>
       )}
 
-      <ToolOverlays controller={tools} />
+      <Palette controller={tools} />
       {/* The viewport's right column: the drawing constraints while Line or Wall is active. */}
       <div className="viewer-right">
         <ViewCube mode={viewMode} onView={showView} cubeRef={cubeRef} initial={nav.current} />
@@ -1992,6 +1999,7 @@ export function Viewer({
             </p>
           )}
         </div>
+        <ToolMessages controller={tools} />
         <ImportReport importer={importer} />
         <ExportReport exporter={exporter} />
         {children}
