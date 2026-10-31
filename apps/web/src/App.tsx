@@ -71,6 +71,7 @@ import { Viewer } from "./viewer/Viewer.tsx";
 import { Visibility } from "./viewer/visibility.ts";
 import { voiceAvailability, voicePillText } from "./voice/availability.ts";
 import { CommandBar } from "./voice/CommandBar.tsx";
+import { heardAs } from "./voice/heard.ts";
 import { detectorLoaded, listenInCloud, listenOnDevice, preloadOnDevice } from "./voice/listeners.ts";
 import { bestEngine, resample, Speaker } from "./voice/speaker.ts";
 import { toolNamed } from "./voice/tool-commands.ts";
@@ -427,17 +428,28 @@ export function App() {
         // A transcript that is only a tool's name ("measure", "sketch area") picks the tool, and one the command
         // grammar fully understands ("copy and rotate 90") runs on what "this" is: neither goes to the agent.
         command: (text, context) => {
-          const tool = toolNamed(text, tools.registry.list());
-          if (tool) {
-            tools.choose(tool.id);
-            return { label: tool.label };
-          }
-          const run = runCommand(
-            text,
-            commandHost,
-            context.references.map((reference) => reference.id),
-          );
-          if (run) return { label: run.label, ran: true };
+          const attempt = (said: string) => {
+            const tool = toolNamed(said, tools.registry.list());
+            if (tool) {
+              tools.choose(tool.id);
+              return { label: tool.label };
+            }
+            const run = runCommand(
+              said,
+              commandHost,
+              context.references.map((reference) => reference.id),
+            );
+            return run ? { label: run.label, ran: true } : null;
+          };
+          // What the speech model mishears ("colon", "scale to") is put right by sound, against the app's own words,
+          // and only when that makes a tool's name or a command the app understands in full.
+          const done =
+            attempt(text) ??
+            (() => {
+              const fixed = heardAs(text, tools.registry.list());
+              return fixed ? attempt(fixed) : null;
+            })();
+          if (done) return done;
           // With Claude chat off nothing is a request: what is not a command is said so, and goes nowhere.
           if (features.on("agent")) return null;
           const notCommand = `Not a command: ${text}`;

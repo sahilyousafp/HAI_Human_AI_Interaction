@@ -39,6 +39,18 @@ const TENS: Record<string, number> = {
 
 const DIGITS = /^(\d+(\.\d+)?|\.\d+)$/;
 
+/** Every word a number is spoken with: the reference for putting a misheard number right. */
+export const NUMBER_WORDS: ReadonlySet<string> = new Set([
+  ...Object.keys(ONES),
+  ...Object.keys(TENS),
+  "hundred",
+  "thousand",
+  "point",
+  "minus",
+  "negative",
+  "half",
+]);
+
 /** A whole number in words ("twenty five", "one hundred", "hundred", "two thousand"), or null. */
 function readWordInteger(words: string[], from: number): Read<number> | null {
   let total = 0;
@@ -113,6 +125,9 @@ const UNIT_MM: Record<string, number> = {
   meter: 1000,
   meters: 1000,
 };
+
+/** The units a length is spoken with. */
+export const UNIT_WORDS: ReadonlySet<string> = new Set(Object.keys(UNIT_MM));
 
 /** A length at `from` in millimetres: a number and an optional unit (millimetres when it has none). */
 export function readLength(words: string[], from: number): Read<number> | null {

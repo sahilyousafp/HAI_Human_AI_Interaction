@@ -68,6 +68,32 @@ test("rotate 90 turns what is selected about its centre", async ({ page }) => {
   expect(centre(after)).toEqual(centre(before));
 });
 
+test("what the speech model mishears is put right by sound, against the app's own words", async ({
+  page,
+}) => {
+  await start(page);
+  await select(page, "block-b");
+  await say(page, "colon"); // Column, as the model hears it
+  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "column");
+  const width = () =>
+    (bridge?.scene.scene.doc.elements["block-b"] as { size: number[] } | undefined)?.size[0];
+  const before = width() ?? 0;
+  await say(page, "scale to");
+  await expect.poll(width).toBe(before * 2);
+  await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
+});
+
+test("a word that sounds like nothing the app knows is left alone, and still goes to the agent", async ({
+  page,
+}) => {
+  await start(page);
+  await select(page, "block-b");
+  const before = JSON.stringify(bridge?.scene.scene.doc.elements);
+  await say(page, "copy for the wall");
+  await page.waitForTimeout(500);
+  expect(JSON.stringify(bridge?.scene.scene.doc.elements)).toBe(before);
+});
+
 test("with nothing selected a command says so and changes nothing", async ({ page }) => {
   await start(page);
   const before = JSON.stringify(elements());
