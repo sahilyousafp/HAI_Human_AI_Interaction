@@ -821,6 +821,23 @@ kbd {
   border-radius: 4px;
   font: 500 11px / 1.3 var(--f-mono);
 }
+/* Lasso select's loop: the viewer's whole area, drawn in view units so it needs no measuring. */
+.lasso-outline {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.lasso-outline polygon {
+  fill: color-mix(in srgb, var(--accent) 14%, transparent);
+  stroke: var(--accent);
+  stroke-width: 2px;
+  stroke-dasharray: 7 5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
 .section-status {
   display: flex;
   align-items: center;

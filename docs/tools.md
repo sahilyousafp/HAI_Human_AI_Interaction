@@ -7,7 +7,7 @@ Many design actions are faster done directly than through the agent: measure a f
 The palette is two rings of eight tools, set out by what each hand is for:
 
 - The **action ring** belongs to the hand you draw with (your dominant hand, the right one unless you change it): Select, Move, Copy, Delete, Undo, Wall, Slab and Column, the tools that act on the model.
-- The **reference ring** belongs to the other hand: Sketch line, Sketch area, Place marker, Measure, Add massing and Section, the tools that point things out, for you and for the agent. Two slots are free for your own choice.
+- The **reference ring** belongs to the other hand: Sketch line, Sketch area, Place marker, Measure, Add massing, Section, Line and Lasso select, the tools that point things out, for you and for the agent.
 
 Both hands are full pointers otherwise: each can tap, press buttons, scroll and drag, so one hand can draw a wall while the other orbits the view. Left-handed? Set **Dominant hand** to Left in **Settings > Tool rings** and the rings swap hands.
 
@@ -95,6 +95,7 @@ The mouse cursor changes with the tool as well. The pointer stays put through br
 | Copy | P | Right (action) | Pinch an element and drag: a copy follows, snapped to 100 mm, and is added where you let go; the original stays. A drag that starts on empty space orbits instead |
 | Sketch line | L | Top (reference) | Pinch and drag to draw a path for the agent, through the drawing aids (say "sketch line" or "path" to pick it; "line" is the Line tool). It shows dashed in your hand's colour, labelled S1, S2 and so on, and is not part of the model. Shorter than 300 mm keeps nothing. Up to 8 sketches are kept; a request carries them all and clears them, and Escape with a sketch tool active clears them too |
 | Sketch area | E | Top right (reference) | Pinch and drag around an area: the outline closes when you let go and shows dashed and lightly filled, labelled like a path. Less than a square metre keeps nothing |
+| Lasso select | G | Top left (reference) | Pinch and drag a loop around what to select (say "lasso"). It shows dashed while you draw and closes when you let go: everything whose middle is inside it is selected (what is hidden or cut away by the section is left out), the bar says how many, and the tool turns itself off, back to Select. A loop smaller than a fingertip keeps the tool and selects nothing |
 | Place marker | K | Right (reference) | Tap to place a lettered marker (the first free letter, A to Z); tap a marker to remove it. Markers are kept with the project and every request tells the agent where they are |
 
 Everything the create tools add sits on the ground level and is one undo step, named after the element ("Add Wall 3"). Exact sizes come afterwards: select the element and say "make this 300 thick", or ask the agent.

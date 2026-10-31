@@ -2,6 +2,7 @@ import type { Element, Point3Mm, SceneOp } from "@hai/protocol";
 import { transformOp } from "@hai/scene";
 import { columnTool, copyTool, lineTool, slabTool, wallTool } from "./create.ts";
 import { snap } from "./grid.ts";
+import { lassoTool } from "./lasso.ts";
 import { movedOffset } from "./placement.ts";
 import { placeMarkerTool, referenceAt, sketchAreaTool, sketchLineTool } from "./reference.ts";
 import type { ToolRegistry } from "./registry.ts";
@@ -331,6 +332,7 @@ export function registerBuiltinTools(registry: ToolRegistry): void {
     sketchLineTool(),
     sketchAreaTool(),
     placeMarkerTool,
+    lassoTool(),
   ]) {
     registry.register(tool);
   }
