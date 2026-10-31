@@ -5,10 +5,10 @@ import type { ModelsState } from "../../packages/protocol/src/desktop.ts";
 // desktop app (see e2e/first-run.spec.ts); the card alone is compared, not the blurred page behind it.
 
 const ITEMS = [
-  { id: "moonshine-base", bytes: 66_700_000 },
+  { id: "moonshine-small", bytes: 169_500_000 },
   { id: "kokoro", bytes: 326_600_000 },
 ];
-const TOTAL = 393_300_000;
+const TOTAL = 496_100_000;
 
 const STATES: Record<string, ModelsState> = {
   needed: { status: "needed", files: 14, totalBytes: TOTAL, items: ITEMS },
@@ -17,7 +17,7 @@ const STATES: Record<string, ModelsState> = {
     file: "models/kokoro/onnx/model.onnx",
     fileNumber: 9,
     fileCount: 14,
-    receivedBytes: 196_650_000,
+    receivedBytes: 248_050_000,
     totalBytes: TOTAL,
     items: ITEMS,
   },

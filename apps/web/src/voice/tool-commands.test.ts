@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { registerBuiltinTools } from "../tools/builtin.ts";
 import { ToolRegistry } from "../tools/registry.ts";
 import { toolNamed } from "./tool-commands.ts";
-import { tokenLimit } from "./voice-config.ts";
+import { tokenLimit, wholeFrames } from "./voice-config.ts";
 
 const registry = new ToolRegistry();
 registerBuiltinTools(registry);
@@ -68,6 +68,15 @@ describe("transcribing short commands", () => {
     expect(tokenLimit(15_000)).toBe(16); // 0.94 s: transformers.js alone would allow none
     expect(tokenLimit(48_000)).toBe(18); // 3 s: 6 a second, as before
     expect(tokenLimit(52_000)).toBe(20); // 3.25 s rounds up
+  });
+
+  it("the audio is padded with silence to whole 5 ms frames, as the v2 frontend needs, and not otherwise changed", () => {
+    expect(wholeFrames(new Float32Array(160)).length).toBe(160);
+    const odd = Float32Array.from({ length: 161 }, (_, i) => i + 1);
+    const padded = wholeFrames(odd);
+    expect(padded.length).toBe(240);
+    expect([...padded.slice(0, 161)]).toEqual([...odd]);
+    expect(padded.slice(161).every((sample) => sample === 0)).toBe(true);
   });
 
   it("the speech model's measured mishearings of tool names pick the tool", () => {

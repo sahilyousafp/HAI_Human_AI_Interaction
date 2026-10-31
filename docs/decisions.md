@@ -260,3 +260,25 @@ Both produced the same text, "Make this wall 300 thick". WebGPU has to unpack in
 **Short commands and the speech model.** transformers.js limits Moonshine to 6 tokens per *whole* second of audio, rounded down: a one-word command under a second got no tokens at all and came out as "Me", "Und" or "B". The limit is now the same 6 a second rounded up, never fewer than 16 (`tokenLimit`). With it, the synthetic fixtures read "Measure,", "Undue.", "Scatch area" and "Bake,"; the measured mishearings "undue" and "scatch area" are spoken names of Undo and Sketch area, as "Machi" is of Mochi. Silero VAD's `minSpeechMs` went from 250 to 150 ms: at 250 a short "Bake." was dropped as a misfire in two runs of three.
 
 **Not verified.** The hold-time spike (task 7.2: twenty minutes of real use at `holdMs` 500, 650 and 800 with the real camera and microphone) is still to run; `holdMs` stays 800 until then. A spoken tool name is picked 131 ms after the utterance ends once the speech model is loaded (it loads at the first engagement); under heavy load, or with the model still loading, it took 342 to 699 ms.
+
+## Speech to text: Moonshine v2 small replaces Moonshine base (2026-10-31)
+
+**Question.** Is there a lighter or better open-source speech model than Moonshine base for short spoken commands, with quick recognition and an accurate reading of numbers and tool names?
+
+**Research.** Moonshine v2 (Useful Sensors, arXiv 2602.12241, MIT) has tiny (34 M parameters), small (123 M) and medium (245 M) streaming models; on the Open ASR leaderboard datasets their average word error rate is 12.0, 7.8 and 6.7 per cent, against about 10 for Moonshine v1 base (61 M parameters, the model this replaces). The paper puts the delay from the end of speech to the transcript on a MacBook M3 at 148 ms for small, against 44 ms for v1 base and 1.9 s for Whisper small. The heavier open models (NVIDIA Parakeet TDT 0.6B, Canary-Qwen 2.5B, Nemotron Speech Streaming) lead the leaderboard but need 600 MB or more and a GPU to be quick, which is not a model to put in a download of every user. transformers.js 4.3.1 has no `moonshine_streaming` type yet and there is no official ONNX export; the only one that loads is a single maintainer's int8 export of the small model (Workmind, MIT, pinned here by revision and SHA-256) whose config says `moonshine`, so the library's v1 path runs it. Its audio frontend needs whole 80-sample frames, so the worker pads each utterance with up to 5 ms of silence (`wholeFrames`).
+
+**Experiment.** 68 phrases (20 tool names, 28 with numbers, 20 commands and agent names) spoken by two Windows voices (136 utterances), each padded with 0.3 s of silence on both sides like the voice detector's output, in Edge on the reference laptop with the app's own transformers.js on WebAssembly, int8 files. Numbers were compared as digits (spoken "three hundred" and written "300" count the same; "30 cm" and "thirty centimetres" too).
+
+| Model | Size | Median / p90 | Word errors | Numbers right | Tool names right | Whole phrase right |
+|---|---|---|---|---|---|---|
+| Moonshine tiny (v1) | 31 MB | 90 / 139 ms | 14.7% | 92.2% | 42.5% | 64.7% |
+| **Moonshine base (v1), before** | 63 MB | 172 / 277 ms | 6.2% | 95.3% | 75.0% | 84.6% |
+| **Moonshine v2 small, now** | 166 MB | 324 / 504 ms | 2.4% | 100% | 95.0% | 91.9% |
+| Whisper tiny.en | 44 MB | 826 / 1012 ms | 6.9% | 96.9% | 80.0% | 83.8% |
+| Whisper base.en | 78 MB | 1710 / 2170 ms | 1.6% | 96.9% | 97.5% | 95.6% |
+
+**Decision.** Moonshine v2 small. It halves the errors of the model before it (word errors 6.2 to 2.4 per cent), reads every number in the set correctly, and hears tool names right 95 times in 100 against 75. It answers in about a third of a second, twice as long as before and still under a second. Whisper base is a little more accurate but answers in 1.7 s, five times slower, which is too slow to pick a tool by voice. Moonshine tiny is fastest and not accurate enough.
+
+What it still gets wrong: "Bake" as "Make", "Column" as "Colon" (one voice of two), "Mochi" as "Machi" (the agent aliases already take it), "stair core" as "stair court", and "four times six" written as "4 x 6", which the command grammar does not read as a repeat. The download grows from 67 MB to 170 MB (496 MB with the spoken replies); the model folder is now `moonshine-small`, and an app that had the old one downloads the new one on its first run.
+
+**Not verified.** The voices are synthetic: real speakers, accents and a noisy room were not measured, and the recorded phrases in `test-assets/speech` still are the synthetic ones. WebGPU was not tried (int8 was slower on it for the base model). Moonshine v2 medium (245 M, 6.7 per cent) has no export that this library loads. The export is one person's work; when transformers.js supports `moonshine_streaming` or Useful Sensors publish ONNX files, the lock file should move to them.

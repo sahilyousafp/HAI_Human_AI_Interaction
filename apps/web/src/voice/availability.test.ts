@@ -52,8 +52,8 @@ describe("voiceAvailability", () => {
 
   it("says the models are missing, with their size, when nothing is fetching them", () => {
     expect(
-      voiceAvailability(true, { status: "needed", files: 14, totalBytes: 393_300_000, items: ITEMS }),
-    ).toEqual({ kind: "missing", label: "Voice needs 393 MB of models", reason: "needed" });
+      voiceAvailability(true, { status: "needed", files: 14, totalBytes: 496_100_000, items: ITEMS }),
+    ).toEqual({ kind: "missing", label: "Voice needs 496 MB of models", reason: "needed" });
   });
 
   it("says the download did not finish when it failed", () => {

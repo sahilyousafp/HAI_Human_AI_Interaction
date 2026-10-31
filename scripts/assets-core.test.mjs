@@ -229,9 +229,9 @@ describe("the lock file", () => {
   it("flags exactly the voice models for download, each with its size", () => {
     const downloaded = lock.models.filter((m) => m.download).map((m) => m.file);
     expect(downloaded.length).toBeGreaterThan(0);
-    for (const file of downloaded) expect(file).toMatch(/^models\/(kokoro|moonshine-base)\//);
+    for (const file of downloaded) expect(file).toMatch(/^models\/(kokoro|moonshine-small)\//);
     for (const m of lock.models) {
-      if (/^models\/(kokoro|moonshine-base)\//.test(m.file)) {
+      if (/^models\/(kokoro|moonshine-small)\//.test(m.file)) {
         expect(m.download).toBe(true);
         expect(m.size).toBeGreaterThan(0);
       } else {
@@ -248,6 +248,6 @@ describe("fetch-assets --shipped-only", () => {
     const run = spawnSync(process.execPath, [script, "--check", "--shipped-only"], { encoding: "utf8" });
     // Every shipped model is listed; no downloaded one is.
     expect(run.stdout + run.stderr).toContain("models/hand_landmarker.task");
-    expect(run.stdout + run.stderr).not.toMatch(/models\/(kokoro|moonshine-base)\//);
+    expect(run.stdout + run.stderr).not.toMatch(/models\/(kokoro|moonshine-small)\//);
   });
 });

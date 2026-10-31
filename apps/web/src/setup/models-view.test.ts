@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { formatBytes, modelsView } from "./models-view.ts";
 
 const ITEMS = [
-  { id: "moonshine-base", bytes: 66_700_000 },
+  { id: "moonshine-small", bytes: 169_500_000 },
   { id: "kokoro", bytes: 326_600_000 },
 ];
-const TOTAL = 393_300_000;
+const TOTAL = 496_100_000;
 
 describe("formatBytes", () => {
   it.each([
@@ -14,9 +14,9 @@ describe("formatBytes", () => {
     [40_000, "under 1 MB"],
     [522_240, "0.5 MB"],
     [7_819_105, "7.8 MB"],
-    [66_700_000, "67 MB"],
+    [169_500_000, "170 MB"],
     [326_600_000, "327 MB"],
-    [393_300_000, "393 MB"],
+    [496_100_000, "496 MB"],
     [999_400_000, "999 MB"],
     [1_200_000_000, "1.2 GB"],
   ])("%d is %s", (bytes, text) => {
@@ -33,14 +33,14 @@ describe("modelsView", () => {
     const view = modelsView({ status: "needed", files: 14, totalBytes: TOTAL, items: ITEMS });
     expect(view?.tone).toBe("idle");
     expect(view?.headline).toBe("Download the voice models");
-    expect(view?.detail).toContain("about 393 MB");
+    expect(view?.detail).toContain("about 496 MB");
     expect(view?.detail).toContain("Camera and hands work without it");
     expect(view?.items).toEqual([
       {
-        id: "moonshine-base",
+        id: "moonshine-small",
         title: "Speech to text",
         detail: "Understands what you say",
-        size: "67 MB",
+        size: "170 MB",
         state: "waiting",
       },
       {
@@ -70,17 +70,17 @@ describe("modelsView", () => {
     });
 
     it("shows progress as a fraction and in sizes, and lets the user continue or stop", () => {
-      const view = modelsView(downloading(196_650_000));
+      const view = modelsView(downloading(248_050_000));
       expect(view?.tone).toBe("busy");
       expect(view?.headline).toBe("Downloading the voice models");
       expect(view?.progress).toBeCloseTo(0.5, 5);
-      expect(view?.progressLabel).toBe("197 MB of 393 MB");
+      expect(view?.progressLabel).toBe("248 MB of 496 MB");
       expect(view?.actions.map((a) => a.id)).toEqual(["continue", "cancel"]);
       expect(view?.actions[0]?.primary).toBe(true);
     });
 
     it("marks the finished part done and the current one active", () => {
-      const view = modelsView(downloading(100_000_000));
+      const view = modelsView(downloading(200_000_000));
       expect(view?.items.map((i) => i.state)).toEqual(["done", "active"]);
     });
 

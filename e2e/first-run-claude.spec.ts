@@ -20,9 +20,9 @@ const modelsReady: ModelsState = { status: "ready" };
 const modelsNeeded: ModelsState = {
   status: "needed",
   files: 14,
-  totalBytes: 393_300_000,
+  totalBytes: 496_100_000,
   items: [
-    { id: "moonshine-base", bytes: 66_700_000 },
+    { id: "moonshine-small", bytes: 169_500_000 },
     { id: "kokoro", bytes: 326_600_000 },
   ],
 };
@@ -352,8 +352,8 @@ test.describe("the models step still works after the Claude step", () => {
       file: "models/kokoro/onnx/model.onnx",
       fileNumber: 9,
       fileCount: 14,
-      receivedBytes: 196_650_000,
-      totalBytes: 393_300_000,
+      receivedBytes: 248_050_000,
+      totalBytes: 496_100_000,
       items: modelsNeeded.status === "needed" ? modelsNeeded.items : [],
     });
     await expect(page.getByTestId("first-run-progress")).toHaveAttribute("aria-valuenow", "50");

@@ -1,6 +1,6 @@
 import type { ModelItem, ModelsState } from "@hai/protocol";
 
-/** "7.8 MB", "67 MB", "393 MB", "1.2 GB": decimal units, as the operating system and the download sites count. */
+/** "7.8 MB", "170 MB", "496 MB", "1.2 GB": decimal units, as the operating system and the download sites count. */
 export function formatBytes(bytes: number): string {
   const mb = bytes / 1e6;
   if (mb >= 1000) return `${(mb / 1000).toFixed(1)} GB`;
@@ -11,7 +11,7 @@ export function formatBytes(bytes: number): string {
 
 /** What the screen calls each folder of model files. */
 const ITEM_COPY: Record<string, { title: string; detail: string }> = {
-  "moonshine-base": { title: "Speech to text", detail: "Understands what you say" },
+  "moonshine-small": { title: "Speech to text", detail: "Understands what you say" },
   kokoro: { title: "Spoken replies", detail: "Reads the agent's answers aloud" },
 };
 

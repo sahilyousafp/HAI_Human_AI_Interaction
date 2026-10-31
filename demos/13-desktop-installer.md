@@ -7,7 +7,7 @@ A bonus clip (the installer). Target length 45-60 s, 16:9, captions burned in. O
 The recording computer is a clean Windows 11 virtual machine or spare laptop, **not your own computer**: the reset script below removes HAI and Claude Code from it.
 
 1. Windows 11, a standard user, no Node, git or Claude Code. **Smart App Control on** (Windows Security > App & browser control > Smart App Control), so the clip shows what a person with a normal PC sees. A webcam (a virtual machine needs a passed-through camera).
-2. A Claude account to sign in with, and a good network connection (the voice models are about 393 MB).
+2. A Claude account to sign in with, and a good network connection (the voice models are about 496 MB).
 3. The release you are showing is published and the download page is up (see "The download page" in [docs/desktop.md](../docs/desktop.md)). Open the page in Edge, light theme, and keep the Downloads folder empty.
 4. Front light on both hands; Windows Studio Effects off.
 5. To take it again, run the reset script (see below) and empty the Downloads folder.

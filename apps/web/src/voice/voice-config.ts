@@ -14,6 +14,21 @@ export const VOICE = {
   dwellMs: 300,
 } as const;
 
+/** The audio frontend of Moonshine v2 reads whole frames of this many samples (5 ms at 16 kHz). */
+const FRAME_SAMPLES = 80;
+
+/**
+ * The samples padded with silence to a whole number of frames: the v2 frontend fails on a partial last frame, and the
+ * voice detector hands over utterances of any length. At most 79 samples (5 ms), so the transcript does not change.
+ */
+export function wholeFrames(audio: Float32Array): Float32Array {
+  const rest = audio.length % FRAME_SAMPLES;
+  if (rest === 0) return audio;
+  const padded = new Float32Array(audio.length + FRAME_SAMPLES - rest);
+  padded.set(audio);
+  return padded;
+}
+
 /** The fewest tokens a transcript may have, however short the utterance. */
 const MIN_TOKENS = 16;
 
