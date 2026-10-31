@@ -72,6 +72,7 @@ import type { PointerSource, ToolController } from "../tools/controller.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
 import {
   ActiveTool,
+  LassoOutline,
   Palette,
   SectionStatus,
   ToolIcon,
@@ -1913,6 +1914,7 @@ export function Viewer({
         </p>
       )}
 
+      <LassoOutline controller={tools} />
       <Palette controller={tools} />
       {/* The viewport's right column: the drawing constraints while Line or Wall is active. */}
       <div className="viewer-right">

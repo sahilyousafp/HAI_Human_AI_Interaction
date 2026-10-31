@@ -80,6 +80,40 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+for (const scheme of ["light", "dark"] as const) {
+  test(`Lasso select: the loop while it is drawn (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    bridge = await startTestBridge(page);
+    await openViewer(page);
+    await settled(page);
+    await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+    await page.keyboard.press("g");
+    const send = async (type: string, at: [number, number]) => {
+      const position = await handAt(page, at);
+      await page.evaluate(
+        (e) =>
+          window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], hand: "Left", ...e } as never]),
+        { type, position, ts: Date.now() },
+      );
+    };
+    // Round the model, the way a hand goes: a start, a wavering loop that has not yet come back to the start.
+    const loop: Array<[number, number]> = [
+      [0.3, 0.3],
+      [0.5, 0.26],
+      [0.7, 0.3],
+      [0.78, 0.5],
+      [0.7, 0.72],
+      [0.5, 0.78],
+      [0.32, 0.7],
+      [0.26, 0.5],
+    ];
+    await send("pinch.drag.start", loop[0] as [number, number]);
+    for (const point of loop.slice(1)) await send("pinch.drag.update", point);
+    await expect(page.getByTestId("lasso-outline")).toBeVisible();
+    await expect(page.getByTestId("viewer")).toHaveScreenshot(`lasso-loop-${scheme}.png`);
+  });
+}
+
 test("both hands' pointers: the left amber over a control, the right with the Wall tool", async ({
   page,
 }) => {

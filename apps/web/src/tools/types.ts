@@ -39,6 +39,8 @@ export interface ToolOverlay {
   draft: Element | null;
   /** Create tools and Move: the point a drawing aid snapped to, with the aid's name; shown as a marker. */
   snap: { point: Point3Mm; kind: SnapKind; label: string; ortho: boolean } | null;
+  /** Lasso select: the loop drawn so far, viewer positions (0..1 across and down the 3D view). */
+  lasso: Point2[] | null;
 }
 
 export const EMPTY_OVERLAY: ToolOverlay = {
@@ -50,6 +52,7 @@ export const EMPTY_OVERLAY: ToolOverlay = {
   sectionHover: false,
   draft: null,
   snap: null,
+  lasso: null,
 };
 
 /** What a tool can do. Positions are viewer coordinates: 0..1 across and down the 3D view. */
@@ -59,6 +62,10 @@ export interface ToolContext {
   undo(): void;
   redo(): void;
   select(ids: string[]): void;
+  /** Switches to another tool (a tool that does its one job and steps back to Select). */
+  choose(id: string): void;
+  /** The elements the user has hidden. */
+  hidden(): ReadonlySet<string>;
   pick(at: Point2): Hit | null;
   /** Where the view ray at `at` meets the horizontal plane at `heightMm`, or null if it points away. */
   ground(at: Point2, heightMm?: number): Point3Mm | null;

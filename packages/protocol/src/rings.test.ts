@@ -38,6 +38,32 @@ describe("settings saved before hold to talk", () => {
     expect(migrated.createPalette).toBeNull();
   });
 
+  it("the reference ring from before Lasso select takes the new default, so its free slot fills", () => {
+    const before = [
+      "sketch-line",
+      "sketch-area",
+      "place-marker",
+      "measure",
+      "massing",
+      "section",
+      "line",
+      null,
+    ];
+    expect(migrateRingSettings({ createPalette: before }).createPalette).toBeNull();
+    const own = [
+      "sketch-line",
+      "sketch-area",
+      "place-marker",
+      "measure",
+      "massing",
+      "section",
+      "line",
+      "wall",
+    ];
+    expect(migrateRingSettings({ createPalette: own }).createPalette).toEqual(own);
+    expect(DEFAULT_REFERENCE_LAYOUT[7]).toBe("lasso");
+  });
+
   it("Custom layout is kept", () => {
     const custom = ["section", ...OLD_CREATE.slice(1)];
     expect(migrateRingSettings({ createPalette: custom }).createPalette).toEqual(custom);

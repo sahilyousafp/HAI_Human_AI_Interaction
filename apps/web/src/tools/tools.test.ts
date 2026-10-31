@@ -586,3 +586,75 @@ describe("Line tool", () => {
     expect(DEFAULT_REFERENCE_LAYOUT).toContain("line");
   });
 });
+
+describe("Lasso select", () => {
+  /** A loop around the block (its middle is at viewer 0.75, 0.67), drawn by the mouse: down, around, up. */
+  function drawLoop(controller: ToolController, loop: Point2[]) {
+    const [first, ...rest] = loop as [Point2, ...Point2[]];
+    expect(controller.dragStart(first)).toBe(true);
+    for (const point of rest) controller.drag(point);
+    controller.dragEnd(first);
+  }
+  const AROUND_BLOCK: Point2[] = [
+    [0.6, 0.5],
+    [0.9, 0.5],
+    [0.9, 0.85],
+    [0.6, 0.85],
+  ];
+
+  it("takes the reference ring's free slot, top left", () => {
+    const { controller } = setup();
+    expect(controller.getSnapshot().layouts.reference[7]).toBe("lasso");
+  });
+
+  it("selects what a loop surrounds and turns itself off: back to Select", () => {
+    const { controller, calls } = setup(withCamera);
+    controller.choose("lasso");
+    drawLoop(controller, AROUND_BLOCK);
+    expect(calls).toContain("select:block-b");
+    expect(controller.getSnapshot().activeId).toBe("select");
+    expect(controller.getSnapshot().overlay.lasso).toBeNull();
+  });
+
+  it("shows the loop while it is drawn", () => {
+    const { controller } = setup(withCamera);
+    controller.choose("lasso");
+    controller.dragStart(AROUND_BLOCK[0] as Point2);
+    controller.drag(AROUND_BLOCK[1] as Point2);
+    controller.drag(AROUND_BLOCK[2] as Point2);
+    expect(controller.getSnapshot().overlay.lasso).toHaveLength(3);
+    expect(controller.getSnapshot().activeId).toBe("lasso");
+  });
+
+  it("a loop around nothing selects nothing, says so, and still turns itself off", () => {
+    const { controller, calls } = setup(withCamera);
+    controller.choose("lasso");
+    drawLoop(controller, [
+      [0.05, 0.1],
+      [0.3, 0.1],
+      [0.3, 0.3],
+      [0.05, 0.3],
+    ]);
+    expect(calls).toContain("select:");
+    expect(controller.getSnapshot().activeId).toBe("select");
+  });
+
+  it("a slip too small to be a loop keeps the tool and selects nothing", () => {
+    const { controller, calls } = setup(withCamera);
+    controller.choose("lasso");
+    drawLoop(controller, [
+      [0.5, 0.5],
+      [0.505, 0.5],
+      [0.505, 0.505],
+    ]);
+    expect(calls.some((call) => call.startsWith("select"))).toBe(false);
+    expect(controller.getSnapshot().activeId).toBe("lasso");
+  });
+
+  it("leaves out an element the user hid", () => {
+    const hidden = setup({ ...withCamera, hidden: () => new Set(["block-b"]) });
+    hidden.controller.choose("lasso");
+    drawLoop(hidden.controller, AROUND_BLOCK);
+    expect(hidden.calls).toContain("select:");
+  });
+});

@@ -30,6 +30,8 @@ import { ReferenceLayer } from "./reference-layer.ts";
 import type { ToolRegistry } from "./registry.ts";
 import { EMPTY_OVERLAY, type Hit, type Tool, type ToolContext, type ToolOverlay } from "./types.ts";
 
+const NO_HIDDEN: ReadonlySet<string> = new Set();
+
 /**
  * Holding a fist still this long returns to Select (the fist is recognised after the clutch debounce). A fist that
  * moves is a fist drag, which pans the view and drops this timer.
@@ -630,6 +632,8 @@ export class ToolController {
       undo: () => env.undo(),
       redo: () => env.redo(),
       select: (ids) => env.select(ids),
+      choose: (id) => this.choose(id),
+      hidden: () => env.hidden?.() ?? NO_HIDDEN,
       pick: (at) => env.pick(at, this.pickSource),
       ground: (at, heightMm) => env.ground(at, heightMm),
       aids: () => env.aids?.() ?? DEFAULT_DRAWING_AIDS,

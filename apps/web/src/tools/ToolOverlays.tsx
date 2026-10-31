@@ -86,6 +86,25 @@ export function Palette({ controller }: { controller: ToolController }) {
   );
 }
 
+/** The loop being drawn by Lasso select, over the whole view: dashed, closing back on its start. */
+export function LassoOutline({ controller }: { controller: ToolController }) {
+  const { overlay } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const loop = overlay.lasso;
+  if (!loop || loop.length < 2) return null;
+  const points = loop.map(([x, y]) => `${x},${y}`).join(" ");
+  return (
+    <svg
+      className="lasso-outline"
+      data-testid="lasso-outline"
+      viewBox="0 0 1 1"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polygon points={points} />
+    </svg>
+  );
+}
+
 /** The section's height with its clear control, which a hand can press as well as the mouse. */
 export function SectionStatus({ controller }: { controller: ToolController }) {
   const { overlay } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);

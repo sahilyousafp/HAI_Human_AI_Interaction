@@ -30,13 +30,25 @@ export const DEFAULT_REFERENCE_LAYOUT: Array<string | null> = [
   "massing",
   "section",
   "line",
-  null,
+  "lasso",
 ];
 
 /** The ring a silent long pinch of `hand` shows. */
 export function ringFor(hand: Hand, dominant: DominantHand): Ring {
   return hand === dominant ? "action" : "reference";
 }
+
+/** The reference ring before Lasso select took its last free slot: a stored layout still equal to it takes the new default. */
+const NO_LASSO_REFERENCE_LAYOUT = [
+  "sketch-line",
+  "sketch-area",
+  "place-marker",
+  "measure",
+  "massing",
+  "section",
+  "line",
+  null,
+];
 
 /** The defaults before hold to talk: replaced when a stored layout still equals them. */
 const OLD_TOOLS_LAYOUT = ["select", "ask-agent", "measure", "section", "move", "massing", "delete", "undo"];
@@ -47,7 +59,7 @@ const RENAMED_ACTIONS: Record<string, string> = {
   "create-ring": "reference-ring",
 };
 
-const sameLayout = (stored: unknown, old: string[]): boolean =>
+const sameLayout = (stored: unknown, old: Array<string | null>): boolean =>
   Array.isArray(stored) && stored.length === old.length && stored.every((id, i) => id === old[i]);
 
 /**
@@ -92,6 +104,7 @@ export function migrateRingSettings(stored: Record<string, unknown>): Record<str
   const out = { ...stored };
   if (sameLayout(out.palette, OLD_TOOLS_LAYOUT)) out.palette = null;
   if (sameLayout(out.createPalette, OLD_CREATE_LAYOUT)) out.createPalette = null;
+  if (sameLayout(out.createPalette, NO_LASSO_REFERENCE_LAYOUT)) out.createPalette = null;
   if (out.gestures && typeof out.gestures === "object" && !Array.isArray(out.gestures)) {
     const gestures = migrateGestures(out.gestures as Record<string, unknown>);
     out.gestures = out.holdRoles === true ? gestures : migrateHoldRoles(gestures);
