@@ -124,6 +124,11 @@ const UNIT_MM: Record<string, number> = {
   metres: 1000,
   meter: 1000,
   meters: 1000,
+  foot: 304.8,
+  feet: 304.8,
+  ft: 304.8,
+  inch: 25.4,
+  inches: 25.4,
 };
 
 /** The units a length is spoken with. */
@@ -132,7 +137,12 @@ export const UNIT_WORDS: ReadonlySet<string> = new Set(Object.keys(UNIT_MM));
 /** A length at `from` in millimetres: a number and an optional unit (millimetres when it has none). */
 export function readLength(words: string[], from: number): Read<number> | null {
   const number = readNumber(words, from);
-  if (!number) return null;
+  // "a metre" (the "a" is gone by now) is one of the unit; only a whole word counts, never "m" or "cm" alone.
+  if (!number) {
+    const unit = words[from] ?? "";
+    const factor = unit.length > 2 ? UNIT_MM[unit] : undefined;
+    return factor === undefined ? null : { value: factor, next: from + 1 };
+  }
   const factor = UNIT_MM[words[number.next] ?? ""];
   return factor === undefined
     ? { value: number.value, next: number.next }

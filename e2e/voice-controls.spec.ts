@@ -98,6 +98,22 @@ test("listening from the palette: Ask agent starts the microphone and the indica
   await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "off");
 });
 
+test("listening that hears nothing says the microphone picked up nothing, not just goes quiet", async ({
+  page,
+}) => {
+  bridge = await startTestBridge(page, { agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-ask-"))) });
+  await openViewer(page);
+  await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+  await page.getByTestId("mic-button").click(); // the fake microphone plays silence
+  await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "on");
+  const problem = page.getByTestId("voice-error");
+  await expect(problem).toBeVisible({ timeout: 20_000 });
+  await expect(problem).toHaveAttribute("data-error", "silent");
+  await expect(problem).toContainText("picking up nothing");
+  await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "off");
+});
+
 test("microphone denied: says how to re-enable it, and typing still works", async ({ page }) => {
   await page.addInitScript(() => {
     const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);

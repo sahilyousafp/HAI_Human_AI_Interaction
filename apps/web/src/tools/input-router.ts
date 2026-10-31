@@ -71,8 +71,11 @@ export interface RouterTalk {
   end(hand: Hand, send: boolean): void;
   /** Calls `listener` when speech starts during a hold. Returns a function that stops calling it. */
   onSpeech(listener: (hand: Hand) => void): () => void;
-  /** Calls `listener` when a stretch of speech during a hold stops (a pause, or a sound that was not speech). */
-  onQuiet(listener: (hand: Hand) => void): () => void;
+  /**
+   * Calls `listener` when a stretch of speech during a hold stops: `noise` when it was too short to be words (a click, a
+   * cough), else words. Returns a function that stops calling it.
+   */
+  onQuiet(listener: (hand: Hand, noise: boolean) => void): () => void;
 }
 
 /** How a held pinch ended, for the local counts in the Detection card. */
@@ -137,7 +140,7 @@ export class InputRouter {
     this.setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
     options.talk?.onSpeech((hand) => this.speech(hand));
-    options.talk?.onQuiet((hand) => this.quiet(hand));
+    options.talk?.onQuiet((hand, noise) => this.quiet(hand, noise));
   }
 
   private get bindings(): GestureBindings {
@@ -293,13 +296,18 @@ export class InputRouter {
   }
 
   /**
-   * A stretch of speech stopped, and the hand has not let go: the hold is silent again, so the ring that speech took
-   * away comes back after the silence (a cough or a click is not a reason to lose the tools).
+   * A stretch of speech stopped, and the hand has not let go. Words: speech wins for the rest of the hold, so the hand
+   * goes on pointing through a pause. Noise (a click, a cough): if no words have been heard the hold is silent again,
+   * and the ring that the sound took away comes back after the silence.
    */
-  quiet(hand: Hand): void {
+  quiet(hand: Hand, noise: boolean): void {
     const hold = this.hold;
     if (!hold || hold.hand !== hand) return;
-    hold.machine.quiet(this.now());
+    if (!noise) {
+      hold.machine.confirm();
+      return;
+    }
+    if (!hold.machine.noise(this.now())) return;
     const { palette } = this.targets;
     if (!palette.isOpen && this.ringOpens(hold.ring)) palette.open(hold.at, hold.ring, hand, true);
     this.clearTimer(hold.timer);

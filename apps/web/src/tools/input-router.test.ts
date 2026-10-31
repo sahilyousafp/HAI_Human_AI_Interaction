@@ -406,7 +406,7 @@ describe("hold to talk", () => {
     let clock = 0;
     let timers: Array<{ at: number; fn: () => void }> = [];
     let speechListener: ((hand: Hand) => void) | null = null;
-    let quietListener: ((hand: Hand) => void) | null = null;
+    let quietListener: ((hand: Hand, noise: boolean) => void) | null = null;
     const targets: RouterTargets = {
       palette: {
         get isOpen() {
@@ -480,7 +480,7 @@ describe("hold to talk", () => {
       timers = timers.filter((t) => t.at > clock);
     };
     const speak = (hand: Hand = "Left") => speechListener?.(hand);
-    const stopSpeaking = (hand: Hand = "Left") => quietListener?.(hand);
+    const stopSpeaking = (hand: Hand = "Left", noise = true) => quietListener?.(hand, noise);
     const event = (type: string, position: Point2 = at, hand: Hand = "Left") =>
       ({ type, ts: ts++, confidence: 1, hand, position, delta: [0, 0] }) as GestureEvent;
     const hold = (hand: Hand = "Left") => {
@@ -522,7 +522,7 @@ describe("hold to talk", () => {
     expect(reports).toEqual([{ outcome: "send", ring: "reference", spoke: true }]);
   });
 
-  it("speech that stops brings the ring back after the silence, and a release still sends what was said", () => {
+  it("a noise that stops brings the ring back after the silence, and a release in the centre drops it", () => {
     const { log, reports, advance, speak, stopSpeaking, hold, router, event } = talkSetup();
     hold();
     speak();
@@ -535,11 +535,11 @@ describe("hold to talk", () => {
     advance(1);
     expect(log.at(-1)).toBe("palette.show");
     router.handle(event("pinch.drag.end"));
-    expect(log.at(-1)).toBe("talk.end:Left:send");
-    expect(reports).toEqual([{ outcome: "send", ring: "reference", spoke: true }]);
+    expect(log.at(-1)).toBe("talk.end:Left:drop");
+    expect(reports).toEqual([{ outcome: "cancel", ring: "reference", spoke: false }]);
   });
 
-  it("a flick once the speech has stopped chooses the slot, as it would have before any speech", () => {
+  it("a flick after a noise chooses the slot, as it would have before any sound", () => {
     const { log, speak, stopSpeaking, hold, router, event } = talkSetup();
     hold();
     speak();
@@ -550,7 +550,21 @@ describe("hold to talk", () => {
     expect(log.at(-1)).toBe("talk.end:Left:drop");
   });
 
-  it("a sound that stops while the ring is still open changes nothing", () => {
+  it("words that stop (a pause) keep speech winning: the ring stays away, the hand points, and a release sends", () => {
+    const { log, reports, advance, speak, stopSpeaking, hold, router, event } = talkSetup();
+    hold();
+    speak();
+    stopSpeaking("Left", false);
+    advance(2000);
+    router.handle(event("pinch.drag.update", [0.62, 0.5])); // pointing "there" in the pause
+    expect(log.filter((entry) => entry.startsWith("palette.open"))).toHaveLength(1);
+    expect(log).not.toContain("palette.show");
+    router.handle(event("pinch.drag.end", [0.62, 0.5]));
+    expect(log.at(-1)).toBe("talk.end:Left:send");
+    expect(reports).toEqual([{ outcome: "send", ring: "reference", spoke: true }]);
+  });
+
+  it("a noise that stops while the ring is still open changes nothing", () => {
     const { log, stopSpeaking, hold } = talkSetup();
     hold();
     const before = [...log];

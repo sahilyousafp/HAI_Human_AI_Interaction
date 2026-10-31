@@ -1,5 +1,5 @@
 import type { Element, LetterMarker, Point3Mm, SceneDocument, SceneOp } from "@hai/protocol";
-import { applySteps, type TransformStep } from "@hai/scene";
+import { applySteps, elementBounds, type TransformStep } from "@hai/scene";
 import { newId } from "../tools/create.ts";
 import type { Clause, Command, Selector } from "./grammar.ts";
 
@@ -67,6 +67,7 @@ function clauseText(clause: Clause): string {
       return `move to marker ${clause.marker}`;
     case "copy": {
       const times = clause.count > 1 ? ` ${clause.count} times` : "";
+      if (clause.spaced) return `array${times || " once"}`;
       return `copy${times}${clause.by ? ` ${offsetText(clause.by)}` : ""}`;
     }
     case "rotate":
@@ -167,6 +168,25 @@ function stepsOf(clauses: Clause[], markers: LetterMarker[]): TransformStep[] | 
 const namesOf = (doc: SceneDocument, ids: string[]) =>
   ids.length === 1 ? (doc.elements[ids[0] as string] as Element).name : `${ids.length} elements`;
 
+/** One width of what is being copied along an axis: an array with no distance puts its copies side by side. */
+function spacingOf(
+  elements: Element[],
+  along: { axis: 0 | 1 | 2; sign: 1 | -1 },
+  doc: SceneDocument,
+): Point3Mm {
+  let low = Number.POSITIVE_INFINITY;
+  let high = Number.NEGATIVE_INFINITY;
+  for (const element of elements) {
+    const { min, max } = elementBounds(element, doc.levels);
+    low = Math.min(low, min[along.axis]);
+    high = Math.max(high, max[along.axis]);
+  }
+  const width = Number.isFinite(high - low) ? high - low : 0;
+  const by: Point3Mm = [0, 0, 0];
+  by[along.axis] = along.sign * width;
+  return by;
+}
+
 /** The changes of place a command asks for, as `update` ops, and `create` ops for the copies. */
 function planEdit(
   clauses: Clause[],
@@ -201,7 +221,8 @@ function planEdit(
     for (const [id, patch] of Object.entries(moved.patches)) ops.push({ op: "update", id, patch });
     working = elements.map((e) => ({ ...e, ...moved.patches[e.id] }) as Element);
   }
-  const unit: TransformStep[] = copy.by ? [{ kind: "translate", by: copy.by }] : [];
+  const step = copy.spaced ? spacingOf(working, copy.spaced, doc) : copy.by;
+  const unit: TransformStep[] = step ? [{ kind: "translate", by: step }] : [];
   const after = stepsOf(clauses.slice(copyAt + 1), markers);
   if (typeof after === "string") return { kind: "error", message: after };
   const created: string[] = [];

@@ -133,6 +133,8 @@ const MIC_PROBLEM = {
   denied: "Microphone blocked",
   "not-found": "No microphone",
   failed: "Microphone failed",
+  silent: "Microphone silent",
+  unheard: "No speech heard",
 } as const;
 const NO_POINTS: Point3Mm[] = [];
 const NO_VOICE = { subscribe: () => () => {}, getSnapshot: () => VOICE_OFF };
@@ -1110,6 +1112,7 @@ export function Viewer({
     tools.attach({
       doc: () => client.getSnapshot().doc,
       hidden: () => visibility.getSnapshot(),
+      selection: () => client.getSnapshot().selection,
       apply: (label, ops) => void client.apply(label, ops),
       undo: () => void client.undo(),
       redo: () => void client.redo(),
@@ -1681,9 +1684,7 @@ export function Viewer({
     voiceState.phase === "error" && !toolState.held ? null : heldChipText(voiceState, listeningHand !== null);
   // A move preview applies only while the element is still as it was when the drag began.
   const previewOffset = (element: Element): [number, number] | null =>
-    overlay.movePreview?.id === element.id && overlay.movePreview.from === JSON.stringify(element)
-      ? overlay.movePreview.offsetMm
-      : null;
+    overlay.movePreview?.from[element.id] === JSON.stringify(element) ? overlay.movePreview.offsetMm : null;
   const selected = scene.doc && scene.selection[0] ? scene.doc.elements[scene.selection[0]] : undefined;
   const submitProject = (e: FormEvent) => {
     e.preventDefault();

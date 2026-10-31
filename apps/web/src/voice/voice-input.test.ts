@@ -74,7 +74,7 @@ describe("VoiceInput", () => {
     expect(voice.getSnapshot()).toMatchObject({ phase: "listening", speaking: false });
     expect(mic.open).toBe(true);
     vi.advanceTimersByTime(VOICE.noSpeechMs);
-    expect(voice.getSnapshot()).toEqual({ phase: "off" });
+    expect(voice.getSnapshot()).toMatchObject({ phase: "error", error: "silent" });
     expect(mic.open).toBe(false);
   });
 
@@ -149,8 +149,47 @@ describe("VoiceInput", () => {
     const quiet = setup();
     await quiet.voice.start();
     vi.advanceTimersByTime(VOICE.noSpeechMs);
-    expect(quiet.voice.getSnapshot()).toEqual({ phase: "off" });
+    expect(quiet.voice.getSnapshot()).toMatchObject({ phase: "error", error: "silent" });
     expect(quiet.mic.open).toBe(false);
+  });
+
+  it("a microphone that picked up sound but no speech says so, and one that picked up nothing says that", async () => {
+    const noise = setup();
+    await noise.voice.start();
+    noise.events()?.peak?.(0.2);
+    vi.advanceTimersByTime(VOICE.noSpeechMs);
+    expect(noise.voice.getSnapshot()).toMatchObject({ phase: "error", error: "unheard" });
+    expect(noise.mic.open).toBe(false);
+
+    const nothing = setup();
+    await nothing.voice.start();
+    nothing.events()?.peak?.(0.001);
+    vi.advanceTimersByTime(VOICE.noSpeechMs);
+    expect(nothing.voice.getSnapshot()).toMatchObject({ phase: "error", error: "silent" });
+  });
+
+  it("the level meter changes ten times a second at most, not with every 32 ms frame of the detector", async () => {
+    const { voice, events } = setup();
+    await voice.start();
+    let changes = 0;
+    voice.subscribe(() => changes++);
+    for (let frame = 0; frame < 31; frame++) {
+      events()?.level(0.05 + (frame % 7) * 0.13); // a different value every frame
+      vi.advanceTimersByTime(32);
+    }
+    expect(changes).toBeGreaterThan(3);
+    expect(changes).toBeLessThanOrEqual(11);
+    expect(voice.getSnapshot()).toMatchObject({ phase: "listening" });
+  });
+
+  it("the loudest sound is counted afresh for each listening", async () => {
+    const { voice, events } = setup();
+    await voice.start();
+    events()?.peak?.(0.5);
+    voice.finish();
+    await voice.start();
+    vi.advanceTimersByTime(VOICE.noSpeechMs);
+    expect(voice.getSnapshot()).toMatchObject({ phase: "error", error: "silent" });
   });
 
   it("stopping while the microphone is still opening cancels, and releases it once it opens", async () => {
@@ -471,18 +510,21 @@ describe("a held pinch", () => {
     expect(sent.map((x) => x.text)).toEqual(["make this 300 thick"]);
   });
 
-  it("the hand is told each time speech starts and each time it stops, a sound that was not speech included", async () => {
+  it("the hand is told each time speech starts and each time it stops, and whether it was noise or words", async () => {
     const { voice, spoken, settle, events } = held();
-    const quiet: string[] = [];
-    voice.onHeldQuiet((hand) => quiet.push(hand));
+    const quiet: Array<[string, boolean]> = [];
+    voice.onHeldQuiet((hand, noise) => quiet.push([hand, noise]));
     voice.startHeld("Right", wall);
     await settle();
     events()?.speechStart();
-    events()?.misfire?.();
+    events()?.misfire?.(); // a sound too short to count
     events()?.speechStart();
-    events()?.speechEnd({ audio: new Float32Array(8000) });
+    events()?.speechEnd({ audio: new Float32Array(10_000) }); // long enough for the detector: words, whatever it was
     expect(spoken).toEqual(["Right", "Right"]);
-    expect(quiet).toEqual(["Right", "Right"]);
+    expect(quiet).toEqual([
+      ["Right", true],
+      ["Right", false],
+    ]);
   });
 
   it("a held pinch released without sending drops what was said", async () => {

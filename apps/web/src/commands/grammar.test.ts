@@ -224,3 +224,99 @@ describe("a count written as the speech model writes it", () => {
     expect(parseCommand("move 3 m along x")).toEqual(parseCommand("move 3 m east"));
   });
 });
+
+const same = (said: string, plain: string) => {
+  const spoken = parseCommand(said);
+  expect(spoken, said).not.toBeNull();
+  expect(spoken, said).toEqual(parseCommand(plain));
+};
+
+describe("how people actually say it", () => {
+  it("talk before the verb is dropped, clause by clause", () => {
+    same("I want to move this three metres to the right", "move 3 m east");
+    same("could you please copy this and then rotate it ninety degrees", "copy and rotate 90");
+    same("go ahead and delete all columns", "delete all columns");
+    same("um, please spin it forty five degrees, thanks", "rotate 45");
+    same("let's scale this to two", "scale 2");
+  });
+
+  it("left, right, forward, back and the like are directions, as seen on a plan with north at the top", () => {
+    same("move this two metres to the left", "move 2 m west");
+    same("push it 5 metres forward", "move 5 m north");
+    same("nudge this 30 centimetres back", "move 30 cm south");
+    same("shift it 1 metre upwards", "move 1 m up");
+  });
+
+  it("other verbs and units for the same things", () => {
+    same("slide this 3 metres east", "move 3 m east");
+    same("shrink this by half", "scale half");
+    same("pick all walls", "select all walls");
+    same("conceal the selection", "hide");
+    same("move this 2 feet east", "move 609.6 mm east");
+    same("move it 4 inches up", "move 101.6 mm up");
+  });
+
+  it("a unit with no number is one of it", () => {
+    same("move this a metre up", "move 1 m up");
+    same("copy it half a metre east", "copy 0.5 m east");
+  });
+
+  it("anything that would change what it does is still the agent's", () => {
+    for (const said of [
+      "don't move this",
+      "never delete the columns",
+      "stop moving this",
+      "do not copy that",
+      "move this somewhere nice",
+      "I want a wall here",
+      "what would you like to move",
+      "can you move this to the right of the wall",
+      "I want to know what is selected",
+    ])
+      expect(parseCommand(said), said).toBeNull();
+  });
+});
+
+describe("an axis and its way, and arrays", () => {
+  const copyOf = (said: string) => {
+    const command = parseCommand(said);
+    expect(command, said).not.toBeNull();
+    return command?.clauses[0] as Extract<Clause, { kind: "copy" }>;
+  };
+
+  it("an axis letter and a way along it can both be said, in either order", () => {
+    same("move 5 meters to the y axis towards right", "move 5 m north");
+    same("move 5 meters along y towards left", "move 5 m south");
+    same("move 5 meters towards right along the y axis", "move 5 m north");
+    same("move y 5 meters forward", "move 5 m north");
+    same("move this 3 m x right", "move 3 m east");
+    same("move this 2 m z downwards", "move 2 m down");
+  });
+
+  it("two ways, or two letters, for one distance are not guessed", () => {
+    expect(parseCommand("move 5 m right left")).toBeNull();
+    expect(parseCommand("move 5 m x y")).toBeNull();
+  });
+
+  it("array 5 times puts five copies side by side along x; an axis and a way change that", () => {
+    expect(copyOf("array 5 times")).toMatchObject({ count: 5, by: null, spaced: { axis: 0, sign: 1 } });
+    expect(copyOf("array 5")).toMatchObject({ count: 5, spaced: { axis: 0, sign: 1 } });
+    expect(copyOf("array this 5 times along y")).toMatchObject({ count: 5, spaced: { axis: 1, sign: 1 } });
+    expect(copyOf("array 3 times up")).toMatchObject({ count: 3, spaced: { axis: 2, sign: 1 } });
+    expect(copyOf("array 4 times to the y axis towards left")).toMatchObject({
+      count: 4,
+      spaced: { axis: 1, sign: -1 },
+    });
+  });
+
+  it("an array with a distance is a copy line, like copy", () => {
+    same("array 4 times 6 m along y", "copy 4 times 6 m along y");
+    same("array 4 times 6 m", "copy 4 times 6 m x");
+  });
+
+  it("an array of nothing sensible is the agent's", () => {
+    expect(parseCommand("array")).not.toBeNull(); // one copy, side by side
+    expect(parseCommand("array 5 banana")).toBeNull();
+    expect(parseCommand("array 0 times")).toBeNull();
+  });
+});

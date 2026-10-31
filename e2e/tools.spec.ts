@@ -210,6 +210,51 @@ test.describe("palette", () => {
 });
 
 test.describe("built-in tools", () => {
+  test("moving with several elements selected carries all of them in one step, and one undo puts them back", async ({
+    page,
+  }) => {
+    await start(page);
+    await page.evaluate(() => window.__HAI_SCENE__?.select(["block-c", "block-b"]));
+    await page.keyboard.press("m");
+    const pickAt = (p: Mm) =>
+      page.evaluate((p) => {
+        const v = window.__HAI_VIEWER__?.project(p);
+        return v ? window.__HAI_VIEWER__?.pick(v[0], v[1]) : null;
+      }, p);
+    let roof: Mm | null = null;
+    for (let x = 5_000; x <= 33_000 && !roof; x += 1_000) {
+      for (const y of [21_000, 23_000, 25_000]) {
+        if (
+          (await pickAt([x, y, 3_500])) === "block-c" &&
+          (await pickAt([x + 1_230, y, 3_500])) === "block-c"
+        ) {
+          roof = [x, y, 3_500];
+          break;
+        }
+      }
+    }
+    if (!roof) throw new Error("Block C's roof is not visible");
+    const before = {
+      c: ((await element(page, "block-c"))?.origin ?? [0, 0, 0]) as [number, number, number],
+      b: ((await element(page, "block-b"))?.origin ?? [0, 0, 0]) as [number, number, number],
+    };
+    await mouseDrag(
+      page,
+      await screenOf(page, roof),
+      await screenOf(page, [roof[0] + 1_230, roof[1], 3_500]),
+    );
+    await expect
+      .poll(async () => (await element(page, "block-c"))?.origin)
+      .toEqual([before.c[0] + 1_200, before.c[1], before.c[2]]);
+    // The other selected block went with it, by the same distance.
+    await expect
+      .poll(async () => (await element(page, "block-b"))?.origin)
+      .toEqual([before.b[0] + 1_200, before.b[1], before.b[2]]);
+    await page.evaluate(() => window.__HAI_SCENE__?.undo());
+    await expect.poll(async () => (await element(page, "block-c"))?.origin).toEqual(before.c);
+    await expect.poll(async () => (await element(page, "block-b"))?.origin).toEqual(before.b);
+  });
+
   test("snapped move: dragging Block C about 1.23 m east moves it 1200 mm; undo from the palette keeps Move", async ({
     page,
   }) => {

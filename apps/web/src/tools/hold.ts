@@ -8,9 +8,10 @@ export const RING_AFTER_MS = 600;
  * One hand's long pinch bound to hold to talk:
  * - `held`: the hold fired; the target is locked and the microphone is listening;
  * - `flicking`: the hand moved past the ring's centre before any speech, toward `slot`;
- * - `speaking`: speech is going on; the hand points, and no slot is chosen. When it stops (a pause, or a sound that was
- *   not speech) the hold is `held` again: the ring comes back after the silence, and a release still sends what was
- *   said, unless the hand flicked to a slot.
+ * - `speaking`: speech is going on; the hand points, and no slot is chosen, for the rest of the hold: a pause in a
+ *   sentence is a pause, and the hand goes on pointing through it. Only a sound too short to be words ("noise") gives
+ *   the hold back: if no words have been heard it is `held` again, the ring comes back after the silence, and the
+ *   hand's flick chooses a tool as before.
  */
 export type HoldPhase = "held" | "flicking" | "speaking";
 
@@ -37,8 +38,10 @@ export class HoldMachine {
   private phase: HoldPhase = "held";
   private slot: number | null = null;
   private started: number;
-  /** Whether any speech was heard during the hold, even if it has stopped. */
+  /** Whether speech was heard that may be words (not yet shown to be noise). */
   private spoke = false;
+  /** Whether a stretch of speech ended that was long enough to be words: from then on speech wins for good. */
+  private confirmed = false;
 
   constructor(
     private readonly space: PaletteSpace,
@@ -71,11 +74,22 @@ export class HoldMachine {
     this.spoke = true;
   }
 
-  /** The speech stopped: the hold is silent again, and the ring comes back after `RING_AFTER_MS` of it. */
-  quiet(now: number): void {
-    if (this.phase !== "speaking") return;
+  /** A stretch of speech ended and was long enough to be words: speech wins from now on, however still it goes. */
+  confirm(): void {
+    this.confirmed = true;
+  }
+
+  /**
+   * A sound that began like speech stopped and was too short to be words (a click, a cough, a breath): when no words
+   * have been heard the hold is silent again, and the ring comes back after `RING_AFTER_MS` of it. False when it
+   * changed nothing.
+   */
+  noise(now: number): boolean {
+    if (this.phase !== "speaking" || this.confirmed) return false;
     this.phase = "held";
     this.started = now;
+    this.spoke = false;
+    return true;
   }
 
   release(): HoldOutcome {

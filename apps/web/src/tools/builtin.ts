@@ -50,9 +50,37 @@ export const selectTool: Tool = {
   },
 };
 
-/** Move: drag an element on the ground plane, snapped to 100 mm or to the drawing aids, one "Move" transaction on release. */
+/**
+ * What a drag that began on `grabbed` moves: the whole selection when `grabbed` is one of several selected elements,
+ * else only `grabbed` (a pinch on something that is not selected moves that alone, as it always did).
+ */
+export function movedWith(ctx: ToolContext, grabbed: Element): Element[] {
+  const doc = ctx.doc();
+  const selected = ctx.selection();
+  if (!doc || selected.length < 2 || !selected.includes(grabbed.id)) return [grabbed];
+  const hidden = ctx.hidden();
+  return selected.flatMap((id) => {
+    const element = doc.elements[id];
+    return element && !hidden.has(id) ? [element] : [];
+  });
+}
+
+/** What a move preview remembers of each element it carries: it applies only while the element is still as it was. */
+const previewOf = (elements: Element[]): Record<string, string> =>
+  Object.fromEntries(elements.map((e) => [e.id, JSON.stringify(e)]));
+
+/**
+ * Move: drag an element on the ground plane, snapped to 100 mm or to the drawing aids, one "Move" transaction on
+ * release. With several elements selected, a drag that starts on one of them carries all of them.
+ */
 export function moveTool(): Tool {
-  let drag: { element: Element; heightMm: number; start: Point3Mm; offset: [number, number] } | null = null;
+  let drag: {
+    element: Element;
+    carried: Element[];
+    heightMm: number;
+    start: Point3Mm;
+    offset: [number, number];
+  } | null = null;
   return {
     id: "move",
     label: "Move",
@@ -70,8 +98,9 @@ export function moveTool(): Tool {
       if (!hit || !element) return false; // empty space: the view orbits instead
       const start = ctx.ground(at, hit.point[2]);
       if (!start) return false;
-      drag = { element, heightMm: hit.point[2], start, offset: [0, 0] };
-      ctx.setOverlay({ movePreview: { id: element.id, offsetMm: [0, 0], from: JSON.stringify(element) } });
+      const carried = movedWith(ctx, element);
+      drag = { element, carried, heightMm: hit.point[2], start, offset: [0, 0] };
+      ctx.setOverlay({ movePreview: { offsetMm: [0, 0], from: previewOf(carried) } });
       return true;
     },
     onDrag(ctx, at) {
@@ -79,16 +108,18 @@ export function moveTool(): Tool {
       const p = ctx.ground(at, drag.heightMm);
       if (!p) return;
       drag.offset = movedOffset(ctx, drag.element, drag.start, p, at);
-      ctx.setOverlay({
-        movePreview: { id: drag.element.id, offsetMm: drag.offset, from: JSON.stringify(drag.element) },
-      });
+      ctx.setOverlay({ movePreview: { offsetMm: drag.offset, from: previewOf(drag.carried) } });
     },
     onDragEnd(ctx) {
       if (!drag) return;
       const [dx, dy] = drag.offset;
-      // The preview stays until the moved element arrives from the bridge (it only applies while the element is
-      // unchanged), so the block never jumps back for a frame.
-      if (dx !== 0 || dy !== 0) ctx.apply("Move", [moveOp(drag.element, dx, dy)]);
+      // The preview stays until the moved elements arrive from the bridge (it only applies while an element is
+      // unchanged), so the block never jumps back for a frame. All of them are one undo step.
+      if (dx !== 0 || dy !== 0)
+        ctx.apply(
+          "Move",
+          drag.carried.map((element) => moveOp(element, dx, dy)),
+        );
       else ctx.setOverlay({ movePreview: null });
       drag = null;
     },
