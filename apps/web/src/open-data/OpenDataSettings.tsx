@@ -1,5 +1,6 @@
 import { OPEN_DATA_SOURCES, PortalHost, Site, STARTER_PORTALS } from "@hai/protocol";
 import { useState, useSyncExternalStore } from "react";
+import type { ContextClient, ContextState } from "../context/context-client.ts";
 import type { FeatureFlags } from "../settings/feature-flags.ts";
 import { ListGroup, ListRow, Switch } from "../ui/controls.tsx";
 import type { OpenDataStore } from "./open-data-store.ts";
@@ -180,6 +181,19 @@ function PortalList({ store }: { store: OpenDataStore }) {
   );
 }
 
+/** What clearing the context layer would remove, in words. */
+function clearDetail(items: ContextState["items"]): string {
+  if (items.length === 0) return "No buildings, trees or ground data are fetched.";
+  const count = (kind: string) => items.filter((item) => item.kind === kind).length;
+  const noun = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const removed = [
+    noun(count("building"), "building", "buildings"),
+    noun(count("tree"), "tree", "trees"),
+    noun(count("raster"), "ground layer", "ground layers"),
+  ];
+  return `Removes ${removed[0]}, ${removed[1]} and ${removed[2]}. Your model and the site stay, and agents can fetch the context again.`;
+}
+
 const when = (at: number) =>
   new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
@@ -187,9 +201,18 @@ const when = (at: number) =>
  * Settings > Open data: the switch, every source the app can contact with its hosts and licence, the portals, the
  * project's site, and the list of what was contacted. Nothing is fetched while the switch is off.
  */
-export function OpenDataSettings({ store, flags }: { store: OpenDataStore; flags: FeatureFlags }) {
+export function OpenDataSettings({
+  store,
+  flags,
+  context,
+}: {
+  store: OpenDataStore;
+  flags: FeatureFlags;
+  context: ContextClient;
+}) {
   const features = useSyncExternalStore(flags.subscribe, flags.getSnapshot);
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const { items } = useSyncExternalStore(context.subscribe, context.getSnapshot);
   const on = features.openData;
   return (
     <div className="settings-page-body" data-testid="open-data-settings">
@@ -216,6 +239,22 @@ export function OpenDataSettings({ store, flags }: { store: OpenDataStore; flags
               checked={state.showContext}
               onChange={(next) => store.setShowContext(next)}
             />
+          }
+        />
+        <ListRow
+          label="Clear context"
+          detail={clearDetail(items)}
+          control={
+            <button
+              type="button"
+              className="secondary"
+              data-testid="clear-context"
+              data-hand-press
+              disabled={items.length === 0}
+              onClick={() => store.clearContext()}
+            >
+              Clear
+            </button>
           }
         />
       </ListGroup>

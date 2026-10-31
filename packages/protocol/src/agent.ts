@@ -229,6 +229,8 @@ export const HAI_TOOLS = {
   context: ["context_list", "context_get"],
   /** Bringing items of the context layer into the model; agents that change the model. */
   contextWrite: ["context_adopt"],
+  /** Emptying the context layer (fetched buildings, trees and ground data; never the model); every agent, when the user asks. */
+  contextClear: ["context_clear"],
   /** Searching open-data portals, buildings, vegetation and urban metrics around the site; Urban (only while Open data is on). */
   urban: ["open_data_search", "open_data_get", "urban_buildings", "urban_vegetation", "urban_metrics"],
   /** The weather now and forecast, and climate normals, for the site; Climate and Simulation (only while Open data is on). */

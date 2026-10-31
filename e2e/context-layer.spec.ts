@@ -164,6 +164,40 @@ test("Show context hides it for the user, brings it back, and a changed site mar
   await expect.poll(() => held(page)).toMatchObject({ stale: true });
 });
 
+test("Clear context in Settings empties the layer for good, keeps the site, and a hand can press it", async ({
+  page,
+}) => {
+  const b = await start(page);
+  b.context.replace(
+    "overpass",
+    "building",
+    [
+      building("way/1", 45_000, 5_000, 14_000, 20_000, 24_000),
+      building("way/2", 70_000, 5_000, 9_000, 9_000, 9_000),
+    ],
+    site,
+  );
+  b.context.replace("planetary-computer", "raster", [raster], site, "2026-09-28");
+  await expect.poll(() => held(page)).toMatchObject({ buildings: 2, rasters: 1 });
+  await openSettings(page, "open-data");
+  const clear = page.getByTestId("clear-context");
+  await expect(clear).toBeEnabled();
+  await expect(clear).toHaveAttribute("data-hand-press", "true");
+  await expect(page.getByTestId("open-data-settings")).toContainText(
+    "Removes 2 buildings, 0 trees and 1 ground layer.",
+  );
+  await clear.click();
+  await expect.poll(() => held(page)).toMatchObject({ buildings: 0, rasters: 0 });
+  await expect(clear).toBeDisabled();
+  await expect(page.getByTestId("open-data-settings")).toContainText(
+    "No buildings, trees or ground data are fetched",
+  );
+  expect(b.context.items).toHaveLength(0);
+  expect(b.site.site).toMatchObject({ lat: 52.37, lon: 4.9 });
+  await closeSettings(page);
+  await expect(page.getByTestId("context-legend")).toHaveCount(0);
+});
+
 test("a writer adopts a neighbour into the model, a reader cannot, and a claim keeps it inside its region", async ({
   page,
 }) => {

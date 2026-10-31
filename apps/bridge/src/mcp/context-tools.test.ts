@@ -83,6 +83,7 @@ const textOf = (result: { content?: unknown }) =>
 const json = (result: { content?: unknown }) => JSON.parse(textOf(result));
 const READ = new Set(["get_elements", "context_list", "context_get"]);
 const WRITE = new Set([...READ, "create_elements", "update_elements", "context_adopt"]);
+const CLEAR = new Set([...READ, "context_clear"]);
 
 describe("context tools", () => {
   it("context_list says what the layer holds, where it came from and that it is current", async () => {
@@ -159,6 +160,33 @@ describe("context tools", () => {
     const again = await agent.callTool({ name: "context_adopt", arguments: { ids: ["way/2"] } });
     expect(textOf(again)).toMatch(/already in the model/);
     expect(Object.keys(bridge?.scene.scene.doc.elements ?? {}).length).toBe(before + 1);
+  });
+
+  it("context_clear empties the layer for everyone, says how much went, and leaves the model and the site alone", async () => {
+    const address = await start();
+    const writer = await mcp(address, { agent: "architect", tools: new Set([...WRITE, "context_clear"]) });
+    await writer.callTool({ name: "context_adopt", arguments: { ids: ["way/1"] } });
+    const browser = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    await browser.waitFor("context.snapshot");
+    const urban = await mcp(address, { agent: "urban", tools: CLEAR });
+    const cleared = json(await urban.callTool({ name: "context_clear", arguments: {} }));
+    expect(cleared.cleared).toEqual({ building: 3, tree: 1, raster: 0 });
+    await browser.waitFor("context.snapshot", (m) => m.payload.items.length === 0);
+    expect(json(await urban.callTool({ name: "context_list", arguments: {} })).counts).toEqual({
+      building: 0,
+      tree: 0,
+      raster: 0,
+    });
+    expect(bridge?.scene.scene.doc.elements["ctx-way-1"]).toBeDefined();
+    expect(bridge?.site.site).toMatchObject({ lat: 52.37, lon: 4.9 });
+  });
+
+  it("the page's Clear context empties the layer too", async () => {
+    const browser = await connectClient(await start(), { token: TOKEN, origin: ORIGIN, track: sockets });
+    await browser.waitFor("context.snapshot");
+    browser.send("context.clear", {});
+    await browser.waitFor("context.snapshot", (m) => m.payload.items.length === 0);
+    expect(bridge?.context.items).toHaveLength(0);
   });
 
   it("every connected page is sent the layer, and told when it goes stale", async () => {

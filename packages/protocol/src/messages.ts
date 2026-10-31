@@ -536,6 +536,8 @@ export const ContextSnapshotMessage = message(
 );
 /** The user clears the list of requests (the cache stays). */
 export const OpenDataClearMessage = message("opendata.clear", z.strictObject({}));
+/** The user empties the city context layer in Settings (agents can fetch it again). */
+export const ContextClearMessage = message("context.clear", z.strictObject({}));
 export const AgentSendMessage = message(
   "agent.send",
   z.strictObject({
@@ -645,6 +647,7 @@ export const Message = z.discriminatedUnion("type", [
   ContextSnapshotMessage,
   OpenDataRecordMessage,
   OpenDataClearMessage,
+  ContextClearMessage,
   AgentStatusMessage,
   AgentTranscriptMessage,
   AgentTurnStartMessage,

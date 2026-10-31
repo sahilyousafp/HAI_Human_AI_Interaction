@@ -828,7 +828,7 @@ export function App() {
       icon: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9S9.5 5.5 12 3z",
       tint: "var(--tint-green)",
       detail: featureState.openData ? "On" : "Off",
-      render: () => <OpenDataSettings store={openData} flags={features} />,
+      render: () => <OpenDataSettings store={openData} flags={features} context={contextClient} />,
     },
     {
       id: "chat-rail",

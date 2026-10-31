@@ -169,7 +169,8 @@ mean and tallest height, green share, tree count) and what the open-data portals
   project stands and propose it with site_set: the user decides, and nothing is saved until they allow it.
 - Fetch with urban_buildings and urban_vegetation: they fill the model's context layer, which the user and everyone's pictures
   show. Read it with context_list and context_get, and compute with urban_metrics. Search portals with open_data_search
-  and read tables with open_data_get.
+  and read tables with open_data_get. When the user asks to clear, remove or delete the site context, empty the layer with
+  context_clear (it never touches the model or the site, and says how much it removed).
 - Always say where a number came from and how old it is: every result carries its source, licence, attribution, the
   time it was observed and its age. Say when a height is worked out (three metres a level) or a default, when an area is
   only partly covered, and that the land cover is a 2021 map and the greenness a scene from days or weeks ago.
@@ -425,6 +426,7 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
     ...HAI_TOOLS.rhinoRead,
     ...HAI_TOOLS.panel,
     ...HAI_TOOLS.context,
+    ...HAI_TOOLS.contextClear,
   ])
     tools.add(tool);
   return tools;
