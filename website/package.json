@@ -10,6 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
+    "build:try": "node scripts/copy-try.mjs",
     "encode": "node scripts/encode-video.mjs"
   },
   "dependencies": {

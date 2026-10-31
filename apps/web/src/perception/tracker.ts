@@ -1,5 +1,6 @@
 import type { RecognizerState } from "@hai/perception";
 import type { GestureEvent, TrackedHand, TrackingFrame } from "@hai/protocol";
+import { siteUrl } from "../site-url.ts";
 import { type CameraEffectsState, disableEffects, EFFECTS_OFF, readEffects } from "./camera-effects.ts";
 import type { FromWorker, ToWorker } from "./messages.ts";
 
@@ -199,9 +200,9 @@ export class Tracker {
     };
     const init: ToWorker = {
       type: "init",
-      wasmBase: `${location.origin}/mediapipe/wasm`,
-      handModel: `${location.origin}/models/hand_landmarker.task`,
-      faceModel: `${location.origin}/models/face_landmarker.task`,
+      wasmBase: siteUrl("/mediapipe/wasm"),
+      handModel: siteUrl("/models/hand_landmarker.task"),
+      faceModel: siteUrl("/models/face_landmarker.task"),
       perfDelayMs: this.options.perfDelayMs ?? 0,
     };
     this.busy = true; // nothing is sent until the models are ready

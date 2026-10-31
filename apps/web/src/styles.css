@@ -1328,6 +1328,13 @@ kbd {
     display: none;
   }
 }
+/* The Try now site: a way back to the page it came from. */
+.site-link {
+  margin-left: 12px;
+  color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+}
 
 /* Agent panel: in the model's left column, under the project bar; it shrinks and scrolls before the status strip. */
 /* The chat rail: full height beside the model, resizable from its right edge, folded to a strip when collapsed. */
@@ -3316,6 +3323,8 @@ kbd {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  /* Wide enough for its placeholder ("Type a command, e.g. move 3 m east") without the mic button beside it. */
+  width: min(380px, 100%);
   max-width: min(420px, 100%);
   padding: 6px;
   border: 0.5px solid var(--line);

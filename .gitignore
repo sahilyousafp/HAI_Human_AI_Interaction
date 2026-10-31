@@ -33,3 +33,5 @@ website/.astro/
 website/.catalystrc
 website/cli-config.json
 website/catalyst-debug.log
+dist-try/
+website/public/try/

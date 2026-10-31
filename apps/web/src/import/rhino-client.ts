@@ -1,3 +1,4 @@
+import { siteUrl } from "../site-url.ts";
 import type { ConvertResult } from "./convert.ts";
 import type { FromImportWorker, ToImportWorker } from "./messages.ts";
 
@@ -27,7 +28,7 @@ export function convertInWorker(
       event.preventDefault();
       finish({ ok: false, error: `The file reader stopped: ${event.message || "unknown error"}` });
     };
-    const request: ToImportWorker = { type: "convert", bytes, wasmBase: `${location.origin}/rhino3dm` };
+    const request: ToImportWorker = { type: "convert", bytes, wasmBase: siteUrl("/rhino3dm") };
     worker.postMessage(request, [bytes]);
   });
 }

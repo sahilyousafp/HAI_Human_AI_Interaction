@@ -1,3 +1,4 @@
+import { siteUrl } from "../site-url.ts";
 import type { ExportResult } from "./build.ts";
 import type { FromExportWorker, ToExportWorker } from "./messages.ts";
 
@@ -18,7 +19,7 @@ export function buildInWorker(input: Omit<ToExportWorker, "type" | "wasmBase">):
       event.preventDefault();
       finish({ ok: false, error: `The file writer stopped: ${event.message || "unknown error"}` });
     };
-    const request: ToExportWorker = { type: "build", ...input, wasmBase: `${location.origin}/rhino3dm` };
+    const request: ToExportWorker = { type: "build", ...input, wasmBase: siteUrl("/rhino3dm") };
     worker.postMessage(request);
   });
 }

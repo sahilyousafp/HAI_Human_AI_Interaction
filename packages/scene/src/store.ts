@@ -1,5 +1,6 @@
 import type { SceneDocument, SceneOp } from "@hai/protocol";
-import { applyTransaction, History } from "@hai/scene";
+import { History } from "./history.ts";
+import { applyTransaction } from "./ops.ts";
 
 export interface ScenePatch {
   seq: number;

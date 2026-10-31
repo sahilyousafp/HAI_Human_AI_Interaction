@@ -2,11 +2,16 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseScene, type SceneDocument, type SceneOp } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
-import { SceneStore } from "./scene-store.ts";
+import { SceneStore } from "./store.ts";
 
 const sample = (): SceneDocument => {
   const parsed = parseScene(
-    JSON.parse(readFileSync(join(import.meta.dirname, "..", "samples", "mixed-use-block.hai.json"), "utf8")),
+    JSON.parse(
+      readFileSync(
+        join(import.meta.dirname, "..", "..", "..", "apps", "bridge", "samples", "mixed-use-block.hai.json"),
+        "utf8",
+      ),
+    ),
   );
   if (!parsed.ok) throw new Error(parsed.error);
   return parsed.doc;
