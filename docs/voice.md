@@ -31,6 +31,12 @@ Say just a tool's name and that tool is picked at once, without the agent and wi
 
 A tool from a plugin or the Rhino connector declares its own spoken names when it registers (`spoken: ["bake"]`, see [tools.md](tools.md#adding-a-tool)); without them its label is what you say. Nothing in voice input needs to change for it.
 
+## Mishearings
+
+A speech model writes what it thinks it heard: "colon" for "column", "scale to" for "scale two", "copy for times six metres" for "copy four times six metres". When a transcript is not a tool's name or a command, the app tries once more with it put right: each word that is not one of its own is compared, by how it sounds, with the app's own words (every word the command grammar reads, the numbers and units among them, and the spoken names of the tools), and the words that sound alike are swapped in. Sounds come from the pronouncing dictionary of the `phonemize` library, so spelling does not matter; a short word is only swapped for one that sounds all but the same ("to" and "two", "for" and "four", "won" and "one"), a longer one for a near sound ("slap" for "slab", "scatch" for "sketch").
+
+The change is only kept when it makes the transcript something the app understands **in full**: a tool's name, or a command. So "colon" picks Column, "scale to" scales by 2, and "write a colon after the title" is left exactly as said, for the agent. Nothing is changed in what goes to the agent, and a word that sounds like nothing the app knows stays as it was. "4 x 6 m" is read as "four times six metres" (the speech model writes it that way). Code: `apps/web/src/voice/lexicon.ts` and `heard.ts`.
+
 ## Spoken commands
 
 Say what to do to the selection and it is done at once, without the agent and without a countdown: "move 3 m east", "rotate 90", "copy 4 times 6 m along y", "copy and rotate 90". The bar says what was done, and nothing is sent. What a command acts on is "this": what you pointed at while you spoke, else what is selected; with neither, it says "Select something first." and changes nothing.

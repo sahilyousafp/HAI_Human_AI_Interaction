@@ -211,3 +211,16 @@ describe("markers", () => {
     expect(clauses("move to marker a and b")).toBeNull();
   });
 });
+
+describe("a count written as the speech model writes it", () => {
+  it("reads 4 x 6 m as four times, six metres each", () => {
+    const written = parseCommand("copy 4 x 6 meters along y");
+    expect(written).not.toBeNull();
+    expect(written).toEqual(parseCommand("copy four times six metres along y"));
+    expect(parseCommand("copy 4x6 m along y")).toEqual(written);
+  });
+
+  it("leaves an axis called x alone", () => {
+    expect(parseCommand("move 3 m along x")).toEqual(parseCommand("move 3 m east"));
+  });
+});

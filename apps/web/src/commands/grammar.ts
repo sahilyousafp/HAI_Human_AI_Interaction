@@ -1,5 +1,5 @@
 import type { ElementType, Point3Mm } from "@hai/protocol";
-import { readLength, readNumber } from "./numbers.ts";
+import { NUMBER_WORDS, readLength, readNumber, UNIT_WORDS } from "./numbers.ts";
 
 /** Which elements a command names: all of them, none, one type ("all walls") or a level ("level 2"). */
 export type Selector =
@@ -34,6 +34,7 @@ export const MAX_COPIES = 200;
 export function wordsOf(text: string): string[] {
   return text
     .toLowerCase()
+    .replace(/(\d)\s*[x×]\s*(?=\d)/g, "$1 times ") // "copy 4 x 6 m" is four times, six metres each
     .replace(/°/g, " degrees ")
     .replace(/%/g, " percent ")
     .replace(/[,;]/g, " and ")
@@ -191,6 +192,24 @@ function readSelector(words: string[]): { selector: Selector | null } | null {
 }
 
 const COUNT_WORDS = new Set(["times", "time", "copies", "copy"]);
+
+/**
+ * Every word the grammar reads: the reference set for putting a mishearing right (voice/lexicon.ts). Words it only
+ * uses inside a rule (a marker's letter, a level's name) are not here; they are what the speaker said.
+ */
+export const COMMAND_VOCABULARY: ReadonlySet<string> = new Set([
+  ...Object.keys(VERBS),
+  ...Object.keys(AXES),
+  ...Object.keys(TYPE_WORDS),
+  ...POLITE,
+  ...FILLER,
+  ...SEPARATORS,
+  ...COUNT_WORDS,
+  ...NUMBER_WORDS,
+  ...UNIT_WORDS,
+  ...["all", "everything", "none", "nothing", "level", "marker", "percent", "double", "clockwise"],
+  ...["anticlockwise", "counterclockwise", "counter", "about", "around", "at", "onto", "from"],
+]);
 
 function parseCopy(args: string[]): Clause | null {
   let count = 1;
