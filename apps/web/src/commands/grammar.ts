@@ -36,20 +36,32 @@ export const MAX_COPIES = 200;
 
 /** A transcript as lower-case words: units and numbers apart, punctuation gone, commas as "and". */
 export function wordsOf(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/['’]/g, "") // "let's" is "lets" and "don't" is "dont", not words with an s or a t left over
-    .replace(/(\d)\s*[x×]\s*(?=\d)/g, "$1 times ") // "copy 4 x 6 m" is four times, six metres each
-    .replace(/°/g, " degrees ")
-    .replace(/%/g, " percent ")
-    .replace(/[,;]/g, " and ")
-    .replace(/([0-9])([a-z])/g, "$1 $2")
-    .replace(/([a-z])([0-9])/g, "$1 $2")
-    .replace(/([a-z])-([a-z])/g, "$1 $2")
-    .replace(/\.(\s|$)/g, " ")
-    .replace(/[^a-z0-9.\- ]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
+  return (
+    text
+      .toLowerCase()
+      .replace(/['’]/g, "") // "let's" is "lets" and "don't" is "dont", not words with an s or a t left over
+      .replace(/\bmake an? copy\b/g, "copy") // "make a copy" is "copy"
+      // "and" inside a number is not a clause break: "one hundred and eighty", "two and a half".
+      .replace(
+        /\b(hundred|thousand) and (?=(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b)/g,
+        "$1 ",
+      )
+      .replace(
+        /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) and a half\b/g,
+        "$1 point five",
+      )
+      .replace(/(\d)\s*[x×]\s*(?=\d)/g, "$1 times ") // "copy 4 x 6 m" is four times, six metres each
+      .replace(/°/g, " degrees ")
+      .replace(/%/g, " percent ")
+      .replace(/[,;]/g, " and ")
+      .replace(/([0-9])([a-z])/g, "$1 $2")
+      .replace(/([a-z])([0-9])/g, "$1 $2")
+      .replace(/([a-z])-([a-z])/g, "$1 $2")
+      .replace(/\.(\s|$)/g, " ")
+      .replace(/[^a-z0-9.\- ]+/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+  );
 }
 
 /** Words that open or close a request without changing it: "please move this", "move this, thanks". */
@@ -73,7 +85,24 @@ const POLITE = new Set([
  */
 const LEADING = new Set([
   ...POLITE,
-  ...["i", "we", "want", "wanna", "need", "like", "will", "let", "lets", "kindly", "go", "ahead", "to"],
+  ...[
+    "i",
+    "id",
+    "ill",
+    "im",
+    "we",
+    "want",
+    "wanna",
+    "need",
+    "like",
+    "will",
+    "let",
+    "lets",
+    "kindly",
+    "go",
+    "ahead",
+    "to",
+  ],
   ...["um", "uh", "er", "so", "well", "actually", "maybe", "hey"],
 ]);
 /** Words inside a clause that carry nothing the grammar needs: "move it by 3 metres along the x axis". */
@@ -373,7 +402,10 @@ function parseRotate(args: string[], about: MarkerWord): Clause | null {
   return { kind: "rotate", deg: clockwise ? -number.value : number.value, ...(about ? { about } : {}) };
 }
 
-function parseScale(args: string[], about: MarkerWord): Clause | null {
+function parseScale(wordsGiven: string[], about: MarkerWord): Clause | null {
+  // "scale it up to 2" and "scale down to half": which way is in the number.
+  const args =
+    ["up", "down"].includes(wordsGiven[0] ?? "") && wordsGiven.length > 1 ? wordsGiven.slice(1) : wordsGiven;
   const keyword: Record<string, number> = { double: 2, triple: 3 };
   const named = keyword[args[0] ?? ""];
   if (args.length === 1 && named !== undefined)
@@ -387,7 +419,9 @@ function parseScale(args: string[], about: MarkerWord): Clause | null {
   return factor > 0 && factor !== 1 ? { kind: "scale", factor, ...(about ? { about } : {}) } : null;
 }
 
-function parseMirror(args: string[], about: MarkerWord): Clause | null {
+function parseMirror(given: string[], about: MarkerWord): Clause | null {
+  // "mirror this across x", "mirror it about the y axis": which way round is in the axis.
+  const args = given.filter((word) => !["across", "about", "around"].includes(word));
   const direction = args.length === 1 ? AXES[args[0] as string] : undefined;
   if (!direction || direction.axis === 2) return null;
   return { kind: "mirror", axis: direction.axis === 0 ? "x" : "y", ...(about ? { about } : {}) };
@@ -512,4 +546,194 @@ export function parseCommand(text: string): Command | null {
     previous.by = [by[0] + more[0], by[1] + more[1], by[2] + more[2]];
   }
   return validSequence(clauses) ? { clauses } : null;
+}
+
+/** What a correction says the number was meant to be: "make it 4 m", "change it to 5 times", "no, 45 degrees". */
+export type Correction =
+  | { kind: "length"; mm: number }
+  | { kind: "count"; count: number }
+  | { kind: "angle"; deg: number }
+  | { kind: "factor"; factor: number }
+  /** A bare number: for whichever number the last command had (its distance, count, angle or factor). */
+  | { kind: "number"; value: number };
+
+/** Words that say a number is being put right rather than a new thing asked for. */
+const CORRECTS = new Set([
+  ...[
+    "make",
+    "change",
+    "set",
+    "adjust",
+    "update",
+    "edit",
+    "fix",
+    "no",
+    "nope",
+    "actually",
+    "rather",
+    "sorry",
+  ],
+  ...["wait", "oops", "meant", "mean", "correction", "instead"],
+]);
+/** What can stand around the number of a correction without saying anything of its own: "make it be 4 m". */
+const AROUND_CORRECTION = new Set([
+  ...CORRECTS,
+  ...[
+    "it",
+    "its",
+    "that",
+    "this",
+    "to",
+    "be",
+    "the",
+    "distance",
+    "length",
+    "angle",
+    "count",
+    "number",
+    "amount",
+  ],
+  ...[
+    "size",
+    "factor",
+    "spacing",
+    "only",
+    "just",
+    "please",
+    "now",
+    "i",
+    "id",
+    "im",
+    "let",
+    "lets",
+    "can",
+    "could",
+  ],
+  ...["you", "would", "thanks", "thank", "a", "an", "of", "by", "at", "should", "is", "was", "not", "and"],
+]);
+
+/**
+ * A correction of the last command, or null: it must say it is one ("make it 4 m", "change it to 4m", "no, 4 metres",
+ * "actually 5 times", "4 metres instead") and be nothing but the new number with its unit. "Make this 300 thick" is not
+ * one (it says what thickness), nor is a bare "4 m": without a word like make, change or no it is a new request.
+ */
+export function parseCorrection(text: string): Correction | null {
+  const words = wordsOf(text);
+  while (POLITE.has(words[words.length - 1] ?? "")) words.pop();
+  if (!words.some((word) => CORRECTS.has(word))) return null;
+  const rest = words.filter((word) => !AROUND_CORRECTION.has(word));
+  const number = readNumber(rest, 0);
+  if (!number) {
+    // "make it a metre": the unit alone is one of it.
+    const alone = rest.length === 1 ? readLength(rest, 0) : null;
+    return alone ? { kind: "length", mm: alone.value } : null;
+  }
+  const tail = rest.slice(number.next);
+  const unit = tail[0] ?? "";
+  if (tail.length === 0) return { kind: "number", value: number.value };
+  if (tail.length !== 1) return null;
+  if (UNIT_WORDS.has(unit)) {
+    const length = readLength(rest, 0);
+    return length && length.next === rest.length
+      ? { kind: "length", mm: Math.round(length.value * 100) / 100 }
+      : null;
+  }
+  if (COUNT_WORDS.has(unit) && Number.isInteger(number.value) && number.value >= 1)
+    return { kind: "count", count: number.value };
+  if (["degrees", "degree", "deg"].includes(unit)) return { kind: "angle", deg: number.value };
+  if (unit === "percent") return { kind: "factor", factor: number.value / 100 };
+  return null;
+}
+
+/**
+ * The command with its number put right, or a sentence saying why it cannot be: the last distance, count, angle or
+ * scale it has. A bare number goes to whichever the command is about: a rotate's angle, a scale's factor, an array's
+ * count, a move's or copy's distance (in metres when the old one was whole metres, else millimetres).
+ */
+export function correctCommand(command: Command, correction: Correction): Command | string {
+  const clauses = command.clauses.map((clause) => ({ ...clause })) as Clause[];
+  const at = (match: (clause: Clause) => boolean) => {
+    for (let i = clauses.length - 1; i >= 0; i--) if (match(clauses[i] as Clause)) return i;
+    return -1;
+  };
+  const hasDistance = (c: Clause) =>
+    (c.kind === "translate" || c.kind === "copy") && (c.by !== null || !!(c as { spaced?: Axis }).spaced);
+  const resized = (from: Point3Mm, mm: number): Point3Mm | null => {
+    const length = Math.hypot(from[0], from[1], from[2]);
+    return length === 0 ? null : [(from[0] * mm) / length, (from[1] * mm) / length, (from[2] * mm) / length];
+  };
+  const setLength = (mm: number): Command | string => {
+    const i = at(hasDistance);
+    if (i < 0) return "There is no distance in that to change.";
+    const clause = clauses[i] as Extract<Clause, { kind: "translate" | "copy" }>;
+    if (clause.kind === "copy" && clause.by === null && clause.spaced) {
+      const by: Point3Mm = [0, 0, 0];
+      by[clause.spaced.axis] = clause.spaced.sign * mm;
+      const { spaced: _gone, ...rest } = clause;
+      clauses[i] = { ...rest, by };
+    } else {
+      const by = resized(clause.by as Point3Mm, mm);
+      if (!by) return "There is no distance in that to change.";
+      clauses[i] = { ...clause, by } as Clause;
+    }
+    return { clauses };
+  };
+  const setCount = (count: number): Command | string => {
+    const i = at((c) => c.kind === "copy");
+    if (i < 0) return "There is no count in that to change.";
+    if (count > MAX_COPIES) return `That is more than ${MAX_COPIES} copies.`;
+    clauses[i] = { ...(clauses[i] as Extract<Clause, { kind: "copy" }>), count };
+    return { clauses };
+  };
+  const setAngle = (deg: number, signed: boolean): Command | string => {
+    const i = at((c) => c.kind === "rotate");
+    if (i < 0) return "There is no angle in that to change.";
+    const clause = clauses[i] as Extract<Clause, { kind: "rotate" }>;
+    if (deg === 0) return "A rotation of 0 turns nothing.";
+    clauses[i] = { ...clause, deg: signed || deg < 0 ? deg : Math.sign(clause.deg) * Math.abs(deg) };
+    return { clauses };
+  };
+  const setFactor = (factor: number): Command | string => {
+    const i = at((c) => c.kind === "scale");
+    if (i < 0) return "There is no scale in that to change.";
+    if (!(factor > 0)) return "A scale has to be more than 0.";
+    clauses[i] = { ...(clauses[i] as Extract<Clause, { kind: "scale" }>), factor };
+    return { clauses };
+  };
+  switch (correction.kind) {
+    case "length":
+      return setLength(correction.mm);
+    case "count":
+      return setCount(correction.count);
+    case "angle":
+      return setAngle(correction.deg, false);
+    case "factor":
+      return setFactor(correction.factor);
+    case "number": {
+      const last = clauses[at((c) => c.kind !== "select") ?? -1];
+      if (!last) return "There is nothing to change.";
+      switch (last.kind) {
+        case "rotate":
+          return setAngle(correction.value, false);
+        case "scale":
+          return setFactor(correction.value);
+        case "copy":
+          if (last.spaced || (last.by === null && last.count > 1) || last.count > 1)
+            return Number.isInteger(correction.value)
+              ? setCount(correction.value)
+              : "A count is a whole number.";
+          return setLength(correction.value * wholeMetres(last.by));
+        case "translate":
+          return setLength(correction.value * wholeMetres(last.by));
+        default:
+          return "There is no number in that to change.";
+      }
+    }
+  }
+}
+
+/** The unit a bare number is in: metres when the old distance was a whole number of them, else millimetres. */
+function wholeMetres(by: Point3Mm | null): number {
+  const length = by ? Math.hypot(by[0], by[1], by[2]) : 0;
+  return length >= 1000 && Math.abs(length / 1000 - Math.round(length / 1000)) < 1e-6 ? 1000 : 1;
 }

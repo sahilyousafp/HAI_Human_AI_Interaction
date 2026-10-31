@@ -71,8 +71,11 @@ export const NEAR = 0.28;
 /** A word this short is only put right when it sounds all but the same ("to" and "two", "for" and "four", "won" and "one"). */
 const SHORT = 3;
 const NEAR_SHORT = 0.15;
-/** How many words of one transcript may be put right at once, and how many choices each has: a search that stays small. */
-const MOST_CHANGED = 5;
+/**
+ * How many words of one transcript may be put right: one (`correct` tries one swap at a time). Two swaps can turn nearly any sentence into a command ("what
+ * would you like to move" came out as "would would you like to remove"); every mishearing measured is one word. And how
+ * many choices each word has: a search that stays small.
+ */
 const MOST_CHOICES = 3;
 
 export interface Heard {
@@ -129,28 +132,12 @@ export class Lexicon {
    * tried again.
    */
   correct(words: string[], understood: (text: string) => boolean): string | null {
-    const options = words.map((word) => [word, ...this.couldBe(word)]);
-    const open = options.flatMap((o, i) => (o.length > 1 ? [i] : [])).slice(0, MOST_CHANGED);
-    if (open.length === 0) return null;
-    // Every way of choosing among the open words, the fewest changes first.
-    const ways: number[][] = [[]];
-    for (const i of open) {
-      const count = options[i]?.length ?? 1;
-      for (const way of [...ways])
-        for (let choice = 1; choice < count; choice++) ways.push([...way, i, choice]);
-    }
-    const tried = new Set<string>();
-    const sorted = ways.filter((way) => way.length > 0).sort((a, b) => a.length - b.length);
-    for (const way of sorted) {
-      const changed = [...words];
-      for (let k = 0; k < way.length; k += 2) {
-        const index = way[k] as number;
-        changed[index] = options[index]?.[way[k + 1] as number] ?? changed[index] ?? "";
+    // One word at a time, left to right, nearest choice first: `MOST_CHANGED` is one (see above).
+    for (const [index, word] of words.entries()) {
+      for (const choice of this.couldBe(word)) {
+        const text = words.map((w, i) => (i === index ? choice : w)).join(" ");
+        if (understood(text)) return text;
       }
-      const text = changed.join(" ");
-      if (tried.has(text)) continue;
-      tried.add(text);
-      if (understood(text)) return text;
     }
     return null;
   }
