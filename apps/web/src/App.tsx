@@ -593,6 +593,7 @@ export function App() {
         voice.releaseHeld(send);
       },
       onSpeech: (listener) => voice.onHeldSpeech(listener),
+      onQuiet: (listener) => voice.onHeldQuiet(listener),
     }),
     [features, tools, voice],
   );

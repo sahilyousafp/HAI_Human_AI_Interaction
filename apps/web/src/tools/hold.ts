@@ -8,7 +8,9 @@ export const RING_AFTER_MS = 600;
  * One hand's long pinch bound to hold to talk:
  * - `held`: the hold fired; the target is locked and the microphone is listening;
  * - `flicking`: the hand moved past the ring's centre before any speech, toward `slot`;
- * - `speaking`: speech started; from now on the hand points, and no slot is chosen.
+ * - `speaking`: speech is going on; the hand points, and no slot is chosen. When it stops (a pause, or a sound that was
+ *   not speech) the hold is `held` again: the ring comes back after the silence, and a release still sends what was
+ *   said, unless the hand flicked to a slot.
  */
 export type HoldPhase = "held" | "flicking" | "speaking";
 
@@ -34,7 +36,9 @@ export interface HoldState {
 export class HoldMachine {
   private phase: HoldPhase = "held";
   private slot: number | null = null;
-  private readonly started: number;
+  private started: number;
+  /** Whether any speech was heard during the hold, even if it has stopped. */
+  private spoke = false;
 
   constructor(
     private readonly space: PaletteSpace,
@@ -55,15 +59,28 @@ export class HoldMachine {
     this.phase = this.slot === null ? "held" : "flicking";
   }
 
-  /** Speech started: the ring is dropped and the hand points from now on. */
+  /** Whether speech was heard at any time in the hold, even if it has stopped. */
+  get heardSpeech(): boolean {
+    return this.spoke;
+  }
+
+  /** Speech started: the ring is dropped and the hand points while it goes on. */
   speech(): void {
     this.phase = "speaking";
     this.slot = null;
+    this.spoke = true;
+  }
+
+  /** The speech stopped: the hold is silent again, and the ring comes back after `RING_AFTER_MS` of it. */
+  quiet(now: number): void {
+    if (this.phase !== "speaking") return;
+    this.phase = "held";
+    this.started = now;
   }
 
   release(): HoldOutcome {
     if (this.phase === "speaking") return { kind: "send" };
     if (this.phase === "flicking" && this.slot !== null) return { kind: "choose", slot: this.slot };
-    return { kind: "cancel" };
+    return this.spoke ? { kind: "send" } : { kind: "cancel" };
   }
 }

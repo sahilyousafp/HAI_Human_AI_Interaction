@@ -406,6 +406,7 @@ describe("hold to talk", () => {
     let clock = 0;
     let timers: Array<{ at: number; fn: () => void }> = [];
     let speechListener: ((hand: Hand) => void) | null = null;
+    let quietListener: ((hand: Hand) => void) | null = null;
     const targets: RouterTargets = {
       palette: {
         get isOpen() {
@@ -458,6 +459,10 @@ describe("hold to talk", () => {
           speechListener = listener;
           return () => {};
         },
+        onQuiet: (listener) => {
+          quietListener = listener;
+          return () => {};
+        },
       },
       onHold: (report) => reports.push(report),
       now: () => clock,
@@ -475,13 +480,14 @@ describe("hold to talk", () => {
       timers = timers.filter((t) => t.at > clock);
     };
     const speak = (hand: Hand = "Left") => speechListener?.(hand);
+    const stopSpeaking = (hand: Hand = "Left") => quietListener?.(hand);
     const event = (type: string, position: Point2 = at, hand: Hand = "Left") =>
       ({ type, ts: ts++, confidence: 1, hand, position, delta: [0, 0] }) as GestureEvent;
     const hold = (hand: Hand = "Left") => {
       router.handle(event("pinch.drag.start", at, hand));
       router.handle(event("pinch.hold", at, hand));
     };
-    return { router, log, reports, advance, speak, event, hold };
+    return { router, log, reports, advance, speak, stopSpeaking, event, hold };
   }
 
   it("a long pinch starts listening, opens the hand's ring hidden, and ends the orbit it began as", () => {
@@ -514,6 +520,43 @@ describe("hold to talk", () => {
     expect(log).not.toContain("palette.release");
     expect(log.at(-1)).toBe("talk.end:Left:send");
     expect(reports).toEqual([{ outcome: "send", ring: "reference", spoke: true }]);
+  });
+
+  it("speech that stops brings the ring back after the silence, and a release still sends what was said", () => {
+    const { log, reports, advance, speak, stopSpeaking, hold, router, event } = talkSetup();
+    hold();
+    speak();
+    expect(log).toContain("palette.cancel");
+    advance(1000);
+    stopSpeaking();
+    expect(log.at(-1)).toBe("palette.open:reference:Left:hidden");
+    advance(599);
+    expect(log).not.toContain("palette.show");
+    advance(1);
+    expect(log.at(-1)).toBe("palette.show");
+    router.handle(event("pinch.drag.end"));
+    expect(log.at(-1)).toBe("talk.end:Left:send");
+    expect(reports).toEqual([{ outcome: "send", ring: "reference", spoke: true }]);
+  });
+
+  it("a flick once the speech has stopped chooses the slot, as it would have before any speech", () => {
+    const { log, speak, stopSpeaking, hold, router, event } = talkSetup();
+    hold();
+    speak();
+    stopSpeaking();
+    router.handle(event("pinch.drag.update", [0.62, 0.5]));
+    router.handle(event("pinch.drag.end", [0.62, 0.5]));
+    expect(log).toContain("palette.release");
+    expect(log.at(-1)).toBe("talk.end:Left:drop");
+  });
+
+  it("a sound that stops while the ring is still open changes nothing", () => {
+    const { log, stopSpeaking, hold } = talkSetup();
+    hold();
+    const before = [...log];
+    stopSpeaking();
+    expect(log.slice(0, before.length)).toEqual(before);
+    expect(log.filter((entry) => entry.startsWith("palette.open"))).toHaveLength(1);
   });
 
   it("Silent flick picks a tool: the ring shows at once and the release chooses", () => {

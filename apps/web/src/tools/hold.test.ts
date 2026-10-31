@@ -39,6 +39,29 @@ describe("a held pinch", () => {
     expect(hold.release()).toEqual({ kind: "cancel" });
   });
 
+  it("speech that stops gives the hold back its silence: the ring comes back after the wait, and release still sends", () => {
+    const hold = new HoldMachine(space, 0);
+    hold.speech();
+    hold.quiet(1000);
+    expect(hold.state(1000 + RING_AFTER_MS - 1)).toEqual({ phase: "held", slot: null, ringShown: false });
+    expect(hold.state(1000 + RING_AFTER_MS).ringShown).toBe(true);
+    expect(hold.release()).toEqual({ kind: "send" });
+  });
+
+  it("after the speech has stopped a flick chooses a slot again", () => {
+    const hold = new HoldMachine(space, 0);
+    hold.speech();
+    hold.quiet(100);
+    hold.move(right);
+    expect(hold.release()).toEqual({ kind: "choose", slot: 2 });
+  });
+
+  it("a hold that never heard speech still cancels when released in the centre", () => {
+    const hold = new HoldMachine(space, 0);
+    hold.quiet(100);
+    expect(hold.release()).toEqual({ kind: "cancel" });
+  });
+
   it("Speech wins over a flick: once speech starts the slot is dropped, later moves point, and release sends", () => {
     const hold = new HoldMachine(space, 0);
     hold.move(right);
