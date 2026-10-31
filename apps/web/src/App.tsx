@@ -26,7 +26,7 @@ import {
   type ConnectionState,
   connectToBridge,
 } from "./bridge/connection.ts";
-import { type CommandHost, runCommand } from "./commands/run.ts";
+import { type CommandHost, CommandMemory, reviseCommand, runCommand } from "./commands/run.ts";
 import { ContextLegend } from "./context/ContextLegend.tsx";
 import { ContextClient } from "./context/context-client.ts";
 import { ProjectExporter } from "./export/exporter.ts";
@@ -370,10 +370,14 @@ export function App() {
       ask: (question, answer) => tools.confirm(question, answer),
       flash: (message) => tools.flash(message),
       markers: () => tools.references.markers,
+      seq: () => sceneClient.getSnapshot().seq,
+      undo: () => sceneClient.undo(),
       visibility,
     }),
     [sceneClient, tools, visibility],
   );
+  // The last change a spoken command made, so that "make it 4 m" can put its number right.
+  const commandMemory = useMemo(() => new CommandMemory(), []);
   // Mochi's replies are spoken on this laptop: Kokoro on WebGPU, else a voice installed on the computer.
   const [speakReplies, setSpeakReplies] = useState(true);
   const [replyVoice, setReplyVoice] = useState<ReplyVoice>("af_heart");
@@ -428,6 +432,9 @@ export function App() {
         // A transcript that is only a tool's name ("measure", "sketch area") picks the tool, and one the command
         // grammar fully understands ("copy and rotate 90") runs on what "this" is: neither goes to the agent.
         command: (text, context) => {
+          // "Make it 4 m" after a command: its number put right, taking the change back and making it again.
+          const corrected = reviseCommand(text, commandHost, commandMemory);
+          if (corrected) return { label: corrected.label, ran: true };
           const attempt = (said: string) => {
             const tool = toolNamed(said, tools.registry.list());
             if (tool) {
@@ -438,6 +445,7 @@ export function App() {
               said,
               commandHost,
               context.references.map((reference) => reference.id),
+              commandMemory,
             );
             return run ? { label: run.label, ran: true } : null;
           };
@@ -461,7 +469,7 @@ export function App() {
           return named !== null && rest.trim() === "";
         },
       }),
-    [transcriber, agent, sceneClient, viewLink, speaker, tools, commandHost, features],
+    [transcriber, agent, sceneClient, viewLink, speaker, tools, commandHost, commandMemory, features],
   );
   // In the desktop app the voice models are downloaded after install: until they are in place the voice says so, the
   // speaker stays quiet and nothing asks for them. When they verify, voice starts without a reload.

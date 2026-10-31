@@ -121,6 +121,44 @@ test("move 5 meters to the y axis towards right, and array 5 times, run as comma
   await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
 });
 
+test("say 5 m, then make it 4 m: the move is taken back and made again, one undo puts it all back", async ({
+  page,
+}) => {
+  await start(page);
+  await select(page, "block-b");
+  const origin = () =>
+    (bridge?.scene.scene.doc.elements["block-b"] as { origin: number[] } | undefined)?.origin ?? [0, 0, 0];
+  const x = origin()[0] ?? 0;
+  await say(page, "move 5 meters east");
+  await expect.poll(() => origin()[0]).toBe(x + 5000);
+  await say(page, "make it 4 m");
+  await expect.poll(() => origin()[0]).toBe(x + 4000);
+  await say(page, "no, change it to 3 metres");
+  await expect.poll(() => origin()[0]).toBe(x + 3000);
+  await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
+  // Undo goes back to before the command, not to a half-way step.
+  await page.evaluate(() => window.__HAI_SCENE__?.undo());
+  await expect.poll(() => origin()[0]).toBe(x);
+});
+
+test("array 5 times, then make it 3: three copies, and what was done by hand since is not corrected", async ({
+  page,
+}) => {
+  await start(page);
+  await select(page, "block-b");
+  const before = massings().length;
+  await say(page, "array 5 times");
+  await expect.poll(() => massings().length).toBe(before + 5);
+  await say(page, "change it to 3 times");
+  await expect.poll(() => massings().length).toBe(before + 3);
+  // Something else changes the model: the next "make it" is no longer a correction of that array.
+  await page.evaluate(() => window.__HAI_SCENE__?.apply("by hand", [{ op: "delete", id: "block-c" }]));
+  await expect.poll(() => massings().length).toBe(before + 2);
+  await say(page, "make it 6 times");
+  await page.waitForTimeout(600);
+  expect(massings().length).toBe(before + 2);
+});
+
 test("but what would change the meaning is not guessed: it is not a command", async ({ page }) => {
   await start(page);
   await select(page, "block-b");

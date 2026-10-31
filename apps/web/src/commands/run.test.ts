@@ -7,7 +7,7 @@ import {
 } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { Visibility } from "../viewer/visibility.ts";
-import { type CommandHost, runCommand } from "./run.ts";
+import { type CommandHost, CommandMemory, reviseCommand, runCommand } from "./run.ts";
 
 const make = (value: Record<string, unknown>): Element => ElementSchema.parse({ properties: {}, ...value });
 const block = make({
@@ -39,13 +39,23 @@ function host(applied = true, markers: LetterMarker[] = []) {
     selected: [] as string[][],
     flashed: [] as string[],
     asked: [] as Array<{ question: string; answer: (yes: boolean) => void }>,
+    undone: 0,
+    /** The scene's sequence number: every change, undo included, moves it on by one. */
+    seq: 10,
   };
   const visibility = new Visibility();
   const value: CommandHost = {
     doc: () => doc,
     apply: (label, ops) => {
       calls.applied.push({ label, ops });
+      calls.seq += 1;
       return applied;
+    },
+    seq: () => calls.seq,
+    undo: () => {
+      calls.undone += 1;
+      calls.seq += 1;
+      return true;
     },
     select: (ids) => calls.selected.push(ids),
     ask: (question, answer) => calls.asked.push({ question, answer }),
@@ -119,5 +129,100 @@ describe("select", () => {
     expect(runCommand("select all walls", h, [])).toEqual({ label: "Select all walls" });
     expect(calls.selected).toEqual([["wall"]]);
     expect(calls.flashed).toEqual(["Selected 1."]);
+  });
+});
+
+describe("correcting the last command", () => {
+  const ran = (text: string, calls: ReturnType<typeof host>, memory: CommandMemory, ids = ["block"]) =>
+    runCommand(text, calls.host, ids, memory);
+  const lastApplied = (h: ReturnType<typeof host>) => h.calls.applied.at(-1);
+  const originX = (h: ReturnType<typeof host>) => {
+    const op = lastApplied(h)?.ops[0];
+    return op && op.op === "update" ? (op.patch as { origin?: number[] }).origin?.[0] : undefined;
+  };
+
+  it("make it 4 m takes the move back and makes it again with 4 m, in the direction it had", () => {
+    const h = host();
+    const memory = new CommandMemory();
+    ran("move 5 m east", h, memory);
+    expect(originX(h)).toBe(5000);
+    const run = reviseCommand("make it 4 m", h.host, memory);
+    expect(run).not.toBeNull();
+    expect(h.calls.undone).toBe(1);
+    expect(originX(h)).toBe(4000);
+    expect(h.calls.applied).toHaveLength(2);
+  });
+
+  it("can be corrected again, and again counts from the new one", () => {
+    const h = host();
+    const memory = new CommandMemory();
+    ran("move 5 m east", h, memory);
+    reviseCommand("change it to 4 metres", h.host, memory);
+    reviseCommand("no, 3 meters", h.host, memory);
+    expect(h.calls.undone).toBe(2);
+    expect(originX(h)).toBe(3000);
+  });
+
+  it("changes an array's count, a rotation's angle and a scale's factor", () => {
+    const h = host();
+    const memory = new CommandMemory();
+    ran("copy 5 times 6 m along y", h, memory);
+    reviseCommand("make it 3 times", h.host, memory);
+    expect(lastApplied(h)?.ops.filter((op) => op.op === "create")).toHaveLength(3);
+    ran("rotate 90", h, memory);
+    reviseCommand("actually 45 degrees", h.host, memory);
+    expect(JSON.stringify(lastApplied(h)?.ops)).toContain('"rotationDeg":45');
+    ran("scale 2", h, memory);
+    reviseCommand("make it 3", h.host, memory); // a bare number is a scale's factor
+    expect(JSON.stringify(lastApplied(h)?.ops)).toContain("12000");
+  });
+
+  it("a bare number for an array is its count, and for a move it is metres when the old one was whole metres", () => {
+    const h = host();
+    const memory = new CommandMemory();
+    ran("array 5 times", h, memory);
+    reviseCommand("make it 2", h.host, memory);
+    expect(lastApplied(h)?.ops.filter((op) => op.op === "create")).toHaveLength(2);
+    ran("move 5 m east", h, memory);
+    reviseCommand("make it 4", h.host, memory);
+    expect(originX(h)).toBe(4000);
+  });
+
+  it("is not a correction when something else changed the model since, or a long time passed, or nothing came before", () => {
+    const h = host();
+    const memory = new CommandMemory();
+    expect(reviseCommand("make it 4 m", h.host, memory)).toBeNull(); // nothing before
+    ran("move 5 m east", h, memory);
+    h.calls.seq += 1; // someone moved something by hand
+    expect(reviseCommand("make it 4 m", h.host, memory)).toBeNull();
+    const again = host();
+    const later = new CommandMemory();
+    ran("move 5 m east", again, later);
+    expect(reviseCommand("make it 4 m", again.host, later, Date.now() + 10 * 60_000)).toBeNull();
+    expect(again.calls.undone).toBe(0);
+  });
+
+  it("what is not only a number is not a correction: make this 300 thick is the agent's", () => {
+    const h = host();
+    const memory = new CommandMemory();
+    ran("move 5 m east", h, memory);
+    for (const said of [
+      "make this 300 thick",
+      "make this wall three hundred thick",
+      "make it taller",
+      "4 m",
+      "move 4 m",
+    ])
+      expect(reviseCommand(said, h.host, memory), said).toBeNull();
+    expect(h.calls.undone).toBe(0);
+  });
+
+  it("says what cannot be changed instead of undoing anything: an angle for a move", () => {
+    const h = host();
+    const memory = new CommandMemory();
+    ran("move 5 m east", h, memory);
+    const run = reviseCommand("make it 45 degrees", h.host, memory);
+    expect(run?.label).toMatch(/no angle/i);
+    expect(h.calls.undone).toBe(0);
   });
 });

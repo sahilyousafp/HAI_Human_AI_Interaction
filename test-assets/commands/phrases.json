@@ -1,0 +1,3872 @@
+{
+ "about": "Ways people say the offline commands (kind offline: `plain` is the wording the grammar must read it as; corrected: true means a speech-model mishearing put right first), and phrases that are the agent's (kind agent: never guessed into a command), and corrections of the last command (make it 4 m, with what number it is taken to be). Built by scripts/make-command-phrases.mjs.",
+ "counts": {
+  "offline": 534,
+  "agent": 50,
+  "corrections": 48
+ },
+ "entries": [
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so shift this 2.5 metres east please",
+   "plain": "move 2.5 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move it 3 m east",
+   "plain": "move 3 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um shift east 6 inches thank you",
+   "plain": "move 6 inches east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please push this two feet east please",
+   "plain": "move 2 feet east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so slide two thousand to the east",
+   "plain": "move 2000 mm east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please nudge a metre to the east thank you",
+   "plain": "move 1 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge 30 cm to the east",
+   "plain": "move 30 cm east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge to the east 5 meters now",
+   "plain": "move 5 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please move 3 m towards the east",
+   "plain": "move 3 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so relocate this a metre towards the east",
+   "plain": "move 1 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "okay nudge three metres towards the east",
+   "plain": "move 3 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now move it 3 meters towards the east",
+   "plain": "move 3 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now nudge it two and a half metres west, thanks",
+   "plain": "move 2.5 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please shift this 5 meters west now",
+   "plain": "move 5 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "shift this west 2.5 metres now",
+   "plain": "move 2.5 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I'd like to nudge west half a metre please",
+   "plain": "move 0.5 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please nudge it 3 m to the west",
+   "plain": "move 3 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move this 3 meters to the west",
+   "plain": "move 3 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and shift this to the west 3 metres now",
+   "plain": "move 3 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um shift to the west thirty centimeters for me",
+   "plain": "move 30 cm west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please move fifty centimetres north for me",
+   "plain": "move 50 cm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and nudge it north 3 meters",
+   "plain": "move 3 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um shift this north 5 meters now",
+   "plain": "move 5 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so nudge three hundred millimetres north",
+   "plain": "move 300 mm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so move to the north 30 cm now",
+   "plain": "move 30 cm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I'd like to move it one metre to the north, thanks",
+   "plain": "move 1 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "okay move it 5 meters to the north",
+   "plain": "move 5 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so relocate this 6 inches to the north",
+   "plain": "move 6 inches north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move south one metre",
+   "plain": "move 1 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "could you shift 6 inches south now",
+   "plain": "move 6 inches south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please move it three meters south, thanks",
+   "plain": "move 3 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "slide 3 m south thank you",
+   "plain": "move 3 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "could you shift this to the south 5 meters please",
+   "plain": "move 5 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "push this 10 m to the south please",
+   "plain": "move 10 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I want to nudge ten metres to the south",
+   "plain": "move 10 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge it to the south two and a half metres",
+   "plain": "move 2.5 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please shift this up 3 m please",
+   "plain": "move 3 m up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "okay push 2000 up thank you",
+   "plain": "move 2000 mm up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please move this up two feet for me",
+   "plain": "move 2 feet up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please move this five metres up for me",
+   "plain": "move 5 m up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please push two thousand upwards",
+   "plain": "move 2000 mm up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's push this fifty centimetres upwards for me",
+   "plain": "move 50 cm up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and nudge it upwards fifty centimetres for me",
+   "plain": "move 50 cm up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and push this 3 metres upwards for me",
+   "plain": "move 3 m up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move this fifty centimetres down",
+   "plain": "move 50 cm down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "push three metres down, thanks",
+   "plain": "move 3 m down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now shift thirty centimeters down thank you",
+   "plain": "move 30 cm down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "okay push this two feet down thank you",
+   "plain": "move 2 feet down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge downwards 2000 thank you",
+   "plain": "move 2000 mm down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "slide downwards 2.5 metres",
+   "plain": "move 2.5 m down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I want to move downwards 6 inches",
+   "plain": "move 6 inches down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "could you move 3 m downwards",
+   "plain": "move 3 m down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please nudge it fifty centimetres to the right please",
+   "plain": "move 50 cm east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "slide 1500 millimetres to the right, thanks",
+   "plain": "move 1500 mm east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please nudge it 5 meters to the right",
+   "plain": "move 5 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please relocate this to the right a metre please",
+   "plain": "move 1 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and move this twenty centimetres towards the right",
+   "plain": "move 20 cm east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so shift two feet towards the right",
+   "plain": "move 2 feet east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "slide 2.5 metres towards the right for me",
+   "plain": "move 2.5 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please move 3 meters towards the right now",
+   "plain": "move 3 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um slide right 6 inches, thanks",
+   "plain": "move 6 inches east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um nudge right ten metres please",
+   "plain": "move 10 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's push right ten metres thank you",
+   "plain": "move 10 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I want to nudge right 5 meters",
+   "plain": "move 5 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please move to the left 3 m",
+   "plain": "move 3 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move a metre to the left thank you",
+   "plain": "move 1 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please push this fifty centimetres to the left",
+   "plain": "move 50 cm west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I'd like to shift this to the left 3 m please",
+   "plain": "move 3 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please nudge twenty centimetres left, thanks",
+   "plain": "move 20 cm west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so shift this a metre left thank you",
+   "plain": "move 1 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "could you move it left 2.5 metres, thanks",
+   "plain": "move 2.5 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's nudge fifty centimetres left",
+   "plain": "move 50 cm west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's shift one metre forward",
+   "plain": "move 1 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please push this forward 2000 now",
+   "plain": "move 2000 mm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please shift this 10 m forward",
+   "plain": "move 10 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move it twelve thousand five hundred millimetres forward",
+   "plain": "move 12500 mm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um move fifty centimetres forwards, thanks",
+   "plain": "move 50 cm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge it forwards 10 m please",
+   "plain": "move 10 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "shift this two and a half metres forwards for me",
+   "plain": "move 2.5 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I'd like to slide forwards 2.5 metres please",
+   "plain": "move 2.5 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "could you shift one metre backward, thanks",
+   "plain": "move 1 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge it two feet backward now",
+   "plain": "move 2 feet south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um shift 10 m backward",
+   "plain": "move 10 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now nudge it 10 m backward",
+   "plain": "move 10 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's nudge two and a half metres backwards now",
+   "plain": "move 2.5 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge it ten metres backwards",
+   "plain": "move 10 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now move 30 cm backwards",
+   "plain": "move 30 cm south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "okay shift this backwards two and a half metres thank you",
+   "plain": "move 2.5 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's shift one metre back please",
+   "plain": "move 1 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's push this back 3 meters please",
+   "plain": "move 3 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so move this back twenty centimetres please",
+   "plain": "move 20 cm south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I'd like to push 1500 millimetres back",
+   "plain": "move 1500 mm south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "push this ten metres along x please",
+   "plain": "move 10 m x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please push along x three meters, thanks",
+   "plain": "move 3 m x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now slide along x three hundred millimetres, thanks",
+   "plain": "move 300 mm x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please push 3 metres along x now",
+   "plain": "move 3 m x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um push this 3 meters along the x axis now",
+   "plain": "move 3 m x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "shift twenty centimetres along the x axis thank you",
+   "plain": "move 20 cm x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge it thirty centimeters along the x axis",
+   "plain": "move 30 cm x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um shift this thirty centimeters along the x axis",
+   "plain": "move 30 cm x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "okay move this thirty centimeters in the x direction",
+   "plain": "move 30 cm x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so nudge it 2000 in the x direction",
+   "plain": "move 2000 mm x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "okay push this in the x direction three metres",
+   "plain": "move 3 m x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and shift 2.5 metres in the x direction, thanks",
+   "plain": "move 2.5 m x"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's move it along y three meters please",
+   "plain": "move 3 m y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now relocate this twelve thousand five hundred millimetres along y, thanks",
+   "plain": "move 12500 mm y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I want to shift along y 5 meters thank you",
+   "plain": "move 5 m y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now move this fifty centimetres along y",
+   "plain": "move 50 cm y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "could you push along the y axis two thousand",
+   "plain": "move 2000 mm y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now shift this 3 m along the y axis",
+   "plain": "move 3 m y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and push this three hundred millimetres along the y axis for me",
+   "plain": "move 300 mm y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move this along the y axis twenty centimetres",
+   "plain": "move 20 cm y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge it five metres to the y axis thank you",
+   "plain": "move 5 m y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move this to the y axis 3 m for me",
+   "plain": "move 3 m y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please nudge it 2000 to the y axis",
+   "plain": "move 2000 mm y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "could you shift this three hundred millimetres to the y axis",
+   "plain": "move 300 mm y"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please move along z five metres now",
+   "plain": "move 5 m z"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "could you slide 6 inches along z",
+   "plain": "move 6 inches z"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move this along z 1500 millimetres for me",
+   "plain": "move 1500 mm z"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "shift along z two thousand now",
+   "plain": "move 2000 mm z"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please move this one metre on the z axis",
+   "plain": "move 1 m z"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's slide on the z axis 3 m",
+   "plain": "move 3 m z"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please move it on the z axis three hundred millimetres, thanks",
+   "plain": "move 300 mm z"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "shift two feet on the z axis",
+   "plain": "move 2 feet z"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I'd like to push this 2.5 metres to the y axis towards right",
+   "plain": "move 2.5 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's shift this three hundred millimetres to the y axis towards right, thanks",
+   "plain": "move 300 mm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please nudge to the y axis towards right fifty centimetres for me",
+   "plain": "move 50 cm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please push to the y axis towards right three hundred millimetres",
+   "plain": "move 300 mm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um shift this three metres on the x axis towards left",
+   "plain": "move 3 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "okay relocate this two thousand on the x axis towards left",
+   "plain": "move 2000 mm west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and move ten metres on the x axis towards left now",
+   "plain": "move 10 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move it one metre on the x axis towards left",
+   "plain": "move 1 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um move this 3 m along the y axis forward, thanks",
+   "plain": "move 3 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and slide along the y axis forward thirty centimeters now",
+   "plain": "move 30 cm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now push along the y axis forward three hundred millimetres",
+   "plain": "move 300 mm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please relocate this a metre along the y axis forward",
+   "plain": "move 1 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge 6 inches along the y axis backwards",
+   "plain": "move 6 inches south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I want to shift 2.5 metres along the y axis backwards please",
+   "plain": "move 2.5 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "please move along the y axis backwards 10 m",
+   "plain": "move 10 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move it along the y axis backwards three meters",
+   "plain": "move 3 m south"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so push this on the z axis upwards 3 metres",
+   "plain": "move 3 m up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "now push this one metre on the z axis upwards please",
+   "plain": "move 1 m up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I'd like to move this twelve thousand five hundred millimetres on the z axis upwards",
+   "plain": "move 12500 mm up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um slide on the z axis upwards thirty centimeters for me",
+   "plain": "move 30 cm up"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please relocate this thirty centimeters along the x axis to the right",
+   "plain": "move 30 cm east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "okay push this along the x axis to the right half a metre",
+   "plain": "move 0.5 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I want to shift this three metres along the x axis to the right, thanks",
+   "plain": "move 3 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and move 3 meters along the x axis to the right, thanks",
+   "plain": "move 3 m east"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so shift this three hundred millimetres up and twenty centimetres down",
+   "plain": "move 300 mm up and 20 cm down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um push one metre up and fifty centimetres forward",
+   "plain": "move 1 m up and 50 cm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "let's push this ten metres up and one metre to the left",
+   "plain": "move 10 m up and 1 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "um shift fifty centimetres east and 30 cm north please",
+   "plain": "move 50 cm east and 30 cm north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "nudge it twenty centimetres up and 10 m to the left",
+   "plain": "move 20 cm up and 10 m west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "slide twelve thousand five hundred millimetres to the right and twenty centimetres down, thanks",
+   "plain": "move 12500 mm east and 20 cm down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "move two thousand east and 2.5 metres forward, thanks",
+   "plain": "move 2000 mm east and 2.5 m north"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "can you please relocate this 3 m to the right and 2000 to the left for me",
+   "plain": "move 3 m east and 2000 mm west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "could you shift this 3 meters up and twelve thousand five hundred millimetres down thank you",
+   "plain": "move 3 m up and 12500 mm down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "I'd like to nudge it half a metre east and 3 m down",
+   "plain": "move 0.5 m east and 3 m down"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "so nudge it one metre up and 30 cm to the left",
+   "plain": "move 1 m up and 30 cm west"
+  },
+  {
+   "group": "move",
+   "kind": "offline",
+   "text": "go ahead and move thirty centimeters up and two and a half metres down please",
+   "plain": "move 30 cm up and 2.5 m down"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "can you please copy, thanks",
+   "plain": "copy"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "okay copy five metres right",
+   "plain": "copy 5 m east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "copy 2.5 metres downwards",
+   "plain": "copy 2.5 m down"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "copy 3 m forward",
+   "plain": "copy 3 m north"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "copy ten metres to the y axis",
+   "plain": "copy 10 m y"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "copy one metre right",
+   "plain": "copy 1 m east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I'd like to copy this please",
+   "plain": "copy"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "can you please copy this three metres on the x axis towards left for me",
+   "plain": "copy 3 m west"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "um copy this twelve thousand five hundred millimetres along the x axis to the right",
+   "plain": "copy 12500 mm east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I want to copy this 1500 millimetres along the y axis",
+   "plain": "copy 1500 mm y"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I want to copy this 2000 to the east for me",
+   "plain": "copy 2000 mm east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "okay copy this 3 m to the right",
+   "plain": "copy 3 m east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "let's duplicate",
+   "plain": "copy"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "duplicate twenty centimetres backward please",
+   "plain": "copy 20 cm south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "duplicate fifty centimetres left",
+   "plain": "copy 50 cm west"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I'd like to duplicate a metre in the x direction thank you",
+   "plain": "copy 1 m x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "please duplicate 2.5 metres forward thank you",
+   "plain": "copy 2.5 m north"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I want to duplicate fifty centimetres downwards",
+   "plain": "copy 50 cm down"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I want to duplicate this thank you",
+   "plain": "copy"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "could you duplicate this 3 metres back",
+   "plain": "copy 3 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now duplicate this half a metre downwards for me",
+   "plain": "copy 0.5 m down"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now duplicate this 3 m along the y axis backwards",
+   "plain": "copy 3 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "so duplicate this three metres down",
+   "plain": "copy 3 m down"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "go ahead and duplicate this 6 inches along x",
+   "plain": "copy 6 inches x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "please clone now",
+   "plain": "copy"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "clone three hundred millimetres north please",
+   "plain": "copy 300 mm north"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I'd like to clone three meters to the right",
+   "plain": "copy 3 m east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I want to clone a metre along x now",
+   "plain": "copy 1 m x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now clone two feet along y thank you",
+   "plain": "copy 2 feet y"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "could you clone 5 meters along the x axis now",
+   "plain": "copy 5 m x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "so clone it, thanks",
+   "plain": "copy"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "clone it three metres towards the right",
+   "plain": "copy 3 m east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now clone it three hundred millimetres to the right",
+   "plain": "copy 300 mm east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now clone it two and a half metres downwards for me",
+   "plain": "copy 2.5 m down"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I want to clone it three metres along x, thanks",
+   "plain": "copy 3 m x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "could you clone it a metre along the y axis forward, thanks",
+   "plain": "copy 1 m north"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "could you make a copy, thanks",
+   "plain": "copy"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I'd like to make a copy a metre on the x axis towards left",
+   "plain": "copy 1 m west"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now make a copy a metre east for me",
+   "plain": "copy 1 m east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "can you please make a copy 5 meters along the x axis",
+   "plain": "copy 5 m x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now make a copy two and a half metres to the left please",
+   "plain": "copy 2.5 m west"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "okay make a copy ten metres forwards",
+   "plain": "copy 10 m north"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "so duplicate this 4 times two thousand downwards please",
+   "plain": "copy 4 times 2000 mm down"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "okay array 4 times two thousand downwards, thanks",
+   "plain": "copy 4 times 2000 mm down"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "um duplicate 4 times thirty centimeters east",
+   "plain": "copy 4 times 30 cm east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "um array 4 times thirty centimeters east for me",
+   "plain": "copy 4 times 30 cm east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "um duplicate this 4 times three metres south now",
+   "plain": "copy 4 times 3 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I'd like to array 4 times three metres south",
+   "plain": "copy 4 times 3 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I'd like to clone it 4 times three metres in the x direction thank you",
+   "plain": "copy 4 times 3 m x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "let's array 4 times three metres in the x direction",
+   "plain": "copy 4 times 3 m x"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "um array 4 times please",
+   "plain": "array 4 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "okay array this 4 times for me",
+   "plain": "array 4 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "I want to make an array 4 times, thanks",
+   "plain": "array 4 times",
+   "skip": "not a verb the grammar has"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "um duplicate four times a metre backward now",
+   "plain": "copy 4 times 1 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now array four times a metre backward now",
+   "plain": "copy 4 times 1 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "could you copy four times twenty centimetres to the south",
+   "plain": "copy 4 times 20 cm south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "array four times twenty centimetres to the south now",
+   "plain": "copy 4 times 20 cm south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now clone four times three metres to the right now",
+   "plain": "copy 4 times 3 m east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I'd like to array four times three metres to the right for me",
+   "plain": "copy 4 times 3 m east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "copy four times thirty centimeters down thank you",
+   "plain": "copy 4 times 30 cm down"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "could you array four times thirty centimeters down",
+   "plain": "copy 4 times 30 cm down"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "so array four times",
+   "plain": "array 4 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "could you array this four times",
+   "plain": "array 4 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "let's make an array four times",
+   "plain": "array 4 times",
+   "skip": "not a verb the grammar has"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "duplicate this 5 times 3 meters on the z axis upwards",
+   "plain": "copy 5 times 3 m up"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now array 5 times 3 meters on the z axis upwards for me",
+   "plain": "copy 5 times 3 m up"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "clone 5 times 6 inches along the x axis, thanks",
+   "plain": "copy 5 times 6 inches x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "so array 5 times 6 inches along the x axis",
+   "plain": "copy 5 times 6 inches x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "okay clone 5 times 5 meters back for me",
+   "plain": "copy 5 times 5 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "so array 5 times 5 meters back for me",
+   "plain": "copy 5 times 5 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I'd like to make a copy 5 times half a metre in the x direction",
+   "plain": "copy 5 times 0.5 m x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "could you array 5 times half a metre in the x direction",
+   "plain": "copy 5 times 0.5 m x"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "array 5 times, thanks",
+   "plain": "array 5 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "array this 5 times please",
+   "plain": "array 5 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "I'd like to make an array 5 times",
+   "plain": "array 5 times",
+   "skip": "not a verb the grammar has"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I want to duplicate this five times two and a half metres south",
+   "plain": "copy 5 times 2.5 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I want to array five times two and a half metres south, thanks",
+   "plain": "copy 5 times 2.5 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "now clone it five times twenty centimetres south",
+   "plain": "copy 5 times 20 cm south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "array five times twenty centimetres south please",
+   "plain": "copy 5 times 20 cm south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "could you clone five times fifty centimetres along the y axis backwards now",
+   "plain": "copy 5 times 50 cm south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "so array five times fifty centimetres along the y axis backwards, thanks",
+   "plain": "copy 5 times 50 cm south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "duplicate this five times two and a half metres towards the east",
+   "plain": "copy 5 times 2.5 m east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "can you please array five times two and a half metres towards the east please",
+   "plain": "copy 5 times 2.5 m east"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "I want to array five times, thanks",
+   "plain": "array 5 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "can you please array this five times",
+   "plain": "array 5 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "make an array five times",
+   "plain": "array 5 times",
+   "skip": "not a verb the grammar has"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "clone it 6 times 6 inches west, thanks",
+   "plain": "copy 6 times 6 inches west"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "array 6 times 6 inches west, thanks",
+   "plain": "copy 6 times 6 inches west"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "okay make a copy 6 times fifty centimetres along the x axis to the right, thanks",
+   "plain": "copy 6 times 50 cm east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "array 6 times fifty centimetres along the x axis to the right now",
+   "plain": "copy 6 times 50 cm east"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "duplicate 6 times ten metres along x",
+   "plain": "copy 6 times 10 m x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "um array 6 times ten metres along x",
+   "plain": "copy 6 times 10 m x"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I'd like to duplicate 6 times half a metre left",
+   "plain": "copy 6 times 0.5 m west"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "go ahead and array 6 times half a metre left, thanks",
+   "plain": "copy 6 times 0.5 m west"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "let's array 6 times",
+   "plain": "array 6 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "let's array this 6 times",
+   "plain": "array 6 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "okay make an array 6 times",
+   "plain": "array 6 times",
+   "skip": "not a verb the grammar has"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "copy ten times a metre backwards for me",
+   "plain": "copy 10 times 1 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "let's array ten times a metre backwards thank you",
+   "plain": "copy 10 times 1 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "go ahead and copy this ten times 3 meters back",
+   "plain": "copy 10 times 3 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "array ten times 3 meters back now",
+   "plain": "copy 10 times 3 m south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "I want to make a copy ten times two feet along the y axis backwards, thanks",
+   "plain": "copy 10 times 2 feet south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "go ahead and array ten times two feet along the y axis backwards, thanks",
+   "plain": "copy 10 times 2 feet south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "clone ten times twelve thousand five hundred millimetres backward thank you",
+   "plain": "copy 10 times 12500 mm south"
+  },
+  {
+   "group": "copy",
+   "kind": "offline",
+   "text": "could you array ten times twelve thousand five hundred millimetres backward",
+   "plain": "copy 10 times 12500 mm south"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "let's array ten times for me",
+   "plain": "array 10 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "array this ten times for me",
+   "plain": "array 10 times"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "could you make an array ten times",
+   "plain": "array 10 times",
+   "skip": "not a verb the grammar has"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "let's array 5 times east thank you",
+   "plain": "array 5 times east"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "so array four times to the east",
+   "plain": "array 4 times east"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "so array four times towards the east",
+   "plain": "array 4 times east"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "now array four times west now",
+   "plain": "array 4 times west"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "now array ten times to the west",
+   "plain": "array 10 times west"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "can you please array ten times north thank you",
+   "plain": "array 10 times north"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "um array ten times to the north for me",
+   "plain": "array 10 times north"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "array four times up",
+   "plain": "array 4 times up"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "go ahead and array 4 times upwards thank you",
+   "plain": "array 4 times up"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "um array ten times to the right",
+   "plain": "array 10 times east"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "um array 4 times towards the right now",
+   "plain": "array 4 times east"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "array four times right thank you",
+   "plain": "array 4 times east"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "array 4 times to the left",
+   "plain": "array 4 times west"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "now array ten times left for me",
+   "plain": "array 10 times west"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "okay array 4 times forward please",
+   "plain": "array 4 times north"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "let's array four times forwards",
+   "plain": "array 4 times north"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "go ahead and array 4 times along x",
+   "plain": "array 4 times x"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "could you array ten times along the x axis thank you",
+   "plain": "array 10 times x"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "could you array five times in the x direction thank you",
+   "plain": "array 5 times x"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "array 6 times along y thank you",
+   "plain": "array 6 times y"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "could you array 4 times along the y axis for me",
+   "plain": "array 4 times y"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "array ten times to the y axis",
+   "plain": "array 10 times y"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "now array 6 times along z now",
+   "plain": "array 6 times z"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "I'd like to array 5 times on the z axis",
+   "plain": "array 5 times z"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "I'd like to array five times to the y axis towards right",
+   "plain": "array 5 times north"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "go ahead and array four times on the x axis towards left",
+   "plain": "array 4 times west"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "array four times along the y axis forward now",
+   "plain": "array 4 times north"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "so array ten times on the z axis upwards now",
+   "plain": "array 10 times up"
+  },
+  {
+   "group": "array",
+   "kind": "offline",
+   "text": "I'd like to array ten times along the x axis to the right",
+   "plain": "array 10 times east"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "could you rotate 90 degrees",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "rotate this 90 degrees for me",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "so turn 90 degrees",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "so turn it 90 degrees for me",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I want to spin 90 degrees please",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "um spin this 90 degrees thank you",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate 90 degrees clockwise thank you",
+   "plain": "rotate 90 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "rotate this 90 degrees anticlockwise for me",
+   "plain": "rotate 90 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "now rotate it 90 degrees counter clockwise thank you",
+   "plain": "rotate 90 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "can you please rotate 90 degrees about marker B",
+   "plain": "rotate 90 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I want to turn it 90 degrees around marker A",
+   "plain": "rotate 90 about marker A"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate ninety degrees",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "let's rotate this ninety degrees thank you",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "now turn ninety degrees thank you",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "now turn it ninety degrees",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "spin ninety degrees please",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and spin this ninety degrees",
+   "plain": "rotate 90"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate ninety degrees clockwise now",
+   "plain": "rotate 90 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "so rotate this ninety degrees anticlockwise please",
+   "plain": "rotate 90 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "let's rotate it ninety degrees counter clockwise",
+   "plain": "rotate 90 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "um rotate ninety degrees about marker B please",
+   "plain": "rotate 90 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "turn it ninety degrees around marker A thank you",
+   "plain": "rotate 90 about marker A"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "could you rotate 45 degrees",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "okay rotate this 45 degrees",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I'd like to turn 45 degrees",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "could you turn it 45 degrees",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I want to spin 45 degrees",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I want to spin this 45 degrees, thanks",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and rotate 45 degrees clockwise please",
+   "plain": "rotate 45 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate this 45 degrees anticlockwise now",
+   "plain": "rotate 45 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate it 45 degrees counter clockwise thank you",
+   "plain": "rotate 45 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "rotate 45 degrees about marker B now",
+   "plain": "rotate 45 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I want to turn it 45 degrees around marker A, thanks",
+   "plain": "rotate 45 about marker A"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "rotate forty five degrees thank you",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I'd like to rotate this forty five degrees",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "um turn forty five degrees now",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "turn it forty five degrees for me",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "um spin forty five degrees",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "okay spin this forty five degrees",
+   "plain": "rotate 45"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and rotate forty five degrees clockwise",
+   "plain": "rotate 45 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate this forty five degrees anticlockwise",
+   "plain": "rotate 45 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I want to rotate it forty five degrees counter clockwise please",
+   "plain": "rotate 45 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "rotate forty five degrees about marker B, thanks",
+   "plain": "rotate 45 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I want to turn it forty five degrees around marker A",
+   "plain": "rotate 45 about marker A"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "now rotate 30 degrees, thanks",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "let's rotate this 30 degrees",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "let's turn 30 degrees now",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please turn it 30 degrees now",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and spin 30 degrees now",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and spin this 30 degrees now",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "could you rotate 30 degrees clockwise",
+   "plain": "rotate 30 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate this 30 degrees anticlockwise for me",
+   "plain": "rotate 30 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate it 30 degrees counter clockwise",
+   "plain": "rotate 30 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "let's rotate 30 degrees about marker B for me",
+   "plain": "rotate 30 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "turn it 30 degrees around marker A, thanks",
+   "plain": "rotate 30 about marker A"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate thirty degrees, thanks",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "let's rotate this thirty degrees please",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "turn thirty degrees",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "can you please turn it thirty degrees",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "um spin thirty degrees",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please spin this thirty degrees",
+   "plain": "rotate 30"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "okay rotate thirty degrees clockwise now",
+   "plain": "rotate 30 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "rotate this thirty degrees anticlockwise for me",
+   "plain": "rotate 30 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "let's rotate it thirty degrees counter clockwise please",
+   "plain": "rotate 30 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "can you please rotate thirty degrees about marker B",
+   "plain": "rotate 30 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "turn it thirty degrees around marker A thank you",
+   "plain": "rotate 30 about marker A"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I'd like to rotate 180 degrees for me",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "now rotate this 180 degrees, thanks",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and turn 180 degrees thank you",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "turn it 180 degrees now",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "let's spin 180 degrees for me",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "can you please spin this 180 degrees",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I'd like to rotate 180 degrees clockwise now",
+   "plain": "rotate 180 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "can you please rotate this 180 degrees anticlockwise",
+   "plain": "rotate 180 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "now rotate it 180 degrees counter clockwise, thanks",
+   "plain": "rotate 180 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "okay rotate 180 degrees about marker B",
+   "plain": "rotate 180 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and turn it 180 degrees around marker A",
+   "plain": "rotate 180 about marker A"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "could you rotate one hundred and eighty degrees for me",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "rotate this one hundred and eighty degrees",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "okay turn one hundred and eighty degrees",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I'd like to turn it one hundred and eighty degrees",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "now spin one hundred and eighty degrees",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "spin this one hundred and eighty degrees for me",
+   "plain": "rotate 180"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "rotate one hundred and eighty degrees clockwise please",
+   "plain": "rotate 180 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "let's rotate this one hundred and eighty degrees anticlockwise",
+   "plain": "rotate 180 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "could you rotate it one hundred and eighty degrees counter clockwise now",
+   "plain": "rotate 180 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate one hundred and eighty degrees about marker B",
+   "plain": "rotate 180 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "turn it one hundred and eighty degrees around marker A, thanks",
+   "plain": "rotate 180 about marker A"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I'd like to rotate 15 degrees",
+   "plain": "rotate 15"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "okay rotate this 15 degrees",
+   "plain": "rotate 15"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and turn 15 degrees",
+   "plain": "rotate 15"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please turn it 15 degrees thank you",
+   "plain": "rotate 15"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "now spin 15 degrees please",
+   "plain": "rotate 15"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and spin this 15 degrees please",
+   "plain": "rotate 15"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "please rotate 15 degrees clockwise thank you",
+   "plain": "rotate 15 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "so rotate this 15 degrees anticlockwise",
+   "plain": "rotate 15 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "can you please rotate it 15 degrees counter clockwise please",
+   "plain": "rotate 15 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "rotate 15 degrees about marker B please",
+   "plain": "rotate 15 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "um turn it 15 degrees around marker A",
+   "plain": "rotate 15 about marker A"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "so rotate sixty degrees thank you",
+   "plain": "rotate 60"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I'd like to rotate this sixty degrees",
+   "plain": "rotate 60"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "can you please turn sixty degrees",
+   "plain": "rotate 60"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and turn it sixty degrees for me",
+   "plain": "rotate 60"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "okay spin sixty degrees for me",
+   "plain": "rotate 60"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "spin this sixty degrees",
+   "plain": "rotate 60"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "okay rotate sixty degrees clockwise",
+   "plain": "rotate 60 clockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "I want to rotate this sixty degrees anticlockwise",
+   "plain": "rotate 60 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "could you rotate it sixty degrees counter clockwise",
+   "plain": "rotate 60 anticlockwise"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "go ahead and rotate sixty degrees about marker B",
+   "plain": "rotate 60 about marker B"
+  },
+  {
+   "group": "rotate",
+   "kind": "offline",
+   "text": "turn it sixty degrees around marker A",
+   "plain": "rotate 60 about marker A"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "scale 2 now",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "um scale this 2, thanks",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "so resize 2 now",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "go ahead and enlarge 2 thank you",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "please scale it up to 2",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "okay scale this to 2",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "can you please scale 2 about marker A now",
+   "plain": "scale 2 about marker A"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "okay scale two",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "let's scale this two",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "I want to resize two",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "go ahead and enlarge two, thanks",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "please scale it up to two",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "can you please scale this to two",
+   "plain": "scale 2"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "scale two about marker A",
+   "plain": "scale 2 about marker A"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "please scale 0.5 for me",
+   "plain": "scale 0.5"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "please scale this 0.5",
+   "plain": "scale 0.5"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "let's resize 0.5 now",
+   "plain": "scale 0.5"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "shrink 0.5 now",
+   "plain": "scale 0.5"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "scale it up to 0.5 now",
+   "plain": "scale 0.5"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "um scale this to 0.5 thank you",
+   "plain": "scale 0.5"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "can you please scale 0.5 about marker A for me",
+   "plain": "scale 0.5 about marker A"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "now scale half",
+   "plain": "scale half"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "go ahead and scale this half for me",
+   "plain": "scale half"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "I want to resize half please",
+   "plain": "scale half"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "okay shrink half please",
+   "plain": "scale half"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "please scale it up to half thank you",
+   "plain": "scale half"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "scale this to half, thanks",
+   "plain": "scale half"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "scale half about marker A, thanks",
+   "plain": "scale half about marker A"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "so scale double now",
+   "plain": "scale double"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "could you scale this double please",
+   "plain": "scale double"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "could you resize double thank you",
+   "plain": "scale double"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "can you please enlarge double thank you",
+   "plain": "scale double"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "now scale it up to double please",
+   "plain": "scale double"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "I want to scale this to double",
+   "plain": "scale double"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "scale double about marker A, thanks",
+   "plain": "scale double about marker A"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "could you scale 50 percent please",
+   "plain": "scale 50 percent"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "um scale this 50 percent thank you",
+   "plain": "scale 50 percent"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "I'd like to resize 50 percent",
+   "plain": "scale 50 percent"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "I'd like to shrink 50 percent",
+   "plain": "scale 50 percent"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "let's scale it up to 50 percent",
+   "plain": "scale 50 percent"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "please scale this to 50 percent please",
+   "plain": "scale 50 percent"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "okay scale 50 percent about marker A for me",
+   "plain": "scale 50 percent about marker A"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "let's scale three",
+   "plain": "scale 3"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "so scale this three please",
+   "plain": "scale 3"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "resize three",
+   "plain": "scale 3"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "go ahead and enlarge three please",
+   "plain": "scale 3"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "so scale it up to three",
+   "plain": "scale 3"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "um scale this to three",
+   "plain": "scale 3"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "please scale three about marker A thank you",
+   "plain": "scale 3 about marker A"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "scale 0.75",
+   "plain": "scale 0.75"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "okay scale this 0.75 please",
+   "plain": "scale 0.75"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "okay resize 0.75, thanks",
+   "plain": "scale 0.75"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "shrink 0.75 please",
+   "plain": "scale 0.75"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "so scale it up to 0.75",
+   "plain": "scale 0.75"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "could you scale this to 0.75 for me",
+   "plain": "scale 0.75"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "scale 0.75 about marker A, thanks",
+   "plain": "scale 0.75 about marker A"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "so scale triple, thanks",
+   "plain": "scale triple"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "go ahead and scale this triple",
+   "plain": "scale triple"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "could you resize triple thank you",
+   "plain": "scale triple"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "please enlarge triple thank you",
+   "plain": "scale triple"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "so scale it up to triple now",
+   "plain": "scale triple"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "scale this to triple, thanks",
+   "plain": "scale triple"
+  },
+  {
+   "group": "scale",
+   "kind": "offline",
+   "text": "now scale triple about marker A",
+   "plain": "scale triple about marker A"
+  },
+  {
+   "group": "mirror",
+   "kind": "offline",
+   "text": "mirror x for me",
+   "plain": "mirror x"
+  },
+  {
+   "group": "mirror",
+   "kind": "offline",
+   "text": "mirror y for me",
+   "plain": "mirror y"
+  },
+  {
+   "group": "mirror",
+   "kind": "offline",
+   "text": "can you please mirror this across x, thanks",
+   "plain": "mirror x"
+  },
+  {
+   "group": "mirror",
+   "kind": "offline",
+   "text": "now flip x",
+   "plain": "mirror x"
+  },
+  {
+   "group": "mirror",
+   "kind": "offline",
+   "text": "can you please flip this y thank you",
+   "plain": "mirror y"
+  },
+  {
+   "group": "mirror",
+   "kind": "offline",
+   "text": "go ahead and mirror it about the y axis please",
+   "plain": "mirror y"
+  },
+  {
+   "group": "mirror",
+   "kind": "offline",
+   "text": "could you mirror x at marker C",
+   "plain": "mirror x at marker C"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "can you please select all please",
+   "plain": "select all"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "let's select everything",
+   "plain": "select all"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "select all walls thank you",
+   "plain": "select all walls"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "can you please select the walls thank you",
+   "plain": "select walls"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "let's pick all columns",
+   "plain": "select all columns"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "choose all slabs",
+   "plain": "select all slabs"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "please select columns now",
+   "plain": "select columns"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "select level 2 please",
+   "plain": "select level 2"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "please select level two for me",
+   "plain": "select level 2"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "select none now",
+   "plain": "select none"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "deselect for me",
+   "plain": "deselect"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "clear the selection thank you",
+   "plain": "deselect"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "um unselect",
+   "plain": "deselect"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "okay select all massings",
+   "plain": "select all massing"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "select all blocks for me",
+   "plain": "select all massing"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "um select all walls and move 2 m up",
+   "plain": "select all walls and move 2 m up"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "please select all columns and move three metres to the right",
+   "plain": "select all columns and move 3 m east"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "can you please delete this please",
+   "plain": "delete"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "could you delete all columns for me",
+   "plain": "delete all columns"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "could you erase this, thanks",
+   "plain": "delete"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "okay remove this",
+   "plain": "delete"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "now delete all walls please",
+   "plain": "delete all walls"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "now hide now",
+   "plain": "hide"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "hide this now",
+   "plain": "hide"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "hide the selection",
+   "plain": "hide"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "so conceal this",
+   "plain": "hide"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "could you isolate please",
+   "plain": "isolate"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "go ahead and isolate this",
+   "plain": "isolate"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "I'd like to isolate the selection",
+   "plain": "isolate"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "show all",
+   "plain": "show all"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "I want to show everything",
+   "plain": "show all"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "unhide",
+   "plain": "show all"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "so reveal all, thanks",
+   "plain": "show all"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "hide all walls",
+   "plain": "hide all walls"
+  },
+  {
+   "group": "marker",
+   "kind": "offline",
+   "text": "please move to marker A",
+   "plain": "move to marker A"
+  },
+  {
+   "group": "marker",
+   "kind": "offline",
+   "text": "move this to marker B for me",
+   "plain": "move to marker B"
+  },
+  {
+   "group": "marker",
+   "kind": "offline",
+   "text": "so move it onto marker A",
+   "plain": "move to marker A"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "I want to copy and rotate 90 now",
+   "plain": "copy and rotate 90"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "I'd like to copy this and rotate it ninety degrees",
+   "plain": "copy and rotate 90"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "okay copy 3 m east then scale 0.5",
+   "plain": "copy 3 m east then scale 0.5"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "I'd like to copy three metres to the right and then scale it half",
+   "plain": "copy 3 m east then scale half"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "please move 2 m up and rotate 45 please",
+   "plain": "move 2 m up and rotate 45"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "can you please rotate 90 and then move 3 m north, thanks",
+   "plain": "rotate 90 and move 3 m north"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "could you copy 4 times 6 m along y and rotate 90 for me",
+   "plain": "copy 4 times 6 m y and rotate 90"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "please mirror x then move 1 m up now",
+   "plain": "mirror x and move 1 m up"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "now rotate ninety degrees, then copy three metres along x",
+   "plain": "rotate 90 and copy 3 m x"
+  },
+  {
+   "group": "chain",
+   "kind": "offline",
+   "text": "let's scale 2 and move 5 m east please",
+   "plain": "scale 2 and move 5 m east"
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "scale to",
+   "plain": "scale 2",
+   "corrected": true
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "scale too",
+   "plain": "scale 2",
+   "corrected": true
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "rotate ate degrees",
+   "plain": "rotate 8 degrees",
+   "corrected": true
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "move won metre east",
+   "plain": "move 1 m east",
+   "corrected": true
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "copy for times six metres along y",
+   "plain": "copy 4 times 6 m y",
+   "corrected": true
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "high the selection",
+   "plain": "hide the selection",
+   "corrected": true
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "rotate ninety degrees clockwize",
+   "plain": "rotate 90 clockwise",
+   "corrected": true
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "move to metres up",
+   "plain": "move 2 m up",
+   "corrected": true
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "copy to times three metres east",
+   "plain": "copy 2 times 3 m east",
+   "corrected": true
+  },
+  {
+   "group": "misheard",
+   "kind": "offline",
+   "text": "scale half",
+   "plain": "scale half",
+   "corrected": true
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 4 m",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 4m",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it four metres",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "change it to 4 m",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "change it to 4m",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "change that to four metres",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "no, 4 metres",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "no 4 meters",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "actually 4 m",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "I meant 4 metres",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "sorry, make it 4 metres",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "4 metres instead",
+   "expect": {
+    "kind": "length",
+    "mm": 4000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make the distance 2.5 metres",
+   "expect": {
+    "kind": "length",
+    "mm": 2500
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "change the distance to two and a half metres",
+   "expect": {
+    "kind": "length",
+    "mm": 2500
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 30 cm",
+   "expect": {
+    "kind": "length",
+    "mm": 300
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "change it to fifty centimetres",
+   "expect": {
+    "kind": "length",
+    "mm": 500
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 1500 millimetres",
+   "expect": {
+    "kind": "length",
+    "mm": 1500
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it a metre",
+   "expect": {
+    "kind": "length",
+    "mm": 1000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 3 feet",
+   "expect": {
+    "kind": "length",
+    "mm": 914.4
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 6 times",
+   "expect": {
+    "kind": "count",
+    "count": 6
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "change it to six times",
+   "expect": {
+    "kind": "count",
+    "count": 6
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 6 copies",
+   "expect": {
+    "kind": "count",
+    "count": 6
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "no, 3 times",
+   "expect": {
+    "kind": "count",
+    "count": 3
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "actually ten times",
+   "expect": {
+    "kind": "count",
+    "count": 10
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make the count 8 times",
+   "expect": {
+    "kind": "count",
+    "count": 8
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 45 degrees",
+   "expect": {
+    "kind": "angle",
+    "deg": 45
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "change it to forty five degrees",
+   "expect": {
+    "kind": "angle",
+    "deg": 45
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "no, 30 degrees",
+   "expect": {
+    "kind": "angle",
+    "deg": 30
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make the angle 60 degrees",
+   "expect": {
+    "kind": "angle",
+    "deg": 60
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "actually 90 degrees",
+   "expect": {
+    "kind": "angle",
+    "deg": 90
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 50 percent",
+   "expect": {
+    "kind": "factor",
+    "factor": 0.5
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "change it to 75 percent",
+   "expect": {
+    "kind": "factor",
+    "factor": 0.75
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it 4",
+   "expect": {
+    "kind": "number",
+    "value": 4
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "change it to 4",
+   "expect": {
+    "kind": "number",
+    "value": 4
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make it four",
+   "expect": {
+    "kind": "number",
+    "value": 4
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "no, 4",
+   "expect": {
+    "kind": "number",
+    "value": 4
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "actually 2.5",
+   "expect": {
+    "kind": "number",
+    "value": 2.5
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "make that 3 please",
+   "expect": {
+    "kind": "number",
+    "value": 3
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "make this 300 thick"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "make this wall three hundred thick"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "make it taller"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "make it red"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "change it to a column"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "set the wall height to 2.8 metres"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "no"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "4 m"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "move 4 m"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "make it 4 m thick"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "add three floors to this block"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "make this wall three hundred thick"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "make this column four hundred by four hundred"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "set the wall height to two point eight metres"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "extrude this outline eighteen metres"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "loft these curves"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "sweep this profile along the rail"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "offset this curve by one point five metres"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "fillet these corners"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "trim the walls at the slab"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "join these two walls"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "put a window one point two metres wide here"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "add a door here"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "draw a wall along this sketch"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "a canopy from here to here"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "copy this along the curve every thirty centimetres"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "array this along line two with the width tapering"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "what is everyone doing"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "Mochi, what is everyone doing"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "Architect, add a stair core here"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "how tall is this"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "measure the distance between these towers"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "make this taller"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "make the third floor three point six metres high"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "extend this wall to that one"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "what is the area of this slab"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "rename this to block A"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "colour this red"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "don't move this"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "do not copy that"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "never delete the columns"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "stop moving this"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "move this somewhere nice"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "move this a bit"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "I want a wall here"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "what would you like to move"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "can you move this to the right of the wall"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "I want to know what is selected"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "undo the last three changes and explain them"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "move this next to the other tower"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "rotate this so it faces the street"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "scale this to fit the plot"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "copy this onto every floor"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "align these walls"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "snap this to the grid"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "array this around marker A"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "mirror this across the street"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "explode this"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "make this a wall"
+  },
+  {
+   "group": "agent",
+   "kind": "agent",
+   "text": "turn this into a column"
+  }
+ ]
+}

@@ -131,6 +131,18 @@ const UNIT_MM: Record<string, number> = {
   inches: 25.4,
 };
 
+/** The units that stand for one of themselves ("a metre"). */
+const SINGULAR_UNITS: ReadonlySet<string> = new Set([
+  "metre",
+  "meter",
+  "centimetre",
+  "centimeter",
+  "millimetre",
+  "millimeter",
+  "foot",
+  "inch",
+]);
+
 /** The units a length is spoken with. */
 export const UNIT_WORDS: ReadonlySet<string> = new Set(Object.keys(UNIT_MM));
 
@@ -139,8 +151,10 @@ export function readLength(words: string[], from: number): Read<number> | null {
   const number = readNumber(words, from);
   // "a metre" (the "a" is gone by now) is one of the unit; only a whole word counts, never "m" or "cm" alone.
   if (!number) {
+    // Only the singular: "a metre" is one, but "metres up" is a number the speech model dropped or wrote as a word that
+    // sounds like it ("to metres" for "two metres"), and is not guessed.
     const unit = words[from] ?? "";
-    const factor = unit.length > 2 ? UNIT_MM[unit] : undefined;
+    const factor = SINGULAR_UNITS.has(unit) ? UNIT_MM[unit] : undefined;
     return factor === undefined ? null : { value: factor, next: from + 1 };
   }
   const factor = UNIT_MM[words[number.next] ?? ""];
