@@ -9,6 +9,7 @@ Speaking is the main way to ask the agent. Say what you want while you point at 
 - Speak. The microphone indicator in the header shows **Mic on** while the microphone is live, and the bar above the input shows a level meter while you speak.
 - Start with a name to choose who does it: "Architect, add a stair core here". The name is taken out and Mochi hands the request to Architect ([agents.md](agents.md)).
 - Stop talking: after a short silence the request ends, the microphone stops, and the transcript appears.
+- If nobody speaks for 8 seconds the microphone stops and the bar says why: **the microphone is picking up nothing** (it may be muted, or Windows may be using another one: check the input device in the sound settings) or **I heard sound but no speech** (speak a little louder or closer).
 - The transcript waits 5 seconds with a countdown, then goes to the agent.
   - To send it at once: nod, press **Enter**, or press **Send**.
   - To throw it away: shake your head, press **Escape**, or press **Discard**. The transcript then shows as discarded.
@@ -43,7 +44,8 @@ Say what to do to the selection and it is done at once, without the agent and wi
 
 | Say | What happens |
 |---|---|
-| **move** 3 m along x, up 2000, 30 cm west | Moves by a distance in a direction. x and east are +X, y and north +Y, up and down are Z. Distances take mm, cm or m (millimetres when no unit is said). Two distances join: "move 2 m up and 3 m east" |
+| **move** 3 m along x, up 2000, 30 cm west | Moves by a distance in a direction. x, east and right are +X, y, north and forward are +Y, up and down are Z (left is west, back is south: as you see a plan with north at the top; the view is not asked). An axis letter and a way can both be said, in either order, and the letter gives the axis and the word the way: "move 5 meters to the y axis towards right" is 5 m along +y. Distances take mm, cm, m, feet or inches (millimetres when no unit is said, and "a metre" is one). Two distances join: "move 2 m up and 3 m east" |
+| **array** 5 times, array 4 times 6 m along y | An array: copies side by side. With no distance each stands one width of what is copied beyond the one before, along +x, or along the axis and way you say ("array 5 times along y", "array 3 times to the y axis towards left"); with a distance it is the same as **copy** below |
 | **copy**, copy 6 m y, copy 4 times 6 m along y | Copies in place, once at a distance, or as a line of copies each one step further than the one before. The copies are selected afterwards |
 | **rotate** 90, 45 clockwise, minus 30 | Turns about the centre of what is selected, counter-clockwise seen from above unless you say clockwise. "Rotate 45 about marker B" turns about that [marker](tools.md) instead |
 | **scale** 2, 0.5, 50 percent, half, double | Scales in plan and in height about the centre of what is selected, at its lowest height; "scale half about marker A" scales about the marker |
@@ -54,6 +56,10 @@ Say what to do to the selection and it is done at once, without the agent and wi
 | **hide**, **isolate**, **show all** | Takes elements out of your view (nothing is saved or undone) and brings them back. Hidden elements are not drawn, picked or snapped to for you, but the agents' own pictures still show them |
 
 Commands chain with "and", "then" or a comma, and each step acts on what the one before left: "copy 3 m x then scale 0.5" makes a copy 3 m along and halves it. A copy leaves the original alone, and what follows it acts on the copies; what comes before it changes the original. A chain is one undo step named after what was said ("Copy, rotate 90 degrees"). A transcript starting with "select" can act on what it selected: "select all walls and move 2 m up".
+
+It does not have to be said precisely. The talk people put around a command is dropped, clause by clause: "I want to move this three metres to the right, thanks", "could you please copy it and then rotate it ninety degrees", "go ahead and delete all columns", "let's scale this to two". Other verbs work for the same things (slide, push, nudge and relocate for move; spin for rotate; enlarge and shrink for scale; choose and pick for select; conceal and reveal for hide and show). What the speech model mishears is put right by sound first ([Mishearings](#mishearings)). A word that would change the meaning is never dropped or guessed: "don't move this" is not a command.
+
+**What this does not have.** These are the operations that change a model here, offline, with no agent: they are a small set, not Rhino's command list. Anything else (extrude, loft, sweep, boolean, offset, fillet, trim, join, section drawings, renders, a script) is a request: it goes to the agent, which uses the geometry tools ([agent.md](agent.md#geometry-kernel)) or, with Rhino connected, Rhino itself ([rhino.md](rhino.md)). With Claude chat off those are refused as "Not a command".
 
 All or nothing: if one word of what you said is not understood, the whole transcript goes to the agent as a request, and nothing is guessed. A whole type is only deleted when you say "all" ("remove the wall" is for the agent). A tool's own name ("copy", "move", "delete") still picks that tool.
 

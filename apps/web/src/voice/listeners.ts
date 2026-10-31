@@ -35,10 +35,11 @@ function loadDetector(): NonNullable<typeof detector> {
     const route: { events: ListenerEvents | null } = { events: null };
     const audioContext = new AudioContext();
     await audioContext.audioWorklet.addModule(`${VAD_ASSETS}${VAD_WORKLET}`);
-    // The context starts suspended when no one has touched the page; an open microphone lets it run.
+    // The context starts suspended when no one has touched the page; an open
+    // microphone lets it run. It is not waited for: it is running within a few frames, and listening is live now.
     const openMicrophone = async () => {
       const stream = await navigator.mediaDevices.getUserMedia(MICROPHONE);
-      await audioContext.resume();
+      audioContext.resume().catch(() => {});
       return stream;
     };
     const vad = await MicVAD.new({
@@ -49,10 +50,7 @@ function loadDetector(): NonNullable<typeof detector> {
       audioContext,
       // The microphone opens when listening starts and every track stops when it pauses.
       getStream: openMicrophone,
-      pauseStream: async (stream) => {
-        stopTracks(stream);
-        await audioContext.suspend();
-      },
+      pauseStream: async (stream) => stopTracks(stream),
       resumeStream: openMicrophone,
       redemptionMs: VOICE.silenceMs,
       preSpeechPadMs: 300,
@@ -65,7 +63,10 @@ function loadDetector(): NonNullable<typeof detector> {
       onSpeechRealStart: () => route.events?.speechStart(),
       onSpeechEnd: (audio) => route.events?.speechEnd({ audio }),
       onVADMisfire: () => route.events?.misfire?.(),
-      onFrameProcessed: (probabilities) => route.events?.level(probabilities.isSpeech),
+      onFrameProcessed: (probabilities, frame) => {
+        route.events?.level(probabilities.isSpeech);
+        route.events?.peak?.(frame.reduce((loudest, sample) => Math.max(loudest, Math.abs(sample)), 0));
+      },
       ortConfig: (ort) => {
         ort.env.logLevel = "error";
       },

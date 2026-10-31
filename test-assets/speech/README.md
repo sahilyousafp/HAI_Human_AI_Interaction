@@ -11,7 +11,7 @@ name about a second long would otherwise be over before it listens.
 | `make-this-wall-300-thick.wav` | "Make this wall three hundred thick." |
 | `add-three-floors.wav` | "Add three floors." |
 | `silence.wav` | Nothing (four seconds of silence) |
-| `click-then-word.wav` | A second of silence, a click (100 ms cut from "Measure"), a second and a half of silence, "Measure.", three seconds of silence |
+| `click-then-word.wav` | A second of silence, a click (60 ms cut from "Measure"), five seconds of silence, "Measure.", three seconds of silence |
 | `mochi-status.wav` | "Mochi, what is everyone doing?" |
 | `hey-mochi-status.wav` | "Hey Mochi, what is everyone doing?" |
 | `architect-stair-core.wav` | "Architect, add a stair core here." |

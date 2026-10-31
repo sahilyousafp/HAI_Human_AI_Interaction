@@ -83,6 +83,53 @@ test("what the speech model mishears is put right by sound, against the app's ow
   await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
 });
 
+test("it does not have to be said precisely: talk around a command is dropped, and left and right are directions", async ({
+  page,
+}) => {
+  await start(page);
+  await select(page, "block-b");
+  const originX = () =>
+    (bridge?.scene.scene.doc.elements["block-b"] as { origin: number[] } | undefined)?.origin[0] ?? 0;
+  const before = originX();
+  await say(page, "I want to move this two metres to the right, thanks");
+  await expect.poll(originX).toBe(before + 2000);
+  await say(page, "could you please push it a metre to the left");
+  await expect.poll(originX).toBe(before + 1000);
+  await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
+});
+
+test("move 5 meters to the y axis towards right, and array 5 times, run as commands with no agent", async ({
+  page,
+}) => {
+  await start(page);
+  await select(page, "block-b");
+  const origin = () =>
+    (bridge?.scene.scene.doc.elements["block-b"] as { origin: number[] } | undefined)?.origin ?? [0, 0, 0];
+  const [x, y] = origin();
+  await say(page, "move 5 meters to the y axis towards right");
+  await expect.poll(() => origin()[1]).toBe((y ?? 0) + 5000);
+  expect(origin()[0]).toBe(x);
+  const before = massings().length;
+  await say(page, "array 5 times");
+  await expect.poll(() => massings().length).toBe(before + 5);
+  const xs = massings()
+    .filter((e) => String(e.name).includes("copy"))
+    .map((e) => (e.origin as number[])[0] ?? 0)
+    .sort((a, b) => a - b);
+  const width = 12_000; // Block B is 12 m wide: the copies stand side by side
+  expect(xs).toEqual([1, 2, 3, 4, 5].map((i) => (x ?? 0) + i * width));
+  await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
+});
+
+test("but what would change the meaning is not guessed: it is not a command", async ({ page }) => {
+  await start(page);
+  await select(page, "block-b");
+  const before = JSON.stringify(bridge?.scene.scene.doc.elements);
+  await say(page, "don't move this two metres to the right");
+  await page.waitForTimeout(500);
+  expect(JSON.stringify(bridge?.scene.scene.doc.elements)).toBe(before);
+});
+
 test("a word that sounds like nothing the app knows is left alone, and still goes to the agent", async ({
   page,
 }) => {

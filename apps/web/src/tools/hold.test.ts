@@ -39,26 +39,36 @@ describe("a held pinch", () => {
     expect(hold.release()).toEqual({ kind: "cancel" });
   });
 
-  it("speech that stops gives the hold back its silence: the ring comes back after the wait, and release still sends", () => {
+  it("a noise that stops gives the hold back its silence: the ring comes back after the wait, and release cancels", () => {
     const hold = new HoldMachine(space, 0);
     hold.speech();
-    hold.quiet(1000);
+    expect(hold.noise(1000)).toBe(true);
     expect(hold.state(1000 + RING_AFTER_MS - 1)).toEqual({ phase: "held", slot: null, ringShown: false });
     expect(hold.state(1000 + RING_AFTER_MS).ringShown).toBe(true);
-    expect(hold.release()).toEqual({ kind: "send" });
+    expect(hold.release()).toEqual({ kind: "cancel" });
   });
 
-  it("after the speech has stopped a flick chooses a slot again", () => {
+  it("after a noise a flick chooses a slot again", () => {
     const hold = new HoldMachine(space, 0);
     hold.speech();
-    hold.quiet(100);
+    hold.noise(100);
     hold.move(right);
     expect(hold.release()).toEqual({ kind: "choose", slot: 2 });
   });
 
-  it("a hold that never heard speech still cancels when released in the centre", () => {
+  it("words win for good: a noise after them changes nothing, the hand goes on pointing and release sends", () => {
     const hold = new HoldMachine(space, 0);
-    hold.quiet(100);
+    hold.speech();
+    hold.confirm();
+    expect(hold.noise(5000)).toBe(false);
+    hold.move(right); // pointing through a pause is not a flick
+    expect(hold.state(9000)).toEqual({ phase: "speaking", slot: null, ringShown: false });
+    expect(hold.release()).toEqual({ kind: "send" });
+  });
+
+  it("a hold that never heard speech is not changed by a noise that never was, and cancels in the centre", () => {
+    const hold = new HoldMachine(space, 0);
+    expect(hold.noise(100)).toBe(false);
     expect(hold.release()).toEqual({ kind: "cancel" });
   });
 

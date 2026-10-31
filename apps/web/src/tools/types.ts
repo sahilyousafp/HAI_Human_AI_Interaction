@@ -24,12 +24,11 @@ export interface ToolOverlay {
   measure: Point3Mm[];
   /** Section: the height of the horizontal cut; geometry above it is hidden. Stays after leaving the tool. */
   sectionMm: number | null;
-  /** Move: the element being dragged and how far, before the move is committed. */
+  /** Move: the elements being dragged (one, or the whole selection) and how far, before the move is committed. */
   movePreview: {
-    id: string;
     offsetMm: [number, number];
-    /** The element as it was when the drag began; the preview applies only while the element still matches. */
-    from: string;
+    /** Each dragged element as it was when the drag began, by id; the preview applies only while it still matches. */
+    from: Record<string, string>;
   } | null;
   /** Delete: the element waiting for confirmation. */
   marked: string | null;
@@ -62,6 +61,8 @@ export interface ToolContext {
   undo(): void;
   redo(): void;
   select(ids: string[]): void;
+  /** The ids selected now (the model's own selection). */
+  selection(): string[];
   /** Switches to another tool (a tool that does its one job and steps back to Select). */
   choose(id: string): void;
   /** The elements the user has hidden. */

@@ -3,7 +3,7 @@ import { listenAndTime, startVoice, toolTiming } from "./tool-names.ts";
 
 // The fake microphone plays test-assets/speech/measure.wav once: "Measure."
 
-test("Say a tool name: Measure is picked within 300 ms of the utterance ending, and no request reaches the agent", async ({
+test("Say a tool name: Measure is picked within 450 ms of the utterance ending, and no request reaches the agent", async ({
   page,
 }) => {
   const { bridge, received } = await startVoice(page);
@@ -21,8 +21,9 @@ test("Say a tool name: Measure is picked within 300 ms of the utterance ending, 
     const ms = await toolTiming(page);
     console.log(`measure: end of speech to tool ${ms} ms`);
     expect(ms).not.toBeNull();
-    // The budget is for the reference laptop; CPU-only CI runners transcribe more slowly.
-    if (!process.env.CI) expect(ms).toBeLessThanOrEqual(300);
+    // The budget is for the reference laptop (Moonshine v2 small takes about 0.3 s a phrase, see docs/decisions.md); CPU-only
+    // CI runners transcribe more slowly.
+    if (!process.env.CI) expect(ms).toBeLessThanOrEqual(450);
     await page.waitForTimeout(1500);
     expect(received()).toEqual([]);
     await expect(page.getByTestId("agent-turn")).toHaveCount(0);

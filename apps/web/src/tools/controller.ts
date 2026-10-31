@@ -72,6 +72,8 @@ export interface ToolEnvironment {
   undo(): void;
   redo(): void;
   select(ids: string[]): void;
+  /** The ids selected now. */
+  selection?(): string[];
   /** What is at a viewer position; for a hand (`source`) the nearest model in reach when none is exactly there. */
   pick(at: Point2, source?: PointerSource): Hit | null;
   ground(at: Point2, heightMm?: number): Point3Mm | null;
@@ -632,6 +634,7 @@ export class ToolController {
       undo: () => env.undo(),
       redo: () => env.redo(),
       select: (ids) => env.select(ids),
+      selection: () => env.selection?.() ?? [],
       choose: (id) => this.choose(id),
       hidden: () => env.hidden?.() ?? NO_HIDDEN,
       pick: (at) => env.pick(at, this.pickSource),

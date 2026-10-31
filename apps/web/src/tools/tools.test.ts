@@ -229,6 +229,75 @@ describe("built-in tools", () => {
     ]);
   });
 
+  describe("moving several selected elements", () => {
+    const two = (): SceneDocument => {
+      const base = doc();
+      return {
+        ...base,
+        elements: {
+          ...base.elements,
+          "block-c": {
+            id: "block-c",
+            name: "Block C",
+            type: "massing",
+            level: "L0",
+            properties: {},
+            origin: [2_000, 20_000, 0],
+            size: [6_000, 6_000, 9_000],
+          },
+        },
+      };
+    };
+
+    it("a drag that starts on one of several selected elements carries all of them, in one undo step", () => {
+      const { controller, applied } = setup({ doc: two, selection: () => ["block-b", "block-c"] });
+      controller.choose("move");
+      expect(controller.dragStart(toViewer(30_000, 10_000))).toBe(true);
+      controller.drag(toViewer(31_230, 10_030));
+      const preview = controller.getSnapshot().overlay.movePreview;
+      expect(preview?.offsetMm).toEqual([1200, 0]);
+      expect(Object.keys(preview?.from ?? {}).sort()).toEqual(["block-b", "block-c"]);
+      controller.dragEnd(toViewer(31_230, 10_030));
+      expect(applied).toEqual([
+        {
+          label: "Move",
+          ops: [
+            { op: "update", id: "block-b", patch: { origin: [25_200, 4_000, 0] } },
+            { op: "update", id: "block-c", patch: { origin: [3_200, 20_000, 0] } },
+          ],
+        },
+      ]);
+    });
+
+    it("a pinch on something that is not selected moves only that, whatever else is selected", () => {
+      const { controller, applied } = setup({ doc: two, selection: () => ["block-c", "block-x"] });
+      controller.choose("move");
+      controller.dragStart(toViewer(30_000, 10_000));
+      controller.drag(toViewer(31_230, 10_030));
+      controller.dragEnd(toViewer(31_230, 10_030));
+      expect(applied.at(-1)?.ops).toEqual([
+        { op: "update", id: "block-b", patch: { origin: [25_200, 4_000, 0] } },
+      ]);
+    });
+
+    it("one selected element, or an id that no longer exists, moves as before", () => {
+      const { controller, applied } = setup({ doc: two, selection: () => ["block-b"] });
+      controller.choose("move");
+      controller.dragStart(toViewer(30_000, 10_000));
+      controller.drag(toViewer(31_230, 10_030));
+      controller.dragEnd(toViewer(31_230, 10_030));
+      expect(applied.at(-1)?.ops).toHaveLength(1);
+      const gone = setup({ selection: () => ["block-b", "gone"] });
+      gone.controller.choose("move");
+      gone.controller.dragStart(toViewer(30_000, 10_000));
+      gone.controller.drag(toViewer(31_230, 10_030));
+      gone.controller.dragEnd(toViewer(31_230, 10_030));
+      expect(gone.applied.at(-1)?.ops).toEqual([
+        { op: "update", id: "block-b", patch: { origin: [25_200, 4_000, 0] } },
+      ]);
+    });
+  });
+
   it("drag on empty space with Move does not take the drag (the view orbits) and changes nothing", () => {
     const { controller, applied } = setup();
     controller.choose("move");

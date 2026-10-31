@@ -244,3 +244,36 @@ describe("markers", () => {
     expect(commandLabel(parseCommand("move to marker A")?.clauses ?? [])).toBe("Move to marker A");
   });
 });
+
+describe("an array with no distance", () => {
+  const created = (result: Plan) => {
+    if (result.kind !== "edit") throw new Error(`kind ${result.kind}`);
+    return result.ops.flatMap((op) => (op.op === "create" ? [op.element] : []));
+  };
+
+  it("array 5 times stands five copies side by side along x, one width apart", () => {
+    const copies = created(plan("array 5 times", doc(block), ["block"]));
+    expect(copies).toHaveLength(5);
+    expect(copies.map((c) => (c.type === "massing" ? c.origin[0] : null))).toEqual([
+      4000, 8000, 12000, 16000, 20000,
+    ]);
+  });
+
+  it("along y it goes one depth apart, and with left it goes the other way", () => {
+    const north = created(plan("array 2 times along y", doc(block), ["block"]));
+    expect(north.map((c) => (c.type === "massing" ? c.origin[1] : null))).toEqual([2000, 4000]);
+    const west = created(plan("array 2 times to the x axis towards left", doc(block), ["block"]));
+    expect(west.map((c) => (c.type === "massing" ? c.origin[0] : null))).toEqual([-4000, -8000]);
+  });
+
+  it("a group of elements is spaced by its whole width, not each one's", () => {
+    const copies = created(plan("array 1 times", doc(wallA, wallB), ["wall-a", "wall-b"]));
+    expect(copies).toHaveLength(2);
+    expect(copies.map((c) => (c.type === "wall" ? c.start[0] : null))).toEqual([4000, 4000]);
+  });
+
+  it("is named an array in what the bar says", () => {
+    const result = plan("array 5 times", doc(block), ["block"]);
+    expect(result).toMatchObject({ kind: "edit", label: expect.stringContaining("Array") });
+  });
+});

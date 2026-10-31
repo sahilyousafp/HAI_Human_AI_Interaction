@@ -13,8 +13,12 @@ export type Clause =
   | { kind: "translate"; by: Point3Mm }
   /** Takes what is acted on to a lettered marker ("move to marker A"). */
   | { kind: "moveTo"; marker: string }
-  /** `count` copies, each `by` further along than the one before (in place when `by` is null); what follows acts on the copies. */
-  | { kind: "copy"; count: number; by: Point3Mm | null }
+  /**
+   * `count` copies, each `by` further along than the one before (in place when `by` is null); what follows acts on the
+   * copies. `spaced` (an array with no distance said): each is one width of what is copied along the axis, side by
+   * side; the planner works the width out from the model.
+   */
+  | { kind: "copy"; count: number; by: Point3Mm | null; spaced?: Axis }
   | { kind: "rotate"; deg: number; about?: string }
   | { kind: "scale"; factor: number; about?: string }
   | { kind: "mirror"; axis: "x" | "y"; about?: string }
@@ -34,6 +38,7 @@ export const MAX_COPIES = 200;
 export function wordsOf(text: string): string[] {
   return text
     .toLowerCase()
+    .replace(/['’]/g, "") // "let's" is "lets" and "don't" is "dont", not words with an s or a t left over
     .replace(/(\d)\s*[x×]\s*(?=\d)/g, "$1 times ") // "copy 4 x 6 m" is four times, six metres each
     .replace(/°/g, " degrees ")
     .replace(/%/g, " percent ")
@@ -47,8 +52,30 @@ export function wordsOf(text: string): string[] {
     .filter(Boolean);
 }
 
-/** Words that open a request without changing it: "please move this". */
-const POLITE = new Set(["please", "now", "just", "ok", "okay", "can", "could", "would", "you"]);
+/** Words that open or close a request without changing it: "please move this", "move this, thanks". */
+const POLITE = new Set([
+  "please",
+  "now",
+  "just",
+  "ok",
+  "okay",
+  "can",
+  "could",
+  "would",
+  "you",
+  "thanks",
+  "thank",
+]);
+/**
+ * Words that lead into a clause the way people talk ("I want to move this", "go ahead and copy it", "let's rotate it"),
+ * on top of `POLITE`. They are only dropped at the start of a clause, so none of them can change what a command does;
+ * a word that would ("not", "don't", "never", "stop") is not here, and with one in it the transcript is the agent's.
+ */
+const LEADING = new Set([
+  ...POLITE,
+  ...["i", "we", "want", "wanna", "need", "like", "will", "let", "lets", "kindly", "go", "ahead", "to"],
+  ...["um", "uh", "er", "so", "well", "actually", "maybe", "hey"],
+]);
 /** Words inside a clause that carry nothing the grammar needs: "move it by 3 metres along the x axis". */
 const FILLER = new Set([
   "the",
@@ -74,22 +101,39 @@ const FILLER = new Set([
   "selection",
   "selected",
   "please",
+  "towards",
+  "toward",
+  "into",
+  "side",
+  "me",
+  "my",
+  "again",
 ]);
 const SEPARATORS = new Set(["and", "then", "next"]);
 
 const VERBS: Record<string, string> = {
   move: "move",
   shift: "move",
+  slide: "move",
+  push: "move",
+  nudge: "move",
+  relocate: "move",
   copy: "copy",
   duplicate: "copy",
   clone: "copy",
+  array: "array",
   rotate: "rotate",
   turn: "rotate",
+  spin: "rotate",
   scale: "scale",
   resize: "scale",
+  enlarge: "scale",
+  shrink: "scale",
   mirror: "mirror",
   flip: "mirror",
   select: "select",
+  choose: "select",
+  pick: "select",
   deselect: "deselect",
   unselect: "deselect",
   clear: "deselect",
@@ -97,12 +141,14 @@ const VERBS: Record<string, string> = {
   erase: "delete",
   remove: "delete",
   hide: "hide",
+  conceal: "hide",
   isolate: "isolate",
   show: "show",
   unhide: "show",
+  reveal: "show",
 };
 
-type Axis = { axis: 0 | 1 | 2; sign: 1 | -1 };
+export type Axis = { axis: 0 | 1 | 2; sign: 1 | -1 };
 /** Directions, with north as +Y (the top of the plan) and east as +X. */
 const AXES: Record<string, Axis> = {
   x: { axis: 0, sign: 1 },
@@ -114,6 +160,18 @@ const AXES: Record<string, Axis> = {
   south: { axis: 1, sign: -1 },
   up: { axis: 2, sign: 1 },
   down: { axis: 2, sign: -1 },
+  upward: { axis: 2, sign: 1 },
+  upwards: { axis: 2, sign: 1 },
+  downward: { axis: 2, sign: -1 },
+  downwards: { axis: 2, sign: -1 },
+  // As people say them in front of a plan with north at the top; the view is not asked.
+  right: { axis: 0, sign: 1 },
+  left: { axis: 0, sign: -1 },
+  forward: { axis: 1, sign: 1 },
+  forwards: { axis: 1, sign: 1 },
+  back: { axis: 1, sign: -1 },
+  backward: { axis: 1, sign: -1 },
+  backwards: { axis: 1, sign: -1 },
 };
 
 const TYPE_WORDS: Record<string, ElementType> = {
@@ -142,23 +200,58 @@ const TYPE_WORDS: Record<string, ElementType> = {
   imports: "imported",
 };
 
-/** Distances along axes ("3 m east", "up 2000", "2 m x and 1 m y") added into one offset, or null if anything else is there. */
+/** The three axis letters: they name an axis and say nothing of which way along it. */
+const AXIS_LETTERS = new Set(["x", "y", "z"]);
+
+/**
+ * Distances along axes ("3 m east", "up 2000", "2 m x and 1 m y") added into one offset, or null if anything else is
+ * there. An axis letter and a way along it may both be said, in either order ("5 m y towards right", "5 m right along
+ * y"): the letter gives the axis and the word the way (right, forward and up are plus; left, back and down minus).
+ */
 function readOffset(words: string[]): Point3Mm | null {
   const by: Point3Mm = [0, 0, 0];
   let axis: Axis | null = null;
+  /** Whether the axis waiting for its distance came from a letter or from a word that says the way. */
+  let axisFromLetter = false;
   let amount: number | null = null;
   let applied = 0;
-  const apply = (a: Axis, mm: number) => {
+  /** The distance applied last, with how its axis was named, so a later word can still say the way or the axis. */
+  let last: { a: Axis; mm: number; fromLetter: boolean } | null = null;
+  const apply = (a: Axis, mm: number, fromLetter: boolean) => {
     by[a.axis] += a.sign * mm;
     applied++;
+    last = { a, mm, fromLetter };
   };
   for (let i = 0; i < words.length; ) {
-    const direction = AXES[words[i] as string];
+    const word = words[i] as string;
+    const direction = AXES[word];
     if (direction) {
-      if (axis) return null;
-      if (amount === null) axis = direction;
-      else {
-        apply(direction, amount);
+      const fromLetter = AXIS_LETTERS.has(word);
+      if (axis) {
+        // "y" then "right" (or "right" then "y") before the distance: the letter's axis, the word's way.
+        if (fromLetter === axisFromLetter) return null;
+        axis = {
+          axis: fromLetter ? direction.axis : axis.axis,
+          sign: fromLetter ? axis.sign : direction.sign,
+        };
+        axisFromLetter = true;
+      } else if (amount === null) {
+        const before = last as { a: Axis; mm: number; fromLetter: boolean } | null;
+        if (before && before.fromLetter !== fromLetter) {
+          // The distance was given first and the axis and its way come in two words: put it right.
+          by[before.a.axis] -= before.a.sign * before.mm;
+          const merged: Axis = {
+            axis: fromLetter ? direction.axis : before.a.axis,
+            sign: fromLetter ? before.a.sign : direction.sign,
+          };
+          by[merged.axis] += merged.sign * before.mm;
+          last = { a: merged, mm: before.mm, fromLetter: true };
+        } else {
+          axis = direction;
+          axisFromLetter = fromLetter;
+        }
+      } else {
+        apply(direction, amount, fromLetter);
         amount = null;
       }
       i++;
@@ -167,7 +260,7 @@ function readOffset(words: string[]): Point3Mm | null {
     const length = readLength(words, i);
     if (!length || amount !== null) return null;
     if (axis) {
-      apply(axis, length.value);
+      apply(axis, length.value, axisFromLetter);
       axis = null;
     } else amount = length.value;
     i = length.next;
@@ -211,22 +304,59 @@ export const COMMAND_VOCABULARY: ReadonlySet<string> = new Set([
   ...["anticlockwise", "counterclockwise", "counter", "about", "around", "at", "onto", "from"],
 ]);
 
-function parseCopy(args: string[]): Clause | null {
+/**
+ * "copy 4 times 6 m along y" and "array 5 times": a count, then how far apart. An array may leave the distance out
+ * ("array 5 times", "array 5 times along y"): the copies then stand side by side along +x, or the axis said.
+ */
+function parseCopy(args: string[], array: boolean): Clause | null {
   let count = 1;
   let from = 0;
   const number = readNumber(args, 0);
   if (number && COUNT_WORDS.has(args[number.next] ?? "")) {
     count = number.value;
     from = number.next + 1;
+  } else if (array && number && (number.next === args.length || AXES[args[number.next] ?? ""])) {
+    // "array 5" and "array 5 along y": the number is the count when no distance follows it.
+    count = number.value;
+    from = number.next;
   } else if (args[0] === "twice") {
     count = 2;
     from = 1;
   } else if (args[0] === "once") from = 1;
   if (!Number.isInteger(count) || count < 1 || count > MAX_COPIES) return null;
   const rest = args.slice(from);
-  if (rest.length === 0) return { kind: "copy", count, by: null };
+  if (rest.length === 0)
+    return array
+      ? { kind: "copy", count, by: null, spaced: { axis: 0, sign: 1 } }
+      : { kind: "copy", count, by: null };
   const by = readOffset(rest);
-  return by ? { kind: "copy", count, by } : null;
+  if (by) return { kind: "copy", count, by };
+  if (array) {
+    // "array 4 times 6 m": a distance with no axis is along x, as an array with no distance at all is.
+    const length = readLength(rest, 0);
+    if (length && length.next === rest.length) return { kind: "copy", count, by: [length.value, 0, 0] };
+  }
+  const spaced = array ? readAxisOnly(rest) : null;
+  return spaced ? { kind: "copy", count, by: null, spaced } : null;
+}
+
+/** An axis and nothing else ("y", "y towards right", "up"), or null. */
+function readAxisOnly(words: string[]): Axis | null {
+  let axis: Axis | null = null;
+  let fromLetter = false;
+  for (const word of words) {
+    const direction = AXES[word];
+    if (!direction) return null;
+    const letter = AXIS_LETTERS.has(word);
+    if (!axis) {
+      axis = direction;
+      fromLetter = letter;
+    } else if (letter !== fromLetter) {
+      axis = { axis: letter ? direction.axis : axis.axis, sign: letter ? axis.sign : direction.sign };
+      fromLetter = true;
+    } else return null;
+  }
+  return axis;
 }
 
 /** What a marker is called in a clause: its letter, "marker B", set apart from the words round it. */
@@ -273,7 +403,9 @@ function parseClause(verb: string, args: string[], marker: MarkerWord): Clause |
       return by ? { kind: "translate", by } : null;
     }
     case "copy":
-      return parseCopy(args);
+      return parseCopy(args, false);
+    case "array":
+      return parseCopy(args, true);
     case "rotate":
       return parseRotate(args, marker);
     case "scale":
@@ -345,8 +477,7 @@ function validSequence(clauses: Clause[]): boolean {
  */
 export function parseCommand(text: string): Command | null {
   const words = wordsOf(text);
-  while (POLITE.has(words[0] ?? "")) words.shift();
-  while (POLITE.has(words[words.length - 1] ?? "")) words.pop();
+  while (words.length > 0 && POLITE.has(words[words.length - 1] ?? "")) words.pop();
   if (words.length === 0) return null;
 
   const parts: string[][] = [[]];
@@ -357,6 +488,8 @@ export function parseCommand(text: string): Command | null {
 
   const clauses: Clause[] = [];
   for (const part of parts) {
+    // "I want to move this" and "and then please rotate it": the talk before the verb is dropped, clause by clause.
+    while (LEADING.has(part[0] ?? "")) part.shift();
     // "and then" leaves nothing between the two.
     if (part.length === 0) continue;
     const [head, ...tail] = part;

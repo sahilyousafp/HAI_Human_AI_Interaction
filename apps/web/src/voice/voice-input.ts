@@ -18,6 +18,8 @@ export interface ListenerEvents {
   misfire?(): void;
   /** Speech probability or input level, 0..1, for the level meter. */
   level(value: number): void;
+  /** The loudest sample of the latest stretch of sound, 0..1: tells a silent microphone from a quiet speaker. */
+  peak?(value: number): void;
 }
 
 export interface VoiceDeps {
@@ -52,7 +54,18 @@ export interface CommandPick {
   ran?: boolean;
 }
 
-export type MicError = "denied" | "not-found" | "failed";
+/**
+ * What went wrong with the microphone. The first three are the page failing to open it; the last two are listening that
+ * heard no one: `silent` when the microphone picked up nothing at all (muted, or not the one Windows is using), `unheard`
+ * when it picked up sound but none the speech detector took for speech (too far, too quiet, or a noisy room).
+ */
+export type MicError = "denied" | "not-found" | "failed" | "silent" | "unheard";
+
+/** The level meter changes at most this often, ms. */
+const LEVEL_EVERY_MS = 100;
+
+/** The loudest sample (0..1) below which a microphone is taken to be picking up nothing. */
+const SILENT_PEAK = 0.004;
 
 /** How long after a held request is sent a shake still stops it, ms. */
 export const HELD_STOP_MS = 1500;
@@ -84,6 +97,10 @@ const MESSAGES: Record<MicError, string> = {
     "The microphone is blocked for this page. Allow it from the icon at the left of the address bar, then try again. You can still type.",
   "not-found": "No microphone was found. Connect one and try again, or type your request.",
   failed: "The microphone could not start. Check that no other app is using it, or type your request.",
+  silent:
+    "The microphone is picking up nothing. It may be muted, or Windows may be using another one: check the input device in the sound settings, or type your request.",
+  unheard:
+    "I heard sound but no speech. Speak a little louder or closer to the microphone, or type your request.",
 };
 
 /** Which recovery message a getUserMedia (or model loading) failure gets. */
@@ -137,6 +154,9 @@ export class VoiceInput {
   private namesWanted = false;
   /** The request was ended by the user while speech was being heard: the microphone is closing, not listening on. */
   private finishing = false;
+  /** The loudest sample the microphone gave since this listening began (0..1). */
+  private peak = 0;
+  private levelShownAt = 0;
   /** The open microphone while listening for names, and the session it belongs to. */
   private namesListener: Listener | null = null;
   private namesSession = 0;
@@ -153,7 +173,7 @@ export class VoiceInput {
    */
   private held: HeldRequest | null = null;
   private readonly heldSpeech = new Set<(hand: Hand) => void>();
-  private readonly heldQuiet = new Set<(hand: Hand) => void>();
+  private readonly heldQuiet = new Set<(hand: Hand, noise: boolean) => void>();
 
   constructor(private readonly deps: VoiceDeps) {
     this.now = deps.now ?? (() => Date.now());
@@ -205,6 +225,7 @@ export class VoiceInput {
   async start(hoveredId: () => string | null = () => null): Promise<void> {
     const { phase } = this.state;
     if (phase === "starting" || phase === "listening" || phase === "transcribing") return;
+    this.peak = 0;
     // The button or the talk key takes the microphone; listening for names resumes once this request is done.
     this.holdNames = true;
     if (phase === "review") this.discard();
@@ -232,8 +253,10 @@ export class VoiceInput {
           else this.waitForSpeech();
         },
         level: (value) => {
-          if (session === this.session && this.state.phase === "listening")
-            this.update({ ...this.state, level: value });
+          if (session === this.session) this.showLevel(value);
+        },
+        peak: (value) => {
+          if (session === this.session) this.peak = Math.max(this.peak, value);
         },
       });
       if (session !== this.session) {
@@ -249,12 +272,32 @@ export class VoiceInput {
     }
   }
 
-  /** Listening with nothing heard yet: gives up when no one speaks for `VOICE.noSpeechMs`. */
+  /**
+   * The level meter's next value. The detector reports a level for every 32 ms of sound, and each change of state
+   * redraws everything that shows it: at 31 a second that held a slow machine's main thread so busy that the page
+   * stopped answering for tens of seconds while a pinch listened. The meter moves in tenths, at most ten times a second.
+   */
+  private showLevel(value: number): void {
+    if (this.state.phase !== "listening") return;
+    const level = Math.round(value * 10) / 10;
+    const now = this.now();
+    if (level === this.state.level || now - this.levelShownAt < LEVEL_EVERY_MS) return;
+    this.levelShownAt = now;
+    this.update({ ...this.state, level });
+  }
+
+  /**
+   * Listening with nothing heard yet: gives up when no one speaks for `VOICE.noSpeechMs`, and says why it heard no one
+   * (a microphone that picked up nothing, or sound that was not speech) instead of just going quiet.
+   */
   private waitForSpeech(): void {
     this.clearTimers();
     this.update({ phase: "listening", speaking: false, level: 0 });
     this.after(VOICE.noSpeechMs, () => {
-      if (this.state.phase === "listening" && !this.state.speaking) this.cancel();
+      if (this.state.phase !== "listening" || this.state.speaking) return;
+      const kind: MicError = this.peak < SILENT_PEAK ? "silent" : "unheard";
+      this.cancel();
+      this.update({ phase: "error", error: kind, message: MESSAGES[kind] });
     });
   }
 
@@ -297,8 +340,12 @@ export class VoiceInput {
     return () => this.heldSpeech.delete(listener);
   };
 
-  /** Calls `listener` when a stretch of speech during a held pinch stops, said or not speech after all. */
-  onHeldQuiet = (listener: (hand: Hand) => void): (() => void) => {
+  /**
+   * Calls `listener` when a stretch of speech during a held pinch stops: `noise` when the detector found it too short
+   * to be words (its misfire), else words. A sound that is long enough for the detector counts as words, whatever it
+   * was: its audio is no shorter than a spoken word's, so length cannot tell them apart.
+   */
+  onHeldQuiet = (listener: (hand: Hand, noise: boolean) => void): (() => void) => {
     this.heldQuiet.add(listener);
     return () => this.heldQuiet.delete(listener);
   };
@@ -344,11 +391,10 @@ export class VoiceInput {
         speechEnd: (result) => this.heardHeld(session, result),
         misfire: () => {
           const held = this.held;
-          if (session === this.session && held) this.segmentOver(held);
+          if (session === this.session && held) this.segmentOver(held, true);
         },
         level: (value) => {
-          if (session === this.session && this.state.phase === "listening")
-            this.update({ ...this.state, level: value });
+          if (session === this.session) this.showLevel(value);
         },
       });
       if (session !== this.session) {
@@ -373,16 +419,16 @@ export class VoiceInput {
     if (session !== this.session || !held) return;
     if ("text" in result) held.texts.push(result.text);
     else held.audio.push(result.audio);
-    this.segmentOver(held);
+    this.segmentOver(held, false);
   }
 
   /**
    * A stretch of speech in a held request is over, said or too short to count: listening goes on, unless the pinch
    * was let go meanwhile, which sends what was said (or stops, if nothing was).
    */
-  private segmentOver(held: HeldRequest): void {
+  private segmentOver(held: HeldRequest, noise: boolean): void {
     held.speaking = false;
-    for (const listener of this.heldQuiet) listener(held.hand);
+    for (const listener of this.heldQuiet) listener(held.hand, noise);
     if (!held.releasing) {
       this.update({ phase: "listening", speaking: false, level: 0, held: held.hand });
       return;
