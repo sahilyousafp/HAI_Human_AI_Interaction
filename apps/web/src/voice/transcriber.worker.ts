@@ -1,10 +1,10 @@
 /// <reference lib="webworker" />
-// Transcribes speech on this machine with Moonshine base (ONNX) through transformers.js. The model and the ONNX
+// Transcribes speech on this machine with Moonshine v2 small (ONNX, int8) through transformers.js. The model and the ONNX
 // runtime are served by the app (scripts/fetch-assets.mjs); nothing is fetched from the internet. Audio arrives
 // transferred, is used once and dropped; only text goes back.
 import { type AutomaticSpeechRecognitionPipeline, env, pipeline } from "@huggingface/transformers";
 import type { FromTranscriber, ToTranscriber } from "./messages.ts";
-import { tokenLimit } from "./voice-config.ts";
+import { tokenLimit, wholeFrames } from "./voice-config.ts";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -14,15 +14,15 @@ env.localModelPath = "/models/";
 env.useBrowserCache = false; // the files are local already; no second copy in Cache Storage
 if (env.backends.onnx.wasm) env.backends.onnx.wasm.wasmPaths = "/ort/";
 
-const MODEL = "moonshine-base";
+const MODEL = "moonshine-small";
 
 const post = (message: FromTranscriber) => self.postMessage(message);
 
 let ready: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
 
 /**
- * WebAssembly with the int8 model: measured on the reference laptop at about 0.2 s per utterance, against about
- * 2 s on WebGPU with the same files (int8 weights are slow there), see docs/decisions.md.
+ * WebAssembly with the int8 model: measured on the reference laptop at about 0.3 s per utterance for a spoken command,
+ * against about 2 s on WebGPU with the same files (int8 weights are slow there), see docs/decisions.md.
  */
 function load(): Promise<AutomaticSpeechRecognitionPipeline> {
   ready ??= (async () => {
@@ -53,6 +53,7 @@ self.onmessage = async (event: MessageEvent<ToTranscriber>) => {
   try {
     const transcriber = await load();
     const started = performance.now();
+    audio = wholeFrames(audio);
     const result = await transcriber(audio, { max_new_tokens: tokenLimit(audio.length) });
     audio = null; // released: nothing keeps the samples once there is text
     const text = (Array.isArray(result) ? result[0]?.text : result.text)?.trim() ?? "";

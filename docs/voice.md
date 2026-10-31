@@ -67,7 +67,7 @@ The agent receives the transcript with a short context block: the captured eleme
 
 ## Privacy
 
-- **On this laptop is the default.** Speech is turned into text on your machine by Moonshine (base, ONNX, MIT licence) running in a Web Worker on WebAssembly. Voice activity detection is Silero VAD (via vad-web) in an AudioWorklet.
+- **On this laptop is the default.** Speech is turned into text on your machine by Moonshine v2 (small, 123 million parameters, int8 ONNX, MIT licence) running in a Web Worker on WebAssembly: about a third of a second from the end of speech to the transcript. Voice activity detection is Silero VAD (via vad-web) in an AudioWorklet.
 - **Audio never leaves the machine and is never stored.** The utterance is kept in memory only until its transcript exists, then dropped. Nothing goes to disk, the bridge or the network. An automated test plays a recorded phrase as the microphone and fails if any request or bridge message carries audio, and a negative control proves the check catches an injected audio upload.
 - **The microphone is off until you ask.** The page requests no microphone on load. It opens when you press the button, hold the key, hold a pinch or choose Ask agent, and closes as soon as the utterance ends (for a held pinch, as soon as you let go). Only **Listen for names** keeps it open, and only while you have it on.
 - **The model files are local.** `pnpm assets` downloads them once from a pinned revision, checks each against its SHA-256, and the app serves them itself. Nothing is fetched from a model hub or CDN while you use the app.

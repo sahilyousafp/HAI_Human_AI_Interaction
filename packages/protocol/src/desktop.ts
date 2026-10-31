@@ -2,7 +2,7 @@
 // reaches it through `window.haiDesktop`, which the desktop app's preload script provides; in a plain browser there is
 // no such object, and the setup screens never show.
 
-/** One thing to fetch, as the screen lists it: a folder of model files (`kokoro`, `moonshine-base`) and its size. */
+/** One thing to fetch, as the screen lists it: a folder of model files (`kokoro`, `moonshine-small`) and its size. */
 export interface ModelItem {
   id: string;
   bytes: number;

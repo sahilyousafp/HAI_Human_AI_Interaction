@@ -126,7 +126,7 @@ export function stageWeb(outdir: string, options: { testHooks?: boolean } = {}):
     "--logLevel",
     "warn",
   ]);
-  // The folders (models/kokoro, models/moonshine-base) go entirely; downloads put them back under the user's data.
+  // The folders (models/kokoro, models/moonshine-small) go entirely; downloads put them back under the user's data.
   const folders = new Set(downloadedModelFiles().map((file) => file.split("/").slice(0, 2).join("/")));
   for (const folder of folders) rmSync(join(outdir, folder), { recursive: true, force: true });
 }

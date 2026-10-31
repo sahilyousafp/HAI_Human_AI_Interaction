@@ -132,7 +132,7 @@ footer { margin-top: 28px; text-align: center; color: var(--muted); font-size: 1
     <h2>Install it in three steps</h2>
     <ol>
       <li><strong>Download and double click.</strong> It installs for you only and needs no administrator rights.</li>
-      <li><strong>Follow the first screen.</strong> HAI can install Claude Code for you and download the voice models (about 393 MB, once).</li>
+      <li><strong>Follow the first screen.</strong> HAI can install Claude Code for you and download the voice models (about 496 MB, once).</li>
       <li><strong>Sign in with your Claude account</strong> when asked. The sign-in happens in Claude Code&rsquo;s own window, and HAI never sees your login.</li>
     </ol>
   </section>

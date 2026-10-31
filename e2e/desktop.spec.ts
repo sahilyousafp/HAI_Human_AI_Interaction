@@ -122,9 +122,9 @@ test.describe("the bridge session", () => {
         claudeKeys: Object.keys(api.claude).sort(),
       };
     });
-    // A fresh data folder holds no voice models: the 14 files of Moonshine and Kokoro, about 390 MB.
+    // A fresh data folder holds no voice models: the 14 files of Moonshine and Kokoro, about 496 MB.
     expect(result.state).toMatchObject({ status: "needed", files: 14 });
-    expect((result.state as { totalBytes: number }).totalBytes).toBeGreaterThan(380e6);
+    expect((result.state as { totalBytes: number }).totalBytes).toBeGreaterThan(480e6);
     expect(result.keys).toEqual(["models", "claude", "updates"]);
     expect(result.modelKeys).toEqual(["cancel", "onChange", "start", "state"]);
     expect(result.claudeKeys).toEqual(["install", "onChange", "openSignIn", "recheck", "state"]);

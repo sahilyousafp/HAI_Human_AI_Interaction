@@ -11,10 +11,10 @@ import { startTestBridge } from "./viewer.ts";
 // `window.haiDesktop` object the desktop app's preload script provides, and the test decides what the models' state is.
 
 const ITEMS = [
-  { id: "moonshine-base", bytes: 66_700_000 },
+  { id: "moonshine-small", bytes: 169_500_000 },
   { id: "kokoro", bytes: 326_600_000 },
 ];
-const TOTAL = 393_300_000;
+const TOTAL = 496_100_000;
 
 const needed: ModelsState = { status: "needed", files: 14, totalBytes: TOTAL, items: ITEMS };
 const downloading = (receivedBytes: number): ModelsState => ({
@@ -116,9 +116,9 @@ test.describe("voice models missing", () => {
     await page.goto("/");
     await expect(screen(page)).toBeVisible();
     await expect(page.getByTestId("first-run-headline")).toHaveText("Download the voice models");
-    await expect(page.getByTestId("first-run-detail")).toContainText("about 393 MB");
-    await expect(page.getByTestId("first-run-item-moonshine-base")).toContainText("Speech to text");
-    await expect(page.getByTestId("first-run-item-moonshine-base")).toContainText("67 MB");
+    await expect(page.getByTestId("first-run-detail")).toContainText("about 496 MB");
+    await expect(page.getByTestId("first-run-item-moonshine-small")).toContainText("Speech to text");
+    await expect(page.getByTestId("first-run-item-moonshine-small")).toContainText("170 MB");
     await expect(page.getByTestId("first-run-item-kokoro")).toContainText("Spoken replies");
     await expect(page.getByTestId("first-run-item-kokoro")).toContainText("327 MB");
     await expect(action(page, "download")).toBeFocused();
@@ -132,15 +132,15 @@ test.describe("voice models missing", () => {
     await action(page, "download").click();
     expect(await calls(page)).toEqual(["start"]);
 
-    await setState(page, downloading(196_650_000));
+    await setState(page, downloading(248_050_000));
     await expect(page.getByTestId("first-run-headline")).toHaveText("Downloading the voice models");
     await expect(page.getByTestId("first-run-progress")).toHaveAttribute("aria-valuenow", "50");
-    await expect(page.getByTestId("first-run-progress-label")).toHaveText("197 MB of 393 MB");
-    await expect(page.getByTestId("first-run-item-moonshine-base")).toHaveAttribute("data-state", "done");
+    await expect(page.getByTestId("first-run-progress-label")).toHaveText("248 MB of 496 MB");
+    await expect(page.getByTestId("first-run-item-moonshine-small")).toHaveAttribute("data-state", "done");
     await expect(page.getByTestId("first-run-item-kokoro")).toHaveAttribute("data-state", "active");
 
     await setState(page, downloading(300_000_000));
-    await expect(page.getByTestId("first-run-progress")).toHaveAttribute("aria-valuenow", "76");
+    await expect(page.getByTestId("first-run-progress")).toHaveAttribute("aria-valuenow", "60");
   });
 
   test("Continue lets the user in while the download carries on", async ({ page }) => {
@@ -188,7 +188,7 @@ test.describe("when the download fails", () => {
       "The voice models could not be downloaded",
     );
     await expect(page.getByTestId("first-run-detail")).toContainText("could not reach the internet");
-    await expect(page.getByTestId("first-run-progress-label")).toHaveText("393 MB still to download");
+    await expect(page.getByTestId("first-run-progress-label")).toHaveText("496 MB still to download");
     await expect(screen(page)).toHaveAttribute("data-tone", "problem");
     await action(page, "retry").click();
     expect(await calls(page)).toEqual(["start"]);
@@ -253,7 +253,7 @@ test.describe("the voice controls while the models are missing", () => {
     await expect(pill).toHaveAttribute("data-state", "missing");
     await expect(pill).toHaveText("Voice not downloaded");
     await expect(mic).toBeDisabled();
-    await expect(mic).toHaveAttribute("aria-label", "Voice needs 393 MB of models");
+    await expect(mic).toHaveAttribute("aria-label", "Voice needs 496 MB of models");
 
     // The Voice page offers the download.
     await openSettings(page, "voice");
@@ -261,7 +261,7 @@ test.describe("the voice controls while the models are missing", () => {
     await page.getByTestId("voice-models-download").click();
     expect(await calls(page)).toEqual(["start"]);
 
-    await setState(page, downloading(196_650_000));
+    await setState(page, downloading(248_050_000));
     await expect(pill).toHaveAttribute("data-state", "preparing");
     await expect(pill).toHaveText("Voice downloading 50%");
     await expect(page.getByTestId("voice-models-progress")).toHaveText("50%");

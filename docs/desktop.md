@@ -67,7 +67,7 @@ HAI never reads, stores or forwards credentials in any of this: `pnpm credential
 
 ## First run: the voice models
 
-The installer carries everything hands and camera need: the hand and face tracking models, the viewer and the runtimes. With no network, HAI starts, tracks your hands and shows the model. Only the voice models are left out, because they are large: **Speech to text** (Moonshine) and **Spoken replies** (Kokoro), about 393 MB together. They are downloaded once, on first run.
+The installer carries everything hands and camera need: the hand and face tracking models, the viewer and the runtimes. With no network, HAI starts, tracks your hands and shows the model. Only the voice models are left out, because they are large: **Speech to text** (Moonshine) and **Spoken replies** (Kokoro), about 496 MB together. They are downloaded once, on first run.
 
 On first launch HAI checks whether they are on this computer. If they are not, the second screen of setup (step 2 of 2) lists them with their size.
 

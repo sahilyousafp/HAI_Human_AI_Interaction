@@ -13,7 +13,7 @@ const WARN_ICON = "M12 4 3 20h18zM12 10v4M12 17h.01";
 
 /** What each part is shown with: the icon of the voice feature it belongs to, in that feature's settings colour. */
 const ITEM_ICONS: Record<string, { path: string; tint: string }> = {
-  "moonshine-base": { path: MIC_ICON, tint: "var(--tint-red)" },
+  "moonshine-small": { path: MIC_ICON, tint: "var(--tint-red)" },
   kokoro: { path: SPEAKER_ICON, tint: "var(--tint-blue)" },
 };
 

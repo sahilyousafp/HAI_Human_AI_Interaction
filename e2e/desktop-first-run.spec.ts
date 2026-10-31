@@ -25,14 +25,14 @@ const modelFile = (userData: string) => join(userData, "models", "kokoro", "onnx
 test.describe("the voice models", () => {
   test("a fresh install offers the download, the app works meanwhile, and voice turns on by itself", async () => {
     test.setTimeout(300_000);
-    models = await startModelServer({ rate: 60e6 }); // about 7 s for the 393 MB, long enough to watch
+    models = await startModelServer({ rate: 60e6 }); // about 7 s for the 496 MB, long enough to watch
     desktop = await launchDesktop({ keepSetup: true });
     const { page } = desktop;
 
     // The screen offers it, with the size.
     await expect(screen(page)).toBeVisible();
     await expect(page.getByTestId("first-run-headline")).toHaveText("Download the voice models");
-    await expect(page.getByTestId("first-run-detail")).toContainText("about 393 MB");
+    await expect(page.getByTestId("first-run-detail")).toContainText("about 496 MB");
     await expect(page.getByTestId("mic-indicator")).toHaveAttribute("data-state", "missing");
 
     await action(page, "download").click();
@@ -141,7 +141,7 @@ test.describe("offline and interrupted downloads", () => {
 
     const requests = models.requests.slice(requestsBefore);
     // The small files that had finished are not fetched again.
-    expect(requests.filter((r) => r.path.includes("moonshine-base"))).toEqual([]);
+    expect(requests.filter((r) => r.path.includes("moonshine-small"))).toEqual([]);
     // The large file continues from what was kept, not from the start.
     const large = requests.find((r) => r.path.endsWith("kokoro/onnx/model.onnx"));
     expect(large?.range).not.toBeNull();
