@@ -37,6 +37,7 @@ import { convertInWorker } from "./import/rhino-client.ts";
 import { GestureSettingsCard } from "./input/GestureSettingsCard.tsx";
 import { GestureSettings } from "./input/gesture-settings.ts";
 import { InputBus } from "./input/input-bus.ts";
+import { LOCAL_MODE, LocalBridge } from "./local/local-bridge.ts";
 import { OpenDataSettings } from "./open-data/OpenDataSettings.tsx";
 import { OpenDataStore } from "./open-data/open-data-store.ts";
 import { PanelClient } from "./panel/panel-client.ts";
@@ -173,8 +174,16 @@ export function App() {
     [],
   );
   const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
+  // The Try now build keeps the scene and the imported models in this tab; otherwise the bridge does.
+  const local = useMemo(() => (LOCAL_MODE ? new LocalBridge() : null), []);
   // The imported models the viewer draws and the project saves, fetched from the bridge as they are first needed.
-  const modelAssets = useMemo(() => new ModelAssets(() => window.__HAI_SESSION__ ?? null), []);
+  const modelAssets = useMemo(
+    () =>
+      local
+        ? new ModelAssets(() => ({ port: 0, token: "" }), local.fetchAsset, local.assetUrl)
+        : new ModelAssets(() => window.__HAI_SESSION__ ?? null),
+    [local],
+  );
   // Rhino's objects, drawn read-only beside the scene while Rhino is connected, and their meshes from the bridge.
   const mirror = useMemo(
     () => new RhinoMirror((message: Message) => connection.current?.send(message) ?? false),
@@ -288,6 +297,10 @@ export function App() {
       new ModelImporter({
         convert: (bytes, onStage) => convertInWorker(bytes, onStage),
         upload: async (id, bytes) => {
+          if (local) {
+            local.putAsset(id, bytes);
+            return;
+          }
           const session = window.__HAI_SESSION__;
           if (!session) throw new Error("The bridge is not connected.");
           const response = await fetch(assetUrl(session.port, id), {
@@ -302,7 +315,7 @@ export function App() {
         },
         apply: (label, ops) => sceneClient.apply(label, ops),
       }),
-    [sceneClient],
+    [sceneClient, local],
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Settings > Setup shows the first-run screens again (desktop app only).
@@ -676,7 +689,7 @@ export function App() {
   }, [speaker, transcriber]);
 
   useEffect(() => {
-    const conn = connectToBridge(window.__HAI_SESSION__ ?? null, browserDeps, setBridge, (message) => {
+    const onMessage = (message: Message) => {
       if (
         viewLink.handle(message) ||
         agent.handle(message) ||
@@ -709,7 +722,10 @@ export function App() {
         setReplyVoice(message.payload.replyVoice);
         setRailStrip(message.payload.railStrip);
       }
-    });
+    };
+    const conn = local
+      ? local.connect(setBridge, onMessage)
+      : connectToBridge(window.__HAI_SESSION__ ?? null, browserDeps, setBridge, onMessage);
     connection.current = conn;
     return () => {
       conn.close();
@@ -728,6 +744,7 @@ export function App() {
     speaker,
     features,
     aids,
+    local,
   ]);
 
   // A panel needs the bridge (its Done sends the result there) and its feature: without either it closes and its
@@ -941,6 +958,11 @@ export function App() {
         <div className="brand">
           <span className="wordmark">HAI</span>
           <span className="tagline">hands, face and voice for AEC agents</span>
+          {LOCAL_MODE && (
+            <a className="site-link" href="/" data-testid="site-link">
+              About HAI
+            </a>
+          )}
         </div>
         <div className="pills">
           <output
@@ -1008,10 +1030,12 @@ export function App() {
             aria-live="polite"
           >
             <span className="dot" aria-hidden="true" />
-            <span>{label.text}</span>
+            <span>{LOCAL_MODE && bridge.status === "connected" ? "Running here" : label.text}</span>
             {bridge.status === "connected" && (
               <span className="meta">
-                v{bridge.bridgeVersion} / {bridge.clients} {bridge.clients === 1 ? "client" : "clients"}
+                {LOCAL_MODE
+                  ? "nothing is saved"
+                  : `v${bridge.bridgeVersion} / ${bridge.clients} ${bridge.clients === 1 ? "client" : "clients"}`}
               </span>
             )}
           </output>

@@ -48,7 +48,17 @@ npm install
 catalyst serve --only slate
 ```
 
-Open the `hai:` URL that the CLI prints, not Astro's own port. `npm run check` type-checks and `npm run build` builds into `dist/`.
+Run `npm run build:try` once first if you want `/try/` to work locally. Open the `hai:` URL that the CLI prints, not Astro's own port. `npm run check` type-checks and `npm run build` builds into `dist/`.
+
+## Try now
+
+The hero's **Try now** button opens `/try/`: the HAI viewer running on its own in the visitor's tab, with a sample building to explore, Rhino `.3dm` import and Save as 3dm, hands through the camera, and typed commands. There is no bridge, no agent and no voice there, and nothing is saved. It is built from the main repository (`apps/web`, `vite build --mode try`; the app's own tests for it are `pnpm test:e2e:try`) and copied into `public/try`:
+
+```sh
+npm run build:try     # builds the app in the repository above and copies it to public/try (git-ignored)
+```
+
+Slate builds only this folder, so run it on the machine that deploys, before `catalyst deploy slate`. The copy is about 90 MB and uploads with the site; the speech models (about 500 MB) are not part of it.
 
 ## Deploy
 

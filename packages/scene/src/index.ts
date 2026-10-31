@@ -8,6 +8,7 @@ export * from "./ops.ts";
 export * from "./placement.ts";
 export * from "./site.ts";
 export * from "./snap.ts";
+export * from "./store.ts";
 export * from "./sun.ts";
 export * from "./transform.ts";
 export * from "./turntable.ts";

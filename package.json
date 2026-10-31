@@ -15,6 +15,7 @@
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.e2e.json",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:try": "playwright test -c playwright.try.config.ts",
     "licenses:check": "node scripts/check-licenses.mjs",
     "credentials:check": "node scripts/credential-boundary.mjs",
     "assets": "node scripts/fetch-assets.mjs",

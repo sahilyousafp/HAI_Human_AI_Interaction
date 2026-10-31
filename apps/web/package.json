@@ -8,6 +8,8 @@
     "dev": "node ../../scripts/fetch-assets.mjs && vite",
     "build": "node ../../scripts/fetch-assets.mjs && vite build",
     "preview": "vite preview",
+    "build:try": "node ../../scripts/fetch-assets.mjs --shipped-only && vite build --mode try --outDir dist-try",
+    "preview:try": "vite preview --mode try --outDir dist-try --port 4174 --host 127.0.0.1 --strictPort",
     "typecheck": "tsc -p ."
   },
   "dependencies": {

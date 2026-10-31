@@ -72,6 +72,9 @@ jobs:
 
       - run: pnpm test:e2e
 
+      # The Try now build (the app with its own scene in the page, served under /try/ of the website).
+      - run: pnpm test:e2e:try
+
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

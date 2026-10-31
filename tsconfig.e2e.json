@@ -8,8 +8,10 @@
   },
   "include": [
     "e2e",
+    "e2e-try",
     "playwright.config.ts",
     "playwright.desktop.config.ts",
-    "playwright.desktop-packaged.config.ts"
+    "playwright.desktop-packaged.config.ts",
+    "playwright.try.config.ts"
   ]
 }

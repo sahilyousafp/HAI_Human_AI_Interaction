@@ -10,6 +10,7 @@ import {
   type Point3Mm,
   type Ring,
   type SceneDocument,
+  type SceneOp,
   type SunSetting,
 } from "@hai/protocol";
 import type { MeshPart } from "@hai/scene";
@@ -58,6 +59,7 @@ import {
   snappedPoint,
   stepHandSnap,
 } from "../input/pointer-snap.ts";
+import { LOCAL_MODE } from "../local/local-bridge.ts";
 import { GeneratedPanel } from "../panel/GeneratedPanel.tsx";
 import type { PanelClient } from "../panel/panel-client.ts";
 import { MirrorLayer } from "../rhino/MirrorLayer.tsx";
@@ -353,7 +355,7 @@ function projectStatusText(scene: SceneState): string {
   if (scene.projectError) return scene.projectError;
   if (scene.savedAt) return `Saved ${new Date(scene.savedAt).toLocaleTimeString()}`;
   if (scene.project) return "All changes saved";
-  return "Sample (not saved)";
+  return LOCAL_MODE ? "Try it: nothing is saved" : "Sample (not saved)";
 }
 
 interface HandPointerState {
@@ -1953,23 +1955,43 @@ export function Viewer({
             >
               Redo
             </button>
-            <button
-              type="button"
-              className="secondary"
-              data-testid="open-project"
-              onClick={() => setProjectForm((f) => (f === "open" ? null : "open"))}
-            >
-              Open project
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              data-testid="new-project"
-              title="Start a project with a clean space to import or draw in"
-              onClick={() => setProjectForm((f) => (f === "new" ? null : "new"))}
-            >
-              New project
-            </button>
+            {LOCAL_MODE ? (
+              <button
+                type="button"
+                className="secondary"
+                data-testid="clear-model"
+                title="Take everything out of the model to import or draw your own (Undo brings it back)"
+                disabled={!scene.doc || Object.keys(scene.doc.elements).length === 0}
+                onClick={() =>
+                  client.apply(
+                    "Clear the model",
+                    Object.keys(scene.doc?.elements ?? {}).map((id): SceneOp => ({ op: "delete", id })),
+                  )
+                }
+              >
+                Clear
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="secondary"
+                  data-testid="open-project"
+                  onClick={() => setProjectForm((f) => (f === "open" ? null : "open"))}
+                >
+                  Open project
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  data-testid="new-project"
+                  title="Start a project with a clean space to import or draw in"
+                  onClick={() => setProjectForm((f) => (f === "new" ? null : "new"))}
+                >
+                  New project
+                </button>
+              </>
+            )}
             <ImportButton importer={importer} />
             <SaveAs3dmButton exporter={exporter} />
           </div>

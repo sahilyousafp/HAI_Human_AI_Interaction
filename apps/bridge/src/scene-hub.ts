@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { type Message, type MessageOf, parseScene, type SceneDocument, type SceneOp } from "@hai/protocol";
+import { SceneStore, type StoreResult } from "@hai/scene";
 import { AssetStore } from "./assets.ts";
 import { Autosaver, createProject, openProject, type ProjectInfo, SAMPLE_SCENE } from "./project.ts";
-import { SceneStore, type StoreResult } from "./scene-store.ts";
 
 type Send = (message: Message) => void;
 
