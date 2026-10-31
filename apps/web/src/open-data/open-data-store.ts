@@ -96,6 +96,11 @@ export class OpenDataStore {
     this.send({ type: "site.set", id: crypto.randomUUID(), payload: { site } });
   }
 
+  /** Empties the city context layer; agents can fetch it again. */
+  clearContext(): void {
+    this.send({ type: "context.clear", id: crypto.randomUUID(), payload: {} });
+  }
+
   clearRecord(): void {
     this.send({ type: "opendata.clear", id: crypto.randomUUID(), payload: {} });
   }

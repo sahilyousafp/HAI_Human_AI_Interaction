@@ -524,6 +524,11 @@ export function createBridge(options: BridgeOptions): Bridge {
             sourceName: (sourceId) =>
               OPEN_DATA_SOURCES.find((s) => s.id === sourceId)?.attribution ?? sourceId,
             taken: () => new Set(Object.keys(scene.scene.doc.elements)),
+            clear: () => {
+              const { counts } = context.summary();
+              context.clear();
+              return counts;
+            },
           },
           ...(settings.featureOn("openData")
             ? {
@@ -715,6 +720,10 @@ export function createBridge(options: BridgeOptions): Bridge {
       if (rhino.handleFromWeb(message)) return;
       if (message.type === "opendata.clear") {
         openDataRecord.clear();
+        return;
+      }
+      if (message.type === "context.clear") {
+        context.clear();
         return;
       }
       if (

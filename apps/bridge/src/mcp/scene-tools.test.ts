@@ -156,6 +156,7 @@ describe("MCP endpoint access", () => {
         "capture_view",
         "close_panel",
         "context_adopt",
+        "context_clear",
         "context_get",
         "context_list",
         "create_elements",

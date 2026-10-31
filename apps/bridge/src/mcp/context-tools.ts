@@ -16,6 +16,8 @@ export interface ContextTools {
   sourceName(sourceId: string): string;
   /** The model's element ids, to keep an adopted id unique. */
   taken(): ReadonlySet<string>;
+  /** Empties the layer, tells every page, and returns how many items of each kind it held. */
+  clear(): { building: number; tree: number; raster: number };
 }
 
 /** The most items one `context_get` returns. */
@@ -61,7 +63,10 @@ function describe(item: ContextItem) {
   }
 }
 
-/** Registers `context_list` and `context_get` (reading the layer) and `context_adopt` (offered to writers only). */
+/**
+ * Registers `context_list` and `context_get` (reading the layer), `context_adopt` (offered to writers only) and
+ * `context_clear` (emptying it, for every agent).
+ */
 export function registerContextTools(
   register: McpServer["registerTool"],
   deps: ContextTools,
@@ -150,5 +155,15 @@ export function registerContextTools(
       const result = apply(ops);
       return result.ok ? text({ adopted: created }) : failure(result.error);
     },
+  );
+
+  register(
+    "context_clear",
+    {
+      description:
+        "Empties the city context layer: every fetched building, tree and ground raster goes, for the user's own view and everyone's pictures and sun studies. Use it only when the user asked to clear, remove or delete the site context (or the layer). It never touches the model: buildings already adopted as elements stay, and so does the project's site. It cannot be undone, but the data can be fetched again (urban_buildings, urban_vegetation). Says how much it removed.",
+      inputSchema: z.object({}),
+    },
+    async () => text({ cleared: deps.clear() }),
   );
 }
