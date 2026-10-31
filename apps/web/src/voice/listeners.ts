@@ -11,25 +11,49 @@ const stopTracks = (stream: MediaStream) => {
 type Vad = Awaited<ReturnType<typeof import("@ricky0123/vad-web")["MicVAD"]["new"]>>;
 
 /** The speech detector, loaded once and kept; `events` is the listening session it reports to now, if any. */
-let detector: Promise<{ vad: Vad; route: { events: ListenerEvents | null } }> | null = null;
+let detector: Promise<{
+  vad: Vad;
+  route: { events: ListenerEvents | null };
+  audioContext: AudioContext;
+}> | null = null;
+
+/** Where the detector's assets are served from (scripts/fetch-assets.mjs), and the audio worklet it listens through. */
+const VAD_ASSETS = "/vad/";
+const VAD_WORKLET = "vad.worklet.bundle.min.js";
 
 /**
  * Loads Silero VAD (vad-web, in an AudioWorklet) without opening the microphone. Loading takes a second or more, so
  * it is done before the first request (at first engagement) and kept: listening then starts at once.
+ *
+ * The audio context and its worklet module are made here too, and handed to vad-web. Left to itself it opens the
+ * microphone first and only then makes the context and loads the module, which on a slow machine took seconds with the
+ * microphone already open, and the first words of the first request fell in that gap.
  */
 function loadDetector(): NonNullable<typeof detector> {
   detector ??= (async () => {
     const { MicVAD } = await import("@ricky0123/vad-web");
     const route: { events: ListenerEvents | null } = { events: null };
+    const audioContext = new AudioContext();
+    await audioContext.audioWorklet.addModule(`${VAD_ASSETS}${VAD_WORKLET}`);
+    // The context starts suspended when no one has touched the page; an open microphone lets it run.
+    const openMicrophone = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia(MICROPHONE);
+      await audioContext.resume();
+      return stream;
+    };
     const vad = await MicVAD.new({
       model: "v5",
-      baseAssetPath: "/vad/",
+      baseAssetPath: VAD_ASSETS,
       onnxWASMBasePath: "/ort/",
       startOnLoad: false,
+      audioContext,
       // The microphone opens when listening starts and every track stops when it pauses.
-      getStream: () => navigator.mediaDevices.getUserMedia(MICROPHONE),
-      pauseStream: async (stream) => stopTracks(stream),
-      resumeStream: () => navigator.mediaDevices.getUserMedia(MICROPHONE),
+      getStream: openMicrophone,
+      pauseStream: async (stream) => {
+        stopTracks(stream);
+        await audioContext.suspend();
+      },
+      resumeStream: openMicrophone,
       redemptionMs: VOICE.silenceMs,
       preSpeechPadMs: 300,
       // A one-syllable command ("Bake.", "Undo.") has less than 250 ms of voiced speech and was dropped as a misfire;
@@ -44,7 +68,7 @@ function loadDetector(): NonNullable<typeof detector> {
         ort.env.logLevel = "error";
       },
     });
-    return { vad, route };
+    return { vad, route, audioContext };
   })();
   detector.catch(() => {
     detector = null;
@@ -68,7 +92,7 @@ export async function detectorLoaded(): Promise<void> {
  * is ours, so ending a session always stops every track.
  */
 export async function listenOnDevice(events: ListenerEvents): Promise<Listener> {
-  const { vad, route } = await loadDetector();
+  const { vad, route, audioContext } = await loadDetector();
   route.events = events;
   try {
     await vad.start();
@@ -77,6 +101,7 @@ export async function listenOnDevice(events: ListenerEvents): Promise<Listener> 
     route.events = null;
     detector = null;
     vad.destroy().catch(() => {}); // a detector that never started has nothing to stop, and says so by throwing
+    audioContext.close().catch(() => {});
     throw error;
   }
   // A session only ends itself: once a newer one has the detector, ending this one changes nothing.
