@@ -27,6 +27,10 @@ The end-to-end tests start their own bridge and dev server (ports 4880 and 5183,
 
 CI runs the same commands on Windows and Ubuntu. Please keep them green: no new lint warnings, no skipped or flaky tests.
 
+## Picking the work up
+
+[docs/handoff.md](docs/handoff.md) is the current state of the work: how it is done here, the traps of the Windows setup, how to read CI, what was finished last and what is open.
+
 ## How work is planned
 
 Changes are specified with [OpenSpec](https://github.com/Fission-AI/OpenSpec) under `openspec/changes/`. Each change has a proposal, specs, a design and a task list, and ends with a short demo script in `demos/`. To propose something new, open an issue first or draft an OpenSpec change.

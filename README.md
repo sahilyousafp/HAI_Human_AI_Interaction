@@ -2,7 +2,7 @@
 
 **Hands, face and voice for AEC agents.** HAI (Human AI Interface) is an open-source interaction layer that lets AEC professionals work with their own AI agent and their design software using a normal laptop webcam: point at a wall, say "make it 300 thick", nod to accept.
 
-> Status: week 12 of a 19-week build in public. Hand and face tracking, both hands as equal pointers, gestures, hand navigation, tool rings with hand-drawn walls, slabs and columns, your own Claude as a small design team (Mochi and its specialists), on-device voice in and out, an Apple-style studio layout with feature switches and a "show my hands" overlay for recordings, pointers that snap to buttons, drawing aids (snap, ortho, projection) import of Rhino .3dm models, snapping and measuring at every height, new empty projects and saving as a Rhino file all work in the built-in viewer. Next: the Rhino 8 connector.
+> Status: past week 14 of a 19-week build in public. Hand and face tracking, both hands as equal pointers, gestures, hand navigation, tool rings with hand-drawn walls, slabs and columns, your own Claude as a small design team (Mochi and its specialists), on-device voice in and out, an Apple-style studio layout with feature switches and a "show my hands" overlay for recordings, pointers that snap to buttons, drawing aids (snap, ortho, projection) import of Rhino .3dm models, snapping and measuring at every height, new empty projects and saving as a Rhino file all work in the built-in viewer. Since then: the Rhino 8 connector, agents working in parallel on separate parts of the model, generated panels, an OpenCascade geometry kernel, hold to talk with spoken commands, a lasso, and on-device speech with Moonshine v2. Where the work stands and what is open: [docs/handoff.md](docs/handoff.md).
 
 Watch the build stage by stage, each with its clip and LinkedIn post, at [hai.spairl.si](https://hai.spairl.si). The site's source is in [website/](website/).
 
@@ -56,6 +56,10 @@ To run the desktop app instead (one window, the bridge started for you), use `pn
 ### Coming from AEX
 
 HAI was called AEX until week 12. Nothing is lost: when the bridge starts, an old `.aex` folder becomes `.hai` (settings, sessions, the always-allowed tools, the team), and a project folder's `scene.aex.json` and `assets/*.aexmesh` take their new names the first time the project opens. Saved tool names follow the app's tool server from `mcp__aex__` to `mcp__hai__`. What does not carry over: environment variables are now `HAI_*` (`AEX_WORKSPACE` is `HAI_WORKSPACE`, and so on), and a few view choices kept in the browser (camera view minimised, last settings page) start from their defaults.
+
+## Carrying on
+
+[docs/handoff.md](docs/handoff.md) says where the work stands, how it is done here (branches, what to run before a push, the traps of the Windows setup, how to read CI), what was finished last and what is open, in the order to take it. Start there, then [docs/decisions.md](docs/decisions.md) for why things are the way they are.
 
 ## Roadmap
 
