@@ -439,7 +439,16 @@ button {
 }
 .toolbar-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+}
+/* A button keeps its label on one line and its size: the row wraps instead of squeezing them into ovals. */
+.toolbar-buttons > * {
+  flex: none;
+  white-space: nowrap;
+}
+.toolbar-buttons button {
+  white-space: nowrap;
 }
 .project-message {
   display: flex;
@@ -759,20 +768,19 @@ button {
     transition: none;
   }
 }
+/* What tools say sits in the model's left column, under the project bar, so it never covers the bar's buttons. */
 .tool-messages {
-  position: absolute;
-  top: 72px;
-  left: calc(var(--hud-left) + (100% - var(--hud-left)) / 2);
-  transform: translateX(-50%);
-  max-width: min(64ch, calc(100% - var(--hud-left) - 24px));
-  z-index: 2;
+  max-width: min(64ch, 100%);
 }
-/* Narrow screens: the agent panel spans the width, so messages sit at the bottom, above the status strip. */
+/* The live region stays in the page when it is empty, but takes no room: undo the column's gap above it. */
+.tool-messages:empty {
+  margin-top: -8px;
+}
+/* Narrow screens: the agent panel spans the width, so the hint sits at the bottom, above the status strip. */
 @media (max-width: 860px) {
   .stage {
     --hud-left: 0px;
   }
-  .tool-messages,
   .hint {
     top: auto;
     bottom: 64px;
@@ -1292,12 +1300,10 @@ kbd {
     animation: none;
   }
 }
-@media (max-width: 860px) {
-  .camera-view {
-    width: 200px;
-  }
-  .camera-readouts {
-    display: none;
+@media (max-width: 1100px) {
+  /* The bottom left column stops short of the camera view (200 px and its 16 px margin) rather than running under it. */
+  .viewer-bottom {
+    max-width: calc(100% - 24px - 216px);
   }
 }
 @media (max-width: 560px) {
@@ -3911,6 +3917,15 @@ kbd {
   background: rgb(0 0 0 / 0.78);
   box-shadow: none;
 }
+/* Beside the chat rail the model is narrow: the camera view shrinks to a small card without its readouts. */
+@media (max-width: 1100px) {
+  .camera-view:not([data-expanded="true"]) {
+    width: 200px;
+  }
+  .camera-view:not([data-expanded="true"]) .camera-readouts {
+    display: none;
+  }
+}
 .preview {
   position: relative;
   aspect-ratio: 4 / 3;
@@ -4675,15 +4690,22 @@ kbd {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  max-height: calc(100% - 76px);
+  /* Stops above the camera view (about 260 px and its margins) rather than running under it. */
+  max-height: calc(100% - 300px);
   pointer-events: none;
 }
 .sun-badge ~ .viewer-right {
   top: 56px;
 }
 .constraints {
+  /* Scrolls inside its own rounded edge when the model is too short for every row. */
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
   pointer-events: auto;
   display: grid;
+  /* One column as wide as the panel: its rows wrap instead of widening it past the edge of the model. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   width: 244px;
   padding: 12px;
@@ -4699,8 +4721,10 @@ kbd {
 }
 .constraints-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 .constraints-label {
   flex: none;
@@ -4733,6 +4757,7 @@ kbd {
 }
 .constraints-length {
   flex: 1;
+  width: 0;
   min-width: 0;
   min-height: 36px;
   padding: 0 10px;
@@ -4766,6 +4791,19 @@ kbd {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--ink);
 }
+/* Beside the chat rail the model is narrow: the right column stops above the camera view, the constraints scroll
+   inside it, and the left column leaves room for it while they show. */
+@media (max-width: 1100px) {
+  .constraints {
+    width: 208px;
+  }
+  .viewer-right {
+    max-height: calc(100% - 240px);
+  }
+  .stage:has(.constraints) .viewer-left {
+    max-width: calc(100% - 24px - 220px);
+  }
+}
 @media (max-width: 860px) {
   .viewer-right {
     max-height: 50%;
@@ -4777,6 +4815,7 @@ kbd {
 
 /* The view cube: a 52 px cube that turns with the camera, its faces the orthographic views. */
 .view-cube-box {
+  flex: none;
   pointer-events: auto;
   display: grid;
   justify-items: center;

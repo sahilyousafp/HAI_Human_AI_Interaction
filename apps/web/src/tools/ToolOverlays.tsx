@@ -35,7 +35,7 @@ export function ToolIcon({ path, size = 22 }: { path: string; size?: number }) {
 export const RING_NAMES: Record<Ring, string> = { action: "Action ring", reference: "Reference ring" };
 
 /** The radial palette: 8 slots around where it was opened, the highlighted one filled. */
-function Palette({ controller }: { controller: ToolController }) {
+export function Palette({ controller }: { controller: ToolController }) {
   const { palette, layouts } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   if (!palette || palette.hidden) return null;
   const layout = layouts[palette.ring];
@@ -108,44 +108,36 @@ export function SectionStatus({ controller }: { controller: ToolController }) {
 }
 
 /**
- * Everything tools show over the 3D view: the palette, the current instruction or message and the yes-or-no
- * question for a deletion. The section readout is `SectionStatus`, beside the status bar.
+ * What tools say to the user, under the project bar: the current instruction or message, and the yes-or-no question for
+ * a deletion. The section readout is `SectionStatus`, beside the status bar.
  */
-export function ToolOverlays({ controller }: { controller: ToolController }) {
+export function ToolMessages({ controller }: { controller: ToolController }) {
   const { overlay, question } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   return (
-    <>
-      <div className="tool-messages" aria-live="polite">
-        {question ? (
-          <div className="tool-question" data-testid="tool-question" role="alertdialog" aria-label="Confirm">
-            <span>{question}</span>
-            <div className="tool-question-actions">
-              <button
-                type="button"
-                className="danger"
-                data-hand-press
-                onClick={() => controller.respond(true)}
-              >
-                Delete <kbd>Enter</kbd>
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                data-hand-press
-                onClick={() => controller.respond(false)}
-              >
-                Keep <kbd>Esc</kbd>
-              </button>
-            </div>
+    <div className="tool-messages" aria-live="polite">
+      {question ? (
+        <div className="tool-question" data-testid="tool-question" role="alertdialog" aria-label="Confirm">
+          <span>{question}</span>
+          <div className="tool-question-actions">
+            <button type="button" className="danger" data-hand-press onClick={() => controller.respond(true)}>
+              Delete <kbd>Enter</kbd>
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              data-hand-press
+              onClick={() => controller.respond(false)}
+            >
+              Keep <kbd>Esc</kbd>
+            </button>
           </div>
-        ) : overlay.notice ? (
-          <p className="tool-notice" data-testid="tool-notice">
-            {overlay.notice}
-          </p>
-        ) : null}
-      </div>
-      <Palette controller={controller} />
-    </>
+        </div>
+      ) : overlay.notice ? (
+        <p className="tool-notice" data-testid="tool-notice">
+          {overlay.notice}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
