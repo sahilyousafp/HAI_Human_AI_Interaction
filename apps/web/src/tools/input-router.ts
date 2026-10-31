@@ -71,6 +71,8 @@ export interface RouterTalk {
   end(hand: Hand, send: boolean): void;
   /** Calls `listener` when speech starts during a hold. Returns a function that stops calling it. */
   onSpeech(listener: (hand: Hand) => void): () => void;
+  /** Calls `listener` when a stretch of speech during a hold stops (a pause, or a sound that was not speech). */
+  onQuiet(listener: (hand: Hand) => void): () => void;
 }
 
 /** How a held pinch ended, for the local counts in the Detection card. */
@@ -122,7 +124,7 @@ export class InputRouter {
   private bothFists = false;
   private twoHand = false;
   /** The held pinch that is listening, if any (one at a time, like a ring). */
-  private hold: { hand: Hand; machine: HoldMachine; ring: Ring; timer: unknown } | null = null;
+  private hold: { hand: Hand; machine: HoldMachine; ring: Ring; timer: unknown; at: Point2 } | null = null;
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (handle: unknown) => void;
@@ -135,6 +137,7 @@ export class InputRouter {
     this.setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
     options.talk?.onSpeech((hand) => this.speech(hand));
+    options.talk?.onQuiet((hand) => this.quiet(hand));
   }
 
   private get bindings(): GestureBindings {
@@ -265,7 +268,7 @@ export class InputRouter {
     const machine = new HoldMachine({ center: position, aspect: palette.aspect?.() ?? 4 / 3 }, this.now());
     if (this.ringOpens(ring)) palette.open(position, ring, hand, true);
     const timer = this.setTimer(() => this.showRing(), RING_AFTER_MS);
-    this.hold = { hand, machine, ring, timer };
+    this.hold = { hand, machine, ring, timer, at: position };
     this.owners.set(hand, "talk");
     return true;
   }
@@ -289,6 +292,20 @@ export class InputRouter {
     if (this.targets.palette.isOpen) this.targets.palette.cancel();
   }
 
+  /**
+   * A stretch of speech stopped, and the hand has not let go: the hold is silent again, so the ring that speech took
+   * away comes back after the silence (a cough or a click is not a reason to lose the tools).
+   */
+  quiet(hand: Hand): void {
+    const hold = this.hold;
+    if (!hold || hold.hand !== hand) return;
+    hold.machine.quiet(this.now());
+    const { palette } = this.targets;
+    if (!palette.isOpen && this.ringOpens(hold.ring)) palette.open(hold.at, hold.ring, hand, true);
+    this.clearTimer(hold.timer);
+    hold.timer = this.setTimer(() => this.showRing(), RING_AFTER_MS);
+  }
+
   private showRing(): void {
     if (this.hold?.machine.state(this.now()).ringShown) this.targets.palette.show?.();
   }
@@ -296,7 +313,7 @@ export class InputRouter {
   private endTalk(hand: Hand): void {
     const hold = this.hold;
     if (!hold || hold.hand !== hand) return;
-    const spoke = hold.machine.state(this.now()).phase === "speaking";
+    const spoke = hold.machine.heardSpeech;
     const outcome = hold.machine.release();
     this.clearTimer(hold.timer);
     this.hold = null;

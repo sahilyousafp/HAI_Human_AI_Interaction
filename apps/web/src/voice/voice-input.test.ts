@@ -471,6 +471,20 @@ describe("a held pinch", () => {
     expect(sent.map((x) => x.text)).toEqual(["make this 300 thick"]);
   });
 
+  it("the hand is told each time speech starts and each time it stops, a sound that was not speech included", async () => {
+    const { voice, spoken, settle, events } = held();
+    const quiet: string[] = [];
+    voice.onHeldQuiet((hand) => quiet.push(hand));
+    voice.startHeld("Right", wall);
+    await settle();
+    events()?.speechStart();
+    events()?.misfire?.();
+    events()?.speechStart();
+    events()?.speechEnd({ audio: new Float32Array(8000) });
+    expect(spoken).toEqual(["Right", "Right"]);
+    expect(quiet).toEqual(["Right", "Right"]);
+  });
+
   it("a held pinch released without sending drops what was said", async () => {
     const { voice, sent, settle, events } = held();
     voice.startHeld("Right", wall);

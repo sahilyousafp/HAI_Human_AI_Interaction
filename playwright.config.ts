@@ -50,6 +50,7 @@ const voiceProjects: Project[] = [
   "sketch-area",
   "measure-the-towers",
   "copy-this-there",
+  "click-then-word",
 ]
   .filter((fixture) => existsSync(join(import.meta.dirname, "e2e", "voice", `${fixture}.spec.ts`)))
   .map((fixture) => ({

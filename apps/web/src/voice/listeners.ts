@@ -60,7 +60,9 @@ function loadDetector(): NonNullable<typeof detector> {
       // the microphone only opens on an explicit action, so a short floor costs little.
       minSpeechMs: 150,
       submitUserSpeechOnPause: true,
-      onSpeechStart: () => route.events?.speechStart(),
+      // Speech starts once the detector is sure (`minSpeechMs`), not at the first loud frame: a click, a cough or a breath
+      // is a misfire after the fact, and by then a held pinch's ring would already have been taken away for it.
+      onSpeechRealStart: () => route.events?.speechStart(),
       onSpeechEnd: (audio) => route.events?.speechEnd({ audio }),
       onVADMisfire: () => route.events?.misfire?.(),
       onFrameProcessed: (probabilities) => route.events?.level(probabilities.isSpeech),

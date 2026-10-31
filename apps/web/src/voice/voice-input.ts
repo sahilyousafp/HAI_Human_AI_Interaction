@@ -153,6 +153,7 @@ export class VoiceInput {
    */
   private held: HeldRequest | null = null;
   private readonly heldSpeech = new Set<(hand: Hand) => void>();
+  private readonly heldQuiet = new Set<(hand: Hand) => void>();
 
   constructor(private readonly deps: VoiceDeps) {
     this.now = deps.now ?? (() => Date.now());
@@ -296,6 +297,12 @@ export class VoiceInput {
     return () => this.heldSpeech.delete(listener);
   };
 
+  /** Calls `listener` when a stretch of speech during a held pinch stops, said or not speech after all. */
+  onHeldQuiet = (listener: (hand: Hand) => void): (() => void) => {
+    this.heldQuiet.add(listener);
+    return () => this.heldQuiet.delete(listener);
+  };
+
   /**
    * A long pinch is held: listen until it is released, about `target`. Pauses do not end it; what is said is
    * collected and sent as one request on release (`releaseHeld`). Returns false, starting nothing, while another
@@ -330,8 +337,8 @@ export class VoiceInput {
             this.context.begin(this.now(), null);
             this.ticking(session);
             this.after(VOICE.maxUtteranceMs, () => this.releaseHeld(true));
-            for (const listener of this.heldSpeech) listener(hand);
           }
+          for (const listener of this.heldSpeech) listener(hand);
           this.update({ phase: "listening", speaking: true, level: 1, held: hand });
         },
         speechEnd: (result) => this.heardHeld(session, result),
@@ -375,6 +382,7 @@ export class VoiceInput {
    */
   private segmentOver(held: HeldRequest): void {
     held.speaking = false;
+    for (const listener of this.heldQuiet) listener(held.hand);
     if (!held.releasing) {
       this.update({ phase: "listening", speaking: false, level: 0, held: held.hand });
       return;
