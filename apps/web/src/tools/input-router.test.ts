@@ -69,7 +69,7 @@ function setup(
   };
   const bindings = { ...DEFAULT_BINDINGS, ...options.bindings };
   const enabled = (feature: FeatureId) => !options.off?.includes(feature);
-  return { router: new InputRouter(targets, { bindings: () => bindings, agent, enabled }), log };
+  return { router: new InputRouter(targets, { bindings: () => bindings, agent, enabled }), log, targets };
 }
 
 let ts = 1000;
@@ -132,6 +132,25 @@ describe("InputRouter", () => {
     router.handle(ev("pinch.drag.update"));
     router.handle(ev("pinch.drag.end"));
     expect(log).toEqual(["tool.dragStart", "tool.drag", "tool.drag", "tool.dragEnd"]);
+  });
+
+  it("a long pinch gives way when the tool only places on a press: the point is dropped and the ring opens", () => {
+    const { router, log, targets } = setup(true);
+    targets.tool.yieldHold = () => {
+      log.push("tool.yieldHold");
+      return true;
+    };
+    router.handle(ev("pinch.drag.start"));
+    router.handle(ev("pinch.hold"));
+    router.handle(ev("pinch.drag.update"));
+    router.handle(ev("pinch.drag.end"));
+    expect(log).toEqual([
+      "tool.dragStart",
+      "tool.yieldHold",
+      "palette.open:action:Right",
+      "palette.steer",
+      "palette.release",
+    ]);
   });
 
   it("a long pinch during an orbit ends the orbit before the palette opens", () => {

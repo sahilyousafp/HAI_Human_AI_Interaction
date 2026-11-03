@@ -587,3 +587,64 @@ describe("resolvePoint: cost", () => {
     expect(best).toBeLessThan(2);
   });
 });
+
+describe("a hand's jitter", () => {
+  const north = wall("north", [0, 5000], [8000, 5000]);
+  const at = (
+    on: Partial<DrawingAids>,
+    pointer: [number, number],
+    anchor: Point3Mm | null,
+    keep: { snap: { point: Point3Mm; kind: "endpoint" } | null; angleDeg: number | null },
+    stepDeg = 45,
+  ) => {
+    const { project, ground } = view(1);
+    const result = resolvePoint({
+      pointer,
+      ground: ground(pointer),
+      anchor,
+      aids: aids(on),
+      index: buildSnapIndex(docOf(north)),
+      project,
+      constraints: { angleStepDeg: stepDeg },
+      keep,
+    });
+    if (!result) throw new Error("no point");
+    return result;
+  };
+  const origin: Point3Mm = [0, 0, 0];
+
+  it("a snap it has stays past where it would be taken, and lets go further out", () => {
+    const end: Point3Mm = [8000, 5000, 0];
+    const keep = { snap: { point: end, kind: "endpoint" as const }, angleDeg: null };
+    // 30 px away: outside the 24 px it is taken within, inside the 36 px it is kept to.
+    expect(at({ endpoint: true }, [8030, 5000], null, keep).point).toEqual(end);
+    expect(at({ endpoint: true }, [8030, 5000], null, { snap: null, angleDeg: null }).kind).toBeNull();
+    expect(at({ endpoint: true }, [8040, 5000], null, keep).kind).toBeNull();
+  });
+
+  it("an angle it has stays across the half-way line to the next step, until clearly past it", () => {
+    const degrees = (deg: number): [number, number] => [
+      4000 * Math.cos((deg * Math.PI) / 180),
+      4000 * Math.sin((deg * Math.PI) / 180),
+    ];
+    // 24 degrees is nearer 45 than 0, but only just.
+    expect(at({ ortho: true }, degrees(24), origin, { snap: null, angleDeg: 0 }).angleDeg).toBe(0);
+    expect(at({ ortho: true }, degrees(24), origin, { snap: null, angleDeg: null }).angleDeg).toBe(45);
+    expect(at({ ortho: true }, degrees(30), origin, { snap: null, angleDeg: 0 }).angleDeg).toBe(45);
+  });
+
+  it("right beside the anchor, where the direction is only jitter, the angle does not swing", () => {
+    // 5 px from the anchor, pointing the other way: nothing about that is a new direction.
+    expect(at({ ortho: true }, [-5, 1], origin, { snap: null, angleDeg: 0 }).angleDeg).toBe(0);
+    // Further out, the same direction is meant.
+    expect(at({ ortho: true }, [-500, 100], origin, { snap: null, angleDeg: 0 }).angleDeg).toBe(180);
+  });
+
+  it("a kept angle from another step setting does not apply", () => {
+    expect(at({ ortho: true }, [4000, 4000], origin, { snap: null, angleDeg: 15 }, 90).angleDeg).not.toBe(15);
+  });
+
+  it("without keep, as for the mouse, nothing is held and no extra field changes the free point", () => {
+    expect(resolve(docOf(north), { endpoint: true }, [8030, 5000]).kind).toBeNull();
+  });
+});

@@ -209,6 +209,11 @@ export interface ResolveInput {
     /** The length of the segment, millimetres, along the Ortho direction or else towards the pointer. */
     lengthMm?: number | null;
   };
+  /**
+   * For a hand, whose jitter must not flip what it has: the snap and the Ortho angle the last call gave for this anchor.
+   * A kept snap holds until the pointer is 36 px from it, and a kept angle until the pointer is clearly nearer the next.
+   */
+  keep?: { snap: { point: Point3Mm; kind: SnapKind } | null; angleDeg: number | null };
 }
 
 export interface Resolved {
@@ -220,6 +225,8 @@ export interface Resolved {
   label: string | null;
   /** The line is held to an axis or a diagonal. */
   ortho: boolean;
+  /** The angle Ortho held the line to, degrees, when it held one (what `keep.angleDeg` takes next time). */
+  angleDeg?: number;
 }
 
 const round3 = (p: Point3Mm): Point3Mm => [Math.round(p[0]), Math.round(p[1]), Math.round(p[2])];
@@ -232,12 +239,73 @@ const directionAt = (angle: number): PointMm =>
  * The unit direction an ortho line takes from `anchor` towards `raw` in plan: the nearest multiple of `stepDeg` from the
  * X axis, however far the pointer is from it (a hard lock, as in Rhino). Null only when the pointer is on the anchor.
  */
-function orthoDirection(anchor: readonly number[], raw: readonly number[], stepDeg: number): PointMm | null {
+function orthoDirection(
+  anchor: readonly number[],
+  raw: readonly number[],
+  stepDeg: number,
+  hold: AngleHold,
+): PointMm | null {
   const dx = (raw[0] as number) - (anchor[0] as number);
   const dy = (raw[1] as number) - (anchor[1] as number);
   if (Math.hypot(dx, dy) === 0) return null;
-  const step = (stepDeg * Math.PI) / 180;
-  return directionAt(Math.round(Math.atan2(dy, dx) / step) * step);
+  return directionAt((heldAngle(Math.atan2(dy, dx), stepDeg, hold) * Math.PI) / 180);
+}
+
+/** What the angle step should do with a held angle: the one kept from the last call, and how near the anchor the pointer is. */
+interface AngleHold {
+  keptDeg: number | null;
+  /** The pointer is so near the anchor on screen that its direction is mostly the hand's jitter. */
+  nearAnchor: boolean;
+  /** The angle in use, degrees, once one was worked out. */
+  chosenDeg: number | null;
+}
+
+/** Past the half-way line to the next angle step, a held angle lets go after this much, degrees. */
+const ANGLE_MARGIN_DEG = 4;
+/** A pointer nearer its anchor than this on screen, px, gives no reliable direction. */
+const ANCHOR_DEAD_PX = 16;
+/** A snap a hand has stays until the pointer is this far from it on screen, px (it is taken within 24). */
+const SNAP_RELEASE_PX = 36;
+
+/**
+ * The step nearest a direction, in degrees; a kept step stays while the pointer is too near the anchor to give a
+ * direction, or within `ANGLE_MARGIN_DEG` past the half-way line to the next step.
+ */
+function heldAngle(radians: number, stepDeg: number, hold: AngleHold): number {
+  const degrees = (radians * 180) / Math.PI;
+  const { keptDeg } = hold;
+  let chosen = Math.round(degrees / stepDeg) * stepDeg;
+  if (keptDeg !== null && keptDeg % stepDeg === 0) {
+    const off = Math.abs(((((degrees - keptDeg + 180) % 360) + 360) % 360) - 180);
+    if (hold.nearAnchor || off <= stepDeg / 2 + ANGLE_MARGIN_DEG) chosen = keptDeg;
+  }
+  hold.chosenDeg = chosen;
+  return chosen;
+}
+
+/** Whether a pointer is within `ANCHOR_DEAD_PX` of the anchor on screen. */
+function pointerNearAnchor(input: ResolveInput): boolean {
+  const out: [number, number] = [0, 0];
+  if (!input.anchor || !input.project?.(input.anchor, out)) return false;
+  return Math.hypot(out[0] - input.pointer[0], out[1] - input.pointer[1]) < ANCHOR_DEAD_PX;
+}
+
+/** The snaps a hand keeps: fixed points. `project` is not one, as it slides along its edge. */
+const KEPT_KINDS = ["endpoint", "midpoint", "centre", "perpendicular"] as const;
+
+/** The snap kept from the last call, when it still holds. */
+function keptSnap(
+  input: ResolveInput,
+  distance2: (q: [number, number]) => number,
+  onLine: (p: Point3Mm) => boolean,
+  ortho: boolean,
+): Resolved | null {
+  const kept = input.keep?.snap;
+  const kind = KEPT_KINDS.find((k) => k === kept?.kind);
+  if (!kept || !kind || !input.aids[kind] || !input.project) return null;
+  const at: [number, number] = [0, 0];
+  if (!input.project(kept.point, at) || distance2(at) > SNAP_RELEASE_PX * SNAP_RELEASE_PX) return null;
+  return onLine(kept.point) ? snapped(kept.point, kind, ortho) : null;
 }
 
 /** The distance from a point to the infinite line through `anchor` along `dir`, in plan. */
@@ -346,13 +414,25 @@ const snapped = (point: Point3Mm, kind: SnapKind, ortho: boolean): Resolved => (
  * snapped.
  */
 export function resolvePoint(input: ResolveInput): Resolved | null {
-  if (input.plane && input.plane !== "xy") return resolveInPlane(input, input.plane);
+  const hold: AngleHold = {
+    keptDeg: input.keep?.angleDeg ?? null,
+    nearAnchor: input.keep ? pointerNearAnchor(input) : false,
+    chosenDeg: null,
+  };
+  const result =
+    input.plane && input.plane !== "xy"
+      ? resolveInPlane(input, input.plane, hold)
+      : resolveInPlan(input, hold);
+  return result && hold.chosenDeg !== null ? { ...result, angleDeg: hold.chosenDeg } : result;
+}
+
+function resolveInPlan(input: ResolveInput, hold: AngleHold): Resolved | null {
   const { pointer, anchor, aids, index, project } = input;
   const height = anchor ? anchor[2] : 0;
   const raw = input.ground(height);
   const dir =
     aids.ortho && anchor && raw
-      ? orthoDirection(anchor, raw, input.constraints?.angleStepDeg ?? DEFAULT_ORTHO_STEP_DEG)
+      ? orthoDirection(anchor, raw, input.constraints?.angleStepDeg ?? DEFAULT_ORTHO_STEP_DEG, hold)
       : null;
   const ortho = dir !== null;
   const lengthMm = input.constraints?.lengthMm;
@@ -388,6 +468,8 @@ export function resolvePoint(input: ResolveInput): Resolved | null {
   const dist2 = (q: [number, number]) => (q[0] - reach[0]) ** 2 + (q[1] - reach[1]) ** 2;
 
   if (project) {
+    const kept = keptSnap(input, dist2, onLine, ortho);
+    if (kept) return kept;
     // Elements whose bounding sphere is far from the pointer on screen cannot hold a candidate within reach.
     const near = nearGroups(index, project, reach);
     for (const kind of ["endpoint", "midpoint", "centre"] as const) {
@@ -489,7 +571,7 @@ const PLANE_AXES: Record<"xz" | "yz", [number, number, number]> = { xz: [0, 2, 1
  * plane's two axes), a typed length, then the point snaps within reach on screen, then Grid, with the free point on the
  * plane as the last resort. `input.ground` gives the view ray's point on the plane through the anchor.
  */
-function resolveInPlane(input: ResolveInput, plane: "xz" | "yz"): Resolved | null {
+function resolveInPlane(input: ResolveInput, plane: "xz" | "yz", hold: AngleHold): Resolved | null {
   const { pointer, anchor, aids, index, project } = input;
   const [ia, ib, ni] = PLANE_AXES[plane];
   const raw = input.ground(anchor ? (anchor[ni] as number) : 0);
@@ -512,8 +594,8 @@ function resolveInPlane(input: ResolveInput, plane: "xz" | "yz"): Resolved | nul
     const [da, db] = along2(raw, anchor);
     const reach = Math.hypot(da, db);
     if (aids.ortho && reach > 0) {
-      const step = ((input.constraints?.angleStepDeg ?? DEFAULT_ORTHO_STEP_DEG) * Math.PI) / 180;
-      const angle = Math.round(Math.atan2(db, da) / step) * step;
+      const stepDeg = input.constraints?.angleStepDeg ?? DEFAULT_ORTHO_STEP_DEG;
+      const angle = (heldAngle(Math.atan2(db, da), stepDeg, hold) * Math.PI) / 180;
       dir = [Math.cos(angle), Math.sin(angle)].map((v) => (Math.abs(v) < 1e-9 ? 0 : v)) as [number, number];
     }
     const lengthMm = input.constraints?.lengthMm;
@@ -549,6 +631,8 @@ function resolveInPlane(input: ResolveInput, plane: "xz" | "yz"): Resolved | nul
     const reach: [number, number] = [pointer[0], pointer[1]];
     if (ortho) project(held, reach);
     const dist2 = (q: [number, number]) => (q[0] - reach[0]) ** 2 + (q[1] - reach[1]) ** 2;
+    const kept = keptSnap(input, dist2, onLine, ortho);
+    if (kept) return kept;
     const near = nearGroups(index, project, reach);
     for (const kind of ["endpoint", "midpoint", "centre"] as const) {
       if (!aids[kind]) continue;

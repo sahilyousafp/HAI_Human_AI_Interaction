@@ -3,6 +3,7 @@ import {
   actionFor,
   DEFAULT_BINDINGS,
   DRAWING_AIDS,
+  type DrawingAidId,
   type Element,
   type GestureEvent,
   type Hand,
@@ -908,6 +909,11 @@ export function Viewer({
   const sun = useSyncExternalStore(view.onSun, () => view.sun);
   const featureState = useSyncExternalStore(features.subscribe, features.getSnapshot);
   const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
+  /** An aid as it applies now: Ortho in the status bar is the active tool's own lock when it has one (Line). */
+  const aidOn = (id: DrawingAidId): boolean => {
+    const own = tools.registry.get(toolState.activeId)?.orthoAid;
+    return aidState[id === "ortho" && own ? own : id];
+  };
   const modelVersion = useSyncExternalStore(modelAssets.subscribe, modelAssets.getVersion);
   // The count of documents that have arrived whole, to frame each once; the objects themselves are the layer's own.
   const rhinoSynced = useSyncExternalStore(mirror.subscribe, () => mirror.getSnapshot().synced);
@@ -1407,6 +1413,13 @@ export function Viewer({
         if (state) shown[hand] = { ...state, focus: hand === focusHand };
       }
       publish();
+      // The hand steering a line keeps steering it while the other hand has the focus.
+      for (const hand of ["Left", "Right"] as const) {
+        const state = shown[hand];
+        if (!state || hand === focusHand || !bus.engaged || navigating.current || state.overControl) continue;
+        if (!overHud(wrapper.current, state.at))
+          tools.follow(state.at, hand, sample.closing?.[hand] ?? false);
+      }
       const pointer = focusHand ? shown[focusHand] : undefined;
       groundAtRef.current = pointer?.at ?? null;
       if (
@@ -1423,7 +1436,8 @@ export function Viewer({
         ? pickRef.current.near(pointer.at[0], pointer.at[1])
         : pickRef.current.hit(pointer.at[0], pointer.at[1]);
       setHoverId(lit?.elementId ?? null);
-      tools.hover(pointer.at, focusHand ?? "Right");
+      const hand = focusHand ?? "Right";
+      tools.hover(pointer.at, hand, sample.closing?.[hand] ?? false);
     });
     const offEngaged = bus.onEngaged((value) => {
       setEngaged(value);
@@ -2040,7 +2054,7 @@ export function Viewer({
           </span>
           <span data-testid="aids-status">
             Aids:{" "}
-            {DRAWING_AIDS.filter((a) => aidState[a.id])
+            {DRAWING_AIDS.filter((a) => a.id !== "lineOrtho" && aidOn(a.id))
               .map((a) => a.label)
               .join(", ") || "none"}
           </span>

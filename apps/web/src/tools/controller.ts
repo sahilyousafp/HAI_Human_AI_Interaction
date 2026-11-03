@@ -175,6 +175,12 @@ export class ToolController {
   private paletteHand: Hand | null = null;
   private paletteHidden = false;
   private env: ToolEnvironment | null = null;
+  /** What a hand's point held last time, so its jitter does not flip a snap or an angle; for one anchor at a time. */
+  private keptPoint: {
+    anchor: string;
+    snap: { point: Point3Mm; kind: SnapKind } | null;
+    angleDeg: number | null;
+  } | null = null;
   /** What moved the pointer in the latest tap, hover or drag start: a hand snaps to models, the mouse does not. */
   private pickSource: PointerSource = "mouse";
   /**
@@ -413,16 +419,32 @@ export class ToolController {
    * Hover feedback. The section outline responds in every tool (it lights up and the pointer shows grab), so the
    * section can be picked up whatever tool is active.
    */
-  hover(at: Point2, source: PointerSource = "mouse"): void {
+  hover(at: Point2, source: PointerSource = "mouse", closing = false): void {
     this.pickSource = source;
     const ctx = this.ctx();
     if (!ctx || this.toolDragger !== null) return;
+    if (closing && this.active?.pressPlaces?.()) return; // the point is what the preview shows, not where the pinch dips
     const line = this.onSectionLine(at);
     const ownHover = this.active?.onHover;
     ownHover?.call(this.active, ctx, at);
     // A tool with its own hover (Section) may light the section up for other reasons too; the line always does.
     const hover = ownHover ? this.snapshot.overlay.sectionHover || line : line;
     if (hover !== this.snapshot.overlay.sectionHover) this.setOverlay({ sectionHover: hover });
+  }
+
+  /** A hand that does not have the focus moved: the tool follows it when that hand is steering what it draws. */
+  follow(at: Point2, hand: Hand, closing = false): void {
+    if (this.active?.followsHand?.() !== hand) return;
+    const previous = this.pickSource;
+    this.hover(at, hand, closing);
+    this.pickSource = previous;
+  }
+
+  /** A long pinch while the active tool has this hand's drag: a press to place gives it up, committing nothing. */
+  private yieldHold(hand: Hand): boolean {
+    if (this.grabs.get(hand)?.kind !== "tool" || !this.active?.pressPlaces?.()) return false;
+    this.cancelDrag(hand);
+    return true;
   }
 
   private onSectionLine(at: Point2): boolean {
@@ -613,6 +635,7 @@ export class ToolController {
         drag: (p, hand) => this.drag(toViewer(p), hand),
         dragEnd: (p, hand) => this.dragEnd(toViewer(p), hand),
         dragCancel: (hand) => this.cancelDrag(hand),
+        yieldHold: (hand) => this.yieldHold(hand),
         nod: () => this.accept(),
         shake: () => this.cancel(),
         clutch: (closed, held) => this.fist(closed, held),
@@ -682,7 +705,9 @@ export class ToolController {
     options: { anchor?: Point3Mm | null; exclude?: string[]; probe?: Point3Mm } = {},
   ): Resolved | null {
     const doc = env.doc();
-    const aids = env.aids?.() ?? DEFAULT_DRAWING_AIDS;
+    const allAids = env.aids?.() ?? DEFAULT_DRAWING_AIDS;
+    const orthoAid = this.active?.orthoAid;
+    const aids = orthoAid ? { ...allAids, ortho: allAids[orthoAid] } : allAids;
     const project = env.projector?.() ?? null;
     const [width, height] = env.screenSize?.() ?? [1, 1];
     let pointer: Point2 = [at[0] * width, at[1] * height];
@@ -694,6 +719,10 @@ export class ToolController {
     // Only a tool that draws in a side view's plane gets it; the others find no ground there and place nothing.
     const plane = this.active?.drawsInView ? (env.plane?.() ?? "xy") : "xy";
     const anchor = options.anchor ?? null;
+    // Only a hand has jitter to hold against; the mouse is exact, and always lands where it points.
+    const byHand = this.pickSource !== "mouse";
+    const anchorKey = anchor?.join(",") ?? "";
+    const kept = byHand && this.keptPoint?.anchor === anchorKey ? this.keptPoint : null;
     const result = resolvePoint({
       pointer,
       ground:
@@ -708,11 +737,19 @@ export class ToolController {
         : emptySnapIndex(),
       project,
       constraints: this.snapshot.constraints,
+      ...(byHand ? { keep: { snap: kept?.snap ?? null, angleDeg: kept?.angleDeg ?? null } } : {}),
     });
     if (!result) {
       this.clearSnap();
       return null;
     }
+    this.keptPoint = byHand
+      ? {
+          anchor: anchorKey,
+          snap: result.kind ? { point: result.point, kind: result.kind as SnapKind } : null,
+          angleDeg: result.angleDeg ?? kept?.angleDeg ?? null,
+        }
+      : null;
     // Grid on its own is the old behaviour and needs no marker; anything else the user switched on is shown.
     const shown = result.kind !== null && (result.kind !== "grid" || result.ortho);
     const label = result.kind === "grid" ? "Ortho" : (result.label ?? "");
@@ -735,6 +772,7 @@ export class ToolController {
   }
 
   private clearSnap(): void {
+    this.keptPoint = null;
     if (this.snapshot.overlay.snap) this.setOverlay({ snap: null });
   }
 
