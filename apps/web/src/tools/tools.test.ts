@@ -350,12 +350,12 @@ describe("built-in tools", () => {
     const { controller, applied } = setup();
     controller.choose("delete");
     controller.tap(toViewer(30_000, 10_000));
-    expect(controller.getSnapshot().overlay.marked).toBe("block-b");
+    expect(controller.getSnapshot().overlay.marked).toEqual(["block-b"]);
     expect(controller.getSnapshot().question).toMatch(/Delete Block B/);
     expect(applied).toEqual([]);
     controller.respond(true);
     expect(applied).toEqual([{ label: "Delete", ops: [{ op: "delete", id: "block-b" }] }]);
-    expect(controller.getSnapshot().overlay.marked).toBeNull();
+    expect(controller.getSnapshot().overlay.marked).toEqual([]);
   });
 
   it("cancel with shake: nothing is deleted", () => {
@@ -503,7 +503,7 @@ describe("create tools", () => {
     controller.choose("copy");
     expect(controller.dragStart(toViewer(30_000, 10_000))).toBe(true);
     controller.drag(toViewer(30_000, 23_040));
-    expect(controller.getSnapshot().overlay.draft).toMatchObject({ origin: [24_000, 17_000, 0] });
+    expect(controller.getSnapshot().overlay.drafts[0]).toMatchObject({ origin: [24_000, 17_000, 0] });
     controller.dragEnd(toViewer(30_000, 23_040));
     const { label, element } = created(applied);
     expect(label).toBe("Copy Block B");

@@ -1,6 +1,7 @@
 import type { SceneDocument } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { UtteranceContext } from "./utterance-context.ts";
+import { VOICE } from "./voice-config.ts";
 
 const column = (id: string, name: string) => ({
   id,
@@ -126,5 +127,45 @@ describe("a holding hand's points", () => {
     context.clear();
     expect(context.points).toEqual([]);
     expect(context.target).toBeNull();
+  });
+});
+
+describe("pointing at part of a selection", () => {
+  const member = (id: string, group?: string) => ({
+    ...column(id, id),
+    ...(group ? { tags: { "hai.group": group } } : {}),
+  });
+  const scene: SceneDocument = {
+    ...doc,
+    elements: {
+      a: member("a"),
+      b: member("b"),
+      c: member("c"),
+      g1: member("g1", "g"),
+      g2: member("g2", "g"),
+    },
+  };
+  const pointedAt = (id: string) => {
+    const context = new UtteranceContext();
+    context.begin(0, id);
+    context.tick(VOICE.dwellMs + 1);
+    return context;
+  };
+  const ids = (context: UtteranceContext, selection: string[]) =>
+    context
+      .resolve(scene, selection, null)
+      .references.map((r) => r.id)
+      .sort();
+
+  it("means all of the selection, however long the hand rests on one part", () => {
+    expect(ids(pointedAt("a"), ["a", "b", "c"])).toEqual(["a", "b", "c"]);
+  });
+
+  it("pointing away from the selection still means what is pointed at", () => {
+    expect(ids(pointedAt("c"), ["a", "b"])).toEqual(["c"]);
+  });
+
+  it("pointing at one member of a group means the whole group", () => {
+    expect(ids(pointedAt("g1"), [])).toEqual(["g1", "g2"]);
   });
 });

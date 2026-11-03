@@ -19,6 +19,7 @@ import { AgentClient, displayName } from "./agent/agent-client.ts";
 import { answerYesNo } from "./agent/answer.ts";
 import { approvalAnchor } from "./agent/approval-anchor.ts";
 import { agentColors, baseAgent, claimBoxes } from "./agent/owners.ts";
+import { groupForRequest } from "./agent/request-group.ts";
 import { ViewLink } from "./agent/view-link.ts";
 import {
   type BridgeConnection,
@@ -414,6 +415,18 @@ export function App() {
       }),
     [agent, speaker],
   );
+  // A request about several elements holds them together: they become one group, one undo step, before it goes.
+  useEffect(() => {
+    agent.prepareRequest = (context) => {
+      const { doc, selection } = sceneClient.getSnapshot();
+      const { context: prepared, ops } = groupForRequest(doc, context, selection);
+      if (ops.length > 0 && prepared?.group) {
+        sceneClient.apply("Group for the agent", ops);
+        sceneClient.select(selection);
+      }
+      return prepared;
+    };
+  }, [agent, sceneClient]);
   // A request carries the sketches the user drew for it (without which hand drew them), and clears them once sent.
   useEffect(
     () =>

@@ -6,7 +6,7 @@ import type { AgentEvent, AgentTurn, Message } from "@hai/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { fakeProvider, DETECTED as OK } from "../../test/fake-provider.ts";
 import { agentDir, migrateSessionToLead, readSessionId, writeSessionId } from "./agent-config.ts";
-import { AgentHub } from "./agent-hub.ts";
+import { AgentHub, withContext } from "./agent-hub.ts";
 
 const temp = (prefix: string) => mkdtempSync(join(tmpdir(), prefix));
 
@@ -258,6 +258,16 @@ describe.each([{ agent: undefined }, { agent: "architect" }])(
       // The transcript, not the block, is what the panel shows.
       expect(transcriptOf(hub).at(-1)).toMatchObject({ request: "make this 300 thick" });
       await hub.close();
+    });
+
+    it("a group in the context is named with its size and middle", () => {
+      const line = withContext("turn this", {
+        references: [],
+        selection: ["a", "b"],
+        groundPoint: null,
+        group: { id: "group-1", count: 2, centre: [100.4, 200, 0] },
+      });
+      expect(line).toContain("; group: group-1 (2 elements, middle 100, 200, 0 mm)");
     });
 
     it('Held target and points: the agent\'s block names the held column as "this" and the rested point as P1', async () => {

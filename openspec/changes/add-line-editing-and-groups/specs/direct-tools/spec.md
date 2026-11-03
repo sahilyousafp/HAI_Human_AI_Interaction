@@ -83,3 +83,27 @@ The Line tool SHALL have a toggle between Straight and Freeform in its panel at 
 - **GIVEN** Line in Freeform
 - **WHEN** the user drags along a curve and lets go
 - **THEN** one line element follows the curve, off the grid, the view has not orbited, and one Undo removes it
+
+### Requirement: Every tool acts on the whole selection and whole groups
+Select and Lasso select SHALL select the whole group of any member. Move, Copy, Delete and Rotate SHALL act on the whole selection when used on part of it, else on the element with the rest of its group, as one undo step. Delete SHALL ask once.
+
+#### Scenario: Delete a group
+- **GIVEN** a group of three
+- **WHEN** the user taps one with Delete and confirms
+- **THEN** all three go, after one question, and one Undo brings all three back
+
+### Requirement: Rotate turns a selection by hand
+A Rotate tool SHALL turn what is selected, or the element or group a drag starts on, about the centre of its plan box as one body, showing the turn and its angle while dragging, in the angle step when Ortho is on, as one undo step. With nothing under the drag and nothing selected the view SHALL orbit.
+
+#### Scenario: Turn a group
+- **GIVEN** a group and Rotate active
+- **WHEN** the user drags round its middle
+- **THEN** its members keep their distances apart, and one Undo puts them back
+
+### Requirement: An options card is pinned to what is selected
+While Select is active and something is selected, a card SHALL be pinned to the top middle of it, naming what is selected and offering Ungroup or Group, Move, Rotate, Copy, Delete, Hide and Ask agent, as buttons a hand can press. It SHALL follow the camera, stay inside the view, and cover no other panel when there is room. Ungroup and Group SHALL be one press and one undo step, and the model under the card SHALL NOT be picked through it.
+
+#### Scenario: Ungroup
+- **GIVEN** a group selected
+- **WHEN** the user presses Ungroup on the card
+- **THEN** its members are on their own and still selected, and one Undo puts the group back

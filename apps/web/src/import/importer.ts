@@ -1,4 +1,4 @@
-import { type Element, type SceneOp, TAG_SOURCE } from "@hai/protocol";
+import { type Element, type SceneOp, TAG_GROUP, TAG_SOURCE, type Tags } from "@hai/protocol";
 import { encodeMeshAsset, partBounds } from "@hai/scene";
 import {
   type ConvertResult,
@@ -145,8 +145,12 @@ export class ModelImporter {
         });
         return;
       }
+      // What came in one file holds together until the user ungroups it: one tap selects all of it.
+      const group: Tags = parts.length > 1 ? { [TAG_GROUP]: `group-${asset.slice(0, 8)}` } : {};
       const ops: SceneOp[] = parts.map((part, i) => {
         const bounds = partBounds(part);
+        const source: Tags = part.objectId ? { [TAG_SOURCE]: sourceTag(name, part.objectId) } : {};
+        const tags: Tags = { ...group, ...source };
         const element: Element = {
           id: `imp-${asset.slice(0, 8)}-${i}`,
           type: "imported",
@@ -158,7 +162,7 @@ export class ModelImporter {
           translation: [0, 0, 0],
           ...(part.layer ? { layer: part.layer } : {}),
           ...(part.color ? { color: part.color } : {}),
-          ...(part.objectId ? { tags: { [TAG_SOURCE]: sourceTag(name, part.objectId) } } : {}),
+          ...(Object.keys(tags).length > 0 ? { tags } : {}),
         };
         return { op: "create", element };
       });

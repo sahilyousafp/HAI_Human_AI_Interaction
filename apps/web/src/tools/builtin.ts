@@ -1,5 +1,16 @@
 import type { Element, Point3Mm, SceneOp } from "@hai/protocol";
-import { type LineElement, linePointAt, linePointMoved, linePointRemoved, transformOp } from "@hai/scene";
+import {
+  applySteps,
+  elementBounds,
+  type LineElement,
+  linePointAt,
+  linePointMoved,
+  linePointRemoved,
+  transformOp,
+  transformPatch,
+  unionBounds,
+} from "@hai/scene";
+import { actedOn, confirmDelete, describeElements } from "./acted-on.ts";
 import { columnTool, copyTool, lineTool, slabTool, wallTool } from "./create.ts";
 import { snap } from "./grid.ts";
 import { lassoTool } from "./lasso.ts";
@@ -39,6 +50,9 @@ export function moveOp(element: Element, dx: number, dy: number): SceneOp {
   return transformOp(element, { kind: "translate", by: [dx, dy, 0] }, []) as SceneOp;
 }
 
+/** Rotate: the smallest step a free turn takes, degrees (the angle step applies when Ortho is on). */
+const ROTATE_STEP_DEG = 1;
+
 export const selectTool: Tool = {
   id: "select",
   label: "Select",
@@ -49,21 +63,6 @@ export const selectTool: Tool = {
     ctx.select(hit ? [hit.elementId] : []);
   },
 };
-
-/**
- * What a drag that began on `grabbed` moves: the whole selection when `grabbed` is one of several selected elements,
- * else only `grabbed` (a pinch on something that is not selected moves that alone, as it always did).
- */
-export function movedWith(ctx: ToolContext, grabbed: Element): Element[] {
-  const doc = ctx.doc();
-  const selected = ctx.selection();
-  if (!doc || selected.length < 2 || !selected.includes(grabbed.id)) return [grabbed];
-  const hidden = ctx.hidden();
-  return selected.flatMap((id) => {
-    const element = doc.elements[id];
-    return element && !hidden.has(id) ? [element] : [];
-  });
-}
 
 /** How near a pointer must be to a line's point on screen to mean that point, px (the drawing aids' snap reach). */
 export const LINE_POINT_REACH_PX = 24;
@@ -125,7 +124,7 @@ export function moveTool(): Tool {
       if (!hit || !element) return false; // empty space: the view orbits instead
       const start = ctx.ground(at, hit.point[2]);
       if (!start) return false;
-      const carried = movedWith(ctx, element);
+      const carried = actedOn(ctx, element);
       drag = { element, carried, heightMm: hit.point[2], start, offset: [0, 0] };
       ctx.setOverlay({ movePreview: { offsetMm: [0, 0], from: previewOf(carried) } });
       return true;
@@ -176,6 +175,119 @@ export function moveTool(): Tool {
       drag = null;
       pointDrag = null;
       ctx.setOverlay({ movePreview: null, draft: null, draftOf: null });
+    },
+  };
+}
+
+/**
+ * Rotate: a drag turns what is selected, or the element or group it starts on, about the centre of its plan box, as one
+ * body and one undo step, in the angle step when Ortho is on. With nothing there and nothing selected the view orbits.
+ */
+export function rotateTool(): Tool {
+  let drag: {
+    carried: Element[];
+    about: Point3Mm;
+    startDeg: number;
+    deg: number;
+    from: Record<string, string>;
+  } | null = null;
+  const hint = "Pinch and drag around the centre to turn. Tap to choose what to turn.";
+  const angleAt = (ctx: ToolContext, at: [number, number], about: Point3Mm): number | null => {
+    const p = ctx.ground(at, about[2]);
+    return p ? (Math.atan2(p[1] - about[1], p[0] - about[0]) * 180) / Math.PI : null;
+  };
+  const clear = (ctx: ToolContext) => ctx.setOverlay({ drafts: [], draftsOf: {}, pivot: null });
+  return {
+    id: "rotate",
+    label: "Rotate",
+    spoken: ["rotate", "turn"],
+    icon: "M20 11a8 8 0 1 0-2.3 6.3M20 5v6h-6",
+    shortcut: "o",
+    activate(ctx) {
+      ctx.setOverlay({ notice: hint });
+    },
+    deactivate(ctx) {
+      drag = null;
+      clear(ctx);
+      ctx.setOverlay({ notice: null });
+    },
+    onTap(ctx, _at, hit) {
+      const element = hit ? ctx.doc()?.elements[hit.elementId] : undefined;
+      ctx.select(element ? actedOn(ctx, element).map((e) => e.id) : []);
+    },
+    onDragStart(ctx, at, hit) {
+      const doc = ctx.doc();
+      if (!doc) return false;
+      const grabbed = hit ? doc.elements[hit.elementId] : undefined;
+      const hidden = ctx.hidden();
+      const carried = grabbed
+        ? actedOn(ctx, grabbed)
+        : ctx.selection().flatMap((id) => {
+            const element = doc.elements[id];
+            return element && !hidden.has(id) ? [element] : [];
+          });
+      const box = unionBounds(carried.map((element) => elementBounds(element, doc.levels)));
+      if (!box) return false; // nothing to turn: the view orbits instead
+      const about: Point3Mm = [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, box.min[2]];
+      const startDeg = angleAt(ctx, at, about);
+      if (startDeg === null) {
+        ctx.flash("Nothing to turn on there. Use the Top or the perspective view.");
+        return false;
+      }
+      clear(ctx);
+      drag = {
+        carried,
+        about,
+        startDeg,
+        deg: 0,
+        from: Object.fromEntries(carried.map((element) => [element.id, JSON.stringify(element)])),
+      };
+      ctx.setOverlay({ pivot: { point: about, label: "0°" } });
+      return true;
+    },
+    onDrag(ctx, at) {
+      const doc = ctx.doc();
+      const raw = drag ? angleAt(ctx, at, drag.about) : null;
+      if (!drag || !doc || raw === null) return;
+      const step = ctx.aids().ortho ? ctx.constraints().angleStepDeg : ROTATE_STEP_DEG;
+      const turned = Math.round((((((raw - drag.startDeg + 180) % 360) + 360) % 360) - 180) / step) * step;
+      drag.deg = turned;
+      const about: [number, number] = [drag.about[0], drag.about[1]];
+      const t = { kind: "rotate" as const, deg: turned, about };
+      ctx.setOverlay({
+        drafts: drag.carried.map(
+          (element) => ({ ...element, ...transformPatch(element, t, doc.levels) }) as Element,
+        ),
+        draftsOf: drag.from,
+        pivot: { point: drag.about, label: `${turned}°` },
+        notice: `Rotate ${turned} deg. Let go to keep it.`,
+      });
+    },
+    onDragEnd(ctx) {
+      const doc = ctx.doc();
+      const current = drag;
+      drag = null;
+      ctx.setOverlay({ pivot: null, notice: hint });
+      if (!current || !doc || current.deg === 0) {
+        clear(ctx);
+        return;
+      }
+      const about: [number, number] = [current.about[0], current.about[1]];
+      const done = applySteps(current.carried, [{ kind: "rotate", deg: current.deg, about }], doc.levels);
+      if (!done.ok) {
+        clear(ctx);
+        ctx.flash(done.error);
+        return;
+      }
+      // As with a moved element, the drafts stay until the change arrives (`draftsOf` then no longer matches).
+      ctx.apply(
+        `Rotate ${describeElements(doc, current.carried)}`,
+        Object.entries(done.patches).map(([id, patch]): SceneOp => ({ op: "update", id, patch })),
+      );
+    },
+    onDragCancel(ctx) {
+      drag = null;
+      clear(ctx);
     },
   };
 }
@@ -317,7 +429,7 @@ export const deleteTool: Tool = {
     ctx.setOverlay({ notice: "Tap an element to delete." });
   },
   deactivate(ctx) {
-    ctx.setOverlay({ notice: null, marked: null });
+    ctx.setOverlay({ notice: null, marked: [] });
   },
   onTap(ctx, at, hit) {
     // Sketches and markers lie over the model, so a tap on one removes it, without asking: neither is model work.
@@ -352,15 +464,7 @@ export const deleteTool: Tool = {
       }
       return;
     }
-    ctx.setOverlay({ marked: element.id, notice: null });
-    ctx.confirm(
-      `Delete ${element.name}? Nod or press Enter to delete. Shake or press Escape to keep it.`,
-      (yes) => {
-        ctx.setOverlay({ marked: null });
-        if (yes) ctx.apply("Delete", [{ op: "delete", id: element.id }]);
-        else ctx.flash(`Kept ${element.name}.`);
-      },
-    );
+    confirmDelete(ctx, actedOn(ctx, element));
   },
 };
 
@@ -410,6 +514,7 @@ export function registerBuiltinTools(registry: ToolRegistry): void {
   for (const tool of [
     selectTool,
     moveTool(),
+    rotateTool(),
     measureTool,
     sectionTool(),
     massingTool,

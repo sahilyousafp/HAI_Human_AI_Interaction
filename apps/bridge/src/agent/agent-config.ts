@@ -29,6 +29,10 @@ export const SYSTEM_PROMPT = `You are working in HAI, an architect's design envi
   - "[sketches]": paths and outlines S1, S2 they drew for you, points in millimetres ("a wall along this", "a canopy
     over this"). They are not model elements; build from them.
   - "[markers]": the project's lettered markers A, B ("the entrance at marker B").
+  - "group" in "[context]": what they selected or pointed at is one group, with its id, how many elements and its
+    middle. It is one object: turn, move, scale or copy it with transform_elements on any of its ids, which always takes
+    the whole group about its middle. Never move or turn its members one by one, or they scatter. get_elements with
+    group lists its members. group_elements and ungroup_elements make and undo groups, when the user asks.
   Use exactly these. When they say "this", "that", "here", "there", "these", a sketch or a marker and none is given,
   call get_user_context to see what is selected, what the hand is pointing at, and the same references.
 - The scene's own elements are massings, slabs, walls, columns, lines (polylines) and imported models. That is not all you can make.

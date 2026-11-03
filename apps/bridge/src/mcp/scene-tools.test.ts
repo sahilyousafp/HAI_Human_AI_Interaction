@@ -169,6 +169,7 @@ describe("MCP endpoint access", () => {
         "get_elements",
         "get_scene_summary",
         "get_user_context",
+        "group_elements",
         "offer_panel",
         "open_panel",
         "python_run",
@@ -178,6 +179,7 @@ describe("MCP endpoint access", () => {
         "simulation_geometry",
         "sun_study",
         "transform_elements",
+        "ungroup_elements",
         "update_elements",
         "update_panel",
       ].sort(),
@@ -861,6 +863,114 @@ describe("reading the model by owner, part and tag", () => {
       owners: { architect: 1, product: 1 },
       parts: { garden: 1, hall: 1 },
     });
+  });
+});
+
+describe("groups", () => {
+  const massings = async (agent: Awaited<ReturnType<typeof mcp>>) =>
+    json(await agent.callTool({ name: "get_elements", arguments: { type: "massing" } })).elements as Array<{
+      id: string;
+      origin: [number, number, number];
+      size: [number, number, number];
+      rotationDeg?: number;
+      tags?: Record<string, string>;
+    }>;
+  const makeTwo = async (agent: Awaited<ReturnType<typeof mcp>>) => {
+    const box = (id: string, x: number) => ({
+      id,
+      type: "massing",
+      name: id,
+      origin: [x, 0, 0],
+      size: [1000, 1000, 1000],
+    });
+    await agent.callTool({
+      name: "create_elements",
+      arguments: { elements: [box("g-a", 100_000), box("g-b", 110_000)] },
+    });
+    return json(await agent.callTool({ name: "group_elements", arguments: { ids: ["g-a", "g-b"] } }));
+  };
+
+  it("group_elements makes one group, which get_elements and the summary can see", async () => {
+    const agent = await mcp(await start());
+    const { group, members } = await makeTwo(agent);
+    expect(group).toMatch(/^group-/);
+    expect(members).toEqual(["g-a", "g-b"]);
+    const found = json(await agent.callTool({ name: "get_elements", arguments: { group } }));
+    expect(found.elements.map((e: { id: string }) => e.id).sort()).toEqual(["g-a", "g-b"]);
+    const summary = json(await agent.callTool({ name: "get_scene_summary", arguments: {} }));
+    expect(summary.groups[group]).toBe(2);
+  });
+
+  it("transform_elements on one member turns the whole group about its middle, so it holds its shape", async () => {
+    const agent = await mcp(await start());
+    await makeTwo(agent);
+    await agent.callTool({
+      name: "transform_elements",
+      arguments: { ids: ["g-a"], steps: [{ kind: "rotate", deg: 180 }] },
+    });
+    const all = await massings(agent);
+    const [a, b] = [all.find((e) => e.id === "g-a"), all.find((e) => e.id === "g-b")];
+    // A half turn about the middle of the two swaps them, and neither went anywhere else.
+    expect(a?.origin[0]).toBeCloseTo(110_000, 6);
+    expect(b?.origin[0]).toBeCloseTo(100_000, 6);
+  });
+
+  it("copies of a group are groups of their own", async () => {
+    const agent = await mcp(await start());
+    const { group } = await makeTwo(agent);
+    const { created } = json(
+      await agent.callTool({
+        name: "transform_elements",
+        arguments: { ids: ["g-b"], steps: [{ kind: "translate", by: [0, 5000] }], copies: 2 },
+      }),
+    );
+    expect(created).toHaveLength(4);
+    const all = await massings(agent);
+    const groups = created.map((id: string) => all.find((e) => e.id === id)?.tags?.["hai.group"]);
+    expect(groups).not.toContain(group);
+    expect(groups[0]).toBe(groups[1]);
+    expect(groups[2]).toBe(groups[3]);
+    expect(groups[0]).not.toBe(groups[2]);
+  });
+
+  it("update_elements refuses to move or turn one member, and allows reshaping it", async () => {
+    const agent = await mcp(await start());
+    await makeTwo(agent);
+    const refused = await agent.callTool({
+      name: "update_elements",
+      arguments: { updates: [{ id: "g-a", patch: { rotationDeg: 45 } }] },
+    });
+    expect(refused.isError).toBe(true);
+    expect(JSON.stringify(refused.content)).toContain("transform_elements");
+    expect((await massings(agent)).find((e) => e.id === "g-a")?.rotationDeg).toBeUndefined();
+    const reshaped = await agent.callTool({
+      name: "update_elements",
+      arguments: { updates: [{ id: "g-a", patch: { size: [1000, 1000, 2000] } }] },
+    });
+    expect(reshaped.isError).toBeFalsy();
+  });
+
+  it("set_selection takes the rest of the group, and ungroup_elements frees all of it", async () => {
+    const agent = await mcp(await start());
+    await makeTwo(agent);
+    const selected = json(await agent.callTool({ name: "set_selection", arguments: { ids: ["g-a"] } }));
+    expect(selected.selected.sort()).toEqual(["g-a", "g-b"]);
+    await agent.callTool({ name: "ungroup_elements", arguments: { ids: ["g-b"] } });
+    const all = await massings(agent);
+    expect(all.find((e) => e.id === "g-a")?.tags?.["hai.group"]).toBeUndefined();
+    expect(all.find((e) => e.id === "g-b")?.tags?.["hai.group"]).toBeUndefined();
+    const again = await agent.callTool({ name: "ungroup_elements", arguments: { ids: ["g-b"] } });
+    expect(again.isError).toBe(true);
+  });
+
+  it("set_tags cannot make a group: the tag is the system's", async () => {
+    const agent = await mcp(await start());
+    await makeTwo(agent);
+    const refused = await agent.callTool({
+      name: "set_tags",
+      arguments: { ids: ["g-a"], tags: { "hai.group": "mine" } },
+    });
+    expect(refused.isError).toBe(true);
   });
 });
 

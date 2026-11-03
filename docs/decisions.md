@@ -306,3 +306,23 @@ What it still gets wrong: "Bake" as "Make", "Column" as "Colon" (one voice of tw
 **Points are handles on the tools that use them.** Move and Delete already mean what they would to a point, so no new tool or ring slot was needed. A handle wins over its line within 24 px, and the rest of the line still moves or deletes the whole line.
 
 **Freeform is a mode of Line, at the owner's request.** It gets a toggle in the panel at the right of the view, and no slot of its own. A trace ignores Grid, Ortho and snaps, as they would make steps of a curve, and is simplified at 15 mm.
+
+## Groups are a tag, and every tool goes through one rule (2026-11-03)
+
+**Question.** The owner selected a whole geometry, asked for a rotation or asked an agent to change it, and it came apart. A group needed an id, one click to undo, and an options panel pinned to the object.
+
+**What was wrong.** An import falls into its objects, with nothing to say they belong together. Only Move carried a selection; Copy and Delete took one element, and there was no Rotate by hand. A hand resting on one part while speaking narrowed "this" to that part. And nothing stopped an agent patching `rotationDeg` on each element, which turns each about its own centre.
+
+**A group is a system tag, `hai.group`, on each member,** not a new section of the document. So there is no change to the file's format, undo works through ordinary updates, a deleted member simply leaves, and the tag reaches Rhino as the other `hai.` tags do. Groups do not nest and an element is in one, which keeps "what does this tap mean" answerable in one sentence. To work on one member, ungroup.
+
+**One rule for what is acted on,** `actedOn` in `apps/web/src/tools/acted-on.ts`: the whole selection when used on part of it, else the element with its group. Selection expands to whole groups in one place on each side (`SceneClient.select`, `set_selection`).
+
+**A request about several elements groups them first.** The owner asked for this, so it is automatic, and one undo step. It happens for every such request, questions included, because the app cannot tell a question from an instruction before the agent reads it. Ungroup is one press if it was not wanted.
+
+**Agents.** `transform_elements` takes whole groups, as it is the tool meant for this and already turns about the middle of what it is given. `update_elements` refuses the fields that say where an element is, and points to it. It still allows a change of shape, as the agent has to be able to make one wall taller. A wall's or slab's own points are both shape and place, so a member can still be moved through those; the refusal is a guard against the common mistake, not a proof.
+
+**The options card** was chosen by the owner from three layouts (a strip, a card, a small pin): the card, for reading and for a hand to hit. It is placed from script (`place-panel.ts`) and not by the 3D view's own overlay, because it has to move aside for the other panels, which are page elements.
+
+**A preview now ends when the model changes.** Move kept its preview after a commit, relying on it only applying while an element still matched what it was made from, so that nothing jumps back for a frame. But Undo brings an element back to exactly that, so the old preview came alive and the model was drawn at the moved place while the scene said otherwise (`e2e/groups.spec.ts`). The preview still bridges the wait for the change, and is cleared when it arrives.
+
+**Not done.** Groups of mirrored Rhino objects. Entering a group to pick one member. A partly hidden group acts on what is shown.

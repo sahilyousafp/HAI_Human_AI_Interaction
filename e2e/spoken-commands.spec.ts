@@ -291,3 +291,20 @@ test("hide takes an element out of the user's view and picking, and it comes bac
   await expect.poll(() => page.evaluate(() => window.__HAI_VIEWER__?.hiddenKept())).toEqual([]);
   expect(await page.evaluate(([x, y]) => window.__HAI_VIEWER__?.pick(x, y), at)).toBe("block-b");
 });
+
+test("a hand resting on one part of the selection does not narrow a command to that part", async ({
+  page,
+}) => {
+  await start(page);
+  const [first, second] = massings().map((m) => m.id as string) as [string, string];
+  await select(page, first, second);
+  // The hand rests on the first for longer than a pass-over, while the user speaks.
+  await page.evaluate((id) => {
+    const voice = window.__HAI_VOICE__;
+    voice?.context.begin(0, id);
+    voice?.context.tick(100_000);
+    voice?.hear("rotate 90");
+  }, first);
+  await expect.poll(() => rotationOf(first)).toBe(90);
+  await expect.poll(() => rotationOf(second)).toBe(90);
+});

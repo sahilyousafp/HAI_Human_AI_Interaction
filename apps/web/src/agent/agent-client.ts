@@ -258,6 +258,8 @@ export class AgentClient {
   private readonly sentRequests = new Map<string, "chat" | "extensions" | "agents">();
 
   private references: { sketches(): Sketch[]; sent(): void } | null = null;
+  /** Runs on every request's context as it goes, typed or spoken (several elements become one group here). */
+  prepareRequest: (context: RequestContext | undefined) => RequestContext | undefined = (context) => context;
   /** The message id of the request sent last. */
   private lastRequestId: string | null = null;
 
@@ -444,12 +446,13 @@ export class AgentClient {
     const id = newId();
     this.sentRequests.set(id, "chat");
     this.update({ error: null });
+    const prepared = this.prepareRequest(context);
     // Every request, typed or spoken, carries the sketches shown now; once sent they are cleared.
     const sketches = this.references?.sketches() ?? [];
     const withSketches =
       sketches.length > 0
-        ? { ...(context ?? { references: [], selection: [], groundPoint: null }), sketches }
-        : context;
+        ? { ...(prepared ?? { references: [], selection: [], groundPoint: null }), sketches }
+        : prepared;
     const sent = this.send({
       type: "agent.send",
       id,

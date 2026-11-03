@@ -1,5 +1,15 @@
 import type { Element, LetterMarker, Point3Mm, SceneDocument, SceneOp } from "@hai/protocol";
-import { applySteps, elementBounds, type TransformStep } from "@hai/scene";
+import {
+  applySteps,
+  copiedTags,
+  elementBounds,
+  groupOf,
+  groupOps,
+  newGroupId,
+  soleGroup,
+  type TransformStep,
+  ungroupOps,
+} from "@hai/scene";
 import { newId } from "../tools/create.ts";
 import type { Clause, Command, Selector } from "./grammar.ts";
 
@@ -86,6 +96,9 @@ function clauseText(clause: Clause): string {
       return clause.kind;
     case "showAll":
       return "show all";
+    case "group":
+    case "ungroup":
+      return clause.kind;
   }
 }
 
@@ -227,6 +240,7 @@ function planEdit(
   if (typeof after === "string") return { kind: "error", message: after };
   const created: string[] = [];
   for (let i = 1; i <= copy.count; i++) {
+    const fresh = new Map<string, string>(); // each copy of a group is a group of its own
     const steps = [...Array.from({ length: i }, () => unit).flat(), ...after];
     const done = applySteps(working, steps, doc.levels);
     if (!done.ok) return { kind: "error", message: done.error };
@@ -238,6 +252,7 @@ function planEdit(
         element: {
           ...element,
           ...done.patches[element.id],
+          ...(groupOf(element) ? { tags: copiedTags(element, fresh) } : {}),
           id,
           name: copy.count > 1 ? `${element.name} copy ${i}` : `${element.name} copy`,
         } as Element,
@@ -285,6 +300,14 @@ export function planCommand(
     case "hide":
     case "isolate":
       return { kind: action.kind, label, ids };
+    case "group":
+      if (ids.length < 2) return { kind: "error", message: "Select at least two elements to group." };
+      if (soleGroup(doc, ids)) return { kind: "error", message: "That is a group already." };
+      return { kind: "edit", label, ops: groupOps(doc, ids, newGroupId()), select: ids };
+    case "ungroup":
+      if (!ids.some((id) => groupOf(doc.elements[id])))
+        return { kind: "error", message: "That is not a group." };
+      return { kind: "edit", label, ops: ungroupOps(doc, ids), select: ids };
     default: {
       const planned = planEdit(rest, doc, ids, label, markers);
       // A leading select also leaves the selection on what the command acted on.

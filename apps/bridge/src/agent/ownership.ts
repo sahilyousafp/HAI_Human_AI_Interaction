@@ -2,6 +2,7 @@ import {
   RESERVED_TAG_PREFIX,
   type SceneDocument,
   type SceneOp,
+  TAG_GROUP,
   TAG_OWNER,
   TAG_PART,
   type Tags,
@@ -9,8 +10,24 @@ import {
 
 type TagRecord = Record<string, string>;
 
+const asTags = (value: unknown): TagRecord | undefined =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as TagRecord) : undefined;
+
+/**
+ * The reserved tags an agent's batch must leave alone. A group is the exception: it is written by the app's own tools
+ * for an agent (`group_elements`, the copies of `transform_elements`), and the tools that take an agent's own tags
+ * refuse it themselves (`writesGroupTag`).
+ */
 const reservedOf = (tags: TagRecord | undefined): TagRecord =>
-  Object.fromEntries(Object.entries(tags ?? {}).filter(([name]) => name.startsWith(RESERVED_TAG_PREFIX)));
+  Object.fromEntries(
+    Object.entries(tags ?? {}).filter(([name]) => name.startsWith(RESERVED_TAG_PREFIX) && name !== TAG_GROUP),
+  );
+
+/** Whether tags an agent wrote itself would change an element's group, which only the group tools may. */
+export function writesGroupTag(written: unknown, current: TagRecord | undefined): boolean {
+  const tags = asTags(written);
+  return tags !== undefined && tags[TAG_GROUP] !== current?.[TAG_GROUP];
+}
 
 const sameReserved = (a: TagRecord | undefined, b: TagRecord | undefined): boolean => {
   const x = reservedOf(a);
@@ -20,9 +37,6 @@ const sameReserved = (a: TagRecord | undefined, b: TagRecord | undefined): boole
   return true;
 };
 
-const asTags = (value: unknown): TagRecord | undefined =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as TagRecord) : undefined;
-
 /**
  * Names starting with `hai.` belong to the system. An agent's change is refused when it would add, change or remove
  * one (an agent cannot give an element to another owner by writing the tag). Returns the message, or null when fine.
@@ -31,7 +45,7 @@ export function reservedTagRefusal(ops: SceneOp[], doc: SceneDocument): string |
   // Tags of elements this batch creates, so a later update in the same batch is held to the same rule.
   const made = new Map<string, TagRecord | undefined>();
   const refusal = (id: string) =>
-    `Element "${id}": tag names starting with "${RESERVED_TAG_PREFIX}" are set by the system (hai.owner, hai.part, hai.source) and cannot be written. Nothing was changed.`;
+    `Element "${id}": tag names starting with "${RESERVED_TAG_PREFIX}" are set by the system (hai.owner, hai.part, hai.source, hai.group) and cannot be written. Nothing was changed.`;
   for (const op of ops) {
     if (op.op === "create") {
       if (Object.keys(reservedOf(op.element.tags)).length > 0) return refusal(op.element.id);
