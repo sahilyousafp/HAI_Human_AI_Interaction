@@ -30,7 +30,8 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 /**
  * What the user pointed out for the agent and that is not part of the model: sketches (paths and outlines, kept in
  * this browser until a request carries them) and lettered markers (kept with the project by the bridge). Neither is
- * ever a scene transaction, so undo never touches them.
+ * ever a scene transaction. A sketch tool's Undo and Redo step through the sketches here, and the model's undo never
+ * touches them.
  */
 export class ReferenceLayer {
   private snapshot: ReferenceSnapshot = { sketches: [], draft: null, markers: [] };
@@ -59,9 +60,41 @@ export class ReferenceLayer {
     this.update({ draft });
   }
 
+  /** Sketches undone since the last one was kept, for Redo; the next to come back is last. */
+  private undoneSketches: Sketch[] = [];
+
+  get canUndoSketch(): boolean {
+    return this.snapshot.sketches.length > 0;
+  }
+
+  get canRedoSketch(): boolean {
+    return this.undoneSketches.length > 0;
+  }
+
+  /** Takes back the newest sketch, keeping it for Redo; false when there is none. */
+  undoSketch(): boolean {
+    const newest = this.snapshot.sketches.at(-1);
+    if (!newest) return false;
+    const kept = [...this.undoneSketches, newest];
+    this.setSketches(this.snapshot.sketches.slice(0, -1));
+    this.undoneSketches = kept;
+    return true;
+  }
+
+  /** Brings back the sketch undone last, under its own label; false when there is none. */
+  redoSketch(): boolean {
+    const next = this.undoneSketches.at(-1);
+    if (!next) return false;
+    this.undoneSketches = this.undoneSketches.slice(0, -1);
+    this.nextNumber = Math.max(this.nextNumber, Number(next.label.slice(1)) + 1);
+    this.update({ sketches: [...this.snapshot.sketches, next] });
+    return true;
+  }
+
   /** Keeps a finished sketch, labelled S1, S2 and so on; a ninth replaces the oldest. */
   addSketch(kind: SketchData["kind"], points: Point3Mm[], hand: Hand | null): Sketch {
     const sketch: Sketch = { label: `S${this.nextNumber++}`, kind, points, hand };
+    this.undoneSketches = [];
     this.update({ sketches: [...this.snapshot.sketches, sketch].slice(-MAX_SKETCHES), draft: null });
     return sketch;
   }
@@ -101,6 +134,7 @@ export class ReferenceLayer {
   }
 
   private setSketches(sketches: Sketch[]): void {
+    this.undoneSketches = [];
     if (sketches.length === 0) this.nextNumber = 1;
     this.update({ sketches });
   }

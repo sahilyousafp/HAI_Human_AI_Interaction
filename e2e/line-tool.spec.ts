@@ -1,6 +1,18 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
-import { handTap, holdAt, openGround, type Point, releaseAt, viewerOf } from "./hands.ts";
+import {
+  handDraw,
+  handEvent,
+  handGestures,
+  handTap,
+  holdAt,
+  openGround,
+  type Point,
+  references,
+  releaseAt,
+  run,
+  viewerOf,
+} from "./hands.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
@@ -318,4 +330,260 @@ test("Line locks to angles from the start, and Wall keeps its own setting", asyn
   await expect.poll(() => lines().length).toBe(1);
   const [a, b] = lines()[0]?.points ?? [];
   expect(b?.[1]).toBe(a?.[1]);
+});
+
+// A line can be put right: while it is drawn, and after it is placed.
+const elementsDraft = async (page: Page) => (await draft(page))?.length ?? 0;
+
+test("undo while drawing takes back the line's last point, however it is asked for, and never the model", async ({
+  page,
+}) => {
+  await start(page);
+  await page.keyboard.press("n");
+  const [x, y] = await openGround(page, 6000, 4000, { empty: true });
+  // A line already in the model, which an undo meant for the new line must not take.
+  await click(page, [x, y]);
+  await click(page, [x + 4000, y]);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => lines().length).toBe(1);
+
+  await click(page, [x, y + 2000]);
+  await click(page, [x + 2000, y + 2000]);
+  await click(page, [x + 4000, y + 2000]);
+  await expect.poll(() => elementsDraft(page)).toBe(3);
+
+  await page.keyboard.press("Control+z");
+  await expect.poll(() => elementsDraft(page)).toBe(2);
+  await page.keyboard.press("Control+Shift+z");
+  await expect.poll(() => elementsDraft(page)).toBe(3);
+  await page.keyboard.press("u");
+  await expect.poll(() => elementsDraft(page)).toBe(2);
+  await page.getByRole("button", { name: "Undo", exact: true }).first().click();
+  await expect.poll(() => elementsDraft(page)).toBe(0); // one point left: not a line to draw yet
+  await page.keyboard.press("Control+z");
+  await expect(page.getByTestId("line-undo-point")).toBeDisabled(); // nothing left of the new line
+  expect(lines()).toHaveLength(1);
+  await page.keyboard.press("Control+z"); // now it is the model's turn
+  await expect.poll(() => lines().length).toBe(0);
+});
+
+test("the panel's Undo point and Finish do the same, and are there for a hand", async ({ page }) => {
+  await start(page);
+  await page.keyboard.press("n");
+  const undo = page.getByTestId("line-undo-point");
+  const finish = page.getByTestId("line-finish");
+  await expect(undo).toBeDisabled();
+  await expect(finish).toBeDisabled();
+  const [x, y] = await openGround(page, 6000, 4000, { empty: true });
+  await click(page, [x, y]);
+  await expect(undo).toBeEnabled();
+  await expect(finish).toBeDisabled(); // one point is not a line
+  await click(page, [x + 2000, y]);
+  await click(page, [x + 4000, y]);
+  await expect(finish).toBeEnabled();
+  await undo.click();
+  await expect.poll(() => elementsDraft(page)).toBe(2);
+  await expect(undo).toHaveAttribute("data-hand-press");
+  await finish.click();
+  await expect.poll(() => lines().length).toBe(1);
+  expect(lines()[0]?.points).toHaveLength(2);
+});
+
+test("a sketch can be undone and redone while its tool is active, and the model is left alone", async ({
+  page,
+}) => {
+  await start(page);
+  await page.keyboard.press("n");
+  const [x, y] = await openGround(page, 6000, 4000, { empty: true });
+  await click(page, [x, y]);
+  await click(page, [x + 4000, y]);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => lines().length).toBe(1);
+  await page.keyboard.press("l");
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+  await handDraw(page, run([x, y + 1000], [x + 3000, y + 1000]), "Right");
+  await expect.poll(() => references(page).then((r) => r.sketches.length)).toBe(1);
+  await page.keyboard.press("Control+z");
+  await expect.poll(() => references(page).then((r) => r.sketches.length)).toBe(0);
+  expect(lines()).toHaveLength(1);
+  await page.keyboard.press("Control+Shift+z");
+  await expect.poll(() => references(page).then((r) => r.sketches.map((s) => s.label))).toEqual(["S1"]);
+});
+
+/** A finished three-point line; its id and where its points are. */
+async function drawnLine(page: Page) {
+  await page.keyboard.press("n");
+  const [x, y] = await openGround(page, 6000, 4000, { empty: true });
+  const path: Point[] = [
+    [x, y],
+    [x + 4000, y],
+    [x + 4000, y + 4000],
+  ];
+  for (const at of path) await click(page, at);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => lines().length).toBe(1);
+  const id = Object.values(bridge?.scene.scene.doc.elements ?? {}).find((e) => e.type === "line")?.id ?? "";
+  return { id, path, x, y };
+}
+
+const selected = (page: Page) =>
+  page.evaluate(() => (window.__HAI_SCENE__?.getSnapshot().selection ?? []) as string[]);
+
+test("a finished line is picked within a finger's reach, however thin it is drawn", async ({ page }) => {
+  await start(page);
+  const { id, x, y } = await drawnLine(page);
+  await page.keyboard.press("v");
+  const [px, py] = await onPage(page, [x + 2000, y]);
+  await page.mouse.click(px, py + 8); // 8 px off the line
+  await expect.poll(() => selected(page)).toEqual([id]);
+  await page.mouse.click(px, py + 60); // well away from it
+  await expect.poll(() => selected(page)).toEqual([]);
+});
+
+test("Move shows a line's points, and drags one as a single undo step", async ({ page }) => {
+  await start(page);
+  const { path, x, y } = await drawnLine(page);
+  await expect(page.getByTestId("line-handle")).toHaveCount(0);
+  await page.keyboard.press("m");
+  await expect(page.getByTestId("line-handle")).toHaveCount(3);
+  const [fx, fy] = await onPage(page, path[1] as Point);
+  const [tx, ty] = await onPage(page, [x + 5000, y + 1000]);
+  await page.mouse.move(fx, fy);
+  await page.mouse.down();
+  await page.mouse.move((fx + tx) / 2, (fy + ty) / 2, { steps: 3 });
+  await page.mouse.move(tx, ty, { steps: 3 });
+  await page.mouse.up();
+  await expect.poll(() => lines()[0]?.points[1]).toEqual([x + 5000, y + 1000, 0]);
+  expect(lines()[0]?.points[0]).toEqual([x, y, 0]);
+  expect(lines()[0]?.points[2]).toEqual([x + 4000, y + 4000, 0]);
+  await page.keyboard.press("Control+z");
+  await expect.poll(() => lines()[0]?.points[1]).toEqual([x + 4000, y, 0]);
+});
+
+test("a hand moves a point with Move too, and a pinch along the span moves the whole line", async ({
+  page,
+}) => {
+  await start(page);
+  const { x, y } = await drawnLine(page);
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+  await page.keyboard.press("m");
+  await handGestures(page, "Right", [
+    { type: "pinch.drag.start", at: [x, y] },
+    { type: "pinch.drag.update", at: [x, y + 1000] },
+    { type: "pinch.drag.end", at: [x, y + 1000] },
+  ]);
+  await expect.poll(() => lines()[0]?.points[0]).toEqual([x, y + 1000, 0]);
+  expect(lines()[0]?.points[1]).toEqual([x + 4000, y, 0]);
+  await handGestures(page, "Right", [
+    { type: "pinch.drag.start", at: [x + 4000, y + 2000] },
+    { type: "pinch.drag.update", at: [x + 4500, y + 2000] },
+    { type: "pinch.drag.end", at: [x + 4500, y + 2000] },
+  ]);
+  await expect.poll(() => lines()[0]?.points[1]).toEqual([x + 4500, y, 0]);
+  expect(lines()[0]?.points[0]).toEqual([x + 500, y + 1000, 0]);
+});
+
+test("Delete removes one point of a line, or the whole line from its span, and both undo", async ({
+  page,
+}) => {
+  await start(page);
+  const { path, x, y } = await drawnLine(page);
+  await page.keyboard.press("x");
+  await expect(page.getByTestId("line-handle")).toHaveCount(3);
+  await click(page, path[1] as Point);
+  await expect.poll(() => lines()[0]?.points.length).toBe(2);
+  expect(lines()[0]?.points).toEqual([
+    [x, y, 0],
+    [x + 4000, y + 4000, 0],
+  ]);
+  await page.keyboard.press("Control+z");
+  await expect.poll(() => lines()[0]?.points.length).toBe(3);
+  await click(page, [x + 2000, y]); // on the span, away from every point
+  await expect(page.getByTestId("tool-question")).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => lines().length).toBe(0);
+  await page.keyboard.press("Control+z");
+  await expect.poll(() => lines().length).toBe(1);
+});
+
+test("a line of two points asks before its last span goes, and a closed line of three opens", async ({
+  page,
+}) => {
+  await start(page);
+  await page.keyboard.press("n");
+  const [x, y] = await openGround(page, 6000, 4000, { empty: true });
+  await click(page, [x, y]);
+  await click(page, [x + 4000, y]);
+  await click(page, [x + 4000, y + 4000]);
+  await click(page, [x, y]); // the first point again: closed
+  await expect.poll(() => lines()[0]?.closed).toBe(true);
+  await page.keyboard.press("x");
+  await click(page, [x + 4000, y + 4000]);
+  await expect.poll(() => lines()[0]?.closed).toBe(false);
+  expect(lines()[0]?.points).toHaveLength(2);
+  await click(page, [x + 4000, y]);
+  await expect(page.getByTestId("tool-question")).toBeVisible();
+  await page.keyboard.press("Escape");
+  expect(lines()).toHaveLength(1);
+});
+
+test("Line is one tool with a Straight and Freeform toggle: a drag traces one real model line", async ({
+  page,
+}) => {
+  await start(page);
+  await page.keyboard.press("n");
+  const straight = page.getByTestId("line-mode-straight");
+  const freeform = page.getByTestId("line-mode-freeform");
+  await expect(straight).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByTestId("constraint-ortho")).toBeVisible();
+  await freeform.click();
+  await expect(freeform).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByTestId("constraint-ortho")).toHaveCount(0); // neither angles nor a length apply to a trace
+  await expect(page.getByTestId("constraint-length")).toHaveCount(0);
+  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "line");
+
+  const [x, y] = await openGround(page, 6000, 4000, { empty: true });
+  const curve: Point[] = Array.from({ length: 13 }, (_, i) => [
+    x + i * 500,
+    y + 2000 + 1500 * Math.sin((i / 12) * Math.PI * 2),
+  ]);
+  const camera = await page.evaluate(() => JSON.stringify(window.__HAI_VIEWER__?.camera()));
+  const [first, ...rest] = curve as [Point, ...Point[]];
+  const start_ = await onPage(page, first);
+  await page.mouse.move(start_[0], start_[1]);
+  await page.mouse.down();
+  for (const at of rest) {
+    const [px, py] = await onPage(page, at);
+    await page.mouse.move(px, py, { steps: 2 });
+  }
+  await page.mouse.up();
+  await expect.poll(() => lines().length).toBe(1);
+  const [line] = lines();
+  expect(line?.points.length).toBeGreaterThan(4); // a curve, not two ends
+  // Free of the 100 mm grid: at least one point is not on it.
+  expect(line?.points.some(([, py]) => py % 100 !== 0)).toBe(true);
+  expect(await page.evaluate(() => JSON.stringify(window.__HAI_VIEWER__?.camera()))).toBe(camera);
+  await page.keyboard.press("Control+z");
+  await expect.poll(() => lines().length).toBe(0);
+  // Back to Straight, the angle lock returns.
+  await straight.click();
+  await expect(page.getByTestId("constraint-ortho")).toBeVisible();
+});
+
+test("the toggle works by hand, and a hand's drag traces in Freeform", async ({ page }) => {
+  await start(page);
+  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
+  await page.keyboard.press("n");
+  const box = await page.getByTestId("line-mode-freeform").boundingBox();
+  const canvas = await page.locator("[data-testid=viewer] canvas").boundingBox();
+  if (!box || !canvas) throw new Error("no toggle");
+  const at: Point = [
+    (box.x + box.width / 2 - canvas.x) / canvas.width,
+    (box.y + box.height / 2 - canvas.y) / canvas.height,
+  ];
+  await handEvent(page, "Right", "pinch.tap", at);
+  await expect(page.getByTestId("line-mode-freeform")).toHaveAttribute("aria-checked", "true");
+  const [x, y] = await openGround(page, 6000, 4000, { empty: true });
+  await handDraw(page, run([x, y], [x + 4000, y + 2000]), "Right");
+  await expect.poll(() => lines().length).toBe(1);
 });

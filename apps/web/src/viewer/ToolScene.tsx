@@ -1,5 +1,5 @@
 import type { HeldTarget, Point3Mm, SceneDocument } from "@hai/protocol";
-import { elementBounds } from "@hai/scene";
+import { elementBounds, type LineElement } from "@hai/scene";
 import { Html, Line } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useState } from "react";
@@ -51,6 +51,32 @@ export function SnapMarker({ point, label }: { point: Point3Mm; label: string })
         </span>
       </Html>
     </group>
+  );
+}
+
+/**
+ * The points of a line, for the tools that act on them and on a selected line. Drawn as page elements, so each keeps
+ * its size at any zoom and shows through what stands in front of it; a pinch finds them on screen, not through these.
+ */
+export function LineHandles({ lines }: { lines: LineElement[] }) {
+  return (
+    <>
+      {lines.flatMap((line) =>
+        line.points.map((point, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a line's points have nothing but their place in it
+          <group key={`${line.id}:${index}`} position={toMetres(point)}>
+            <Html center zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
+              <span
+                className="line-handle"
+                data-testid="line-handle"
+                data-line={line.id}
+                data-index={index}
+              />
+            </Html>
+          </group>
+        )),
+      )}
+    </>
   );
 }
 

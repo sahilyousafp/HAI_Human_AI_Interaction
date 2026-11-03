@@ -9,10 +9,10 @@
 
 ## 2. Undo, edit points, Freeform
 
-- [ ] 2.1 Undo and Redo go to the active tool first, from every entry point; Undo point and Finish in the panel. Verify: `e2e/line-tool.spec.ts`.
-- [ ] 2.2 Pick a thin line within reach on screen. Verify: `e2e/line-tool.spec.ts`.
-- [ ] 2.3 Point handles: Move drags one and Delete removes one. Verify: `line-edit.test.ts`, `e2e/line-tool.spec.ts`.
-- [ ] 2.4 The Straight / Freeform toggle. Verify: `e2e/line-tool.spec.ts`.
+- [x] 2.1 Undo and Redo go to the active tool first, from every entry point; Undo point and Finish in the panel. Verify: `e2e/line-tool.spec.ts`.
+- [x] 2.2 Pick a thin line within reach on screen. Verify: `e2e/line-tool.spec.ts`.
+- [x] 2.3 Point handles: Move drags one and Delete removes one. Verify: `line-edit.test.ts`, `e2e/line-tool.spec.ts`.
+- [x] 2.4 The Straight / Freeform toggle. Verify: `e2e/line-tool.spec.ts`.
 
 ## 3. Groups, selection, Rotate
 

@@ -180,6 +180,16 @@ function sketchTool(options: {
       drawn = null;
       ctx.references.setDraft(null);
     },
+    onUndo(ctx) {
+      const done = ctx.references.undoSketch();
+      if (done) ctx.flash("Sketch taken back. Redo brings it back.");
+      return done;
+    },
+    onRedo(ctx) {
+      const done = ctx.references.redoSketch();
+      if (done) ctx.flash("Sketch brought back.");
+      return done;
+    },
     onCancel(ctx) {
       if (ctx.references.sketches.length === 0) return false;
       ctx.references.clearSketches();

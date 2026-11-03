@@ -1,6 +1,7 @@
 import type { Element, Hand, Point2, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
 import { transformPatch } from "@hai/scene";
 import { movedOffset } from "./placement.ts";
+import { pathLength, simplify } from "./reference.ts";
 import type { Tool, ToolContext } from "./types.ts";
 
 /** A new wall: thickness and height, millimetres; shorter drags than `minLength` place nothing. */
@@ -205,6 +206,12 @@ const LINE_REACH_PX = 24;
 const LINE_MIN_CLOSED = 3;
 /** A hand's pinch places what the preview showed if it began within this of it (a share of the view): past that it is stale. */
 const PREVIEW_REACH = 0.08;
+/** A freeform trace takes a new point once the pointer has moved this far, mm. */
+const TRACE_SAMPLE_MM = 20;
+/** A freeform trace keeps no point within this of the line between its neighbours, mm. */
+const TRACE_TOLERANCE_MM = 15;
+/** A freeform trace shorter than this adds nothing, mm. */
+const TRACE_MIN_MM = 300;
 
 /**
  * Line: each tap or pinch places one point of a polyline, and between them the segment follows the pointer, held by the
@@ -212,7 +219,9 @@ const PREVIEW_REACH = 0.08;
  * the preview shows: the preview stands still as the fingers close, drifting while they are closed moves nothing, and
  * the view does not orbit. The hand that placed the first point steers the line, and the other hand's drag orbits.
  * Tapping the last point again, a nod or Enter finishes the line; tapping the first point closes it. Escape or a shake
- * takes back the last point, and with none left goes back to Select. The line is one undo step.
+ * takes back the last point, and with none left goes back to Select, and Undo and Redo step through the points. The
+ * line is one undo step once it is finished. In Freeform, set in the tool's panel, a drag traces one line instead,
+ * without any drawing aid.
  */
 export function lineTool(): Tool {
   let points: Point3Mm[] = [];
@@ -223,7 +232,14 @@ export function lineTool(): Tool {
   let preview: { at: Point2; point: Point3Mm; hand: Hand } | null = null;
   /** A hand's pinch that outlasted a tap: where it began and which hand. */
   let press: { at: Point2; hand: Hand } | null = null;
+  /** The points undone since the last one placed, for Redo; the next to come back is last. */
+  let undone: Point3Mm[] = [];
+  let mode: "straight" | "freeform" = "straight";
+  /** The freeform trace being drawn. */
+  let trace: Point3Mm[] | null = null;
   const hint = "Pinch or tap to place each point. Tap the last point again, nod or press Enter to finish.";
+  const traceHint = "Pinch and drag to trace a line. It becomes a line in the model when you let go.";
+  const hintNow = () => (mode === "freeform" ? traceHint : hint);
 
   const lineOf = (doc: SceneDocument, through: Point3Mm[], closed = false): Element | null => {
     if (through.length < 2 || !identity) return null;
@@ -243,6 +259,8 @@ export function lineTool(): Tool {
     drawer = null;
     preview = null;
     press = null;
+    undone = [];
+    trace = null;
     ctx.setLength(null);
     ctx.clearSnap();
     ctx.setOverlay({ draft: null });
@@ -307,8 +325,40 @@ export function lineTool(): Tool {
     points = [...points, point];
     if (points.length === 1) drawer = hand;
     preview = null;
+    undone = [];
     ctx.setLength(null); // a typed length is for one segment
     show(ctx, null);
+  };
+  /** Takes back the last point, keeping it for Redo; false when there is none. */
+  const takeBack = (ctx: ToolContext): boolean => {
+    const taken = points.at(-1);
+    if (!taken) return false;
+    const kept = [...undone, taken];
+    points = points.slice(0, -1);
+    preview = null;
+    if (points.length === 0) reset(ctx);
+    else show(ctx, null);
+    undone = kept;
+    return true;
+  };
+  /** The free point under the pointer, in whole millimetres, in the plane of the trace. */
+  const tracePoint = (ctx: ToolContext, at: Point2, anchor: Point3Mm | null): Point3Mm | null => {
+    const result = ctx.resolve(at, { anchor, free: true });
+    if (!result) return null;
+    const [x, y, z] = result.point;
+    return [Math.round(x), Math.round(y), Math.round(z)];
+  };
+  const finishTrace = (ctx: ToolContext, drawn: Point3Mm[]) => {
+    const doc = ctx.doc();
+    ctx.setOverlay({ draft: null, notice: traceHint });
+    if (!doc) return;
+    if (pathLength(drawn) < TRACE_MIN_MM) {
+      ctx.flash(`Trace at least ${TRACE_MIN_MM} mm to keep a line.`);
+      return;
+    }
+    identity ??= newIdentity(doc, "line", "Line");
+    const line = lineOf(doc, simplify(drawn, TRACE_TOLERANCE_MM));
+    if (line) ctx.apply(`Add ${line.name}`, [{ op: "create", element: line }]);
   };
 
   return {
@@ -318,18 +368,53 @@ export function lineTool(): Tool {
     drawsInView: true,
     orthoAid: "lineOrtho",
     pressPlaces: () => true,
-    followsHand: () => drawer,
+    followsHand: () => (mode === "straight" ? drawer : null),
+    modes: {
+      options: [
+        { id: "straight", label: "Straight", spoken: ["straight line", "straight"], constrained: true },
+        {
+          id: "freeform",
+          label: "Freeform",
+          spoken: ["freeform", "free form", "freehand"],
+          constrained: false,
+        },
+      ],
+      current: () => mode,
+      set(ctx, id) {
+        if (id !== "straight" && id !== "freeform") return;
+        if (id === mode) return;
+        reset(ctx);
+        mode = id;
+        ctx.setOverlay({ notice: hintNow() });
+      },
+    },
+    canUndo: () => points.length > 0,
+    canRedo: () => undone.length > 0,
+    canFinish: () => points.length >= 2,
+    onUndo: takeBack,
+    onRedo(ctx) {
+      const next = undone.at(-1);
+      const doc = ctx.doc();
+      if (!next || !doc) return false;
+      const rest = undone.slice(0, -1);
+      identity ??= newIdentity(doc, "line", "Line");
+      points = [...points, next];
+      undone = rest;
+      show(ctx, null);
+      return true;
+    },
     feature: "createTools",
     icon: "M4 19 10 7l5 8 5-10M4 19h.01M10 7h.01M15 15h.01M20 5h.01",
     shortcut: "n",
     activate(ctx) {
-      ctx.setOverlay({ notice: hint });
+      ctx.setOverlay({ notice: hintNow() });
     },
     deactivate(ctx) {
       reset(ctx);
       ctx.setOverlay({ notice: null });
     },
     onHover(ctx, at) {
+      if (mode === "freeform") return;
       const hand = ctx.hand();
       if (hand && drawer && hand !== drawer) return; // the other hand does not steer this line
       const last = points.at(-1);
@@ -338,11 +423,21 @@ export function lineTool(): Tool {
       if (last && next) show(ctx, next);
     },
     onTap(ctx, at) {
+      if (mode === "freeform") {
+        ctx.setOverlay({ notice: traceHint });
+        return;
+      }
       const hand = ctx.hand();
       if (hand && drawer && hand !== drawer) return;
       place(ctx, at, hand);
     },
     onDragStart(ctx, at) {
+      if (mode === "freeform") {
+        const first = ctx.doc() ? tracePoint(ctx, at, null) : null;
+        if (!first) return false;
+        trace = [first];
+        return true;
+      }
       // The mouse is exact, so its drag is meant: it orbits. A hand's pinch that drifts is still one point, except
       // that the hand not drawing this line keeps its drag, to orbit.
       const hand = ctx.hand();
@@ -350,25 +445,42 @@ export function lineTool(): Tool {
       press = { at, hand };
       return true;
     },
+    onDrag(ctx, at) {
+      const doc = ctx.doc();
+      const first = trace?.[0];
+      const end = trace?.at(-1);
+      if (!trace || !doc || !first || !end) return;
+      const point = tracePoint(ctx, at, first);
+      if (!point || Math.hypot(point[0] - end[0], point[1] - end[1], point[2] - end[2]) < TRACE_SAMPLE_MM)
+        return;
+      trace = [...trace, point];
+      identity ??= newIdentity(doc, "line", "Line");
+      ctx.setOverlay({ draft: lineOf(doc, trace) });
+    },
     onDragEnd(ctx) {
+      if (trace) {
+        const drawn = trace;
+        trace = null;
+        finishTrace(ctx, drawn);
+        identity = null;
+        return;
+      }
       const current = press;
       press = null;
       if (current) place(ctx, current.at, current.hand);
     },
-    onDragCancel() {
+    onDragCancel(ctx) {
       press = null;
+      if (trace) {
+        trace = null;
+        identity = null;
+        ctx.setOverlay({ draft: null });
+      }
     },
     onAccept(ctx) {
       return points.length >= 2 ? finish(ctx, false) : false;
     },
-    onCancel(ctx) {
-      if (points.length === 0) return false;
-      points = points.slice(0, -1);
-      preview = null;
-      if (points.length === 0) reset(ctx);
-      else show(ctx, null);
-      return true;
-    },
+    onCancel: takeBack,
   };
 }
 

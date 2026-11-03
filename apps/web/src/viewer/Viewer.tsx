@@ -18,6 +18,8 @@ import type { MeshPart } from "@hai/scene";
 import {
   elementBounds,
   importedPlacement,
+  type LineElement,
+  lineSpanAt,
   ORTHO_VIEWS,
   type Projector,
   sunLightDirection,
@@ -25,7 +27,7 @@ import {
   viewMatches,
   workPlane,
 } from "@hai/scene";
-import { Edges, Grid, OrthographicCamera } from "@react-three/drei";
+import { Edges, Grid, Line, OrthographicCamera } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   createContext,
@@ -106,6 +108,7 @@ import { nearestModel, type SnapCandidate, snapRadius } from "./snap-pick.ts";
 import {
   HeldPoints,
   HeldTargetMark,
+  LineHandles,
   MeasureMarks,
   ReferenceMarkers,
   ReferenceMarks,
@@ -183,6 +186,15 @@ const RIGHT_HOLD_MS = 400;
 /** The hand pointer stays put this long when tracking drops the hand for a few frames, instead of blinking out. */
 const POINTER_HOLD_MS = 250;
 
+/** How wide a line is drawn on screen (pixels), whatever the zoom; a model line's real size is only its points. */
+const LINE_WIDTH_PX = 2;
+const LINE_WIDTH_ACTIVE_PX = 3;
+/** How close to a line (screen pixels) still counts as on it: a line is drawn thinner than a pointer's tip. */
+const LINE_PICK_PX = 12;
+/** A line this far behind the surface under the pointer (metres) is hidden by it, and is not picked through it. */
+const LINE_PICK_BEHIND_M = 0.2;
+/** Above this many line points in the model, only a selected line shows its handles: each is a page element. */
+const MAX_LINE_HANDLES = 300;
 /** How close to the section outline (screen pixels) still counts as on it: about a fingertip's reach. */
 const SECTION_LINE_PX = 14;
 
@@ -471,42 +483,83 @@ function ElementMesh({
     : offset;
   const scale = model ? MM * (placement?.scale ?? 1) : 1;
   const turned: [number, number, number] = [0, 0, radians(placement?.rotationDeg ?? 0)];
+  // A line's tube is thinner than a pixel from any distance, so it is drawn as well at a width on screen.
+  const stroke =
+    element.type === "line"
+      ? (element.closed ? [...element.points, element.points[0] as Point3Mm] : element.points).map(
+          (p): [number, number, number] => [p[0] * MM, p[1] * MM, p[2] * MM],
+        )
+      : null;
+  // Drawn in the element colour a line would be lost on the pale ground, so at rest it takes the edges' colour.
+  const strokeColor = color === base ? colors.edge : color;
   if (draft) {
     return (
+      <>
+        <mesh
+          geometry={geometry}
+          position={placed}
+          rotation={turned}
+          scale={scale}
+          raycast={() => null}
+          renderOrder={1}
+        >
+          <meshStandardMaterial color={colors.selected} transparent opacity={0.55} depthWrite={false} />
+          {element.type !== "line" && <Edges threshold={20} color={colors.selected} />}
+        </mesh>
+        {stroke && (
+          <Line
+            points={stroke}
+            position={placed}
+            color={colors.selected}
+            lineWidth={LINE_WIDTH_ACTIVE_PX}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            raycast={() => null}
+          />
+        )}
+      </>
+    );
+  }
+  return (
+    <>
+      {stroke && (
+        <Line
+          points={stroke}
+          position={placed}
+          color={strokeColor}
+          lineWidth={selected || hovered || marked ? LINE_WIDTH_ACTIVE_PX : LINE_WIDTH_PX}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          visible={!hiddenByUser}
+          raycast={() => null}
+          userData={{ cleanStroke: clean === base ? colors.edge : clean }}
+        />
+      )}
       <mesh
         geometry={geometry}
         position={placed}
         rotation={turned}
         scale={scale}
-        raycast={() => null}
-        renderOrder={1}
+        castShadow
+        receiveShadow
+        visible={!hiddenByUser}
+        {...(hiddenByUser ? { raycast: () => null } : {})}
+        userData={{
+          elementId: element.id,
+          cleanColor: clean,
+          ...(hiddenByUser ? { hiddenByUser: true } : {}),
+        }}
       >
-        <meshStandardMaterial color={colors.selected} transparent opacity={0.55} depthWrite={false} />
-        {element.type !== "line" && <Edges threshold={20} color={colors.selected} />}
+        <meshStandardMaterial
+          color={color}
+          roughness={0.9}
+          metalness={0}
+          flatShading={model !== null}
+          {...(glow ? { emissive: glow, emissiveIntensity: 0.6 } : {})}
+        />
+        {showEdges && <Edges threshold={20} color={glow ?? owner ?? colors.edge} />}
       </mesh>
-    );
-  }
-  return (
-    <mesh
-      geometry={geometry}
-      position={placed}
-      rotation={turned}
-      scale={scale}
-      castShadow
-      receiveShadow
-      visible={!hiddenByUser}
-      {...(hiddenByUser ? { raycast: () => null } : {})}
-      userData={{ elementId: element.id, cleanColor: clean, ...(hiddenByUser ? { hiddenByUser: true } : {}) }}
-    >
-      <meshStandardMaterial
-        color={color}
-        roughness={0.9}
-        metalness={0}
-        flatShading={model !== null}
-        {...(glow ? { emissive: glow, emissiveIntensity: 0.6 } : {})}
-      />
-      {showEdges && <Edges threshold={20} color={glow ?? owner ?? colors.edge} />}
-    </mesh>
+    </>
   );
 }
 
@@ -552,6 +605,7 @@ function CameraRig({
   latency,
   pickRef,
   sectionRef,
+  linesRef,
   invalidateRef,
   rendersRef,
   view,
@@ -572,6 +626,8 @@ function CameraRig({
   pickRef: React.RefObject<Picking>;
   /** Section height, mm: surfaces above it are hidden, so they cannot be picked either. */
   sectionRef: React.RefObject<number | null>;
+  /** The lines shown now, found on screen when picking: they are drawn far thinner than a finger. */
+  linesRef: React.RefObject<() => LineElement[]>;
   invalidateRef: React.RefObject<() => void>;
   rendersRef: React.RefObject<() => number>;
   /** Reports the camera to the agent and captures the view for it. */
@@ -592,7 +648,7 @@ function CameraRig({
     };
     const cast = (x: number, y: number) =>
       raycaster.setFromCamera(new THREE.Vector2(x * 2 - 1, -(y * 2 - 1)), camera);
-    const hit = (x: number, y: number): Hit | null => {
+    const surface = (x: number, y: number): Hit | null => {
       cast(x, y);
       const cut = sectionRef.current;
       for (const h of raycaster.intersectObjects(scene.children, true)) {
@@ -602,6 +658,26 @@ function CameraRig({
         return { elementId: id, point: [h.point.x / MM, h.point.y / MM, h.point.z / MM] };
       }
       return null;
+    };
+    /** What is under a viewer position: a line in reach on screen, unless a surface stands in front of it, else the surface. */
+    const hit = (x: number, y: number): Hit | null => {
+      const direct = surface(x, y);
+      const lines = linesRef.current();
+      if (lines.length === 0) return direct;
+      const cut = sectionRef.current;
+      const shown = cut === null ? lines : lines.filter((line) => line.points.some((p) => p[2] <= cut + 1));
+      const screenOf = (point: Point3Mm): [number, number] | null => {
+        const v = new THREE.Vector3(point[0] * MM, point[1] * MM, point[2] * MM).project(camera);
+        return v.z > 1 ? null : [((v.x + 1) / 2) * size.width, ((1 - v.y) / 2) * size.height];
+      };
+      const line = lineSpanAt(shown, screenOf, [x * size.width, y * size.height], LINE_PICK_PX);
+      if (!line) return direct;
+      if (direct && direct.elementId !== line.id) {
+        const away = (p: Point3Mm) =>
+          camera.position.distanceTo(new THREE.Vector3(p[0] * MM, p[1] * MM, p[2] * MM));
+        if (away(line.point) > away(direct.point) + LINE_PICK_BEHIND_M) return direct;
+      }
+      return { elementId: line.id, point: line.point };
     };
     /** The nearest model within a few centimetres on screen of a pointer that hit nothing. */
     const near = (x: number, y: number): Hit | null => {
@@ -686,7 +762,7 @@ function CameraRig({
     return () => {
       scene.onAfterRender = () => {};
     };
-  }, [camera, scene, raycaster, size, pendingTs, latency, pickRef, sectionRef, modeRef]);
+  }, [camera, scene, raycaster, size, pendingTs, latency, pickRef, sectionRef, linesRef, modeRef]);
 
   // The agent's picture of the view: render the current frame, then read the canvas.
   useEffect(
@@ -911,8 +987,11 @@ export function Viewer({
   const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
   /** An aid as it applies now: Ortho in the status bar is the active tool's own lock when it has one (Line). */
   const aidOn = (id: DrawingAidId): boolean => {
-    const own = tools.registry.get(toolState.activeId)?.orthoAid;
-    return aidState[id === "ortho" && own ? own : id];
+    const tool = tools.registry.get(toolState.activeId);
+    // A tool in a mode that takes no aids (Line in Freeform) has none on, whatever the switches say.
+    const mode = tool?.modes?.options.find((option) => option.id === tool.modes?.current());
+    if (mode && !mode.constrained) return false;
+    return aidState[id === "ortho" && tool?.orthoAid ? tool.orthoAid : id];
   };
   const modelVersion = useSyncExternalStore(modelAssets.subscribe, modelAssets.getVersion);
   // The count of documents that have arrived whole, to frame each once; the objects themselves are the layer's own.
@@ -965,6 +1044,15 @@ export function Viewer({
   const pendingTs = useRef<number | null>(null);
   const pickRef = useRef<Picking>(noPicking);
   const sectionRef = useRef<number | null>(null);
+  const linesRef = useRef<() => LineElement[]>(() => []);
+  linesRef.current = () => {
+    const doc = client.getSnapshot().doc;
+    const hiddenNow = visibility.getSnapshot();
+    if (!doc) return [];
+    return Object.values(doc.elements).filter(
+      (e): e is LineElement => e.type === "line" && !hiddenNow.has(e.id),
+    );
+  };
   sectionRef.current = toolState.overlay.sectionMm;
   const handAspect = useRef(4 / 3);
   const lastMouse = useRef<Point2 | null>(null);
@@ -1555,10 +1643,10 @@ export function Viewer({
       if (e.ctrlKey || e.metaKey) {
         if (k === "z" && !e.shiftKey) {
           e.preventDefault();
-          client.undo();
+          tools.undo();
         } else if ((k === "z" && e.shiftKey) || k === "y") {
           e.preventDefault();
-          client.redo();
+          tools.redo();
         }
         return;
       }
@@ -1595,7 +1683,7 @@ export function Viewer({
       window.removeEventListener("keydown", keydown);
       window.removeEventListener("keyup", keyup);
     };
-  }, [client, tools, view, features]);
+  }, [tools, view, features]);
 
   // Latency readout refreshes twice a second.
   useEffect(() => {
@@ -1702,6 +1790,20 @@ export function Viewer({
   const previewOffset = (element: Element): [number, number] | null =>
     overlay.movePreview?.from[element.id] === JSON.stringify(element) ? overlay.movePreview.offsetMm : null;
   const selected = scene.doc && scene.selection[0] ? scene.doc.elements[scene.selection[0]] : undefined;
+  // A draft standing in for an element: drawn in its place until the change it shows arrives.
+  const replacedByDraft =
+    overlay.draft &&
+    overlay.draftOf &&
+    JSON.stringify(scene.doc?.elements[overlay.draft.id]) === overlay.draftOf
+      ? overlay.draft.id
+      : null;
+  const shownDraft = overlay.draft && (!overlay.draftOf || replacedByDraft) ? overlay.draft : null;
+  const allLines = linesRef.current();
+  const editsPoints = tools.registry.get(toolState.activeId)?.editsLinePoints === true;
+  const handleLines =
+    editsPoints && allLines.reduce((count, line) => count + line.points.length, 0) <= MAX_LINE_HANDLES
+      ? allLines
+      : allLines.filter((line) => selection.has(line.id));
   const submitProject = (e: FormEvent) => {
     e.preventDefault();
     const path = projectPath.trim();
@@ -1790,30 +1892,32 @@ export function Viewer({
           />
           <ModelAssetsContext.Provider value={modelAssets}>
             {shownDoc &&
-              Object.values(shownDoc.elements).map((element) => (
-                <ElementMesh
-                  key={element.id}
-                  element={element}
-                  doc={shownDoc as SceneDocument}
-                  colors={colors}
-                  selected={selection.has(element.id)}
-                  hovered={hoverId === element.id}
-                  marked={overlay.marked === element.id}
-                  offsetMm={previewOffset(element)}
-                  sectionMm={overlay.sectionMm}
-                  hiddenByUser={hidden.has(element.id)}
-                />
-              ))}
+              Object.values(shownDoc.elements)
+                .filter((element) => element.id !== replacedByDraft)
+                .map((element) => (
+                  <ElementMesh
+                    key={element.id}
+                    element={element}
+                    doc={shownDoc as SceneDocument}
+                    colors={colors}
+                    selected={selection.has(element.id)}
+                    hovered={hoverId === element.id}
+                    marked={overlay.marked === element.id}
+                    offsetMm={previewOffset(element)}
+                    sectionMm={overlay.sectionMm}
+                    hiddenByUser={hidden.has(element.id)}
+                  />
+                ))}
           </ModelAssetsContext.Provider>
           <group userData={USER_ONLY}>
             <ClaimBoxes boxes={(owners ?? NO_OWNERS).boxes} />
           </group>
         </OwnerDisplayContext.Provider>
-        {shownDoc && overlay.draft && (
+        {shownDoc && shownDraft && (
           <group userData={USER_ONLY}>
             <ElementMesh
               key="draft"
-              element={overlay.draft}
+              element={shownDraft}
               doc={shownDoc}
               colors={colors}
               selected={false}
@@ -1837,6 +1941,7 @@ export function Viewer({
           )}
           {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
           {overlay.snap && <SnapMarker point={overlay.snap.point} label={overlay.snap.label} />}
+          <LineHandles lines={handleLines} />
           {markers.length > 0 && <ReferenceMarkers ids={markers} doc={shownDoc} />}
           {toolState.held && (
             <HeldTargetMark
@@ -1866,6 +1971,7 @@ export function Viewer({
           latency={latency}
           pickRef={pickRef}
           sectionRef={sectionRef}
+          linesRef={linesRef}
           invalidateRef={invalidateRef}
           rendersRef={rendersRef}
           view={view}
@@ -1952,8 +2058,8 @@ export function Viewer({
             <button
               type="button"
               className="secondary"
-              onClick={() => client.undo()}
-              disabled={!scene.canUndo}
+              onClick={() => tools.undo()}
+              disabled={!scene.canUndo && !tools.toolCanUndo}
               title="Undo (Ctrl+Z)"
               data-hand-press
             >
@@ -1962,8 +2068,8 @@ export function Viewer({
             <button
               type="button"
               className="secondary"
-              onClick={() => client.redo()}
-              disabled={!scene.canRedo}
+              onClick={() => tools.redo()}
+              disabled={!scene.canRedo && !tools.toolCanRedo}
               title="Redo (Ctrl+Shift+Z)"
               data-hand-press
             >

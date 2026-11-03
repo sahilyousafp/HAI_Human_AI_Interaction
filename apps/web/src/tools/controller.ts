@@ -1,6 +1,7 @@
 import { DEFAULT_GESTURES } from "@hai/perception";
 import {
   DEFAULT_DRAWING_AIDS,
+  DRAWING_AID_IDS,
   type DrawingAids,
   type GestureEvent,
   type Hand,
@@ -31,6 +32,7 @@ import type { ToolRegistry } from "./registry.ts";
 import { EMPTY_OVERLAY, type Hit, type Tool, type ToolContext, type ToolOverlay } from "./types.ts";
 
 const NO_HIDDEN: ReadonlySet<string> = new Set();
+const NO_AIDS = Object.fromEntries(DRAWING_AID_IDS.map((id) => [id, false])) as DrawingAids;
 
 /**
  * Holding a fist still this long returns to Select (the fist is recognised after the clutch debounce). A fist that
@@ -432,6 +434,38 @@ export class ToolController {
     if (hover !== this.snapshot.overlay.sectionHover) this.setOverlay({ sectionHover: hover });
   }
 
+  /** Undo from anywhere: what the active tool has of its own goes first (a line's last point), then the model. */
+  undo(): void {
+    const ctx = this.ctx();
+    if (ctx && this.active?.onUndo?.(ctx)) return;
+    this.env?.undo();
+  }
+
+  /** Redo from anywhere: what the active tool has of its own goes first, then the model. */
+  redo(): void {
+    const ctx = this.ctx();
+    if (ctx && this.active?.onRedo?.(ctx)) return;
+    this.env?.redo();
+  }
+
+  /** Whether the active tool has something of its own to undo. */
+  get toolCanUndo(): boolean {
+    return this.active?.canUndo?.() ?? false;
+  }
+
+  /** Whether the active tool has something of its own to redo. */
+  get toolCanRedo(): boolean {
+    return this.active?.canRedo?.() ?? false;
+  }
+
+  /** Switches the active tool to one of its modes (its panel, or by voice). */
+  setToolMode(id: string): void {
+    const ctx = this.ctx();
+    if (!ctx) return;
+    this.active?.modes?.set(ctx, id);
+    this.update({}); // the panel shows the mode
+  }
+
   /** A hand that does not have the focus moved: the tool follows it when that hand is steering what it draws. */
   follow(at: Point2, hand: Hand, closing = false): void {
     if (this.active?.followsHand?.() !== hand) return;
@@ -640,8 +674,8 @@ export class ToolController {
         shake: () => this.cancel(),
         clutch: (closed, held) => this.fist(closed, held),
         select: (p) => this.selectAt(toViewer(p)),
-        undo: () => this.env?.undo(),
-        redo: () => this.env?.redo(),
+        undo: () => this.undo(),
+        redo: () => this.redo(),
         cancel: () => this.cancel(),
       },
       navigation: (event, dragMode) => this.env?.navigate(event, dragMode),
@@ -654,8 +688,8 @@ export class ToolController {
     return {
       doc: () => env.doc(),
       apply: (label, ops) => env.apply(label, ops),
-      undo: () => env.undo(),
-      redo: () => env.redo(),
+      undo: () => this.undo(),
+      redo: () => this.redo(),
       select: (ids) => env.select(ids),
       selection: () => env.selection?.() ?? [],
       choose: (id) => this.choose(id),
@@ -702,12 +736,13 @@ export class ToolController {
   private resolveSnap(
     env: ToolEnvironment,
     at: Point2,
-    options: { anchor?: Point3Mm | null; exclude?: string[]; probe?: Point3Mm } = {},
+    options: { anchor?: Point3Mm | null; exclude?: string[]; probe?: Point3Mm; free?: boolean } = {},
   ): Resolved | null {
     const doc = env.doc();
     const allAids = env.aids?.() ?? DEFAULT_DRAWING_AIDS;
     const orthoAid = this.active?.orthoAid;
-    const aids = orthoAid ? { ...allAids, ortho: allAids[orthoAid] } : allAids;
+    const toolAids = orthoAid ? { ...allAids, ortho: allAids[orthoAid] } : allAids;
+    const aids = options.free ? NO_AIDS : toolAids;
     const project = env.projector?.() ?? null;
     const [width, height] = env.screenSize?.() ?? [1, 1];
     let pointer: Point2 = [at[0] * width, at[1] * height];
@@ -736,7 +771,7 @@ export class ToolController {
         ? this.snapIndex(doc, [...(options.exclude ?? []), ...(env.hidden?.() ?? [])])
         : emptySnapIndex(),
       project,
-      constraints: this.snapshot.constraints,
+      constraints: options.free ? {} : this.snapshot.constraints,
       ...(byHand ? { keep: { snap: kept?.snap ?? null, angleDeg: kept?.angleDeg ?? null } } : {}),
     });
     if (!result) {

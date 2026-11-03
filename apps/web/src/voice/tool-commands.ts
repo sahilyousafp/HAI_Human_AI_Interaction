@@ -18,6 +18,17 @@ function words(text: string): string {
   return all.slice(start, end).join(" ");
 }
 
+/** The tool and mode a transcript names when it is nothing but a mode's spoken name ("freeform"), or null. */
+export function toolModeNamed(text: string, tools: Tool[]): { tool: Tool; mode: string } | null {
+  const said = words(text);
+  for (const tool of tools) {
+    for (const option of tool.modes?.options ?? []) {
+      if (option.spoken.some((name) => words(name) === said)) return { tool, mode: option.id };
+    }
+  }
+  return null;
+}
+
 /**
  * The tool a transcript names when it is nothing but that tool's spoken name ("measure", "sketch area", "use the wall
  * tool"), or null. Exact names win; otherwise one letter of difference is allowed for names of five letters or more,

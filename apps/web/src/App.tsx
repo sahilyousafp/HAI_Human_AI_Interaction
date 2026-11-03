@@ -75,7 +75,7 @@ import { CommandBar } from "./voice/CommandBar.tsx";
 import { heardAs } from "./voice/heard.ts";
 import { detectorLoaded, listenInCloud, listenOnDevice, preloadOnDevice } from "./voice/listeners.ts";
 import { bestEngine, resample, Speaker } from "./voice/speaker.ts";
-import { toolNamed } from "./voice/tool-commands.ts";
+import { toolModeNamed, toolNamed } from "./voice/tool-commands.ts";
 import { Transcriber } from "./voice/transcriber.ts";
 import { VoiceSettingsCard } from "./voice/VoiceSettingsCard.tsx";
 import { VoiceInput } from "./voice/voice-input.ts";
@@ -449,6 +449,12 @@ export function App() {
           const corrected = reviseCommand(text, commandHost, commandMemory);
           if (corrected) return { label: corrected.label, ran: true };
           const attempt = (said: string) => {
+            const named = toolModeNamed(said, tools.registry.list());
+            if (named) {
+              tools.choose(named.tool.id);
+              tools.setToolMode(named.mode);
+              return { label: `${named.tool.label}: ${said}` };
+            }
             const tool = toolNamed(said, tools.registry.list());
             if (tool) {
               tools.choose(tool.id);
