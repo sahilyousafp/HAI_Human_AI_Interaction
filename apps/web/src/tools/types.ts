@@ -1,7 +1,9 @@
 import type {
+  DrawingAidId,
   DrawingAids,
   Element,
   FeatureId,
+  Hand,
   Point2,
   Point3Mm,
   SceneDocument,
@@ -132,6 +134,16 @@ export interface Tool {
   instant?: boolean;
   /** The tool draws points in any view, in a side view's vertical plane too (Line); others need the ground in plan. */
   drawsInView?: boolean;
+  /** The aid that holds this tool's lines to the angle step, instead of the shared Ortho. */
+  orthoAid?: DrawingAidId;
+  /**
+   * A hand's pinch places one thing: while this says so, the preview stands still as the fingers close, and the tool
+   * takes the pinch however far the hand drifts (no orbit). A long pinch that stays still is dropped, for talking or a
+   * ring. The mouse is exact and is not affected.
+   */
+  pressPlaces?(): boolean;
+  /** The hand steering what is being drawn, which is followed even when the other hand has the focus. */
+  followsHand?(): Hand | null;
   /** The feature that switches this tool on and off (Settings > Features); without one it is always available. */
   feature?: FeatureId;
   run?(ctx: ToolContext): void;

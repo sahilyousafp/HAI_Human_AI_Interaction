@@ -107,7 +107,7 @@ test("a Line drawn in the Front view lies in a vertical plane: Ortho at 90 degre
   await face(page, "front");
   await expect(viewer(page)).toHaveAttribute("data-view", "front");
   await page.keyboard.press("n");
-  await page.getByTestId("constraint-ortho").click();
+  await expect(page.getByTestId("constraint-ortho")).toHaveAttribute("aria-pressed", "true"); // Line locks by default
   await page.getByTestId("constraint-step-90").click();
   const canvas = page.locator("[data-testid=viewer] canvas");
   const box = await canvas.boundingBox();

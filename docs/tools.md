@@ -27,7 +27,7 @@ To have a long pinch open a ring at once, without listening, set it to **Open th
 
 Then move toward a tool and release (the pinch, Space or the right button). The tool in that direction is highlighted once you are outside the small circle in the middle (4% of the image width); release there to cancel. Each slot keeps its direction, so with practice a quick flick picks a tool without looking. If you start speaking, the ring hides and your hand points instead: what you say wins.
 
-While a ring is open, the hand that opened it steers it; the other hand keeps working (tapping, pressing, scrolling, orbiting). One ring is open at a time. A long pinch while you are holding something (an element with Move, the section plane with Section, a wall or a sketch being drawn) keeps holding it instead of opening a ring or listening.
+While a ring is open, the hand that opened it steers it; the other hand keeps working (tapping, pressing, scrolling, orbiting). One ring is open at a time. A long pinch while you are holding something (an element with Move, the section plane with Section, a wall or a sketch being drawn) keeps holding it instead of opening a ring or listening. Line holds nothing between points, so a long pinch with Line opens the ring or listens as usual, and places no point.
 
 ### What moved
 
@@ -89,7 +89,7 @@ The mouse cursor changes with the tool as well. The pointer stays put through br
 | Undo | U | Bottom (action) | Undoes the last change at once and keeps your current tool; Undo again on the strip that appears steps further back |
 | Redo | R | (not in a ring) | Redoes at once and keeps your current tool |
 | Wall | W | Left (action) | Pinch on the ground and drag from one end of the wall to the other: the wall shows as you drag, with its length, and is added when you let go (200 mm thick, 3000 mm high, ends snapped to 100 mm). Shorter than 300 mm adds nothing |
-| Line | N | Left (reference) | Tap to place each point of a polyline (a model element at the heights you tap). The segment follows the pointer through the drawing aids, with its length and angle in the notice. Tap the last point again, nod or press Enter to finish; tap the first point to close the line (3 points or more); Escape or a shake takes back the last point. One undo step, named "Add Line 2". Say "line" to pick it |
+| Line | N | Left (reference) | Each pinch or tap places one point of a polyline (a model element at the heights you tap). Between points the segment follows the pointer through the drawing aids, locked to 45 degree steps until you change it, with its length and angle in the notice. A pinch places the point the preview shows: the preview stands still as your fingers close, moving your hand while they are closed moves nothing, and the view does not orbit. The hand that placed the first point steers the line, and your other hand's drag orbits. Tap the last point again, nod or press Enter to finish; tap the first point to close the line (3 points or more); Escape or a shake takes back the last point. One undo step, named "Add Line 2". Say "line" to pick it |
 | Slab | F | Top left (action) | Pinch on the ground and drag from one corner to the opposite one: a 200 mm slab fills the rectangle (sides at least 300 mm, corners snapped to 100 mm) |
 | Column | C | Bottom left (action) | Tap the ground: a 400 x 400 mm column, 3000 mm high, is placed there, snapped to 100 mm |
 | Copy | P | Right (action) | Pinch an element and drag: a copy follows, snapped to 100 mm, and is added where you let go; the original stays. A drag that starts on empty space orbits instead |
@@ -104,12 +104,13 @@ Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y keep working as before.
 
 ## Placing points exactly: drawing aids
 
-Wall, Line, Slab, Column, Copy and Move put their points through the **drawing aids** in **Settings > Drawing aids**. Each is a switch; only Grid is on until you turn the others on, and a change applies to the very next point. The status bar lists the aids that are on.
+Wall, Line, Slab, Column, Copy and Move put their points through the **drawing aids** in **Settings > Drawing aids**. Each is a switch; only Grid and Ortho for Line are on until you change them, and a change applies to the very next point. The status bar lists the aids that apply to the active tool.
 
 | Aid | What it does |
 |---|---|
 | Grid | Points land on a 100 mm grid (what the tools always did) |
-| Ortho | A line is **locked** to the angles of its step (90, 45 or 15 degrees from the X axis, 45 by default) from where it starts, whatever your hand does: it always takes the nearest one. The notice shows the length and the angle |
+| Ortho | A wall is **locked** to the angles of its step (90, 45 or 15 degrees from the X axis, 45 by default) from where it starts, whatever your hand does: it takes the nearest one. The notice shows the length and the angle |
+| Ortho for Line | The same lock for the Line tool, with the same step, and on until you turn it off. The Ortho chip in the constraints panel shows this one while Line is active |
 | Endpoint | Snaps to the ends of walls, the corners of slabs, the centres of columns, and the corners of massings and imported models |
 | Midpoint | Snaps to the middle of a wall or of an edge of a slab, a massing or an imported model |
 | Centre | Snaps to the centre of a slab, a massing, an imported model or a column |
@@ -117,6 +118,8 @@ Wall, Line, Slab, Column, Copy and Move put their points through the **drawing a
 | Perpendicular | Ends a line where it meets an edge at a right angle |
 
 Snaps work **at every height**: candidates are the real points of the model, at the base and the top of walls and columns, at the top of slabs, and at the bottom and the top of massings and imported models, and the pointer is matched to them where they appear on screen, within 24 pixels, whatever the zoom and however high they are. A wall end three floors up, or the top corner of an imported building, snaps when it is under the pointer on screen, even if it is hidden behind something. A line started on a snapped point is drawn in the plane at that height, and the new element is placed at it: on the level whose elevation matches (within 1 mm), else with no level and its own base height. When more than one could apply, the first of Endpoint, Midpoint, Centre, Perpendicular and Project that is within reach wins, and Grid takes what is left. With Ortho on, only a snap that lies on the held line counts (Project then means where the line meets the edge). The snapped point shows a ring and the aid's name, and the notice repeats it, for example "Wall 5000 mm at 0 deg (Endpoint)". The first point of a line and of a slab take the point snaps; Ortho and Perpendicular need a start, so they apply to the end of a wall, not to a slab's opposite corner.
+
+A hand always shakes a little, so what a hand has is kept against it: a snap stays until the pointer is 36 pixels from it (it is taken within 24), an Ortho angle stays until the pointer is 4 degrees past the half-way line to the next step, and within 16 pixels of the last point the angle does not change at all. The mouse lands exactly where it points.
 
 A **length** can be set for the next segment of a Line or Wall (in the constraints panel, or by voice): the point then lies exactly that far along the Ortho direction, or towards the pointer without Ortho, and snaps and the grid do not move it. It is freed once the point is placed.
 
@@ -156,6 +159,8 @@ A tool can implement any of these; the `ctx` it receives reads and changes the s
 | `onDragStart(ctx, at, hit)` | A drag begins. Return true to take it; otherwise the view orbits |
 | `onDrag`, `onDragEnd` | The drag moves and ends |
 | `onDragCancel` | The drag was taken over (the palette opened) or the user disengaged: undo any preview, commit nothing |
+| `pressPlaces` | Says that a hand's pinch places one thing: the preview stands still as the fingers close, the tool takes the pinch however far the hand drifts, and a long still pinch is given up for talking or a ring |
+| `followsHand` | Says which hand is steering what is drawn, so it is followed while the other hand has the focus |
 | `instant` and `run(ctx)` | Instant tools (like Undo) run once and leave the current tool active |
 
 Positions (`at`) are viewer coordinates, 0 to 1 across and down the 3D view, whether they come from a hand, the mouse or a test.

@@ -34,6 +34,8 @@ export interface RouterTargets {
     dragEnd(position: Point2, hand: Hand): void;
     /** Drops a hand's drag (every hand's when none is given). */
     dragCancel(hand?: Hand): void;
+    /** A long pinch while the tool has this hand's drag: true if the tool let go of it, as a press to place does. */
+    yieldHold?(hand: Hand): boolean;
     /** Yes to the tool's open question. */
     nod(): void;
     /** No to the open question, or cancel. */
@@ -165,8 +167,13 @@ export class InputRouter {
     const b = this.bindings;
     switch (event.type) {
       case "pinch.hold": {
-        const owner = this.owners.get(event.hand);
-        if (owner === "tool" || palette.isOpen) return;
+        let owner = this.owners.get(event.hand);
+        if (palette.isOpen) return;
+        if (owner === "tool") {
+          if (!tool.yieldHold?.(event.hand)) return;
+          owner = "ignored";
+          this.owners.set(event.hand, owner);
+        }
         const action = actionFor(b, "hold", event.hand);
         if (action === "talk" && this.startTalk(event, owner)) return;
         const ring = action === "talk" ? this.ringOf(event.hand) : RINGS[action];

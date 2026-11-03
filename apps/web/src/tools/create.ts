@@ -1,4 +1,4 @@
-import type { Element, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
+import type { Element, Hand, Point2, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
 import { transformPatch } from "@hai/scene";
 import { movedOffset } from "./placement.ts";
 import type { Tool, ToolContext } from "./types.ts";
@@ -203,17 +203,27 @@ export function wallTool(): Tool {
 const LINE_REACH_PX = 24;
 /** A closed line needs this many points. */
 const LINE_MIN_CLOSED = 3;
+/** A hand's pinch places what the preview showed if it began within this of it (a share of the view): past that it is stale. */
+const PREVIEW_REACH = 0.08;
 
 /**
- * Line: a tap places each point of a polyline, and the segment follows the pointer, held by the drawing aids (Ortho,
- * its angle step, snaps) and by a length when one is set. Tapping the last point again, a nod or Enter finishes the
- * line; tapping the first point closes it. Escape or a shake takes back the last point, and with none left goes back to
- * Select. The line is one undo step.
+ * Line: each tap or pinch places one point of a polyline, and between them the segment follows the pointer, held by the
+ * drawing aids (Ortho for Line, its angle step, snaps) and by a length when one is set. A hand's pinch places the point
+ * the preview shows: the preview stands still as the fingers close, drifting while they are closed moves nothing, and
+ * the view does not orbit. The hand that placed the first point steers the line, and the other hand's drag orbits.
+ * Tapping the last point again, a nod or Enter finishes the line; tapping the first point closes it. Escape or a shake
+ * takes back the last point, and with none left goes back to Select. The line is one undo step.
  */
 export function lineTool(): Tool {
   let points: Point3Mm[] = [];
   let identity: { id: string; name: string } | null = null;
-  const hint = "Tap to place each point. Tap the last point again, nod or press Enter to finish.";
+  /** The hand steering the line (null for the mouse, or before the first point). */
+  let drawer: Hand | null = null;
+  /** The point a hand's pinch would place now: what the preview shows, and where the pointer was for it. */
+  let preview: { at: Point2; point: Point3Mm; hand: Hand } | null = null;
+  /** A hand's pinch that outlasted a tap: where it began and which hand. */
+  let press: { at: Point2; hand: Hand } | null = null;
+  const hint = "Pinch or tap to place each point. Tap the last point again, nod or press Enter to finish.";
 
   const lineOf = (doc: SceneDocument, through: Point3Mm[], closed = false): Element | null => {
     if (through.length < 2 || !identity) return null;
@@ -230,6 +240,9 @@ export function lineTool(): Tool {
   const reset = (ctx: ToolContext) => {
     points = [];
     identity = null;
+    drawer = null;
+    preview = null;
+    press = null;
     ctx.setLength(null);
     ctx.clearSnap();
     ctx.setOverlay({ draft: null });
@@ -267,11 +280,45 @@ export function lineTool(): Tool {
     return true;
   };
 
+  /** Where a press at `at` puts its point: for a hand, what the preview showed, if the preview is about this press. */
+  const pointFor = (ctx: ToolContext, at: Point2, hand: Hand | null): Point3Mm | null => {
+    const shown =
+      hand &&
+      preview?.hand === hand &&
+      Math.hypot(preview.at[0] - at[0], preview.at[1] - at[1]) <= PREVIEW_REACH;
+    return shown && preview ? preview.point : drawPoint(ctx, at, points.at(-1) ?? null);
+  };
+  /** One press: finishes on the last point, closes on the first, else places the next point. */
+  const place = (ctx: ToolContext, at: Point2, hand: Hand | null) => {
+    const doc = ctx.doc();
+    if (!doc) return;
+    const last = points.at(-1);
+    if (last && nearPixel(ctx, at, last)) {
+      finish(ctx, false);
+      return;
+    }
+    if (points.length >= LINE_MIN_CLOSED && nearPixel(ctx, at, points[0])) {
+      finish(ctx, true);
+      return;
+    }
+    const point = pointFor(ctx, at, hand);
+    if (!point) return;
+    identity ??= newIdentity(doc, "line", "Line");
+    points = [...points, point];
+    if (points.length === 1) drawer = hand;
+    preview = null;
+    ctx.setLength(null); // a typed length is for one segment
+    show(ctx, null);
+  };
+
   return {
     id: "line",
     label: "Line",
     spoken: ["line", "polyline"],
     drawsInView: true,
+    orthoAid: "lineOrtho",
+    pressPlaces: () => true,
+    followsHand: () => drawer,
     feature: "createTools",
     icon: "M4 19 10 7l5 8 5-10M4 19h.01M10 7h.01M15 15h.01M20 5h.01",
     shortcut: "n",
@@ -283,32 +330,33 @@ export function lineTool(): Tool {
       ctx.setOverlay({ notice: null });
     },
     onHover(ctx, at) {
+      const hand = ctx.hand();
+      if (hand && drawer && hand !== drawer) return; // the other hand does not steer this line
       const last = points.at(-1);
-      if (!last) {
-        ctx.resolve(at);
-        return;
-      }
-      const next = drawPoint(ctx, at, last);
-      if (next) show(ctx, next);
+      const next = drawPoint(ctx, at, last ?? null);
+      preview = hand && next ? { at, point: next, hand } : null;
+      if (last && next) show(ctx, next);
     },
     onTap(ctx, at) {
-      const doc = ctx.doc();
-      if (!doc) return;
-      const last = points.at(-1);
-      if (last && nearPixel(ctx, at, last)) {
-        finish(ctx, false);
-        return;
-      }
-      if (points.length >= LINE_MIN_CLOSED && nearPixel(ctx, at, points[0])) {
-        finish(ctx, true);
-        return;
-      }
-      const point = drawPoint(ctx, at, last ?? null);
-      if (!point) return;
-      identity ??= newIdentity(doc, "line", "Line");
-      points = [...points, point];
-      ctx.setLength(null); // a typed length is for one segment
-      show(ctx, null);
+      const hand = ctx.hand();
+      if (hand && drawer && hand !== drawer) return;
+      place(ctx, at, hand);
+    },
+    onDragStart(ctx, at) {
+      // The mouse is exact, so its drag is meant: it orbits. A hand's pinch that drifts is still one point, except
+      // that the hand not drawing this line keeps its drag, to orbit.
+      const hand = ctx.hand();
+      if (!hand || (drawer && hand !== drawer)) return false;
+      press = { at, hand };
+      return true;
+    },
+    onDragEnd(ctx) {
+      const current = press;
+      press = null;
+      if (current) place(ctx, current.at, current.hand);
+    },
+    onDragCancel() {
+      press = null;
     },
     onAccept(ctx) {
       return points.length >= 2 ? finish(ctx, false) : false;
@@ -316,6 +364,7 @@ export function lineTool(): Tool {
     onCancel(ctx) {
       if (points.length === 0) return false;
       points = points.slice(0, -1);
+      preview = null;
       if (points.length === 0) reset(ctx);
       else show(ctx, null);
       return true;

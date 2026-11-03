@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_DRAWING_AIDS, DRAWING_AID_IDS, DRAWING_AIDS, resolveDrawingAids } from "./drawing-aids.ts";
 
 describe("drawing aids", () => {
-  it("only Grid is on until the user changes it", () => {
-    expect(DRAWING_AID_IDS.filter((id) => DEFAULT_DRAWING_AIDS[id])).toEqual(["grid"]);
+  it("only Grid and the Line tool's angle lock are on until the user changes them", () => {
+    expect(DRAWING_AID_IDS.filter((id) => DEFAULT_DRAWING_AIDS[id])).toEqual(["grid", "lineOrtho"]);
     expect(resolveDrawingAids(null)).toEqual(DEFAULT_DRAWING_AIDS);
   });
 

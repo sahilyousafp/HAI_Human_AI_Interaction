@@ -27,6 +27,7 @@ export function ConstraintsPanel({
   const [draft, setDraft] = useState("");
   if (!DRAWING_TOOLS.has(activeId)) return null;
   const tool = controller.registry.get(activeId);
+  const orthoAid = tool?.orthoAid ?? "ortho";
 
   const lock = (e: FormEvent) => {
     e.preventDefault();
@@ -52,8 +53,8 @@ export function ConstraintsPanel({
           className="constraint-chip"
           data-testid="constraint-ortho"
           data-hand-press
-          aria-pressed={on.ortho}
-          onClick={() => aids.set("ortho", !on.ortho)}
+          aria-pressed={on[orthoAid]}
+          onClick={() => aids.set(orthoAid, !on[orthoAid])}
         >
           Ortho
         </button>

@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 /**
- * The aids that help the create tools and Move place a point exactly (Settings > Drawing aids). Grid is on until
- * the user turns it off; the rest are off until the user turns them on.
+ * The aids that help the create tools and Move place a point exactly (Settings > Drawing aids). Grid and the Line
+ * tool's angle lock are on until the user turns them off; the rest are off until the user turns them on.
  */
 export const DRAWING_AIDS = [
   {
@@ -14,8 +14,14 @@ export const DRAWING_AIDS = [
   {
     id: "ortho",
     label: "Ortho",
-    description: "Lines lock to the X axis, the Y axis or 45 degrees from where they start.",
+    description: "Walls lock to the X axis, the Y axis or 45 degrees from where they start.",
     default: false,
+  },
+  {
+    id: "lineOrtho",
+    label: "Ortho for Line",
+    description: "The Line tool's segments lock to the angle step from the point before them.",
+    default: true,
   },
   {
     id: "endpoint",
