@@ -32,8 +32,8 @@ export interface ToolOverlay {
     /** Each dragged element as it was when the drag began, by id; the preview applies only while it still matches. */
     from: Record<string, string>;
   } | null;
-  /** Delete: the element waiting for confirmation. */
-  marked: string | null;
+  /** Delete: the elements waiting for confirmation. */
+  marked: string[];
   /** Section: the pointer is over the section plane, so a pinch would grab it. */
   sectionHover: boolean;
   /** Create tools and Copy: the element being drawn or placed, shown before it is created. */
@@ -45,6 +45,12 @@ export interface ToolOverlay {
   draftOf: string | null;
   /** Create tools and Move: the point a drawing aid snapped to, with the aid's name; shown as a marker. */
   snap: { point: Point3Mm; kind: SnapKind; label: string; ortho: boolean } | null;
+  /** Copy and Rotate: the elements being placed or turned, shown before anything changes. */
+  drafts: Element[];
+  /** Those that stand in for an element in the model (Rotate), by id: that element as it was, by its JSON. See `draftOf`. */
+  draftsOf: Record<string, string>;
+  /** Rotate: the point the elements turn about, and what to say beside it. */
+  pivot: { point: Point3Mm; label: string } | null;
   /** Lasso select: the loop drawn so far, viewer positions (0..1 across and down the 3D view). */
   lasso: Point2[] | null;
 }
@@ -54,10 +60,13 @@ export const EMPTY_OVERLAY: ToolOverlay = {
   measure: [],
   sectionMm: null,
   movePreview: null,
-  marked: null,
+  marked: [],
   sectionHover: false,
   draft: null,
   draftOf: null,
+  drafts: [],
+  draftsOf: {},
+  pivot: null,
   snap: null,
   lasso: null,
 };

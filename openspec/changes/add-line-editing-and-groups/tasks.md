@@ -16,14 +16,14 @@
 
 ## 3. Groups, selection, Rotate
 
-- [ ] 3.1 `hai.group` and `packages/scene/src/groups.ts`; selection expands to whole groups. Verify: `groups.test.ts`.
-- [ ] 3.2 Move, Copy and Delete act on the whole selection. Verify: `tools.test.ts`, `e2e/groups.spec.ts`.
-- [ ] 3.3 The Rotate tool. Verify: `e2e/groups.spec.ts`.
-- [ ] 3.4 An import is one group. Verify: `importer.test.ts`, `e2e/import.spec.ts`.
-- [ ] 3.5 Publish layouts for the options panel for the owner to pick from, then build the chosen one. Verify: `e2e/groups.spec.ts`, `e2e/hud-layout.spec.ts`, screenshots at 1280, 1024 and 900 px.
+- [x] 3.1 `hai.group` and `packages/scene/src/groups.ts`; selection expands to whole groups. Verify: `groups.test.ts`.
+- [x] 3.2 Move, Copy and Delete act on the whole selection. Verify: `tools.test.ts`, `e2e/groups.spec.ts`.
+- [x] 3.3 The Rotate tool. Verify: `e2e/groups.spec.ts`.
+- [x] 3.4 An import is one group. Verify: `importer.test.ts`, `e2e/import.spec.ts`.
+- [x] 3.5 Publish layouts for the options panel for the owner to pick from, then build the chosen one. Verify: `e2e/groups.spec.ts`, `e2e/hud-layout.spec.ts`, screenshots at 1280, 1024 and 900 px.
 
 ## 4. Agents and voice
 
-- [ ] 4.1 Pointing at part of a selection means the whole selection; "group this" and "ungroup". Verify: `utterance-context.test.ts`, `phrases.test.ts`, `e2e/spoken-commands.spec.ts`.
-- [ ] 4.2 A request about several elements groups them and names the group. Verify: `e2e/agent.spec.ts`.
-- [ ] 4.3 `group_elements`, `ungroup_elements`, whole groups in `transform_elements`, and the refusal in `update_elements`. Verify: bridge unit tests.
+- [x] 4.1 Pointing at part of a selection means the whole selection; "group this" and "ungroup". Verify: `utterance-context.test.ts`, `phrases.test.ts`, `e2e/spoken-commands.spec.ts`.
+- [x] 4.2 A request about several elements groups them and names the group. Verify: `e2e/agent.spec.ts`.
+- [x] 4.3 `group_elements`, `ungroup_elements`, whole groups in `transform_elements`, and the refusal in `update_elements`. Verify: bridge unit tests.

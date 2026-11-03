@@ -1,5 +1,6 @@
-import type { Element, Hand, Point2, Point3Mm, PointMm, SceneDocument } from "@hai/protocol";
-import { transformPatch } from "@hai/scene";
+import type { Element, Hand, Point2, Point3Mm, PointMm, SceneDocument, SceneOp } from "@hai/protocol";
+import { copiedTags, transformPatch } from "@hai/scene";
+import { actedOn, describeElements } from "./acted-on.ts";
 import { movedOffset } from "./placement.ts";
 import { pathLength, simplify } from "./reference.ts";
 import type { Tool, ToolContext } from "./types.ts";
@@ -537,10 +538,18 @@ export const columnTool: Tool = {
   },
 };
 
-/** Copy: pinch an element and drag the copy into place; it snaps to 100 mm or to the drawing aids and the original stays. */
+/**
+ * Copy: pinch an element and drag the copy into place; it snaps to 100 mm or to the drawing aids and the original stays.
+ * What is copied is what Move would carry: the whole group, or the whole selection when the pinch is on part of it.
+ */
 export function copyTool(): Tool {
-  let drag: { element: Element; heightMm: number; start: [number, number, number]; offset: PointMm } | null =
-    null;
+  let drag: {
+    element: Element;
+    carried: Element[];
+    heightMm: number;
+    start: [number, number, number];
+    offset: PointMm;
+  } | null = null;
   const hint = "Pinch an element and drag its copy into place. It snaps to 100 mm.";
   return {
     id: "copy",
@@ -554,7 +563,7 @@ export function copyTool(): Tool {
     },
     deactivate(ctx) {
       drag = null;
-      ctx.setOverlay({ notice: null, draft: null });
+      ctx.setOverlay({ notice: null, drafts: [] });
     },
     onTap(ctx) {
       ctx.setOverlay({ notice: hint });
@@ -564,7 +573,7 @@ export function copyTool(): Tool {
       if (!hit || !element) return false; // empty space: the view orbits instead
       const start = ctx.ground(at, hit.point[2]);
       if (!start) return false;
-      drag = { element, heightMm: hit.point[2], start, offset: [0, 0] };
+      drag = { element, carried: actedOn(ctx, element), heightMm: hit.point[2], start, offset: [0, 0] };
       return true;
     },
     onDrag(ctx, at) {
@@ -575,7 +584,7 @@ export function copyTool(): Tool {
       const [dx, dy] = drag.offset;
       const moved = dx !== 0 || dy !== 0;
       ctx.setOverlay({
-        draft: moved ? shifted(drag.element, dx, dy) : null,
+        drafts: moved ? drag.carried.map((element) => shifted(element, dx, dy)) : [],
         notice: moved ? `Copy ${dx}, ${dy} mm away. Let go to place it.` : hint,
       });
     },
@@ -583,20 +592,28 @@ export function copyTool(): Tool {
       const doc = ctx.doc();
       const current = drag;
       drag = null;
-      ctx.setOverlay({ draft: null, notice: hint });
+      ctx.setOverlay({ drafts: [], notice: hint });
       if (!current || !doc) return;
       const [dx, dy] = current.offset;
       if (dx === 0 && dy === 0) return;
-      const element = {
-        ...shifted(current.element, dx, dy),
-        id: newId(current.element.type),
-        name: `${current.element.name} copy`,
-      };
-      ctx.apply(`Copy ${current.element.name}`, [{ op: "create", element }]);
+      const fresh = new Map<string, string>();
+      const ops = current.carried.map((source): SceneOp => {
+        const tags = copiedTags(source, fresh);
+        return {
+          op: "create",
+          element: {
+            ...shifted(source, dx, dy),
+            id: newId(source.type),
+            name: `${source.name} copy`,
+            ...(tags ? { tags } : {}),
+          },
+        };
+      });
+      ctx.apply(`Copy ${describeElements(doc, current.carried)}`, ops);
     },
     onDragCancel(ctx) {
       drag = null;
-      ctx.setOverlay({ draft: null });
+      ctx.setOverlay({ drafts: [] });
     },
   };
 }

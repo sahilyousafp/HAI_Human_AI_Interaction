@@ -22,6 +22,7 @@ import {
   lineSpanAt,
   ORTHO_VIEWS,
   type Projector,
+  soleGroup,
   sunLightDirection,
   type ViewMode,
   viewMatches,
@@ -75,6 +76,7 @@ import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
 import { ConstraintsPanel } from "../tools/ConstraintsPanel.tsx";
 import type { PointerSource, ToolController } from "../tools/controller.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
+import { SelectionPanel } from "../tools/SelectionPanel.tsx";
 import {
   ActiveTool,
   LassoOutline,
@@ -1044,6 +1046,7 @@ export function Viewer({
   const pendingTs = useRef<number | null>(null);
   const pickRef = useRef<Picking>(noPicking);
   const sectionRef = useRef<number | null>(null);
+  const projectPoint = useCallback((point: Point3Mm): Point2 => pickRef.current.project(point), []);
   const linesRef = useRef<() => LineElement[]>(() => []);
   linesRef.current = () => {
     const doc = client.getSnapshot().doc;
@@ -1789,7 +1792,22 @@ export function Viewer({
   // A move preview applies only while the element is still as it was when the drag began.
   const previewOffset = (element: Element): [number, number] | null =>
     overlay.movePreview?.from[element.id] === JSON.stringify(element) ? overlay.movePreview.offsetMm : null;
+  useEffect(() => {
+    if (scene.doc) tools.settlePreviews();
+  }, [scene.doc, tools]);
   const selected = scene.doc && scene.selection[0] ? scene.doc.elements[scene.selection[0]] : undefined;
+  let selectionText = "Nothing selected";
+  if (selected && scene.selection.length === 1) selectionText = `${selected.name} (${selected.type})`;
+  else if (selected && scene.doc && soleGroup(scene.doc, scene.selection))
+    selectionText = `Group of ${scene.selection.length}`;
+  else if (selected) selectionText = `${scene.selection.length} selected`;
+  // Drafts standing in for elements (Rotate): drawn in their place until the change they show arrives.
+  const standIns = overlay.drafts.filter((draft) => {
+    const from = overlay.draftsOf[draft.id];
+    return from !== undefined && JSON.stringify(scene.doc?.elements[draft.id]) === from;
+  });
+  const shownDrafts = Object.keys(overlay.draftsOf).length > 0 ? standIns : overlay.drafts;
+  const replacedByDrafts = new Set(standIns.map((draft) => draft.id));
   // A draft standing in for an element: drawn in its place until the change it shows arrives.
   const replacedByDraft =
     overlay.draft &&
@@ -1893,7 +1911,7 @@ export function Viewer({
           <ModelAssetsContext.Provider value={modelAssets}>
             {shownDoc &&
               Object.values(shownDoc.elements)
-                .filter((element) => element.id !== replacedByDraft)
+                .filter((element) => element.id !== replacedByDraft && !replacedByDrafts.has(element.id))
                 .map((element) => (
                   <ElementMesh
                     key={element.id}
@@ -1902,7 +1920,7 @@ export function Viewer({
                     colors={colors}
                     selected={selection.has(element.id)}
                     hovered={hoverId === element.id}
-                    marked={overlay.marked === element.id}
+                    marked={overlay.marked.includes(element.id)}
                     offsetMm={previewOffset(element)}
                     sectionMm={overlay.sectionMm}
                     hiddenByUser={hidden.has(element.id)}
@@ -1929,6 +1947,26 @@ export function Viewer({
             />
           </group>
         )}
+        {shownDoc && shownDrafts.length > 0 && (
+          <group userData={USER_ONLY}>
+            <ModelAssetsContext.Provider value={modelAssets}>
+              {shownDrafts.map((element) => (
+                <ElementMesh
+                  key={`draft-${element.id}`}
+                  element={element}
+                  doc={shownDoc}
+                  colors={colors}
+                  selected={false}
+                  hovered={false}
+                  marked={false}
+                  offsetMm={null}
+                  sectionMm={overlay.sectionMm}
+                  draft
+                />
+              ))}
+            </ModelAssetsContext.Provider>
+          </group>
+        )}
         <SectionClipping heightMm={overlay.sectionMm} version={clipVersion} />
         <group userData={USER_ONLY}>
           {overlay.sectionMm !== null && (
@@ -1942,6 +1980,7 @@ export function Viewer({
           {overlay.measure.length > 0 && <MeasureMarks points={overlay.measure} color={colors.selected} />}
           {overlay.snap && <SnapMarker point={overlay.snap.point} label={overlay.snap.label} />}
           <LineHandles lines={handleLines} />
+          {overlay.pivot && <SnapMarker point={overlay.pivot.point} label={overlay.pivot.label} />}
           {markers.length > 0 && <ReferenceMarkers ids={markers} doc={shownDoc} />}
           {toolState.held && (
             <HeldTargetMark
@@ -2040,6 +2079,14 @@ export function Viewer({
       <LassoOutline controller={tools} />
       <Palette controller={tools} />
       {/* The viewport's right column: the drawing constraints while Line or Wall is active. */}
+      <SelectionPanel
+        controller={tools}
+        client={client}
+        visibility={visibility}
+        project={projectPoint}
+        wrapper={wrapper}
+        canAsk={!LOCAL_MODE && featureState.agent}
+      />
       <div className="viewer-right">
         <ViewCube mode={viewMode} onView={showView} cubeRef={cubeRef} initial={nav.current} />
         <ConstraintsPanel controller={tools} aids={aids} />
@@ -2155,9 +2202,7 @@ export function Viewer({
         <SectionStatus controller={tools} />
         <div className="viewer-status" data-hud>
           <ActiveTool controller={tools} />
-          <span data-testid="selection-status">
-            {selected ? `${selected.name} (${selected.type})` : "Nothing selected"}
-          </span>
+          <span data-testid="selection-status">{selectionText}</span>
           <span data-testid="aids-status">
             Aids:{" "}
             {DRAWING_AIDS.filter((a) => a.id !== "lineOrtho" && aidOn(a.id))

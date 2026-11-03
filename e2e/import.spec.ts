@@ -313,5 +313,5 @@ test("a detailed model is drawn in its colours, not black, and its selection sho
   const ids = (await importedElements(page)).map((e) => e.id);
   await page.evaluate((id) => window.__HAI_SCENE__?.select([id]), ids[0] as string);
   await page.waitForTimeout(500);
-  await expect(page.getByTestId("selection-status")).toContainText("Facade");
+  await expect(page.getByTestId("selection-status")).toContainText(`Group of ${ids.length}`);
 });

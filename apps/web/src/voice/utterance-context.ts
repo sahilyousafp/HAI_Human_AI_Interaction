@@ -5,6 +5,7 @@ import {
   type RequestContext,
   type SceneDocument,
 } from "@hai/protocol";
+import { expandToGroups } from "@hai/scene";
 import { VOICE } from "./voice-config.ts";
 
 /** A holding hand that stays within this of where it rests is still resting there, millimetres. */
@@ -138,10 +139,15 @@ export class UtteranceContext {
 
   /**
    * The context to send: the captured elements, or the selection when nothing was captured, resolved against the
-   * scene (ids no longer in the scene are dropped).
+   * scene (ids no longer in the scene are dropped). Pointing at part of the selection means all of it, as does pointing
+   * at part of a group: resting a hand on one wall of a selected building must not narrow "rotate this" to that wall.
    */
   resolve(doc: SceneDocument | null, selection: string[], groundPoint: Point3Mm | null): RequestContext {
-    const ids = this.captured.length > 0 ? this.captured : selection;
+    const pointedAtSelection = this.captured.some((id) => selection.includes(id));
+    let pointed = this.captured;
+    if (pointed.length === 0) pointed = selection;
+    else if (pointedAtSelection) pointed = [...new Set([...this.captured, ...selection])];
+    const ids = doc ? expandToGroups(doc, pointed) : pointed;
     const references = ids.flatMap((id) => {
       const element = doc?.elements[id];
       return element ? [{ id, type: element.type, name: element.name }] : [];

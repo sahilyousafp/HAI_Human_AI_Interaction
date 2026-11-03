@@ -19,6 +19,8 @@ HAI turns smoothed hand and head tracking into a small gesture vocabulary. Every
 
 Nothing but engagement produces a command until you are engaged. Lowering both hands out of view, or not gesturing for a while, disengages.
 
+**With the Line tool, a pinch is one point.** The point is the one the preview shows, however the hand moves while the fingers are closed, so a pinch that drifts past a tap does not orbit the view. The hand that placed the first point steers the line, and the other hand's drag orbits. A long still pinch talks or opens a ring as usual (see [tools.md](tools.md#tools)).
+
 **Both hands are equal.** Each hand taps, drags, scrolls and presses buttons on its own; a silent long pinch shows a different ring per hand (the action ring for your dominant hand, the reference ring for the other). Two pinches are one two-hand gesture only when they start together (or while neither hand is doing something of its own): a hand that holds a ring open, or is already dragging, keeps its gesture, and the other hand's pinch is its own tap or drag.
 
 **Stop needs two fists first.** Open palms alone never stop anything, so showing both hands to the camera is safe. Close both hands into fists (the HUD then says to open them), and open both palms within a second to stop the agents.

@@ -13,6 +13,7 @@ import {
   type SceneOp,
   type Sketch,
   type SunSetting,
+  TAG_GROUP,
   TAG_OWNER,
   TAG_PART,
   TaskScope,
@@ -20,13 +21,25 @@ import {
   type ViewCamera,
   ViewRequest,
 } from "@hai/protocol";
-import { applySteps, elementBounds, sunPosition, type TransformStep, unionBounds } from "@hai/scene";
+import {
+  applySteps,
+  copiedTags,
+  elementBounds,
+  expandToGroups,
+  groupOf,
+  groupOps,
+  newGroupId,
+  sunPosition,
+  type TransformStep,
+  ungroupOps,
+  unionBounds,
+} from "@hai/scene";
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { HAI_SERVER } from "../agent/agent-config.ts";
 import { type AgentEyes, describeCamera, PRESETS, presetCameras } from "../agent/agent-eyes.ts";
 import type { PermissionDecision } from "../agent/approvals.ts";
-import { countByTag } from "../agent/ownership.ts";
+import { countByTag, writesGroupTag } from "../agent/ownership.ts";
 import type { PanelResult } from "../agent/panels.ts";
 import type { Caller } from "./agent-tokens.ts";
 import { type ContextTools, registerContextTools } from "./context-tools.ts";
@@ -47,7 +60,15 @@ import { registerUrbanTools, type UrbanTools } from "./urban-tools.ts";
 import { registerWeatherTools, type WeatherTools } from "./weather-tools.ts";
 
 /** At most this many elements come back from one get_elements call. */
+
 const MAX_ELEMENTS = 200;
+
+/** The fields that say where an element is, not what shape it is: patching one on a group's member scatters the group. */
+const PLACE_FIELDS = new Set(["origin", "position", "translation", "rotationDeg"]);
+
+/** The answer to an agent writing a group's tag itself. */
+const GROUP_TAG_REFUSED =
+  "Nothing was changed: the hai.group tag belongs to the system. Use group_elements and ungroup_elements.";
 
 export interface SceneToolDeps {
   doc(): SceneDocument;
@@ -309,6 +330,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       for (const e of elements) counts[e.type] = (counts[e.type] ?? 0) + 1;
       const owners = countByTag(doc, TAG_OWNER);
       const parts = countByTag(doc, TAG_PART);
+      const groups = countByTag(doc, TAG_GROUP);
       const rhinoObjects = deps.rhino?.objects() ?? [];
       const rhinoTags = (name: string) => {
         const tally: Record<string, number> = {};
@@ -328,6 +350,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
         withoutOwner: owners.without,
         parts: parts.counts,
         withoutPart: parts.without,
+        groups: groups.counts,
         ...(deps.rhino
           ? {
               rhino: {
@@ -352,17 +375,19 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
         level: z.string().optional().describe("Level id"),
         owner: z.string().optional().describe("An agent's name, e.g. architect"),
         part: z.string().optional().describe("A part name (the hai.part tag)"),
+        group: z.string().optional().describe("A group's id: its members (the hai.group tag)"),
         tag: z
           .object({ name: z.string(), value: z.string().optional() })
           .optional()
           .describe("A tag name, and optionally the value it must have"),
       }),
     },
-    async ({ ids, type, level, owner, part, tag }) => {
+    async ({ ids, type, level, owner, part, group, tag }) => {
       const doc = deps.doc();
       const tagged = (tags: Record<string, string> | undefined) =>
         (owner === undefined || tags?.[TAG_OWNER] === owner) &&
         (part === undefined || tags?.[TAG_PART] === part) &&
+        (group === undefined || tags?.[TAG_GROUP] === group) &&
         (tag === undefined ||
           (tag.value === undefined ? tags?.[tag.name] !== undefined : tags?.[tag.name] === tag.value));
       let elements = ids
@@ -452,6 +477,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       const taken = new Set(Object.keys(doc.elements));
       const created: Array<Record<string, unknown> & { id: string }> = [];
       for (const e of elements) {
+        if (writesGroupTag(e.tags, undefined)) return failure(GROUP_TAG_REFUSED);
         const id = typeof e.id === "string" && e.id ? e.id : freshId(e.type, taken);
         const existing = doc.elements[id];
         if (existing || created.some((c) => c.id === id)) {
@@ -480,6 +506,21 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       }),
     },
     async ({ updates }) => {
+      const doc = deps.doc();
+      if (
+        updates.some(({ id, patch }) => "tags" in patch && writesGroupTag(patch.tags, doc.elements[id]?.tags))
+      )
+        return failure(GROUP_TAG_REFUSED);
+      const scattering = updates.filter(
+        ({ id, patch }) =>
+          groupOf(doc.elements[id]) && Object.keys(patch).some((field) => PLACE_FIELDS.has(field)),
+      );
+      if (scattering.length > 0) {
+        const ids = scattering.map((u) => u.id).join(", ");
+        return failure(
+          `Nothing was changed: ${ids} belong to a group, and moving or turning a member alone scatters it. Use transform_elements, which takes the whole group about its middle, or ungroup_elements first if the user asked to split it.`,
+        );
+      }
       const result = deps.apply(
         updates.map(({ id, patch }) => ({ op: "update", id, patch })),
         caller.agent,
@@ -492,7 +533,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
     "transform_elements",
     {
       description:
-        "Moves, turns, scales or mirrors elements, whatever their type, in one change. Steps run in order, each on what the one before left. A rotate, scale or mirror turns about the centre of the elements together unless it names a point. With copies: N the originals stay and N copies are made, copy i being the originals put through the steps i times (copy 4 times 6 m along y: one translate step of [0, 6000, 0] and copies 4). Lengths are millimetres, angles degrees counter-clockwise seen from above. An imported model cannot be mirrored.",
+        "Moves, turns, scales or mirrors elements, whatever their type, in one change. An element in a group brings the whole group with it, and a copied group is a new group. Steps run in order, each on what the one before left. A rotate, scale or mirror turns about the centre of the elements together unless it names a point. With copies: N the originals stay and N copies are made, copy i being the originals put through the steps i times (copy 4 times 6 m along y: one translate step of [0, 6000, 0] and copies 4). Lengths are millimetres, angles degrees counter-clockwise seen from above. An imported model cannot be mirrored.",
       inputSchema: z.object({
         ids: z.array(z.string()).min(1),
         steps: z
@@ -516,8 +557,9 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
         copies: z.number().int().min(1).max(200).optional(),
       }),
     },
-    async ({ ids, steps, copies }) => {
+    async ({ ids: named, steps, copies }) => {
       const doc = deps.doc();
+      const ids = expandToGroups(doc, named);
       const elements = ids.map((id) => doc.elements[id]);
       const missing = ids.filter((_, i) => !elements[i]);
       if (missing.length) return failure(`Nothing was changed: no element ${missing.join(", ")}.`);
@@ -537,6 +579,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       const created: SceneOp[] = [];
       const createdIds: string[] = [];
       for (let i = 1; i <= copies; i++) {
+        const fresh = new Map<string, string>(); // each copy of a group is a group of its own
         const done = run(i);
         if (!done.ok) return failure(`Nothing was changed: ${done.error}`);
         for (const element of found) {
@@ -544,9 +587,11 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
           taken.add(id);
           createdIds.push(id);
           // The copy is the agent's own: the system's tags (owner, part, source) are not carried over.
-          const tags = Object.fromEntries(
+          const tags: Record<string, string> = Object.fromEntries(
             Object.entries(element.tags ?? {}).filter(([name]) => !name.startsWith(RESERVED_TAG_PREFIX)),
           );
+          const group = copiedTags(element, fresh)?.[TAG_GROUP];
+          if (group) tags[TAG_GROUP] = group;
           created.push({
             op: "create",
             element: { ...element, ...done.patches[element.id], id, tags } as Element,
@@ -584,6 +629,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
     },
     async ({ ids, tags }) => {
       const doc = deps.doc();
+      if (TAG_GROUP in tags) return failure(GROUP_TAG_REFUSED);
       const unknown = ids.filter((id) => !doc.elements[id]);
       if (unknown.length) return failure(`Nothing was changed: no element ${unknown.join(", ")}.`);
       const updates = ids.map((id): SceneOp => {
@@ -600,13 +646,49 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
   );
 
   register(
+    "group_elements",
+    {
+      description:
+        "Makes elements one group, one object from now on: selecting, moving or turning any of them takes all of them. An element in another group brings its whole group in. Groups do not nest. Do this when the user asks, or for a thing you made of several parts that should stay together.",
+      inputSchema: z.object({ ids: z.array(z.string()).min(2) }),
+    },
+    async ({ ids: named }) => {
+      const doc = deps.doc();
+      const ids = expandToGroups(doc, named);
+      const missing = ids.filter((id) => !doc.elements[id]);
+      if (missing.length) return failure(`Nothing was changed: no element ${missing.join(", ")}.`);
+      const group = newGroupId();
+      const result = deps.apply(groupOps(doc, ids, group), caller.agent);
+      return result.ok ? text({ group, members: ids }) : failure(result.error);
+    },
+  );
+
+  register(
+    "ungroup_elements",
+    {
+      description:
+        "Takes the groups these elements belong to apart: every member of each is on its own again. Only when the user asks to split a group, or to change one member's place.",
+      inputSchema: z.object({ ids: z.array(z.string()).min(1) }),
+    },
+    async ({ ids: named }) => {
+      const doc = deps.doc();
+      const ids = expandToGroups(doc, named);
+      const ops = ungroupOps(doc, ids);
+      if (ops.length === 0) return failure("Nothing was changed: none of these is in a group.");
+      const result = deps.apply(ops, caller.agent);
+      return result.ok ? text({ ungrouped: ids }) : failure(result.error);
+    },
+  );
+
+  register(
     "set_selection",
     {
-      description: "Selects elements (shown highlighted to the user). An empty list clears the selection.",
+      description:
+        "Selects elements (shown highlighted to the user), with the rest of any group they belong to. An empty list clears the selection.",
       inputSchema: z.object({ ids: z.array(z.string()) }),
     },
     async ({ ids }) => {
-      deps.setSelection(ids);
+      deps.setSelection(expandToGroups(deps.doc(), ids));
       return text({ selected: deps.selection() });
     },
   );

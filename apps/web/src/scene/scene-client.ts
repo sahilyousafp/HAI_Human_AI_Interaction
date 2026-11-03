@@ -1,5 +1,5 @@
 import type { Message, SceneDocument, SceneOp } from "@hai/protocol";
-import { applyTransaction } from "@hai/scene";
+import { applyTransaction, expandToGroups } from "@hai/scene";
 
 export interface SceneState {
   doc: SceneDocument | null;
@@ -115,9 +115,12 @@ export class SceneClient {
     return this.send({ type: "scene.redo", id: newId(), payload: {} });
   }
 
+  /** Selects elements; one member of a group means all of it, wherever the ids came from. */
   select(ids: string[]): void {
-    this.update({ selection: ids });
-    this.send({ type: "selection.set", id: newId(), payload: { ids } });
+    const { doc } = this.state;
+    const whole = doc ? expandToGroups(doc, ids) : ids;
+    this.update({ selection: whole });
+    this.send({ type: "selection.set", id: newId(), payload: { ids: whole } });
   }
 
   /** The id of the last Open or New project request, so its refusal can be told from other errors. */

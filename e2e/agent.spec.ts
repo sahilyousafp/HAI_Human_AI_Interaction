@@ -50,6 +50,30 @@ async function startWithFakeAgent(page: Page, detection?: Parameters<typeof fake
   return bridge;
 }
 
+test("a request about a selection of several groups it first, as one undo step, and the agent is told", async ({
+  page,
+}) => {
+  const bridge = await startWithFakeAgent(page);
+  try {
+    const ids = Object.values(bridge.scene.scene.doc.elements)
+      .slice(0, 3)
+      .map((e) => e.id);
+    await page.evaluate((i) => window.__HAI_SCENE__?.select(i), ids);
+    const groupOf = (id: string) => bridge.scene.scene.doc.elements[id]?.tags?.["hai.group"];
+    expect(ids.map(groupOf)).toEqual([undefined, undefined, undefined]);
+    await page.getByTestId("agent-input").fill("echo make these taller");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => groupOf(ids[0] as string)).toMatch(/^group-/);
+    expect(new Set(ids.map(groupOf)).size).toBe(1);
+    // The card now says it is a group, with one press to take it apart.
+    await expect(page.getByTestId("selection-title")).toHaveText("Group of 3");
+    await page.getByRole("button", { name: "Undo", exact: true }).first().click();
+    await expect.poll(() => groupOf(ids[0] as string)).toBeUndefined();
+  } finally {
+    await bridge.stop();
+  }
+});
+
 const panel = (page: Page) => page.getByTestId("agent-panel");
 const status = (page: Page) => page.getByTestId("agent-status");
 const lastTurn = (page: Page) => page.getByTestId("agent-turn").last();

@@ -2,6 +2,7 @@ export * from "./along-curve.ts";
 export * from "./bounds.ts";
 export * from "./claim-scope.ts";
 export * from "./extrusions.ts";
+export * from "./groups.ts";
 export * from "./history.ts";
 export * from "./line-edit.ts";
 export * from "./mesh-asset.ts";

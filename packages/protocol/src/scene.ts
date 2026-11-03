@@ -28,11 +28,13 @@ export const Tags = z
   .refine((t) => Object.keys(t).length <= MAX_TAGS, `at most ${MAX_TAGS} tags`);
 export type Tags = z.infer<typeof Tags>;
 
-/** Names starting with this belong to the system (`hai.owner`, `hai.part`, `hai.source`); agents cannot set them. */
+/** Names starting with this belong to the system (`hai.owner`, `hai.part`, `hai.source`, `hai.group`); agents cannot set them. */
 export const RESERVED_TAG_PREFIX = "hai.";
 export const TAG_OWNER = "hai.owner";
 export const TAG_PART = "hai.part";
 export const TAG_SOURCE = "hai.source";
+/** The group an element holds together with: selecting, moving or turning one member means all of them. */
+export const TAG_GROUP = "hai.group";
 
 const common = {
   id: ElementId,

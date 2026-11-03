@@ -90,7 +90,7 @@ export function lassoTool(): Tool {
       }
       const ids = idsInsideLoop(ctx, drawn);
       ctx.select(ids);
-      ctx.flash(ids.length === 0 ? "Nothing inside the loop." : `${ids.length} selected.`);
+      ctx.flash(ids.length === 0 ? "Nothing inside the loop." : `${ctx.selection().length} selected.`);
       ctx.choose("select");
     },
     onDragCancel(ctx) {

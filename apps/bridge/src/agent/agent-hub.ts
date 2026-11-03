@@ -85,6 +85,8 @@ export function withContext(text: string, context: RequestContext | undefined): 
   const selection = context.selection.length ? context.selection.join(", ") : "none";
   const ground = context.groundPoint ? mm(context.groundPoint) : "none";
   let line = `[context] references: ${refs}; selection: ${selection}; ground point: ${ground}`;
+  if (context.group)
+    line += `; group: ${context.group.id} (${context.group.count} elements, middle ${mm(context.group.centre)})`;
   const target = context.target;
   if (target)
     line +=

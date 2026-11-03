@@ -24,7 +24,8 @@ export type Clause =
   | { kind: "mirror"; axis: "x" | "y"; about?: string }
   | { kind: "select"; selector: Selector }
   | { kind: "delete" | "hide" | "isolate"; selector: Selector | null }
-  | { kind: "showAll" };
+  | { kind: "showAll" }
+  | { kind: "group" | "ungroup" };
 
 /** What a whole transcript says: its clauses, in the order they run. */
 export interface Command {
@@ -172,6 +173,8 @@ const VERBS: Record<string, string> = {
   hide: "hide",
   conceal: "hide",
   isolate: "isolate",
+  group: "group",
+  ungroup: "ungroup",
   show: "show",
   unhide: "show",
   reveal: "show",
@@ -464,6 +467,12 @@ function parseClause(verb: string, args: string[], marker: MarkerWord): Clause |
       // "remove the wall" is not "remove every wall": a whole type is only named with "all".
       if (read.selector?.kind === "type" && args[0] !== "all") return null;
       return { kind: verb, selector: read.selector };
+    }
+    case "group":
+    case "ungroup": {
+      // "group this", "ungroup the selection": it acts on what "this" is, and names nothing else.
+      const read = readSelector(args);
+      return read && read.selector === null ? { kind: verb } : null;
     }
   }
   return null;

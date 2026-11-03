@@ -25,6 +25,7 @@ import {
   type SnapKind,
   type WorkPlane,
 } from "@hai/scene";
+import { confirmDelete } from "./acted-on.ts";
 import type { DragMode, RouterTargets } from "./input-router.ts";
 import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from "./palette.ts";
 import { ReferenceLayer } from "./reference-layer.ts";
@@ -432,6 +433,33 @@ export class ToolController {
     // A tool with its own hover (Section) may light the section up for other reasons too; the line always does.
     const hover = ownHover ? this.snapshot.overlay.sectionHover || line : line;
     if (hover !== this.snapshot.overlay.sectionHover) this.setOverlay({ sectionHover: hover });
+  }
+
+  /**
+   * The model changed: a preview left waiting for its own change has done its job. It must not stay, or an undo back to
+   * what it was made from would bring it alive again and draw the model where it is not.
+   */
+  settlePreviews(): void {
+    if (this.toolDragger !== null) return;
+    const { movePreview, draftOf, draftsOf } = this.snapshot.overlay;
+    const standIns = Object.keys(draftsOf).length > 0;
+    if (!movePreview && !draftOf && !standIns) return;
+    this.setOverlay({
+      movePreview: null,
+      ...(draftOf ? { draft: null, draftOf: null } : {}),
+      ...(standIns ? { drafts: [], draftsOf: {} } : {}),
+    });
+  }
+
+  /** Asks once whether to delete these elements (the selection panel's Delete). */
+  deleteElements(ids: string[]): void {
+    const ctx = this.ctx();
+    const doc = ctx?.doc();
+    if (!ctx || !doc) return;
+    confirmDelete(
+      ctx,
+      ids.flatMap((id) => doc.elements[id] ?? []),
+    );
   }
 
   /** Undo from anywhere: what the active tool has of its own goes first (a line's last point), then the model. */

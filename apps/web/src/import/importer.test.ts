@@ -203,8 +203,30 @@ describe("hai.source", () => {
     });
     await importer.importFile(file("tower.3dm"));
     const [first, second] = (applied[0]?.ops ?? []).map((op) => (op.op === "create" ? op.element : null));
-    expect(first?.tags).toEqual({ "hai.source": "tower.3dm#11111111-2222-3333-4444-555555555555" });
-    expect(second?.tags).toBeUndefined();
+    expect(first?.tags?.["hai.source"]).toBe("tower.3dm#11111111-2222-3333-4444-555555555555");
+    expect(second?.tags?.["hai.source"]).toBeUndefined();
+  });
+
+  it("what came in one file is one group; a single object needs none", async () => {
+    const many = setup({
+      ok: true,
+      parts: [part("Wall", 1000), part("Roof", 2000), part("Door", 3000)],
+      report: report(3),
+    });
+    await many.importer.importFile(file("tower.3dm"));
+    const groups = (many.applied[0]?.ops ?? []).map((op) =>
+      op.op === "create" ? op.element.tags?.["hai.group"] : undefined,
+    );
+    expect(groups[0]).toMatch(/^group-/);
+    expect(new Set(groups).size).toBe(1);
+    const one = setup({
+      ok: true,
+      parts: [part("Wall", 1000)],
+      report: report(1),
+    });
+    await one.importer.importFile(file("tower.3dm"));
+    const [only] = one.applied[0]?.ops ?? [];
+    expect(only?.op === "create" ? only.element.tags?.["hai.group"] : "").toBeUndefined();
   });
 
   it("a long file name is cut so the tag stays within 200 characters", async () => {

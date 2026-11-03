@@ -27,6 +27,7 @@ Say just a tool's name and that tool is picked at once, without the agent and wi
 
 - Every tool has one or more spoken names; the first is the word under its icon in the tool rings, so the rings show what to say. The full list is in [tools.md](tools.md#tools).
 - Case, punctuation and the words "use", "the" and "tool" around the name do not matter: "Use the wall tool" picks Wall.
+- Pointing at part of the selection means all of it, and pointing at one member of a group means the whole group: a hand resting on one wall of a selected building does not narrow "rotate this" to that wall. "Group this" and "ungroup" group what "this" is.
 - A tool's mode has names too: "freeform" picks Line for tracing, and "straight line" picks it for placing points.
 - A name of five letters or more may be one letter off ("measur" is Measure); shorter names must be exact.
 - Some names include how the on-device speech model hears them, measured: "undue" picks Undo, "scatch area" picks Sketch area.

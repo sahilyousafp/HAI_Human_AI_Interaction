@@ -73,7 +73,7 @@ interface Window {
         notice: string | null;
         sectionMm: number | null;
         measure: unknown[];
-        marked: string | null;
+        marked: string[];
         draft: { type: string } | null;
       };
       question: string | null;

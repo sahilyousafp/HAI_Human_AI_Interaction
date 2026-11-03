@@ -91,9 +91,17 @@ export type HeldTarget = z.infer<typeof HeldTarget>;
 /** Points the hand rested on while the user spoke (P1, P2, ...), at most this many. */
 export const MAX_HELD_POINTS = 12;
 
+/** The most elements a request lists; a group larger than that is named by `group` and stands for all of it. */
+export const MAX_REQUEST_REFERENCES = 50;
+export const MAX_REQUEST_SELECTION = 500;
+
 export const RequestContext = z.strictObject({
-  references: z.array(z.strictObject({ id: z.string(), type: z.string(), name: z.string() })).max(50),
-  selection: z.array(z.string()).max(500),
+  references: z
+    .array(z.strictObject({ id: z.string(), type: z.string(), name: z.string() }))
+    .max(MAX_REQUEST_REFERENCES),
+  selection: z.array(z.string()).max(MAX_REQUEST_SELECTION),
+  /** The group a request about several elements is about: one object to the agent, with how many and its middle, mm. */
+  group: z.strictObject({ id: z.string(), count: z.number().int().positive(), centre: Point3Mm }).optional(),
   /** Where the hand pointer met the ground when the user stopped speaking, millimetres. */
   groundPoint: z.tuple([z.number(), z.number(), z.number()]).nullable(),
   /** A held pinch's locked target ("this"). */
@@ -222,7 +230,15 @@ export type TeamMemberInfo = z.infer<typeof TeamMemberInfo>;
 /** The app's own MCP server's tools (`mcp__hai__<name>`), grouped by what they let an agent do. */
 export const HAI_TOOLS = {
   read: ["get_scene_summary", "get_elements", "get_user_context", "capture_view"],
-  write: ["create_elements", "update_elements", "transform_elements", "delete_elements", "set_selection"],
+  write: [
+    "create_elements",
+    "update_elements",
+    "transform_elements",
+    "delete_elements",
+    "set_selection",
+    "group_elements",
+    "ungroup_elements",
+  ],
   /** Offering and showing a generated panel; granted to every agent (a reader's panel is information only). */
   panel: ["offer_panel", "open_panel", "update_panel", "close_panel"],
   /** What the city context layer holds, and its items near a point; every agent (reading changes nothing). */

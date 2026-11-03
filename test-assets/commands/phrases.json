@@ -1,7 +1,7 @@
 {
  "about": "Ways people say the offline commands (kind offline: `plain` is the wording the grammar must read it as; corrected: true means a speech-model mishearing put right first), and phrases that are the agent's (kind agent: never guessed into a command), and corrections of the last command (make it 4 m, with what number it is taken to be). Built by scripts/make-command-phrases.mjs.",
  "counts": {
-  "offline": 534,
+  "offline": 542,
   "agent": 50,
   "corrections": 48
  },
@@ -3051,109 +3051,157 @@
   {
    "group": "select",
    "kind": "offline",
-   "text": "show all",
+   "text": "group",
+   "plain": "group"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "I want to group this",
+   "plain": "group"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "group these",
+   "plain": "group"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "so group the selection, thanks",
+   "plain": "group"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "ungroup",
+   "plain": "ungroup"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "please ungroup this",
+   "plain": "ungroup"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "ungroup these for me",
+   "plain": "ungroup"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "so ungroup the selection",
+   "plain": "ungroup"
+  },
+  {
+   "group": "select",
+   "kind": "offline",
+   "text": "I want to show all now",
    "plain": "show all"
   },
   {
    "group": "select",
    "kind": "offline",
-   "text": "I want to show everything",
+   "text": "I'd like to show everything",
    "plain": "show all"
   },
   {
    "group": "select",
    "kind": "offline",
-   "text": "unhide",
+   "text": "okay unhide",
    "plain": "show all"
   },
   {
    "group": "select",
    "kind": "offline",
-   "text": "so reveal all, thanks",
+   "text": "I'd like to reveal all",
    "plain": "show all"
   },
   {
    "group": "select",
    "kind": "offline",
-   "text": "hide all walls",
+   "text": "please hide all walls please",
    "plain": "hide all walls"
   },
   {
    "group": "marker",
    "kind": "offline",
-   "text": "please move to marker A",
+   "text": "can you please move to marker A, thanks",
    "plain": "move to marker A"
   },
   {
    "group": "marker",
    "kind": "offline",
-   "text": "move this to marker B for me",
+   "text": "could you move this to marker B for me",
    "plain": "move to marker B"
   },
   {
    "group": "marker",
    "kind": "offline",
-   "text": "so move it onto marker A",
+   "text": "please move it onto marker A now",
    "plain": "move to marker A"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "I want to copy and rotate 90 now",
+   "text": "now copy and rotate 90",
    "plain": "copy and rotate 90"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "I'd like to copy this and rotate it ninety degrees",
+   "text": "let's copy this and rotate it ninety degrees please",
    "plain": "copy and rotate 90"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "okay copy 3 m east then scale 0.5",
+   "text": "let's copy 3 m east then scale 0.5, thanks",
    "plain": "copy 3 m east then scale 0.5"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "I'd like to copy three metres to the right and then scale it half",
+   "text": "copy three metres to the right and then scale it half",
    "plain": "copy 3 m east then scale half"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "please move 2 m up and rotate 45 please",
+   "text": "okay move 2 m up and rotate 45",
    "plain": "move 2 m up and rotate 45"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "can you please rotate 90 and then move 3 m north, thanks",
+   "text": "go ahead and rotate 90 and then move 3 m north",
    "plain": "rotate 90 and move 3 m north"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "could you copy 4 times 6 m along y and rotate 90 for me",
+   "text": "please copy 4 times 6 m along y and rotate 90 for me",
    "plain": "copy 4 times 6 m y and rotate 90"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "please mirror x then move 1 m up now",
+   "text": "mirror x then move 1 m up",
    "plain": "mirror x and move 1 m up"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "now rotate ninety degrees, then copy three metres along x",
+   "text": "can you please rotate ninety degrees, then copy three metres along x",
    "plain": "rotate 90 and copy 3 m x"
   },
   {
    "group": "chain",
    "kind": "offline",
-   "text": "let's scale 2 and move 5 m east please",
+   "text": "scale 2 and move 5 m east thank you",
    "plain": "scale 2 and move 5 m east"
   },
   {

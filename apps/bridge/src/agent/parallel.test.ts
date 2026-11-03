@@ -232,6 +232,62 @@ describe("claims enforced where the model changes", () => {
     return { ...harness, architect: await mcp("architect"), product: await mcp("product") };
   }
 
+  it("a named agent can group and copy what it holds, but not write the tag, nor group what it does not hold", async () => {
+    const { architect, scene } = await twoWorking();
+    const made = await architect.callTool({
+      name: "create_elements",
+      arguments: {
+        elements: [column("rib-1", 40_000), column("rib-2", 42_000)].map(({ tags: _tags, ...e }) => e),
+      },
+    });
+    expect(made.isError).toBeFalsy();
+    const grouped = await architect.callTool({
+      name: "group_elements",
+      arguments: { ids: ["rib-1", "rib-2"] },
+    });
+    expect(grouped.isError).toBeFalsy();
+    const group = scene.scene.doc.elements["rib-1"]?.tags?.["hai.group"];
+    expect(group).toMatch(/^group-/);
+    expect(scene.scene.doc.elements["rib-2"]?.tags?.["hai.group"]).toBe(group);
+    // Grouping leaves the owner on them.
+    expect(scene.scene.doc.elements["rib-1"]?.tags?.["hai.owner"]).toBe("architect");
+
+    const copied = await architect.callTool({
+      name: "transform_elements",
+      arguments: { ids: ["rib-1"], steps: [{ kind: "translate", by: [0, 5000] }], copies: 1 },
+    });
+    expect(copied.isError).toBeFalsy();
+    const copies = Object.values(scene.scene.doc.elements).filter(
+      (e) => e.tags?.["hai.group"] && e.tags["hai.group"] !== group,
+    );
+    expect(copies).toHaveLength(2);
+
+    const written = await architect.callTool({
+      name: "set_tags",
+      arguments: { ids: ["rib-1"], tags: { "hai.group": "mine" } },
+    });
+    expect(written.isError).toBe(true);
+    const patched = await architect.callTool({
+      name: "update_elements",
+      arguments: { updates: [{ id: "rib-1", patch: { tags: { "hai.group": "mine" } } }] },
+    });
+    expect(patched.isError).toBe(true);
+    const created = await architect.callTool({
+      name: "create_elements",
+      arguments: { elements: [{ ...column("rib-3", 44_000), tags: { "hai.group": "mine" } }] },
+    });
+    expect(created.isError).toBe(true);
+    expect(scene.scene.doc.elements["rib-1"]?.tags?.["hai.group"]).toBe(group);
+
+    // Product holds the hall: its wall cannot be drawn into Architect's group.
+    const across = await architect.callTool({
+      name: "group_elements",
+      arguments: { ids: ["rib-1", "hall-1"] },
+    });
+    expect(across.isError).toBe(true);
+    expect(scene.scene.doc.elements["hall-1"]?.tags?.["hai.group"]).toBeUndefined();
+  });
+
   it("touching another agent's wall is refused and names the holder, the task and the scope", async () => {
     const { architect, scene } = await twoWorking();
     const before = structuredClone(scene.scene.doc.elements["hall-1"]);
