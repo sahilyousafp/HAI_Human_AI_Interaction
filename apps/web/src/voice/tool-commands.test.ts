@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { registerBuiltinTools } from "../tools/builtin.ts";
 import { ToolRegistry } from "../tools/registry.ts";
-import { toolNamed } from "./tool-commands.ts";
+import { toolModeNamed, toolNamed } from "./tool-commands.ts";
 import { tokenLimit, wholeFrames } from "./voice-config.ts";
 
 const registry = new ToolRegistry();
@@ -77,6 +77,18 @@ describe("transcribing short commands", () => {
     expect(padded.length).toBe(240);
     expect([...padded.slice(0, 161)]).toEqual([...odd]);
     expect(padded.slice(161).every((sample) => sample === 0)).toBe(true);
+  });
+
+  it("a mode's name picks its tool in that mode, and anything longer does not", () => {
+    const mode = (text: string) => {
+      const found = toolModeNamed(text, registry.list());
+      return found ? [found.tool.id, found.mode] : null;
+    };
+    expect(mode("Freeform.")).toEqual(["line", "freeform"]);
+    expect(mode("free form")).toEqual(["line", "freeform"]);
+    expect(mode("straight line")).toEqual(["line", "straight"]);
+    expect(mode("line")).toBeNull();
+    expect(mode("draw a freeform curve here")).toBeNull();
   });
 
   it("the speech model's measured mishearings of tool names pick the tool", () => {

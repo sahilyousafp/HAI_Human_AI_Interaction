@@ -294,3 +294,15 @@ What it still gets wrong: "Bake" as "Make", "Column" as "Colon" (one voice of tw
 **Line takes the pinch, so what about orbiting?** The other hand's drag orbits, and fist drags and two hands work as everywhere. A long still pinch is the one thing Line gives up, as it holds nothing between points; the tools that hold something keep it.
 
 **Line's lock is its own aid.** The owner wanted Line locked from the start, and Wall as it was. A shared Ortho would have changed Wall. `lineOrtho` is stored like the other aids, and the chip and status bar show whichever applies to the active tool.
+
+## Undo inside a tool, and a line that can be seen and edited (2026-11-03)
+
+**Undo.** Undo during a line changed the model, and the line stayed as it was, because every way of asking went straight to the scene. All of them now go through the tool controller, which asks the active tool first. A tool's own undo is not on the scene's stack: a line in progress is not in the model, and a finished one is still one step.
+
+**Seeing a line.** A line's tube is thinner than a pixel from most distances, so on screen it broke up into a faint thread (see the screenshots from this change). It is now also drawn at 2 px whatever the zoom, in the edges' colour, as the element colour is lost on the pale ground. The tube stays, for the shadows and the hand's reach to the nearest model.
+
+**Picking a line.** A view ray rarely hits something that thin, so a line is also looked for on screen, within 12 px of its span. It wins over a surface it lies on, but not over one more than 20 cm in front of it, so nothing is picked through a wall.
+
+**Points are handles on the tools that use them.** Move and Delete already mean what they would to a point, so no new tool or ring slot was needed. A handle wins over its line within 24 px, and the rest of the line still moves or deletes the whole line.
+
+**Freeform is a mode of Line, at the owner's request.** It gets a toggle in the panel at the right of the view, and no slot of its own. A trace ignores Grid, Ortho and snaps, as they would make steps of a curve, and is simplified at 15 mm.

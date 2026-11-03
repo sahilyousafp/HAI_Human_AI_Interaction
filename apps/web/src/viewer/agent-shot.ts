@@ -159,6 +159,16 @@ function shootOne(rig: ShotRig, request: ShotRequest, spec: AgentCamera): ShotIm
           material.emissiveIntensity = glow;
         });
       }
+      // A line's stroke, the same: without the user's hover and selection.
+      const cleanStroke = object.userData.cleanStroke as string | undefined;
+      if (!request.selection && cleanStroke && mesh.isMesh) {
+        const material = mesh.material as THREE.Material & { color: THREE.Color };
+        const color = material.color.clone();
+        material.color.set(cleanStroke);
+        undo.push(() => {
+          material.color.copy(color);
+        });
+      }
       // The infinite grid is centred under the viewer's camera from frame to frame; each picture centres it under its own.
       if (object.userData.grid === true) {
         const uniform = (object as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>).material.uniforms

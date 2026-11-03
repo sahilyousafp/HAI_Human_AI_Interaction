@@ -38,6 +38,11 @@ export interface ToolOverlay {
   sectionHover: boolean;
   /** Create tools and Copy: the element being drawn or placed, shown before it is created. */
   draft: Element | null;
+  /**
+   * A draft that stands in for an element already in the model (a line with a point being moved): that element as it
+   * was, by its JSON. While it still matches, the draft is drawn in its place; once the change arrives it no longer does.
+   */
+  draftOf: string | null;
   /** Create tools and Move: the point a drawing aid snapped to, with the aid's name; shown as a marker. */
   snap: { point: Point3Mm; kind: SnapKind; label: string; ortho: boolean } | null;
   /** Lasso select: the loop drawn so far, viewer positions (0..1 across and down the 3D view). */
@@ -52,6 +57,7 @@ export const EMPTY_OVERLAY: ToolOverlay = {
   marked: null,
   sectionHover: false,
   draft: null,
+  draftOf: null,
   snap: null,
   lasso: null,
 };
@@ -84,7 +90,13 @@ export interface ToolContext {
    */
   resolve(
     at: Point2,
-    options?: { anchor?: Point3Mm | null; exclude?: string[]; probe?: Point3Mm },
+    options?: {
+      anchor?: Point3Mm | null;
+      exclude?: string[];
+      probe?: Point3Mm;
+      /** The free point on the plane, with no drawing aid and no constraint at all (a freeform trace). */
+      free?: boolean;
+    },
   ): Resolved | null;
   /** Removes the snap marker. */
   clearSnap(): void;
@@ -144,6 +156,31 @@ export interface Tool {
   pressPlaces?(): boolean;
   /** The hand steering what is being drawn, which is followed even when the other hand has the focus. */
   followsHand?(): Hand | null;
+  /** The ways of working this tool has, switched in its panel at the right of the view (Line: Straight or Freeform). */
+  modes?: {
+    options: Array<{
+      id: string;
+      label: string;
+      /** What can be said to pick the tool in this mode, lower case. */
+      spoken: string[];
+      /** The panel's angle, length and snap controls apply in this mode. */
+      constrained: boolean;
+    }>;
+    current(): string;
+    set(ctx: ToolContext, id: string): void;
+  };
+  /** Line points show as handles while this tool is active, for it to act on them. */
+  editsLinePoints?: boolean;
+  /** Undo, however it is asked for, while this tool is active: true if the tool undid something of its own. */
+  onUndo?(ctx: ToolContext): boolean;
+  /** Redo, however it is asked for, while this tool is active: true if the tool redid something of its own. */
+  onRedo?(ctx: ToolContext): boolean;
+  /** Whether `onUndo` has something to undo. */
+  canUndo?(): boolean;
+  /** Whether `onRedo` has something to redo. */
+  canRedo?(): boolean;
+  /** Whether a nod or Enter would finish what is drawn. A tool with this gets a Finish button in its panel. */
+  canFinish?(): boolean;
   /** The feature that switches this tool on and off (Settings > Features); without one it is always available. */
   feature?: FeatureId;
   run?(ctx: ToolContext): void;

@@ -1,5 +1,5 @@
 import type { Element, Point3Mm, SceneOp } from "@hai/protocol";
-import { transformOp } from "@hai/scene";
+import { type LineElement, linePointAt, linePointMoved, linePointRemoved, transformOp } from "@hai/scene";
 import { columnTool, copyTool, lineTool, slabTool, wallTool } from "./create.ts";
 import { snap } from "./grid.ts";
 import { lassoTool } from "./lasso.ts";
@@ -65,15 +65,33 @@ export function movedWith(ctx: ToolContext, grabbed: Element): Element[] {
   });
 }
 
+/** How near a pointer must be to a line's point on screen to mean that point, px (the drawing aids' snap reach). */
+export const LINE_POINT_REACH_PX = 24;
+
+/** The line point under a viewer position, among the lines that are shown. */
+function linePointUnder(ctx: ToolContext, at: [number, number]): { line: LineElement; index: number } | null {
+  const doc = ctx.doc();
+  if (!doc) return null;
+  const hidden = ctx.hidden();
+  const lines = Object.values(doc.elements).filter(
+    (e): e is LineElement => e.type === "line" && !hidden.has(e.id),
+  );
+  const found = linePointAt(lines, ctx.toScreen, ctx.toPixels(at), LINE_POINT_REACH_PX);
+  const line = found ? lines.find((l) => l.id === found.id) : undefined;
+  return found && line ? { line, index: found.index } : null;
+}
+
 /** What a move preview remembers of each element it carries: it applies only while the element is still as it was. */
 const previewOf = (elements: Element[]): Record<string, string> =>
   Object.fromEntries(elements.map((e) => [e.id, JSON.stringify(e)]));
 
 /**
  * Move: drag an element on the ground plane, snapped to 100 mm or to the drawing aids, one "Move" transaction on
- * release. With several elements selected, a drag that starts on one of them carries all of them.
+ * release. With several elements selected, a drag that starts on one of them carries all of them. A pinch on a line's
+ * point moves that point alone, through the drawing aids, as one "Move point" transaction.
  */
 export function moveTool(): Tool {
+  let pointDrag: { line: LineElement; index: number; from: Point3Mm; to: Point3Mm } | null = null;
   let drag: {
     element: Element;
     carried: Element[];
@@ -87,13 +105,22 @@ export function moveTool(): Tool {
     spoken: ["move"],
     icon: "M12 3v18M3 12h18M12 3 9 6M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3",
     shortcut: "m",
+    editsLinePoints: true,
     activate(ctx) {
-      ctx.setOverlay({ notice: "Pinch an element and drag it. It snaps to 100 mm." });
+      ctx.setOverlay({ notice: "Pinch an element and drag it, or a line's point. It snaps to 100 mm." });
     },
     deactivate(ctx) {
-      ctx.setOverlay({ notice: null });
+      pointDrag = null;
+      ctx.setOverlay({ notice: null, draft: null, draftOf: null });
     },
     onDragStart(ctx, at, hit) {
+      const point = linePointUnder(ctx, at);
+      const from = point?.line.points[point.index];
+      if (point && from) {
+        pointDrag = { ...point, from, to: from };
+        ctx.setOverlay({ draft: null, draftOf: null });
+        return true;
+      }
       const element = hit ? ctx.doc()?.elements[hit.elementId] : undefined;
       if (!hit || !element) return false; // empty space: the view orbits instead
       const start = ctx.ground(at, hit.point[2]);
@@ -104,6 +131,19 @@ export function moveTool(): Tool {
       return true;
     },
     onDrag(ctx, at) {
+      if (pointDrag) {
+        const { line, index, from } = pointDrag;
+        const resolved = ctx.resolve(at, { anchor: from, exclude: [line.id] });
+        if (!resolved) return;
+        const [x, y, z] = resolved.point;
+        const to: Point3Mm = [Math.round(x), Math.round(y), Math.round(z)];
+        pointDrag.to = to;
+        ctx.setOverlay({
+          draft: { ...line, ...linePointMoved(line, index, to) },
+          draftOf: JSON.stringify(line),
+        });
+        return;
+      }
       if (!drag) return;
       const p = ctx.ground(at, drag.heightMm);
       if (!p) return;
@@ -111,6 +151,15 @@ export function moveTool(): Tool {
       ctx.setOverlay({ movePreview: { offsetMm: drag.offset, from: previewOf(drag.carried) } });
     },
     onDragEnd(ctx) {
+      if (pointDrag) {
+        const { line, index, from, to } = pointDrag;
+        pointDrag = null;
+        // As with a moved element, the draft stays until the change arrives (`draftOf` then no longer matches).
+        if (to[0] !== from[0] || to[1] !== from[1] || to[2] !== from[2])
+          ctx.apply("Move point", [{ op: "update", id: line.id, patch: linePointMoved(line, index, to) }]);
+        else ctx.setOverlay({ draft: null, draftOf: null });
+        return;
+      }
       if (!drag) return;
       const [dx, dy] = drag.offset;
       // The preview stays until the moved elements arrive from the bridge (it only applies while an element is
@@ -125,7 +174,8 @@ export function moveTool(): Tool {
     },
     onDragCancel(ctx) {
       drag = null;
-      ctx.setOverlay({ movePreview: null });
+      pointDrag = null;
+      ctx.setOverlay({ movePreview: null, draft: null, draftOf: null });
     },
   };
 }
@@ -262,6 +312,7 @@ export const deleteTool: Tool = {
   spoken: ["delete", "erase"],
   icon: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
   shortcut: "x",
+  editsLinePoints: true,
   activate(ctx) {
     ctx.setOverlay({ notice: "Tap an element to delete." });
   },
@@ -281,7 +332,18 @@ export const deleteTool: Tool = {
       ctx.flash(`${reference.label} removed.`);
       return;
     }
-    const element = hit ? ctx.doc()?.elements[hit.elementId] : undefined;
+    const point = linePointUnder(ctx, at);
+    if (point) {
+      const patch = linePointRemoved(point.line, point.index);
+      if (patch) {
+        ctx.apply("Delete point", [{ op: "update", id: point.line.id, patch }]);
+        ctx.flash("Point removed. Undo brings it back.");
+        return;
+      }
+      // Two points are the least a line can have: taking one is taking the line, and that is asked for below.
+    }
+    const hitElement = hit ? ctx.doc()?.elements[hit.elementId] : undefined;
+    const element = point?.line ?? hitElement;
     if (!element) {
       // The section plane is not part of the model; tapping it with Delete simply removes it.
       if (overSectionPlane(ctx, at) || ctx.onSectionLine(at)) {

@@ -3,6 +3,7 @@ export * from "./bounds.ts";
 export * from "./claim-scope.ts";
 export * from "./extrusions.ts";
 export * from "./history.ts";
+export * from "./line-edit.ts";
 export * from "./mesh-asset.ts";
 export * from "./ops.ts";
 export * from "./placement.ts";
