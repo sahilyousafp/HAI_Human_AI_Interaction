@@ -1,7 +1,7 @@
 using System;
+using System.IO;
 using HAI.Rhino.Bridge;
 using HAI.Rhino.Core.Protocol;
-using HAI.Rhino.Core.Python;
 using HAI.Rhino.Mirror;
 using Rhino;
 
@@ -40,7 +40,7 @@ namespace HAI.Rhino
             {
                 RhinoVersion = Limits.Clip(RhinoApp.Version.ToString(), 40),
                 PluginVersion = Limits.Clip(HaiPlugin.PluginVersion, 40),
-                Python = PythonSupport.Status,
+                Python = PythonStatus.Ready(),
                 Document = documentName,
             };
 
@@ -69,7 +69,7 @@ namespace HAI.Rhino
             RhinoApp.InvokeOnUiThread(new Action(() =>
             {
                 ShareActiveDocument();
-                _ = client.Send(Wire.Status, new StatusChanged { Python = PythonSupport.Status, Document = documentName });
+                _ = client.Send(Wire.Status, new StatusChanged { Python = PythonStatus.Ready(), Document = documentName });
             }));
         }
 
@@ -78,7 +78,7 @@ namespace HAI.Rhino
             var name = NameOf(e.Document);
             if (name == documentName) return;
             documentName = name;
-            _ = client.Send(Wire.Status, new StatusChanged { Python = PythonSupport.Status, Document = documentName });
+            _ = client.Send(Wire.Status, new StatusChanged { Python = PythonStatus.Ready(), Document = documentName });
         }
 
         private void OnReceived(Incoming message)
@@ -91,8 +91,7 @@ namespace HAI.Rhino
                     break;
                 case Wire.Open:
                     var open = message.As<OpenRequest>();
-                    if (open != null && !string.IsNullOrWhiteSpace(open.Path))
-                        RhinoApp.InvokeOnUiThread(new Action(() => RhinoApp.RunScript($"-_Open \"{open.Path}\" _Enter", false)));
+                    if (open != null && !string.IsNullOrWhiteSpace(open.Path)) OpenFile(open.Path);
                     break;
                 case Wire.Undo:
                     // The user chose to undo a script that went outside its claim. Each run is one undo step.
@@ -100,9 +99,36 @@ namespace HAI.Rhino
                     break;
                 case Wire.PythonRun:
                     var run = message.As<PythonRunRequest>();
-                    if (run != null) _ = client.Send(Wire.PythonResult, PythonSupport.Refuse(run.Id));
+                    if (run != null)
+                        RhinoApp.InvokeOnUiThread(new Action(() => _ = client.Send(Wire.PythonResult, PythonRunner.Run(run))));
                     break;
             }
+        }
+
+        /// <summary>
+        /// Opens exactly this file. The path is made native first and must exist: Rhino's Open does not take every spelling
+        /// of a path, and when it refuses one the Enter that ends the command opens the most recent file instead.
+        /// </summary>
+        private static void OpenFile(string path)
+        {
+            string full;
+            try
+            {
+                full = Path.GetFullPath(path);
+            }
+            catch (Exception error) when (error is ArgumentException || error is NotSupportedException || error is PathTooLongException)
+            {
+                RhinoApp.WriteLine("HAI: could not open \"" + path + "\": " + error.Message);
+                return;
+            }
+
+            if (!File.Exists(full))
+            {
+                RhinoApp.WriteLine("HAI: could not open \"" + full + "\": there is no such file.");
+                return;
+            }
+
+            RhinoApp.InvokeOnUiThread(new Action(() => RhinoApp.RunScript($"-_Open \"{full}\" _Enter", false)));
         }
 
         public void Dispose()

@@ -91,7 +91,7 @@ import type { VoiceInput, VoiceState } from "../voice/voice-input.ts";
 import { type ApprovalBadge, ApprovalBadges } from "./ApprovalBadges.tsx";
 import { SUN_DISTANCE, takeShots, USER_ONLY } from "./agent-shot.ts";
 import { type CameraMarker, CameraMarkers } from "./camera-markers.tsx";
-import { elementGeometry, MM, modelGeometry, radians, sceneBounds } from "./geometry.ts";
+import { elementGeometry, framingBounds, MM, modelGeometry, radians, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
 import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
 import {
@@ -557,6 +557,10 @@ function ElementMesh({
           roughness={0.9}
           metalness={0}
           flatShading={model !== null}
+          // A Rhino model can be open surfaces with no inside, and Rhino shows both sides of them.
+          side={model !== null ? THREE.DoubleSide : THREE.FrontSide}
+          // Shadows stay as they were for one side: from both, a surface shades itself in a moire over the whole model.
+          shadowSide={THREE.BackSide}
           {...(glow ? { emissive: glow, emissiveIntensity: 0.6 } : {})}
         />
         {showEdges && <Edges threshold={20} color={glow ?? owner ?? colors.edge} />}
@@ -1181,7 +1185,7 @@ export function Viewer({
     if (!ids || !doc || !ids.every((id) => doc.elements[id])) return;
     framePending.current = null;
     const geometries = ids.map((id) => elementGeometry(doc.elements[id] as Element, doc.levels));
-    const { min, max } = sceneBounds(geometries);
+    const { min, max } = framingBounds(geometries);
     for (const g of geometries) g.dispose();
     nav.current = frameBox(min, max);
     invalidateRef.current();
@@ -1198,7 +1202,7 @@ export function Viewer({
     if (geometries.length === 0) {
       nav.current = frameBox([-15, -15, 0], [15, 15, 5]);
     } else {
-      const { min, max } = sceneBounds(geometries);
+      const { min, max } = framingBounds(geometries);
       nav.current = frameBox(min, max);
     }
     for (const g of geometries) g.dispose();

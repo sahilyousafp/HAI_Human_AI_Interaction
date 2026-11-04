@@ -34,9 +34,9 @@
 
 ## 5. Python in the open Rhino document
 
-- [ ] 5.1 Spike: in Rhino 8, find how the plugin runs Python 3 in process with output and error capture, cancellation and `# r:` requirement lines (the `Rhino.Runtime.Code` scripting API, or a temporary script through Rhino's Python command), and measure the overhead of a trivial script; record the choice and numbers in `docs/decisions.md`; verify the note names the API and the measured overhead, and that cancel works or does not
-- [ ] 5.2 Implement the runner in the plugin: UI thread, one undo record per run, result and error answer, time limit; verify "a script changes the document", "a Python error is returned, not thrown", "one undo reverts a run" and "time limit" by the manual script, with the shaping covered by the unit tests of 2.2
-- [ ] 5.3 Report Python status in the hello and on change; verify "Python ready" and "Python unavailable" in bridge tests with the fake Rhino client, and by the manual script
+- [x] 5.1 Spike: in Rhino 8, find how the plugin runs Python 3 in process with output and error capture, cancellation and `# r:` requirement lines (the `Rhino.Runtime.Code` scripting API, or a temporary script through Rhino's Python command), and measure the overhead of a trivial script; record the choice and numbers in `docs/decisions.md`; verify the note names the API and the measured overhead, and that cancel works or does not
+- [x] 5.2 Implement the runner in the plugin: UI thread, one undo record per run, result and error answer, time limit; verify "a script changes the document", "a Python error is returned, not thrown", "one undo reverts a run" and "time limit" by the manual script, with the shaping covered by the unit tests of 2.2
+- [x] 5.3 Report Python status in the hello and on change; verify "Python ready" and "Python unavailable" in bridge tests with the fake Rhino client, and by the manual script
 - [x] 5.4 Add `rhino_run_python` and `rhino_get_document` to HAI's MCP server (run asks for approval and shows the script and its `# r:` packages; read is pre-approved) and the per-role tool lists; verify "a run waits for the user", "a package is listed for approval", "read the document" "roles get their tools" / "Reviewer cannot run Python", and "a run is kept" for a Rhino run, with the fake Rhino client and fake agent
 - [ ] 5.5 Show Python status in the HUD with what to do when unavailable, and the Python tool chip timing; verify the E2E with the fake Rhino client and that a trivial script's overhead stays under 500 ms in the bridge test
 

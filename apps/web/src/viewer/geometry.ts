@@ -96,6 +96,28 @@ export function modelGeometry(mesh: MeshPart): THREE.BufferGeometry {
   return g;
 }
 
+/** An element this many times the size of the model's typical one is a backdrop: a sky dome, a landscape. */
+const BACKDROP_FACTOR = 8;
+/** With fewer elements than this there is no telling what is typical, and all of them are framed. */
+const BACKDROP_MIN_ELEMENTS = 5;
+
+/**
+ * What to bring into view on opening a model: its bounds without any backdrop. A sky dome kilometres across would leave
+ * the building a speck, and would put the camera's target high in the air, where zooming in never reaches the model.
+ */
+export function framingBounds(geometries: THREE.BufferGeometry[]): {
+  min: [number, number, number];
+  max: [number, number, number];
+} {
+  if (geometries.length < BACKDROP_MIN_ELEMENTS) return sceneBounds(geometries);
+  const sizes = geometries.map((g) => {
+    g.computeBoundingBox();
+    return g.boundingBox ? g.boundingBox.getSize(new THREE.Vector3()).length() : 0;
+  });
+  const typical = [...sizes].sort((a, b) => a - b)[Math.floor(sizes.length / 2)] as number;
+  return sceneBounds(geometries.filter((_, i) => (sizes[i] as number) <= typical * BACKDROP_FACTOR));
+}
+
 /** Bounding box of all elements, metres. */
 export function sceneBounds(geometries: THREE.BufferGeometry[]): {
   min: [number, number, number];

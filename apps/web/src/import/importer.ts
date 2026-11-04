@@ -42,6 +42,16 @@ const sourceTag = (file: string, objectId: string): string =>
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** Says which blocks are not at full detail: the view must not pass for the model, and neither must a saved copy. */
+function simplifiedNote({ simplified, triangles }: ImportReport): string {
+  if (!simplified) return "";
+  const { blocks, placements, fromTriangles } = simplified;
+  const named = blocks.slice(0, 3).join(", ");
+  const others = blocks.length > 3 ? ` and ${blocks.length - 3} more` : "";
+  const millions = (n: number) => `${(n / 1e6).toFixed(1)} million`;
+  return ` Too large to draw in full (${millions(fromTriangles)} triangles), so ${plural(placements, "placement")} of ${named}${others} ${placements === 1 ? "is" : "are"} simplified, ${millions(triangles)} in all.`;
+}
+
 /** What the report says in a sentence: "Imported 5 objects, read as millimetres. Skipped 5: 4 curves, 1 annotation." */
 export function summarise(report: ImportReport): string {
   const parts = [
@@ -53,7 +63,7 @@ export function summarise(report: ImportReport): string {
   const skipped = totalSkipped(report.skipped);
   if (report.units.assumed) parts[0] += " (the file does not say, so millimetres are assumed)";
   const curves = report.curvesDrawn ?? 0;
-  const text = `${parts[0]}.${curves > 0 ? ` ${plural(curves, "curve")} drawn as thin tubes.` : ""}`;
+  const text = `${parts[0]}.${curves > 0 ? ` ${plural(curves, "curve")} drawn as thin tubes.` : ""}${simplifiedNote(report)}`;
   return skipped > 0 ? `${text} Skipped ${skipped}: ${describeSkips(report.skipped)}.` : text;
 }
 

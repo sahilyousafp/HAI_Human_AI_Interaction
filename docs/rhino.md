@@ -2,12 +2,12 @@
 
 The agent can model in two ways, and you choose which in Settings > Modelling ([settings.md](settings.md)):
 
-- **Rhino** (the main way). Rhino 8 runs in the background and the agent works in its open document with all of RhinoCommon. HAI draws Rhino's model in its own viewer, so you keep looking at HAI and navigating with your hands.
+- **Rhino** (the main way). Rhino 8 or 9 runs in the background and the agent works in its open document with all of RhinoCommon. HAI draws Rhino's model in its own viewer, so you keep looking at HAI and navigating with your hands.
 - **The Python workbench** (the light way, no Rhino needed). The agent writes Python in an environment HAI manages in your project and saves a `.3dm` file you can bring into the viewer, or open in Rhino later.
 
 Automatic, the default, uses Rhino while it is connected and the workbench otherwise, so the same workspace works on a machine with Rhino and on one without.
 
-> **Status.** The workbench, the Rhino link in the bridge (connection, mirror relay, selection, tools) and the viewer's side (the mirror layer, Settings > Modelling, `set_view`) are built and tested against a stand-in for the plugin. The plugin itself (`plugins/rhino`) is written and builds for both of Rhino 8's runtimes, and its message, mesh and Python-handling code is tested without Rhino and against the bridge's own schemas; it has **not been run in a real Rhino 8 yet**, so the Rhino steps below are not verified. It cannot run Python in Rhino yet (that has to be worked out on a real Rhino first), so it tells the agent so and the agent uses the workbench.
+> **Status.** The workbench, the Rhino link in the bridge (connection, mirror relay, selection, tools) and the viewer's side (the mirror layer, Settings > Modelling, `set_view`) are built and tested against a stand-in for the plugin. The plugin itself (`plugins/rhino`) has now run in a real **Rhino 8.36 and Rhino 9.0** on Windows, from one build: it loads, connects, mirrors the document and runs Python as described below (2026-11-04, [decisions.md](decisions.md)). Those runs were driven by a script against a bridge with no web page, so the mirror has not been looked at in the viewer with a real Rhino.
 
 ## The Python workbench
 
@@ -41,7 +41,7 @@ Lengths are millimetres, Z up. When a run leaves a new or changed `.3dm` in the 
 
 ### Connecting
 
-1. Build the plugin with `dotnet build plugins/rhino/src/HAI.Rhino/HAI.Rhino.csproj -c Release` (it needs the .NET SDK, not Rhino), install `bin/Release/net48/HAI.Rhino.rhp` (or the `net7.0` one, for Rhino running on .NET 7) with Rhino's `PlugInManager` > Install, and run `HaiConnect` in Rhino.
+1. Build the plugin with `dotnet build plugins/rhino/src/HAI.Rhino/HAI.Rhino.csproj -c Release` (it needs the .NET SDK, not Rhino), install `bin/Release/net8.0/HAI.Rhino.rhp` (or the `net48` one, for a Rhino 8 started on .NET Framework) with Rhino's `PlugInManager` > Install, and run `HaiConnect` in Rhino.
 2. The plugin finds the running bridge through a small file in your user profile (`%LOCALAPPDATA%\HAI\bridge.json`, readable by you only), connects to it on this machine with the session token, and reports Rhino's version, the open document and whether Python runs inside Rhino. The bridge accepts a connection without a browser origin only from a client that says it is Rhino and presents the token.
 3. The top bar shows **Rhino connected**. Run `HaiDisconnect` to stop; if the bridge is restarted the plugin reconnects within 5 seconds.
 
@@ -67,9 +67,11 @@ While Rhino is connected and the mode is not Python only, every object in Rhino'
 
 Rhino's own viewport is not driven: HAI's viewer is the one you look at. Where a script's result changes the model, the mirror shows it.
 
-Scripts run on Rhino's one user-interface thread, one at a time, and nothing is sandboxed: a script has all of RhinoCommon and your user's rights, which is why you see it before it runs.
+Scripts run through Rhino's ScriptEditor on its one user-interface thread, one at a time, and nothing is sandboxed: a script has all of RhinoCommon and your user's rights, which is why you see it before it runs. A trivial script takes about 50 ms. While you are in the middle of a Rhino command a script is not started, and the agent is told to try again.
 
-With several agents the bridge queues the scripts (they take turns, in the order asked, and a script's time limit starts when Rhino gets it), sends each the agent's name, the run's title and the task's claim, and has the plugin stamp every object the script adds with `hai.owner` and `hai.part`. After the run it compares the document before and after with the claim and reports what the script touched outside it, to the agent and to you with **Undo in Rhino**: this is checked afterwards, it cannot prevent anything ([parallel.md](parallel.md#scripts)). The plugin half (`RunScope`, `RunDiff`) is written and its comparison is tested; it needs the Python runner, and a real Rhino 8, to be checked end to end.
+The time limit stops Python code. It cannot interrupt a call into Rhino, or a sleep, until that call returns, so Rhino can stay busy past the limit. What a script added before it failed or was stopped stays, and one undo removes it.
+
+With several agents the bridge queues the scripts (they take turns, in the order asked, and a script's time limit starts when Rhino gets it), sends each the agent's name, the run's title and the task's claim, and has the plugin stamp every object the script adds with `hai.owner` and `hai.part`. After the run it compares the document before and after with the claim and reports what the script touched outside it, to the agent and to you with **Undo in Rhino**: this is checked afterwards, it cannot prevent anything ([parallel.md](parallel.md#scripts)). The stamp and one undo per run were checked on a real Rhino 8.36 and 9.0; a report of a script going outside its claim, with real agents, has not been.
 
 ## Performance tips
 

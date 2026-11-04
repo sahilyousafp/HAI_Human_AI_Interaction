@@ -326,3 +326,37 @@ What it still gets wrong: "Bake" as "Make", "Column" as "Colon" (one voice of tw
 **A preview now ends when the model changes.** Move kept its preview after a commit, relying on it only applying while an element still matched what it was made from, so that nothing jumps back for a frame. But Undo brings an element back to exactly that, so the old preview came alive and the model was drawn at the moved place while the scene said otherwise (`e2e/groups.spec.ts`). The preview still bridges the wait for the change, and is cleared when it arrives.
 
 **Not done.** Groups of mirrored Rhino objects. Entering a group to pick one member. A partly hidden group acts on what is shown.
+
+## Rhino 9, and the plugin's first run in a real Rhino (2026-11-04)
+
+**Question.** Rhino 9 is out. Should HAI move to it, and does that change the approach?
+
+**Decision.** Keep the approach: HAI's own viewer and its own plugin that mirrors Rhino. McNeel's RhinoAI, now built into Rhino 9, gives an agent Python, C# and Grasshopper tools, but its tool list has no live mirror and no ownership tracking, and HAI needs both. Support Rhino 8 and Rhino 9 from one build, targeting `net8.0` and `net48` as RhinoAI does. The guide says `net10.0` for Rhino 9, but the RhinoCommon 9 package checked offered only `net8.0` and `net48`.
+
+**How Python runs.** Through `_-ScriptEditor _Run`, the route RhinoAI uses on Rhino 8. It is one code path for both versions, and Rhino brings its own Python and installs the `# r:` packages. Rhino reports a script's output and errors only as command window text, which RhinoAI parses. HAI runs the script from a small wrapper instead (`PythonWrapper`), which captures them and writes them to a file, so they come back as data with no parsing. RhinoAI's in-process route on Rhino 9 (`Rhino.Runtime.Code`, the `RhinoCode` package) would also work, but it is only available to compile against as a Rhino 9 package, needs a second build, and could not be tested here.
+
+**Measured (Rhino 8.36, .NET 10.0.2, Python 3.9.10, Windows 11, three full rounds through the bridge; then one round on Rhino 9.0.26300 evaluation, .NET 10.0.2, Python 3.13.13, with the same results and the same build).** A trivial script usually answers in 30 to 60 ms, with some up to about 110 ms and the first up to about 370 ms. The plugin loads, connects and mirrors with its mesh. Objects a script adds carry `hai.owner` and `hai.part`, and one undo reverts a two-object run. An error comes back with its output and a traceback of only the agent's lines. An infinite loop with a 2 s limit answered at about 2.06 s, and the next script ran.
+
+**Not verified.**
+
+- `# r:` packages in a real Rhino: not run, to avoid installing packages into the owner's Rhino without asking.
+- A script arriving during a Rhino command, and the viewer showing a real Rhino's mirror.
+- Once, in the first attempt with the runner, Rhino closed by itself a few seconds after six trivial scripts, with nothing in the Windows event log. It did not happen in the next four rounds, and the cause is unknown. Those six scripts were also unusually slow (0.5 to 1.5 s).
+
+**Reading Rhino 9 files.** `rhino3dm` 8.35.0 (the newest on npm and PyPI) reads a real version 9 `.3dm`: all 4087 objects, layers and block definitions of `Taj_by_rhino.3dm`, with their render meshes. It was refused on import for its size and not its version: it has 263.6 million triangles once its blocks are expanded, against the limit of 5 million. Over 99% of them are trees and cypresses, placed as blocks: the model holds 2492 block instances of 15 definitions, and the building alone is about 0.85 million triangles.
+
+**Side effects to know about.** Starting Rhino can start its own updater (this machine went from 8.35 to 8.36 during the first attempt).
+
+**A wrong file opened.** The first run with the Taj file opened another of the owner's files. Rhino's Open refused the path as spelled, with forward slashes, and the Enter the plugin sent to end the command then opened the most recent file. The plugin now makes the path native and checks that it exists first (`Session.OpenFile`).
+
+**Heavy repeated blocks are simplified.** Raising the limit does not help, since a browser cannot draw 263 million triangles. Two ways were offered: low-detail copies of the repeated blocks, or one drawn copy of each shape reused on the graphics card with distant ones simplified. The first was recommended and the owner said to continue, without choosing outright: it is much less work and opens quickly, and the second would still have to draw hundreds of millions of triangles up close on a laptop. How it works is in [import.md](import.md#a-model-over-the-limit). The Taj model imports in about 7 s at 3.5 million triangles. While orbiting it the viewer rendered about 60 frames per second on this machine's integrated Intel Arc 140T (measured with `renders()` during the drag: an idle view renders nothing, so a frame count at rest says nothing).
+
+**Open surfaces are drawn from both sides.** A Rhino model can be surfaces with no inside (82 of the mosque's sandstone parts in that file), and one seen from behind was neither drawn nor pickable, which Rhino's shaded view does not do. `e2e/import.spec.ts` reproduces it. Shadows stay one-sided: from both sides, surfaces shade themselves in a moire over the whole model.
+
+**Framing leaves out backdrops.** That file's sky dome is 5.6 km across, so the view framed on import showed a speck of building, and put the camera's target 1.3 km in the air, where zooming in never reached the model. Framing now leaves out an element over 8 times the size of the typical one (`framingBounds`). This does not yet apply when framing a Rhino mirror.
+
+**Known and left.**
+
+- **The mirror does not draw block instances.** With the Taj file open in Rhino 9, it shows 699 objects and 95 433 triangles, and leaves out 2481 block instances: the minarets, the gate, the trees. This was already documented, and it matters more now that a real model has shown how much can be in blocks. It is the next thing to do for Rhino as the main way to work. It should reuse the same simplification.
+- **Walls can vanish into floors.** Without edge lines on imported models, faces of one colour at different angles can light almost alike: the mosque's sandstone walls blend into its sandstone plinth, and it took looking from another side to tell they were there. Changing the lighting touches every screenshot in the app, so it needs its own look.
+

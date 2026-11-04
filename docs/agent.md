@@ -49,7 +49,7 @@ The `hai` MCP server gives each agent the tools its definition lists, from these
 | `get_claims`, `request_claim`, `release_claim` | See who is working on which part of the model, ask for more scope for the running task, give some back (every agent; see [Parallel modelling](parallel.md)) |
 | `capture_view` | A PNG of what you see in the viewer, at most 1280 px on its longest side |
 | `python_run` | Runs a Python script in an environment HAI manages in the project (no Rhino needed). You see the whole script and the packages it would install first; every run is kept in `.hai/scripts`; a `.3dm` it writes can be imported into the viewer with one click (Architect, Product, Climate) |
-| `rhino_run_python` | Runs a Python script inside your open Rhino 8 with all of RhinoCommon, as one undo step, after you have seen it. Only offered while Rhino is connected and the mode is not Python only (Architect, Product) |
+| `rhino_run_python` | Runs a Python script inside your open Rhino with all of RhinoCommon, as one undo step, after you have seen it. Only offered while Rhino is connected and the mode is not Python only (Architect, Product) |
 | `rhino_get_document` | Reads Rhino's units, layers, object counts, selection and active view (every agent, while Rhino is connected) |
 | `set_view` | Moves your camera: turn, tilt, nearer or further, look at a point, frame elements, or switch to a named view (Top, Front, Right and the rest of the [view cube](navigation.md#the-view-cube-and-orthographic-views), or Perspective). It changes nothing in the model (every agent) |
 | `camera_set` | Places or moves one of your own cameras by name (direction, distance, target or elements to frame); it is private to you and never moves the user's view |

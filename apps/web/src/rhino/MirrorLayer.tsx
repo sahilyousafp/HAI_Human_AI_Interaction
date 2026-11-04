@@ -86,6 +86,8 @@ function MirrorMesh({
             roughness={0.9}
             metalness={0}
             flatShading
+            side={THREE.DoubleSide}
+            shadowSide={THREE.BackSide}
             {...(glow ? { emissive: glow, emissiveIntensity: 0.6 } : {})}
           />
         </mesh>
