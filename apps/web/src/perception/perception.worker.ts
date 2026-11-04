@@ -10,6 +10,7 @@ import {
 } from "@hai/perception";
 import { FaceLandmarker, FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { isSoftwareRenderer } from "../gpu.ts";
+import { shouldFallBackToCpu } from "./gpu-fallback.ts";
 import type { FromWorker, ToWorker } from "./messages.ts";
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -23,6 +24,13 @@ let perfDelayMs = 0;
 let sendRawHands = false;
 let mirrored = false;
 let flipCanvas: OffscreenCanvas | null = null;
+let fileset: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>> | null = null;
+let handModel = "";
+let faceModel = "";
+/** Frames processed without finding a hand, and whether one has ever been found. */
+let emptyFrames = 0;
+let everFoundHand = false;
+let fellBack = false;
 const identity = new HandIdentity();
 const smoother = new FrameSmoother();
 const scheduler = new AdaptiveScheduler();
@@ -47,36 +55,68 @@ async function withDelegate<T>(
   return { task: await create("CPU"), delegate: "CPU" };
 }
 
+// With ES-module WASM, MediaPipe reads `self.ModuleFactory` set by the loader module's top level and then
+// clears it. A second import() of the same URL comes from the module cache and never re-sets it
+// ("ModuleFactory not set."), so every task loads the loader under its own URL.
+function filesetFor(task: string) {
+  if (!fileset) throw new Error("The vision fileset is not loaded.");
+  return { ...fileset, wasmLoaderPath: `${fileset.wasmLoaderPath}?task=${task}` };
+}
+
+function createHand(delegate: Delegate): Promise<HandLandmarker> {
+  return HandLandmarker.createFromOptions(filesetFor(`hand-${delegate}`), {
+    baseOptions: { modelAssetPath: handModel, delegate },
+    runningMode: "VIDEO",
+    numHands: 2,
+  });
+}
+
+function createFace(delegate: Delegate): Promise<FaceLandmarker> {
+  return FaceLandmarker.createFromOptions(filesetFor(`face-${delegate}`), {
+    baseOptions: { modelAssetPath: faceModel, delegate },
+    runningMode: "VIDEO",
+    numFaces: 1,
+    outputFaceBlendshapes: true,
+    outputFacialTransformationMatrixes: true,
+  });
+}
+
 async function init(msg: Extract<ToWorker, { type: "init" }>) {
   perfDelayMs = msg.perfDelayMs;
-  const vision = await FilesetResolver.forVisionTasks(msg.wasmBase, true);
-  // With ES-module WASM, MediaPipe reads `self.ModuleFactory` set by the loader module's top level and then
-  // clears it. A second import() of the same URL comes from the module cache and never re-sets it
-  // ("ModuleFactory not set."), so every task loads the loader under its own URL.
-  const filesetFor = (task: string) => ({
-    ...vision,
-    wasmLoaderPath: `${vision.wasmLoaderPath}?task=${task}`,
-  });
-  const handResult = await withDelegate((delegate) =>
-    HandLandmarker.createFromOptions(filesetFor(`hand-${delegate}`), {
-      baseOptions: { modelAssetPath: msg.handModel, delegate },
-      runningMode: "VIDEO",
-      numHands: 2,
-    }),
-  );
-  const faceResult = await withDelegate((delegate) =>
-    FaceLandmarker.createFromOptions(filesetFor(`face-${delegate}`), {
-      baseOptions: { modelAssetPath: msg.faceModel, delegate },
-      runningMode: "VIDEO",
-      numFaces: 1,
-      outputFaceBlendshapes: true,
-      outputFacialTransformationMatrixes: true,
-    }),
-  );
+  handModel = msg.handModel;
+  faceModel = msg.faceModel;
+  fileset = await FilesetResolver.forVisionTasks(msg.wasmBase, true);
+  // Hands first: they drive the pointer and every gesture, so the camera becomes useful without waiting for the
+  // (larger, slower to start) face model.
+  const handResult = await withDelegate(createHand);
   hands = handResult.task;
-  face = faceResult.task;
-  backend = handResult.delegate === "GPU" && faceResult.delegate === "GPU" ? "GPU" : "CPU";
+  backend = handResult.delegate;
   post({ type: "ready", backend });
+  // The face joins when it is ready. Head tracking is an extra: a face model that fails must not cost the hands.
+  void (async () => {
+    try {
+      face = (await withDelegate(createFace)).task;
+    } catch (error) {
+      console.warn("[hai] face tracking is off:", error);
+    }
+  })();
+}
+
+/**
+ * Rebuilds the hand model on the CPU once, for GPUs whose driver starts the graph but returns no landmarks. Frames are
+ * dropped while `hands` is null.
+ */
+async function fallBackToCpu(reason: unknown): Promise<void> {
+  fellBack = true;
+  console.warn("[hai] the GPU delegate is not finding hands; switching to the CPU delegate.", reason);
+  hands = null;
+  try {
+    hands = await createHand("CPU");
+    backend = "CPU";
+    post({ type: "ready", backend });
+  } catch (error) {
+    post({ type: "error", message: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 /**
@@ -99,10 +139,29 @@ function onFrame(msg: Extract<ToWorker, { type: "frame" }>) {
   const { seq, captureTs } = msg;
   const bitmap = unmirrored(msg.bitmap);
   try {
-    if (!hands || !face) return;
+    if (!hands) return;
     const started = performance.now();
-    const handResult = hands.detectForVideo(bitmap, captureTs);
-    const faceResult = scheduler.shouldRunFace(seq) ? face.detectForVideo(bitmap, captureTs) : undefined;
+    let handResult: ReturnType<HandLandmarker["detectForVideo"]>;
+    try {
+      handResult = hands.detectForVideo(bitmap, captureTs);
+    } catch (error) {
+      if (backend === "GPU" && !fellBack) {
+        void fallBackToCpu(error);
+      } else {
+        console.warn("[hai] hand tracking failed on this frame:", error);
+      }
+      return;
+    }
+    if (handResult.landmarks.length > 0) {
+      everFoundHand = true;
+    } else {
+      emptyFrames += 1;
+      if (shouldFallBackToCpu({ backend, fellBack, everFoundHand, emptyFrames })) {
+        void fallBackToCpu("no hands");
+      }
+    }
+    const faceResult =
+      face && scheduler.shouldRunFace(seq) ? face.detectForVideo(bitmap, captureTs) : undefined;
     if (perfDelayMs > 0) {
       const until = performance.now() + perfDelayMs;
       while (performance.now() < until) {

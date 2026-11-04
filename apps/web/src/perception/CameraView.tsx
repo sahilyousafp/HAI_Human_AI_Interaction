@@ -133,6 +133,8 @@ export function CameraView({ session }: { session: TrackingSession }) {
 
   const running = state.camera === "on" || state.camera === "starting";
   const cameraOn = state.camera === "on";
+  // The stream is live but the worker has not reported a backend yet: the models are still arriving.
+  const loading = cameraOn && state.backend === null;
   const engaged = gestures.state.engaged;
   const last =
     gestures.last && performance.now() - gestures.last.shownAt < LAST_GESTURE_HOLD_MS
@@ -234,7 +236,7 @@ export function CameraView({ session }: { session: TrackingSession }) {
         >
           {running ? "Stop camera" : "Start camera"}
         </button>
-        {cameraOn && (
+        {cameraOn && !loading && (
           <span
             className="camera-chip"
             data-testid="camera-chip-engaged"
@@ -243,8 +245,13 @@ export function CameraView({ session }: { session: TrackingSession }) {
             {engaged ? "Engaged" : "Open palm to engage"}
           </span>
         )}
+        {loading && (
+          <span className="camera-chip" data-testid="camera-chip-loading" data-state="loading">
+            Loading the tracking models...
+          </span>
+        )}
       </div>
-      {cameraOn && (
+      {cameraOn && !loading && (
         <dl className="camera-readouts">
           <div data-hand="left">
             <dt>Left</dt>
