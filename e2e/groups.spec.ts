@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
 import { handEvent, openGround, type Point, viewerOf } from "./hands.ts";
-import { openViewer, startTestBridge } from "./viewer.ts";
+import { modelArrived, openViewer, startTestBridge } from "./viewer.ts";
 
 // A selection holds together: tapping one member of a group means all of it, and every tool acts on the whole. The
 // options card pinned to it does the same, one press away.
@@ -55,10 +55,12 @@ async function start(page: Page, grouping: "group" | "none" = "group") {
   }));
   await page.evaluate((o) => window.__HAI_SCENE__?.apply("Columns", o as never), ops);
   await expect.poll(() => byId("alone")?.id).toBe("alone");
+  await modelArrived(page, bridge);
 }
 
 /** Where a point on a column is on the page, px: partway up it, so the pointer meets the column. */
 async function onColumn(page: Page, id: string): Promise<Point> {
+  await modelArrived(page, bridge as Bridge);
   const [x, y] = byId(id)?.position ?? [0, 0];
   const view = await page.evaluate(([a, b]) => window.__HAI_VIEWER__?.project([a, b, 1500]), [x, y] as const);
   const box = await page.locator("[data-testid=viewer] canvas").boundingBox();
@@ -68,6 +70,7 @@ async function onColumn(page: Page, id: string): Promise<Point> {
 
 /** Where a ground point is on the page, px. */
 async function onGround(page: Page, at: Point): Promise<Point> {
+  await modelArrived(page, bridge as Bridge);
   const view = await viewerOf(page, at);
   const box = await page.locator("[data-testid=viewer] canvas").boundingBox();
   if (!view || !box) throw new Error(`${at} is not clear on screen`);

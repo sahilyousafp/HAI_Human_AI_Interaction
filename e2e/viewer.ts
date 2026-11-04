@@ -149,3 +149,13 @@ export const handAt = (page: Page, [x, y]: [number, number]): Promise<[number, n
   );
 
 export const now = (page: Page) => page.evaluate(() => performance.timeOrigin + performance.now());
+
+/**
+ * Waits for the page to hold the model the bridge holds. A change reaches the bridge first and the page a moment later:
+ * a person never acts inside that moment, but a test that polled the bridge can, and its click then meets the old model.
+ */
+export async function modelArrived(page: Page, bridge: Bridge): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(() => window.__HAI_SCENE__?.getSnapshot().doc?.elements))
+    .toEqual(bridge.scene.scene.doc.elements);
+}

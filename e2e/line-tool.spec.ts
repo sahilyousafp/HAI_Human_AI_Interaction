@@ -14,7 +14,7 @@ import {
   viewerOf,
 } from "./hands.ts";
 import { closeSettings, openSettings } from "./settings.ts";
-import { openViewer, startTestBridge } from "./viewer.ts";
+import { modelArrived, openViewer, startTestBridge } from "./viewer.ts";
 
 // The Line tool and the drawing constraints panel: Ortho as a hard lock, its angle step, a locked length.
 let bridge: Bridge | null = null;
@@ -31,6 +31,7 @@ async function start(page: Page) {
 
 /** Where a ground point (mm) is on the page, px. */
 async function onPage(page: Page, at: Point): Promise<Point> {
+  await modelArrived(page, bridge as Bridge);
   const view = await viewerOf(page, at);
   const box = await page.locator("[data-testid=viewer] canvas").boundingBox();
   if (!view || !box) throw new Error(`${at} is not clear on screen`);
@@ -422,6 +423,7 @@ async function drawnLine(page: Page) {
   for (const at of path) await click(page, at);
   await page.keyboard.press("Enter");
   await expect.poll(() => lines().length).toBe(1);
+  await modelArrived(page, bridge as Bridge);
   const id = Object.values(bridge?.scene.scene.doc.elements ?? {}).find((e) => e.type === "line")?.id ?? "";
   return { id, path, x, y };
 }
@@ -474,6 +476,7 @@ test("a hand moves a point with Move too, and a pinch along the span moves the w
   ]);
   await expect.poll(() => lines()[0]?.points[0]).toEqual([x, y + 1000, 0]);
   expect(lines()[0]?.points[1]).toEqual([x + 4000, y, 0]);
+  await modelArrived(page, bridge as Bridge);
   await handGestures(page, "Right", [
     { type: "pinch.drag.start", at: [x + 4000, y + 2000] },
     { type: "pinch.drag.update", at: [x + 4500, y + 2000] },

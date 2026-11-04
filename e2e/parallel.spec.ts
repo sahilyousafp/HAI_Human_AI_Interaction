@@ -65,13 +65,14 @@ async function seed(page: Page) {
 
 const wear = (page: Page, id: string) => page.evaluate((i) => window.__HAI_VIEWER__?.wear?.(i) ?? null, id);
 
+// A task here works until the test ends and `afterEach` stops it, so a slow page cannot see it finish before it has looked.
 test.describe("who holds what", () => {
   test("two disjoint tasks: the panel lists both parts, the chips say what each holds, and the model shows who owns what", async ({
     page,
   }) => {
     await start(page);
     await seed(page);
-    await team().request("delegate architect[dome]: work 8000 | product[hall]: work 8000");
+    await team().request("delegate architect[dome]: work 60000 | product[hall]: work 60000");
     const parts = page.getByTestId("parts-list");
     await expect(parts.getByTestId("part-row")).toHaveCount(2);
     await expect(parts.getByTestId("part-row").first()).toContainText("Architect");
@@ -98,7 +99,7 @@ test.describe("who holds what", () => {
   test("pointing at a claim in the panel lights its elements, and only its elements", async ({ page }) => {
     await start(page);
     await seed(page);
-    await team().request("delegate architect[dome]: work 8000 | product[hall]: work 8000");
+    await team().request("delegate architect[dome]: work 60000 | product[hall]: work 60000");
     const row = page.locator('[data-testid="part-row"]', { hasText: "Product" });
     await expect(row).toBeVisible();
     await row.hover();
@@ -137,7 +138,7 @@ test.describe("who holds what", () => {
   test("Show owners off: no tint and no box, but the panel still lists the claims", async ({ page }) => {
     await start(page);
     await seed(page);
-    await team().request("delegate architect(-5000,-9000,12000,2000): work 8000");
+    await team().request("delegate architect(-5000,-9000,12000,2000): work 60000");
     await expect.poll(() => wear(page, "dome-1").then((w) => w?.outline)).toBe(colorOf("architect"));
     await openSettings(page, "modelling");
     await page.getByTestId("show-owners").click();
@@ -154,7 +155,7 @@ test.describe("switched off, and Rhino", () => {
     await openSettings(page, "features");
     await page.getByTestId("feature-parallelModelling").click();
     await closeSettings(page);
-    await team().request("delegate architect(-5000,-9000,12000,2000): work 5000");
+    await team().request("delegate architect(-5000,-9000,12000,2000): work 60000");
     await expect(page.getByTestId("part-row")).toHaveCount(1);
     expect((await wear(page, "dome-1"))?.outline).toBeNull();
     expect(await page.evaluate(() => window.__HAI_VIEWER__?.claimBoxes?.().length)).toBe(0);
@@ -179,7 +180,7 @@ test.describe("switched off, and Rhino", () => {
         ],
       }),
     );
-    await team().request("delegate product[hall]: work 6000");
+    await team().request("delegate product[hall]: work 60000");
     await expect(page.getByTestId("part-row")).toHaveCount(1);
     await expect
       .poll(async () => (await wear(page, "r-owned"))?.color !== (await wear(page, "r-free"))?.color)
