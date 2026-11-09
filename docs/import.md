@@ -26,7 +26,7 @@ A Brep saved by Rhino with **Save small** has no render meshes, so its objects c
 - **Import** in the project bar opens a file picker (or press Ctrl+I). Browsers open a file picker only after a real mouse click or key press, so a pinch on the button explains that instead of opening it when you have not just used the mouse or keyboard; click it, press Ctrl+I, or drop the file.
 - **Drop** a `.3dm` file anywhere on the page. A message shows while the file is over it, and the browser never opens or downloads the file.
 - The model appears, the view frames it, and a report says how many objects came in and what was left out: `Imported 6 objects, read as millimeters. 4 curves drawn as thin tubes. Skipped 1: 1 annotation.` The whole import is one undo step.
-- Nothing is imported, and the scene is not changed, when the file cannot be read, has nothing importable, is over **500 MB**, or has more than **5 million triangles**; the report says which.
+- Nothing is imported, and the scene is not changed, when the file cannot be read, has nothing importable, is over **500 MB**, or has more than **5 million triangles** that cannot be brought under the limit (see [below](#a-model-over-the-limit)); the report says which.
 
 ## What you get
 
@@ -36,7 +36,19 @@ Imported models are **reference geometry**: you can select, measure, section, mo
 - A model with **more than 1000 objects** becomes one element per layer and colour, named after the layer and the number of objects it holds (`Facade (4210 objects)`), so the scene file stays small and quick to draw. A stand with 48 692 objects and 2.9 million triangles became 14 elements.
 - **Curves are drawn as thin tubes** along them: lines and polylines keep their corners, a smooth curve is sampled (24 to 160 points by its control points), and the tube is six-sided, 4 to 40 mm thick by the curve's length, with capped ends. It is a picture of the curve for the viewer (picking, bounds, sectioning); the file you saved keeps the real curve. Curves count toward the triangle limit like any geometry, so a plan of many thousands of curves can be over it.
 - Points, text and hatches are not imported; the report counts them.
-- Imported models are drawn with flat shading (each face lit by its own direction) and no edge lines (finding them costs time in proportion to the triangles).
+- Imported models are drawn with flat shading (each face lit by its own direction) and no edge lines (finding them costs time in proportion to the triangles). Open surfaces are drawn from both sides.
+
+## A model over the limit
+
+A model is usually over 5 million triangles because of a block placed many times, such as trees. So that it can still be opened, its heaviest repeated blocks are drawn with less detail, and everything else stays exact. A model of 263.6 million triangles, over 99% of them in 2430 placed trees and cypresses, came in at 3.5 million in about 7 seconds, with its 0.85 million triangles of building untouched.
+
+- Blocks are chosen heaviest first, by triangles times placements, until the exact geometry left is under 1 million triangles (a fifth of the limit).
+- A block placed only once is never simplified: it is part of the design. If what is over the limit is not repeated, the model is refused as before.
+- A low-detail copy is made once per block by merging the vertices in a grid over each of its objects, as fine as fits under the limit. It keeps the outline and the mass, not edges or thin detail.
+- The report says so, naming the blocks: `Too large to draw in full (263.6 million triangles), so 2430 placements of Taj_Tree3, Taj_Tree2, Taj_Tree1 and 5 more are simplified, 3.5 million in all.`
+- **Save as 3dm writes what HAI holds**, so a saved copy has the simplified blocks too. Your original file is not changed.
+
+Rhino 9's `.3dm` files are read as they are. Open surfaces are drawn from both sides, as in Rhino's shaded view. A backdrop such as a sky dome or a landscape, more than 8 times the size of the model's typical element, is left out when the view is framed on opening; it is still drawn.
 
 ## Where it is kept
 

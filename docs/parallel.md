@@ -88,7 +88,7 @@ Settings > Modelling > **Show owners** turns the tint and the boxes off while ke
 
 ## Checking it by hand
 
-On Rhino 8, with the plugin's Python runner once it exists: hand two scoped tasks to Architect and Product that each run a script adding surfaces. Both should list their claims; the new objects should carry `hai.owner` and `hai.part` in Rhino's user strings; one undo in Rhino should revert one script. Then run a script that moves an object of the other task's part: the panel should report it with **Undo in Rhino**.
+On Rhino, hand two scoped tasks to Architect and Product that each run a script adding surfaces. Both should list their claims; the new objects should carry `hai.owner` and `hai.part` in Rhino's user strings; one undo in Rhino should revert one script. Then run a script that moves an object of the other task's part: the panel should report it with **Undo in Rhino**.
 
 ## Where things live
 

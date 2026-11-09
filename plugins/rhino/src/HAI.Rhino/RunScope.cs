@@ -15,8 +15,7 @@ namespace HAI.Rhino
     ///
     /// A script is not sandboxed: this cannot stop it from changing anything. It makes the change visible, owned and
     /// undoable. Use it on the UI thread around the script; Finish returns the comparison and closes the undo step.
-    /// Needs a real Rhino 8 to run (the Python runner that uses it is task 5.1 of add-rhino-connector); the comparison
-    /// and the stamp it rely on are tested in HAI.Rhino.Core.Tests.
+    /// The comparison and the stamp it relies on are tested in HAI.Rhino.Core.Tests.
     /// </summary>
     internal sealed class RunScope : IDisposable
     {

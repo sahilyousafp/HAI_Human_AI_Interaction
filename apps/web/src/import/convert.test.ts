@@ -203,6 +203,120 @@ describe("convert3dm", () => {
     expect(result).toEqual({ ok: false, error: expect.stringMatching(/triangles, over the limit/) });
   });
 
+  describe("a model over the limit because of a block placed many times", () => {
+    /** A file with a dense block placed `placements` times, and a one-off box of 12 triangles. */
+    function forest(placements: number): Uint8Array {
+      const file = new rhino.File3dm();
+      file.settings().modelUnitSystem = rhino.UnitSystem.Millimeters;
+      const named = (name: string) => {
+        const attributes = new rhino.ObjectAttributes();
+        attributes.name = name;
+        return attributes;
+      };
+      // A ball of 2000 mm on the ground: 80 rings of 80 squares, 12 800 triangles.
+      const dense = new rhino.Mesh();
+      for (let ring = 0; ring <= 80; ring++) {
+        for (let step = 0; step <= 80; step++) {
+          const up = (ring / 80) * Math.PI;
+          const around = (step / 80) * 2 * Math.PI;
+          dense
+            .vertices()
+            .add(
+              1000 * Math.sin(up) * Math.cos(around),
+              1000 * Math.sin(up) * Math.sin(around),
+              1000 + 1000 * Math.cos(up),
+            );
+        }
+      }
+      for (let ring = 0; ring < 80; ring++) {
+        for (let step = 0; step < 80; step++) {
+          const at = (r: number, t: number) => r * 81 + t;
+          dense.faces().addTriFace(at(ring, step), at(ring + 1, step), at(ring + 1, step + 1));
+          dense.faces().addTriFace(at(ring, step), at(ring + 1, step + 1), at(ring, step + 1));
+        }
+      }
+      const index = file
+        .instanceDefinitions()
+        .add("Tree", "", "", "", [0, 0, 0], [dense as never], [named("Tree mesh")]);
+      const definition = file.instanceDefinitions().get(index);
+      for (let i = 0; i < placements; i++) {
+        file
+          .objects()
+          .addInstanceObject(
+            new (rhino.InstanceReference as unknown as new (id: string, xform: unknown) => never)(
+              definition.id,
+              rhino.Transform.translationXYZ(i * 3000, 0, 0),
+            ),
+            named("Tree"),
+          );
+      }
+      const hall = new rhino.Mesh();
+      for (const z of [0, 3000]) {
+        for (const [x, y] of [
+          [0, 5000],
+          [4000, 5000],
+          [4000, 9000],
+          [0, 9000],
+        ] as const)
+          hall.vertices().add(x, y, z);
+      }
+      for (const [a, b, c, d] of [
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+        [0, 1, 5, 4],
+        [1, 2, 6, 5],
+        [2, 3, 7, 6],
+        [3, 0, 4, 7],
+      ] as const) {
+        hall.faces().addTriFace(a, b, c);
+        hall.faces().addTriFace(a, c, d);
+      }
+      file.objects().addMesh(hall, named("Hall"));
+      return file.toByteArray();
+    }
+
+    const limits = { maxFileBytes: 1e9, maxTriangles: 200_000 };
+
+    it("draws that block simplified rather than refusing the model, and keeps the rest exact", () => {
+      const result = convert3dm(rhino, forest(100), limits);
+      expect(result.ok, result.ok ? "" : result.error).toBe(true);
+      if (!result.ok) return;
+      const whole = result.report.simplified?.fromTriangles ?? 0;
+      expect(whole).toBeGreaterThan(limits.maxTriangles);
+      expect(result.report.simplified).toMatchObject({ blocks: ["Tree"], placements: 100 });
+      expect(result.report.triangles).toBeLessThanOrEqual(limits.maxTriangles);
+      const hall = result.parts.find((p) => p.name === "Hall");
+      expect((hall?.indices.length ?? 0) / 3).toBe(12);
+      const trees = result.parts.filter((p) => p.name === "Tree");
+      expect(trees).toHaveLength(100);
+      // Each stands where it was placed, about its size.
+      const last = partBounds(trees[99] as (typeof trees)[number]);
+      expect(last.min[0]).toBeGreaterThan(99 * 3000 - 1000);
+      expect(last.max[0]).toBeLessThan(99 * 3000 + 1000);
+      expect(last.max[2]).toBeGreaterThan(1700);
+    });
+
+    it("keeps as much detail as fits", () => {
+      const few = convert3dm(rhino, forest(40), limits);
+      const many = convert3dm(rhino, forest(400), limits);
+      if (!few.ok || !many.ok) throw new Error("both should import");
+      const each = (r: typeof few) => (r.parts.find((p) => p.name === "Tree")?.indices.length ?? 0) / 3;
+      expect(each(few)).toBeGreaterThan(each(many));
+    });
+
+    it("leaves the block alone when the model is under the limit", () => {
+      const result = convert3dm(rhino, forest(2), limits);
+      if (!result.ok) throw new Error(result.error);
+      expect(result.report.simplified).toBeUndefined();
+      expect((result.parts.find((p) => p.name === "Tree")?.indices.length ?? 0) / 3).toBeGreaterThan(10_000);
+    });
+
+    it("still refuses when what is over the limit is not repeated: a block placed once stays exact", () => {
+      const result = convert3dm(rhino, forest(1), { maxFileBytes: 1e9, maxTriangles: 1000 });
+      expect(result).toEqual({ ok: false, error: expect.stringMatching(/triangles, over the limit/) });
+    });
+  });
+
   it("refuses a file over the size limit before reading it", () => {
     const result = convert3dm(rhino, new Uint8Array(IMPORT_LIMITS.maxFileBytes + 1));
     expect(result).toEqual({ ok: false, error: expect.stringMatching(/500 MB/) });

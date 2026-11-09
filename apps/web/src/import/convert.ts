@@ -1,6 +1,7 @@
 import type { MeshPart } from "@hai/scene";
 import type { File3dm, File3dmObject, GeometryBase, RhinoModule } from "rhino3dm";
 import { type CurveLike, polylineLength, sampleCurve, tubeAlong, tubeRadiusMm } from "./curve-tube.ts";
+import { reduceMesh } from "./reduce-mesh.ts";
 
 /** The most an import may bring in; beyond this nothing is imported. */
 export interface ImportLimits {
@@ -44,6 +45,15 @@ export interface ImportReport {
   /** The file's unit system by name, and how many millimetres one of its units is. */
   units: { name: string; mm: number; assumed: boolean };
   triangles: number;
+  /** The model was over the limit because of blocks placed many times, and those are drawn with less detail. */
+  simplified?: {
+    /** The blocks drawn with less detail, by name. */
+    blocks: string[];
+    /** How many times they are placed in the model. */
+    placements: number;
+    /** The triangles of the whole model at full detail. */
+    fromTriangles: number;
+  };
 }
 
 export type ConvertResult =
@@ -108,6 +118,24 @@ type Matrix = readonly [
 ];
 const IDENTITY: Matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const BLOCK_DEPTH = 8;
+
+/** Only a block placed at least this many times is drawn with less detail: one placed once is part of the design. */
+const MIN_PLACEMENTS = 2;
+/** Blocks are simplified, the heaviest in the model first, until the exact geometry left is this share of the limit. */
+const EXACT_SHARE = 0.2;
+/** The share of the limit the simplified model may fill, so a model at the limit is not refused for a rounding. */
+const REDUCED_SHARE = 0.9;
+/** How finely a simplified block is kept, cells along its longest side: the finest that fits is used. */
+const GRID_STEPS = [48, 32, 24, 16, 12, 8, 6, 4, 3, 2];
+
+/** What to draw with less detail: the blocks, by definition id, and how finely. */
+interface Reduction {
+  definitions: Set<string>;
+  cells: number;
+  blocks: string[];
+  placements: number;
+  fromTriangles: number;
+}
 
 function multiply(a: Matrix, b: Matrix): Matrix {
   const out = new Array<number>(16).fill(0);
@@ -185,11 +213,12 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
     ? { name: unitName.toLowerCase(), mm: MM_PER_UNIT[unitName] as number, assumed: false }
     : { name: "millimetres", mm: 1, assumed: true };
 
-  const skipped = NO_SKIPS();
-  const parts: ImportedPart[] = [];
+  let skipped = NO_SKIPS();
+  let parts: ImportedPart[] = [];
   let triangles = 0;
   let overLimit = false;
   let curvesDrawn = 0;
+  let reduction: Reduction | null = null;
 
   const layerOf = (index: number) =>
     index >= 0 && index < file.layers().count ? file.layers().get(index) : null;
@@ -234,11 +263,114 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
     return { positions: tube.positions, indices: tube.indices };
   };
 
+  const cellsFor = (definitionId: string) =>
+    reduction?.definitions.has(definitionId) ? reduction.cells : null;
+
+  /** A low-detail copy of one object in a block, made once however many times the block is placed. */
+  const reducedCopies = new Map<string, MeshPart | null>();
+  const reducedOf = (id: string, geometry: GeometryBase, cells: number): MeshPart | null => {
+    const key = `${id}|${cells}`;
+    let copy = reducedCopies.get(key);
+    if (copy === undefined) {
+      const mesh = meshOf(geometry);
+      copy = mesh ? reduceMesh(mesh, cells) : null;
+      reducedCopies.set(key, copy);
+    }
+    return copy;
+  };
+
+  /**
+   * The triangles of an object, a block counting all it holds. With `cells`, those of its low-detail copies. Counts are
+   * kept by object, so a block placed thousands of times is measured once.
+   */
+  const triangleCounts = new Map<string, number>();
+  const trianglesIn = (object: File3dmObject, cells: number | null, depth = 0): number => {
+    const id = object.attributes().id as string;
+    const key = cells === null ? id : `${id}|${cells}`;
+    const known = triangleCounts.get(key);
+    if (known !== undefined) return known;
+    const geometry = object.geometry();
+    const T = rhino.ObjectType;
+    let count = 0;
+    if (geometry.objectType === T.InstanceReference) {
+      const reference = geometry as unknown as import("rhino3dm").InstanceReference;
+      const definition = file.instanceDefinitions().findId(reference.parentIdefId);
+      if (definition && depth < BLOCK_DEPTH) {
+        for (const childId of definition.getObjectIds() as string[]) {
+          const child = file.objects().findId(childId);
+          if (child) count += trianglesIn(child, cells, depth + 1);
+        }
+      }
+    } else if (geometry.objectType === T.Curve) {
+      const curve = curveOf(geometry);
+      count = curve ? curve.indices.length / 3 : 0;
+    } else if (
+      geometry.objectType === T.Mesh ||
+      geometry.objectType === T.Brep ||
+      geometry.objectType === T.Extrusion
+    ) {
+      const mesh = cells === null ? meshOf(geometry) : reducedOf(id, geometry, cells);
+      count = mesh ? mesh.indices.length / 3 : 0;
+    }
+    triangleCounts.set(key, count);
+    return count;
+  };
+
+  /**
+   * How to bring a model over the limit under it by drawing its heaviest repeated blocks with less detail, keeping them
+   * as fine as will fit, or null when it cannot be done: what is over the limit is not repeated.
+   */
+  const planReduction = (): Reduction | null => {
+    const objects = file.objects();
+    const placed = new Map<string, { object: File3dmObject; name: string; placements: number }>();
+    let whole = 0;
+    for (let i = 0; i < objects.count; i++) {
+      const object = objects.get(i);
+      if (object.attributes().isInstanceDefinitionObject) continue;
+      whole += trianglesIn(object, null);
+      const geometry = object.geometry();
+      if (geometry.objectType !== rhino.ObjectType.InstanceReference) continue;
+      const id = (geometry as unknown as import("rhino3dm").InstanceReference).parentIdefId as string;
+      const entry = placed.get(id);
+      if (entry) entry.placements++;
+      else {
+        const name = file.instanceDefinitions().findId(id)?.name || "Block";
+        placed.set(id, { object, name, placements: 1 });
+      }
+    }
+    const heaviest = [...placed.entries()]
+      .filter(([, block]) => block.placements >= MIN_PLACEMENTS)
+      .map(([id, block]) => ({ id, ...block, weight: block.placements * trianglesIn(block.object, null) }))
+      .sort((a, b) => b.weight - a.weight);
+    const chosen: typeof heaviest = [];
+    let exact = whole;
+    for (const block of heaviest) {
+      if (exact <= limits.maxTriangles * EXACT_SHARE) break;
+      chosen.push(block);
+      exact -= block.weight;
+    }
+    if (chosen.length === 0) return null;
+    for (const cells of GRID_STEPS) {
+      const total = chosen.reduce((sum, b) => sum + b.placements * trianglesIn(b.object, cells), exact);
+      if (total <= limits.maxTriangles * REDUCED_SHARE) {
+        return {
+          definitions: new Set(chosen.map((b) => b.id)),
+          cells,
+          blocks: chosen.map((b) => b.name),
+          placements: chosen.reduce((sum, b) => sum + b.placements, 0),
+          fromTriangles: whole,
+        };
+      }
+    }
+    return null;
+  };
+
   const add = (
     object: File3dmObject,
     transform: Matrix,
     inherited: { name: string; color?: string; sourceId?: string } | null,
     depth: number,
+    cells: number | null = null,
   ) => {
     const attributes = object.attributes();
     // The object in the file this part comes from: for a block's parts, the block instance placed in the model.
@@ -273,7 +405,7 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
       );
       for (const id of ids) {
         const child = file.objects().findId(id);
-        if (child) add(child, matrix, next, depth + 1);
+        if (child) add(child, matrix, next, depth + 1, cells ?? cellsFor(definition.id as string));
         else skipped.blocks++;
       }
       return;
@@ -284,7 +416,12 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
     if (kind !== T.Mesh && kind !== T.Brep && kind !== T.Extrusion && kind !== T.Curve)
       return void skipped.unsupported++;
 
-    const mesh = kind === T.Curve ? curveOf(geometry) : meshOf(geometry);
+    const mesh =
+      kind === T.Curve
+        ? curveOf(geometry)
+        : cells !== null
+          ? reducedOf(attributes.id as string, geometry, cells)
+          : meshOf(geometry);
     if (!mesh) return void (kind === T.Curve ? skipped.curves++ : skipped.noMesh++);
     if (kind === T.Curve) curvesDrawn++;
     const count = mesh.indices.length / 3;
@@ -325,9 +462,19 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
     });
   };
 
-  const objects = file.objects();
-  for (let i = 0; i < objects.count; i++) {
-    add(objects.get(i), IDENTITY, null, 0);
+  const addAll = () => {
+    skipped = NO_SKIPS();
+    parts = [];
+    triangles = 0;
+    overLimit = false;
+    curvesDrawn = 0;
+    const objects = file.objects();
+    for (let i = 0; i < objects.count && !overLimit; i++) add(objects.get(i), IDENTITY, null, 0);
+  };
+  addAll();
+  if (overLimit) {
+    reduction = planReduction();
+    if (reduction) addAll();
     if (overLimit) {
       return {
         ok: false,
@@ -348,6 +495,15 @@ function convertFile(rhino: RhinoModule, file: File3dm, limits: ImportLimits): C
       skipped,
       units,
       triangles,
+      ...(reduction
+        ? {
+            simplified: {
+              blocks: reduction.blocks,
+              placements: reduction.placements,
+              fromTriangles: reduction.fromTriangles,
+            },
+          }
+        : {}),
     },
   };
 }

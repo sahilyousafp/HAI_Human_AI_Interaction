@@ -116,7 +116,7 @@ export function rhinoBatch(partial: Partial<RhinoBatch> = {}): RhinoBatch {
   return {
     changed: [],
     deleted: [],
-    notDrawn: { curves: 0, points: 0, annotations: 0, other: 0, heavy: 0 },
+    notDrawn: { curves: 0, points: 0, annotations: 0, other: 0, heavy: 0, simplified: 0 },
     sync: null,
     reset: false,
     changedAt: Date.now(),

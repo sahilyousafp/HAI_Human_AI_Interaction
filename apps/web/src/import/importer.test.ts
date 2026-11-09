@@ -185,6 +185,22 @@ describe("ModelImporter", () => {
     );
   });
 
+  it("summarise says what was simplified, so the view does not pass for the whole model", () => {
+    const text = summarise({
+      ...report(14),
+      triangles: 4_200_000,
+      simplified: {
+        blocks: ["Tree0", "Tree1", "Tree2", "Tree3", "Cypress"],
+        placements: 2430,
+        fromTriangles: 263_600_000,
+      },
+    });
+    expect(text).toContain("263.6 million triangles");
+    expect(text).toContain(
+      "2430 placements of Tree0, Tree1, Tree2 and 2 more are simplified, 4.2 million in all.",
+    );
+  });
+
   it("summarise says when the units were assumed", () => {
     const text = summarise({ ...report(1), units: { name: "millimetres", mm: 1, assumed: true } });
     expect(text).toMatch(/millimetres are assumed/);

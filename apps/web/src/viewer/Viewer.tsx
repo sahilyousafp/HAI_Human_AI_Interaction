@@ -91,7 +91,7 @@ import type { VoiceInput, VoiceState } from "../voice/voice-input.ts";
 import { type ApprovalBadge, ApprovalBadges } from "./ApprovalBadges.tsx";
 import { SUN_DISTANCE, takeShots, USER_ONLY } from "./agent-shot.ts";
 import { type CameraMarker, CameraMarkers } from "./camera-markers.tsx";
-import { elementGeometry, MM, modelGeometry, radians, sceneBounds } from "./geometry.ts";
+import { elementGeometry, framingBounds, MM, modelGeometry, radians, sceneBounds } from "./geometry.ts";
 import type { LatencyTracker } from "./latency.ts";
 import { coast, initialInput, movesCamera, type NavigationInput, navigate } from "./navigation.ts";
 import {
@@ -553,10 +553,17 @@ function ElementMesh({
         }}
       >
         <meshStandardMaterial
+          // The model's mesh arrives after its placeholder is drawn, and flat shading and sides are built into the shader:
+          // changed on the same material, the mesh would keep the placeholder's and be lit as if every face looked up.
+          key={model !== null ? "model" : "built"}
           color={color}
           roughness={0.9}
           metalness={0}
           flatShading={model !== null}
+          // A Rhino model can be open surfaces with no inside, and Rhino shows both sides of them.
+          side={model !== null ? THREE.DoubleSide : THREE.FrontSide}
+          // Shadows stay as they were for one side: from both, a surface shades itself in a moire over the whole model.
+          shadowSide={THREE.BackSide}
           {...(glow ? { emissive: glow, emissiveIntensity: 0.6 } : {})}
         />
         {showEdges && <Edges threshold={20} color={glow ?? owner ?? colors.edge} />}
@@ -654,7 +661,9 @@ function CameraRig({
       cast(x, y);
       const cut = sectionRef.current;
       for (const h of raycaster.intersectObjects(scene.children, true)) {
-        const id = h.object.userData.elementId;
+        // A block drawn many times in one call: which placement was hit.
+        const batched = h.object.userData.elementIds as string[] | undefined;
+        const id = batched ? batched[h.instanceId ?? -1] : h.object.userData.elementId;
         if (typeof id !== "string") continue;
         if (cut !== null && h.point.z / MM > cut + 1) continue; // hidden above the section
         return { elementId: id, point: [h.point.x / MM, h.point.y / MM, h.point.z / MM] };
@@ -693,7 +702,7 @@ function CameraRig({
       scene.traverse((object) => {
         const id = object.userData.elementId;
         const mesh = object as THREE.Mesh;
-        if (typeof id !== "string" || !mesh.isMesh || !mesh.visible) return;
+        if (typeof id !== "string" || !mesh.isMesh || !mesh.visible || object.userData.elementIds) return;
         if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
         const local = mesh.geometry.boundingBox;
         if (!local) return;
@@ -1181,7 +1190,7 @@ export function Viewer({
     if (!ids || !doc || !ids.every((id) => doc.elements[id])) return;
     framePending.current = null;
     const geometries = ids.map((id) => elementGeometry(doc.elements[id] as Element, doc.levels));
-    const { min, max } = sceneBounds(geometries);
+    const { min, max } = framingBounds(geometries);
     for (const g of geometries) g.dispose();
     nav.current = frameBox(min, max);
     invalidateRef.current();
@@ -1198,7 +1207,7 @@ export function Viewer({
     if (geometries.length === 0) {
       nav.current = frameBox([-15, -15, 0], [15, 15, 5]);
     } else {
-      const { min, max } = sceneBounds(geometries);
+      const { min, max } = framingBounds(geometries);
       nav.current = frameBox(min, max);
     }
     for (const g of geometries) g.dispose();
@@ -1335,7 +1344,7 @@ export function Viewer({
   useEffect(() => {
     if (rhinoSynced === syncedSeen.current) return;
     syncedSeen.current = rhinoSynced;
-    const box = mirror.bounds();
+    const box = mirror.framingBounds();
     if (!box) return;
     nav.current = frameBox(
       [box.min[0] * MM, box.min[1] * MM, box.min[2] * MM],

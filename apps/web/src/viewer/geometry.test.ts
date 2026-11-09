@@ -1,7 +1,7 @@
 import type { Element, Level } from "@hai/protocol";
-import type * as THREE from "three";
+import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { elementGeometry } from "./geometry.ts";
+import { elementGeometry, framingBounds } from "./geometry.ts";
 
 const levels: Level[] = [
   { id: "L0", name: "G", elevation: 0 },
@@ -78,5 +78,25 @@ describe("element geometry (millimetres in, metres out, Z up)", () => {
     });
     expect((b.min.x + b.max.x) / 2).toBeCloseTo(4, 6);
     expect(b.max.z).toBeCloseTo(4.5, 6);
+  });
+});
+
+describe("framingBounds", () => {
+  const box = (x: number, size: number) => new THREE.BoxGeometry(size, size, size).translate(x, 0, 0);
+  const building = [box(0, 10), box(20, 10), box(40, 10), box(60, 10), box(80, 10)];
+
+  it("leaves out a backdrop far larger than the model's typical element", () => {
+    const { min, max } = framingBounds([...building, box(0, 5000)]);
+    expect(min[0]).toBe(-5);
+    expect(max[0]).toBe(85);
+  });
+
+  it("keeps a big element that is in scale with the rest, such as a site slab", () => {
+    expect(framingBounds([...building, box(0, 60)]).max[0]).toBe(85);
+    expect(framingBounds([...building, box(0, 60)]).min[0]).toBe(-30);
+  });
+
+  it("frames everything when there are too few elements to tell what is typical", () => {
+    expect(framingBounds([box(0, 10), box(0, 5000)]).max[0]).toBe(2500);
   });
 });

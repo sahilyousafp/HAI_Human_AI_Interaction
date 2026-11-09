@@ -2,6 +2,7 @@ import type { Element, Level, Point3Mm } from "@hai/protocol";
 import { elementBase, importedPlacement, type MeshPart } from "@hai/scene";
 import * as THREE from "three";
 import { polylineLength, tubeAlong, tubeRadiusMm } from "../import/curve-tube.ts";
+import { withoutBackdrops } from "./backdrop.ts";
 
 /** Scene units are millimetres; the viewer works in metres. */
 export const MM = 0.001;
@@ -94,6 +95,19 @@ export function modelGeometry(mesh: MeshPart): THREE.BufferGeometry {
   for (let i = 2; i < up.length; i += 4) up[i] = 127;
   g.setAttribute("normal", new THREE.BufferAttribute(up, 4, true));
   return g;
+}
+
+/** The bounds to frame on opening a model: without any backdrop. */
+export function framingBounds(geometries: THREE.BufferGeometry[]): {
+  min: [number, number, number];
+  max: [number, number, number];
+} {
+  return sceneBounds(
+    withoutBackdrops(geometries, (g) => {
+      g.computeBoundingBox();
+      return g.boundingBox ? g.boundingBox.getSize(new THREE.Vector3()).length() : 0;
+    }),
+  );
 }
 
 /** Bounding box of all elements, metres. */

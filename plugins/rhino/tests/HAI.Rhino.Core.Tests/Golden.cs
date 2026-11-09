@@ -36,6 +36,20 @@ namespace HAI.Rhino.Core.Tests
         /// <summary>A message the bridge sends the plugin, as the TypeScript test also reads it.</summary>
         public static string Read(string name) => File.ReadAllText(Path.Combine(Folder(), name));
 
+        /// <summary>A text file, compared with the file of that name.</summary>
+        public static void Text(string name, string actual)
+        {
+            var path = Path.Combine(Folder(), name);
+            if (Updating)
+            {
+                File.WriteAllText(path, actual);
+                return;
+            }
+
+            Assert.True(File.Exists(path), $"Missing fixture {name}; run the tests with HAI_UPDATE_FIXTURES=1 to write it.");
+            Assert.Equal(File.ReadAllText(path).Replace("\r\n", "\n"), actual);
+        }
+
         public static void Bytes(string name, byte[] actual)
         {
             var path = Path.Combine(Folder(), name);

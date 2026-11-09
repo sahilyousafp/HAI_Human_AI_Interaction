@@ -124,4 +124,70 @@ namespace HAI.Rhino.Core.Tests
             Assert.True(failed.Error!.Length <= 10_000, "the bridge refuses an error over 10 000 characters");
         }
     }
+
+    public class PythonWrapperTests
+    {
+        private static readonly string[] NoPackages = new string[0];
+
+        [Fact]
+        public void TheWrapperIsTheOneTheContractTestRuns() =>
+            Golden.Text("python-wrapper.py", PythonWrapper.Compose(NoPackages, "CODE_PATH", "RESULT_PATH", 1000));
+
+        [Fact]
+        public void ItAsksRhinoForTheApprovedPackagesFirstAndNothingElse()
+        {
+            var lines = PythonWrapper.Compose(new[] { "numpy==2.1", "shapely" }, "c", "r", 1000).Split('\n');
+            Assert.Equal("#! python 3", lines[0]);
+            Assert.Equal("# r: numpy==2.1, shapely", lines[1]);
+            Assert.Single(lines, line => line.StartsWith("# r:", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void WithoutPackagesThereIsNoRequirementLine() =>
+            Assert.DoesNotContain("# r:", PythonWrapper.Compose(NoPackages, "c", "r", 1000));
+
+        [Fact]
+        public void APathIsAPythonStringWhateverItHolds()
+        {
+            var text = PythonWrapper.Compose(NoPackages, "C:\\a b\\\"code\".py", "r", 1000);
+            Assert.Contains("_hai_run(\"C:\\\\a b\\\\\\\"code\\\".py\", \"r\", 1)", text);
+        }
+
+        [Fact]
+        public void TheTimeLimitIsInSecondsWhateverTheLanguageOfTheMachine() =>
+            Assert.EndsWith(", 2.5)\n", PythonWrapper.Compose(NoPackages, "c", "r", 2500));
+
+        [Fact]
+        public void AFinishedRunGivesItsOutputAndResult()
+        {
+            var answer = PythonWrapper.Answer("r", "{\"stdout\":\"hi\\r\\n\",\"result\":\"2\",\"error\":null}", "", TimeSpan.Zero);
+            Assert.True(answer.Ok);
+            Assert.Equal("hi\n", answer.Stdout);
+            Assert.Equal("2", answer.Result);
+        }
+
+        [Fact]
+        public void AFailedRunGivesItsOutputAndError()
+        {
+            var answer = PythonWrapper.Answer("r", "{\"stdout\":\"so far\",\"result\":null,\"error\":\"ValueError: no\"}", "", TimeSpan.Zero);
+            Assert.False(answer.Ok);
+            Assert.Equal("so far", answer.Stdout);
+            Assert.Equal("ValueError: no", answer.Error);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("not json")]
+        public void WithoutAnAnswerWhatRhinoPrintedIsTheError(string? written)
+        {
+            var answer = PythonWrapper.Answer("r", written, " Could not install numpy\n", TimeSpan.Zero);
+            Assert.False(answer.Ok);
+            Assert.Equal("Could not install numpy", answer.Error);
+        }
+
+        [Fact]
+        public void WithNothingAtAllItStillSaysSo() =>
+            Assert.Equal("Rhino did not run the script.", PythonWrapper.Answer("r", null, "", TimeSpan.Zero).Error);
+    }
 }

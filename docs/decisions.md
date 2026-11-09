@@ -327,6 +327,54 @@ What it still gets wrong: "Bake" as "Make", "Column" as "Colon" (one voice of tw
 
 **Not done.** Groups of mirrored Rhino objects. Entering a group to pick one member. A partly hidden group acts on what is shown.
 
+## Rhino 9, and the plugin's first run in a real Rhino (2026-11-04)
+
+**Question.** Rhino 9 is out. Should HAI move to it, and does that change the approach?
+
+**Decision.** Keep the approach: HAI's own viewer and its own plugin that mirrors Rhino. McNeel's RhinoAI, now built into Rhino 9, gives an agent Python, C# and Grasshopper tools, but its tool list has no live mirror and no ownership tracking, and HAI needs both. Support Rhino 8 and Rhino 9 from one build, targeting `net8.0` and `net48` as RhinoAI does. The guide says `net10.0` for Rhino 9, but the RhinoCommon 9 package checked offered only `net8.0` and `net48`.
+
+**How Python runs.** Through `_-ScriptEditor _Run`, the route RhinoAI uses on Rhino 8. It is one code path for both versions, and Rhino brings its own Python and installs the `# r:` packages. Rhino reports a script's output and errors only as command window text, which RhinoAI parses. HAI runs the script from a small wrapper instead (`PythonWrapper`), which captures them and writes them to a file, so they come back as data with no parsing. RhinoAI's in-process route on Rhino 9 (`Rhino.Runtime.Code`, the `RhinoCode` package) would also work, but it is only available to compile against as a Rhino 9 package, needs a second build, and could not be tested here.
+
+**Measured (Rhino 8.36, .NET 10.0.2, Python 3.9.10, Windows 11, three full rounds through the bridge; then one round on Rhino 9.0.26300 evaluation, .NET 10.0.2, Python 3.13.13, with the same results and the same build).** A trivial script usually answers in 30 to 60 ms, with some up to about 110 ms and the first up to about 370 ms. The plugin loads, connects and mirrors with its mesh. Objects a script adds carry `hai.owner` and `hai.part`, and one undo reverts a two-object run. An error comes back with its output and a traceback of only the agent's lines. An infinite loop with a 2 s limit answered at about 2.06 s, and the next script ran.
+
+**Not verified.**
+
+- `# r:` packages in a real Rhino: not run, to avoid installing packages into the owner's Rhino without asking.
+- A script arriving during a Rhino command, and the viewer showing a real Rhino's mirror.
+- Once, in the first attempt with the runner, Rhino closed by itself a few seconds after six trivial scripts, with nothing in the Windows event log. It did not happen in the next four rounds, and the cause is unknown. Those six scripts were also unusually slow (0.5 to 1.5 s).
+
+**Reading Rhino 9 files.** `rhino3dm` 8.35.0 (the newest on npm and PyPI) reads a real version 9 `.3dm`: all 4087 objects, layers and block definitions of `Taj_by_rhino.3dm`, with their render meshes. It was refused on import for its size and not its version: it has 263.6 million triangles once its blocks are expanded, against the limit of 5 million. Over 99% of them are trees and cypresses, placed as blocks: the model holds 2492 block instances of 15 definitions, and the building alone is about 0.85 million triangles.
+
+**Side effects to know about.** Starting Rhino can start its own updater (this machine went from 8.35 to 8.36 during the first attempt).
+
+**A wrong file opened.** The first run with the Taj file opened another of the owner's files. Rhino's Open refused the path as spelled, with forward slashes, and the Enter the plugin sent to end the command then opened the most recent file. The plugin now makes the path native and checks that it exists first (`Session.OpenFile`).
+
+**Heavy repeated blocks are simplified.** Raising the limit does not help, since a browser cannot draw 263 million triangles. Two ways were offered: low-detail copies of the repeated blocks, or one drawn copy of each shape reused on the graphics card with distant ones simplified. The first was recommended and the owner said to continue, without choosing outright: it is much less work and opens quickly, and the second would still have to draw hundreds of millions of triangles up close on a laptop. How it works is in [import.md](import.md#a-model-over-the-limit). The Taj model imports in about 7 s at 3.5 million triangles. While orbiting it the viewer rendered about 60 frames per second on this machine's integrated Intel Arc 140T (measured with `renders()` during the drag: an idle view renders nothing, so a frame count at rest says nothing).
+
+**Open surfaces are drawn from both sides.** A Rhino model can be surfaces with no inside (82 of the mosque's sandstone parts in that file), and one seen from behind was neither drawn nor pickable, which Rhino's shaded view does not do. `e2e/import.spec.ts` reproduces it. Shadows stay one-sided: from both sides, surfaces shade themselves in a moire over the whole model.
+
+**Framing leaves out backdrops.** That file's sky dome is 5.6 km across, so the view framed on import showed a speck of building, and put the camera's target 1.3 km in the air, where zooming in never reached the model. Framing now leaves out an element over 8 times the size of the typical one (`framingBounds`). The mirror frames the same way, and also leaves out blocks placed 8 or more times, since planting can spread for kilometres around a building.
+
+## Imported models were lit as if every face looked up (2026-11-04)
+
+**Found by comparing.** Through the mirror, the Taj model's mosque had walls, towers and ribbed domes. Imported, the same triangles were flat fills: walls melted into the plinth and domes were plain silhouettes. Before that comparison this was put down to the lighting of one colour at different angles, which was wrong, and the owner was told so.
+
+**Cause.** An imported element is first drawn as a box, from geometry with smooth shading, until its mesh arrives. Flat shading and sides are built into the shader, so setting them on the existing material did nothing without a rebuild, and the mesh kept the box's shader. A mesh's normals are placeholders that all point up, since flat shading is meant to work them out, so every face was lit as if it looked up. It has been so for every imported model. A test that only checked for not being black could not see it.
+
+**Fix.** The material has a different `key` once the mesh is there, so it is made new. `e2e/import.spec.ts` compares two sunlit faces of a box of one colour: 25 levels apart with the fix, none without it.
+
+## Blocks in the mirror (2026-11-04)
+
+**Decision.** A block is one asset in the block's own coordinates, with one part per colour, and each placement is an object naming it with a `transform` and `partColors`. The bridge already counted the uses of an asset. It now takes the new use before releasing the old, since a moved placement names the mesh it already has. Sending a mesh per placement would have meant 2481 uploads where 15 do.
+
+**Simplifying** follows the importer's rule (`BlockBudget`, `MeshReducer`, the same rule in C#). The plan is made when a document is first sent and again when a placement is added or removed; if that changes what is simplified, all placements are sent again.
+
+**Drawing.** With a mesh object per placement part, about 5000 draw calls, orbiting ran at about 20 frames per second. Blocks placed 8 or more times are now one `InstancedMesh` per part; hover, selection and owner tags take a placement out of the batch, so it looks as any other object does.
+
+**Measured, real Rhino 9.0, plugin and viewer together, Taj model, Intel Arc 140T.** 3180 objects (697 Breps, 2 meshes, 2481 placements), 3.4 million triangles, 714 assets, no boxes, about 15 s. Orbiting: about 24 frames per second, against about 60 for the same model imported, where it is 19 merged elements. Batching barely moved it, so the draw calls of the batched blocks were not the main cost. The likely remainder is the 697 Breps and non-repeated placements with a mesh and material each, drawn twice for shadows, but this was not measured.
+
+**Not verified.** Editing a block or changing a layer live in Rhino, and adding placements until the plan changes: written, not run on a real Rhino. Hand picking on a real model. Rhino 8 with blocks, though it shares the code.
+
 ## The face is tracked only while a nod or a shake can answer (2026-11-09)
 
 **Question.** The owner reported that the pinch misbehaves when the hand crosses the face, and asked for face tracking to be off unless it is needed.

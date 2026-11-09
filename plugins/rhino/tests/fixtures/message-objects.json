@@ -48,6 +48,50 @@
         "asset": null,
         "triangles": 0,
         "tags": {}
+      },
+      {
+        "id": "b3e5d7f9-0000-4000-8000-000000000003",
+        "name": "Tree",
+        "type": "block",
+        "layer": "Garden",
+        "color": "#325023",
+        "bounds": {
+          "min": [
+            9000.0,
+            0.0,
+            0.0
+          ],
+          "max": [
+            13000.0,
+            4000.0,
+            6000.0
+          ]
+        },
+        "asset": "1f8fad5b-d9cb-469f-a165-70867728950e",
+        "triangles": 800,
+        "transform": [
+          1.0,
+          0.0,
+          0.0,
+          11000.0,
+          0.0,
+          1.0,
+          0.0,
+          2000.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "partColors": [
+          "#463223",
+          null
+        ],
+        "tags": {}
       }
     ],
     "deleted": [
@@ -58,7 +102,8 @@
       "points": 0,
       "annotations": 1,
       "other": 0,
-      "heavy": 1
+      "heavy": 1,
+      "simplified": 40
     },
     "sync": {
       "done": 2,

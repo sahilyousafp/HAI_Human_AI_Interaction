@@ -1,4 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseMessage } from "../packages/protocol/src/index.ts";
@@ -138,5 +140,69 @@ describe("the mesh asset the plugin writes", () => {
     const header = JSON.parse(new TextDecoder().decode(bytes.subarray(12, 12 + headerLength)));
     expect(header.parts[0].bounds).toEqual({ min: [0, 0, 0], max: [2000, 1000, 3000] });
     expect((12 + headerLength) % 4).toBe(0);
+  });
+});
+
+// The wrapper the plugin gives Rhino's ScriptEditor, run by a plain Python with stand-ins for Rhino's two modules. Real
+// Rhino runs are in docs/rhino.md; what is checked here is what comes back to the agent.
+const python = ["python", "python3"].find((name) => spawnSync(name, ["--version"]).status === 0);
+
+describe.skipIf(!python)("the wrapper around an agent's script", () => {
+  const run = (code, timeoutSeconds = 30) => {
+    const folder = mkdtempSync(join(tmpdir(), "hai-wrapper-"));
+    try {
+      const codePath = join(folder, "agent_script.py");
+      const resultPath = join(folder, "result.json");
+      const wrapperPath = join(folder, "run.py");
+      writeFileSync(join(folder, "Rhino.py"), "class RhinoDoc:\n    ActiveDoc = 'the document'\n");
+      writeFileSync(join(folder, "scriptcontext.py"), "doc = None\n");
+      writeFileSync(codePath, code);
+      writeFileSync(
+        wrapperPath,
+        readFileSync(join(fixtures, "python-wrapper.py"), "utf8")
+          .replace('"CODE_PATH"', JSON.stringify(codePath))
+          .replace('"RESULT_PATH"', JSON.stringify(resultPath))
+          .replace(/, 1\)\n$/, `, ${timeoutSeconds})\n`),
+      );
+      const ran = spawnSync(python, [wrapperPath], { encoding: "utf8", timeout: 20_000 });
+      expect(ran.status, ran.stderr).toBe(0);
+      expect(ran.stdout, "nothing of the script reaches Rhino's command window").toBe("");
+      return JSON.parse(readFileSync(resultPath, "utf8"));
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  };
+
+  it("captures output and errors printed, and the value of result as text", () => {
+    const out = run("import sys\nprint('hi')\nprint('oops', file=sys.stderr)\nresult = {'a': 1}\n");
+    expect(out).toEqual({ stdout: "hi\noops\n", result: "{'a': 1}", error: null });
+  });
+
+  it("gives the script the document, in both of the ways scripts ask for it", () => {
+    const out = run("import scriptcontext\nresult = __rhino_doc__ + ' / ' + scriptcontext.doc\n");
+    expect(out.result).toBe("the document / the document");
+  });
+
+  it("reports an error from the script's own lines, keeping the output so far", () => {
+    const out = run("print('before')\n1 / 0\n");
+    expect(out.stdout).toBe("before\n");
+    expect(out.error).toContain('File "agent_script.py", line 2');
+    expect(out.error).toContain("ZeroDivisionError");
+    expect(out.error).not.toContain("_hai_run");
+  });
+
+  it("reports a syntax error", () => {
+    expect(run("def (\n").error).toContain("SyntaxError");
+  });
+
+  it("does not take sys.exit() for a failure, unless it says so", () => {
+    expect(run("import sys\nsys.exit()\n").error).toBeNull();
+    expect(run("import sys\nsys.exit(3)\n").error).toBe("The script exited with 3");
+  });
+
+  it("stops a loop at the time limit and says why", () => {
+    const out = run("print('started')\nwhile True:\n    pass\n", 0.2);
+    expect(out.stdout).toBe("started\n");
+    expect(out.error).toContain("ran past its time limit");
   });
 });

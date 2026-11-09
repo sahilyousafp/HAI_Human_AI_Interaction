@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
@@ -314,4 +315,136 @@ test("a detailed model is drawn in its colours, not black, and its selection sho
   await page.evaluate((id) => window.__HAI_SCENE__?.select([id]), ids[0] as string);
   await page.waitForTimeout(500);
   await expect(page.getByTestId("selection-status")).toContainText(`Group of ${ids.length}`);
+});
+
+test("an open surface can be seen and picked from behind, as in Rhino's shaded view", async ({ page }) => {
+  await start(page);
+  // One square high above the sample model, its front facing the ground, so the camera above sees only its back.
+  const require = createRequire(join(import.meta.dirname, "..", "apps", "web", "package.json"));
+  const rhino = await (
+    require("rhino3dm") as () => Promise<{
+      File3dm: new () => {
+        settings(): { modelUnitSystem: unknown };
+        objects(): { addMesh(mesh: unknown, attributes: unknown): void };
+        toByteArray(): Uint8Array;
+      };
+      Mesh: new () => {
+        vertices(): { add(x: number, y: number, z: number): void };
+        faces(): { addTriFace(a: number, b: number, c: number): void };
+      };
+      ObjectAttributes: new () => unknown;
+      UnitSystem: { Millimeters: unknown };
+    }>
+  )();
+  const file = new rhino.File3dm();
+  file.settings().modelUnitSystem = rhino.UnitSystem.Millimeters;
+  const square = new rhino.Mesh();
+  for (const [x, y] of [
+    [-10_000, -10_000],
+    [-10_000, 10_000],
+    [10_000, 10_000],
+    [10_000, -10_000],
+  ] as const)
+    square.vertices().add(x, y, 40_000);
+  square.faces().addTriFace(0, 1, 2);
+  square.faces().addTriFace(0, 2, 3);
+  file.objects().addMesh(square, new rhino.ObjectAttributes());
+  await page.getByTestId("import-input").setInputFiles({
+    name: "back-to-the-camera.3dm",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from(file.toByteArray()),
+  });
+  await expect.poll(() => importedElements(page).then((e) => e.length), { timeout: 30_000 }).toBe(1);
+  const [element] = await importedElements(page);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const viewer = window.__HAI_VIEWER__;
+          const at = viewer?.project([0, 0, 40_000]);
+          return at ? viewer?.pick(at[0], at[1]) : null;
+        }),
+      { timeout: 15_000 },
+    )
+    .toBe(element?.id);
+});
+
+test("an imported model is lit by the way each face looks, so a wall does not melt into the floor", async ({
+  page,
+}) => {
+  await start(page);
+  // One colour, one box high above the sample model: only the light can tell its faces apart.
+  const require = createRequire(join(import.meta.dirname, "..", "apps", "web", "package.json"));
+  const rhino = await (
+    require("rhino3dm") as () => Promise<{
+      File3dm: new () => {
+        settings(): { modelUnitSystem: unknown };
+        objects(): { addMesh(mesh: unknown, attributes: unknown): void };
+        toByteArray(): Uint8Array;
+      };
+      Mesh: new () => {
+        vertices(): { add(x: number, y: number, z: number): void };
+        faces(): { addTriFace(a: number, b: number, c: number): void };
+      };
+      ObjectAttributes: new () => unknown;
+      UnitSystem: { Millimeters: unknown };
+    }>
+  )();
+  const file = new rhino.File3dm();
+  file.settings().modelUnitSystem = rhino.UnitSystem.Millimeters;
+  const box = new rhino.Mesh();
+  const size = 20_000;
+  const base = 40_000;
+  for (const z of [base, base + size]) {
+    for (const [x, y] of [
+      [0, 0],
+      [size, 0],
+      [size, size],
+      [0, size],
+    ] as const)
+      box.vertices().add(x, y, z);
+  }
+  for (const [a, b, c, d] of [
+    [3, 2, 1, 0],
+    [4, 5, 6, 7],
+    [0, 1, 5, 4],
+    [1, 2, 6, 5],
+    [2, 3, 7, 6],
+    [3, 0, 4, 7],
+  ] as const) {
+    box.faces().addTriFace(a, b, c);
+    box.faces().addTriFace(a, c, d);
+  }
+  file.objects().addMesh(box, new rhino.ObjectAttributes());
+  await page.getByTestId("import-input").setInputFiles({
+    name: "one-colour-box.3dm",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from(file.toByteArray()),
+  });
+  await expect.poll(() => importedElements(page).then((e) => e.length), { timeout: 30_000 }).toBe(1);
+  await page.waitForTimeout(2000);
+
+  /** The colour on the canvas at each of these points, red, green and blue. */
+  const colours = (points: Array<[number, number, number]>) =>
+    page.evaluate((list) => {
+      const canvas = document.querySelector("[data-testid=viewer] canvas") as HTMLCanvasElement;
+      const copy = document.createElement("canvas");
+      copy.width = canvas.width;
+      copy.height = canvas.height;
+      const context = copy.getContext("2d") as CanvasRenderingContext2D;
+      context.drawImage(canvas, 0, 0);
+      return list.map((point) => {
+        const at = window.__HAI_VIEWER__?.project(point) ?? [0, 0];
+        const pixel = context.getImageData(at[0] * canvas.width, at[1] * canvas.height, 1, 1).data;
+        return [pixel[0] as number, pixel[1] as number, pixel[2] as number];
+      });
+    }, points);
+  const half = size / 2;
+  const [top, south] = await colours([
+    [half, half, base + size],
+    [half, 0, base + half],
+  ]);
+  // Both are in the sun, so only the light's angle can tell them apart. Lit as if all faces looked up, they came out equal.
+  const apart = Math.max(...[0, 1, 2].map((i) => Math.abs((top?.[i] ?? 0) - (south?.[i] ?? 0))));
+  expect(apart).toBeGreaterThan(4);
 });

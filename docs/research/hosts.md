@@ -19,7 +19,7 @@ Research date: 2026-10-19. Star counts are approximate (GitHub pages or aggregat
 
 ## 2. Rhino details
 
-- Rhino 8: new ScriptEditor with CPython 3 (likely 3.9) and C#. Rhino 9 (beta, open to Rhino 8 owners): CPython 3.13, .NET 10, Direct3D display on Windows, Grasshopper 2, Rhino.Compute on Linux, in-viewport UI SDK. Ship date unconfirmed; 8.33 (2026-07-07) is current stable.
+- Rhino 8: new ScriptEditor with CPython 3 (likely 3.9) and C#. Rhino 9 (beta, open to Rhino 8 owners): CPython 3.13, .NET 10, Direct3D display on Windows, Grasshopper 2, Rhino.Compute on Linux, in-viewport UI SDK. Released by 2026-11-04: McNeel's download page lists it as the latest version (no release date found). Rhino 8.36 itself reports .NET 10 at run time.
 - WebView2 panel works in Rhino 8+ via `Eto.Forms.WebView` in a registered panel. JS to Rhino via custom URI navigation interception in `DocumentLoading` + `ExecuteScript`. Forum reports of crashes in WebView-only dialogs and "WebView2 not found" cases. Pure Python panel hosting is awkward, so use C#.
 - MediaPipe inside Rhino's CPython: possible but wheel compatibility and UI-thread blocking make it a bad idea. Run tracking out of process.
 - DisplayConduit HUD 2D elements tile in a grid during scaled (>1) viewport captures.
@@ -68,4 +68,4 @@ Research date: 2026-10-19. Star counts are approximate (GitHub pages or aggregat
 
 ## Unverified
 
-Rhino 9 ship date; Revit MCP write scope; Speckle viewer licence; replicad / OCC.js / Manifold / CAD-Recode licences; MediaPipe fps on target laptop; overlay over Rhino 9 Direct3D.
+Revit MCP write scope; Speckle viewer licence; replicad / OCC.js / Manifold / CAD-Recode licences; MediaPipe fps on target laptop; overlay over Rhino 9 Direct3D.

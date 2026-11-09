@@ -323,9 +323,10 @@ export class RhinoLink {
         this.options.log?.info("rhino object skipped: its mesh was not uploaded", { id: object.id });
         continue;
       }
+      // The new use first: a block's placements share a mesh, and a moved placement names the one it already has.
+      if (object.asset) this.assetUses.set(object.asset, (this.assetUses.get(object.asset) ?? 0) + 1);
       this.release(this.objects.get(object.id));
       this.objects.set(object.id, object);
-      if (object.asset) this.assetUses.set(object.asset, (this.assetUses.get(object.asset) ?? 0) + 1);
       accepted.push(object);
     }
     for (const id of batch.deleted) {

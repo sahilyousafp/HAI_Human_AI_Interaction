@@ -186,6 +186,36 @@ describe("the discovery file", () => {
 });
 
 describe("the mirror", () => {
+  it("a block's placements share one mesh: it stays until the last of them goes, also when one is replaced", async () => {
+    await start();
+    const rhino = await connectFakeRhino(address, { token: TOKEN });
+    sockets.push(rhino.ws);
+    const asset = await rhino.uploadMesh();
+    const placement = (id: string, x: number) =>
+      rhinoObject(id, asset, { type: "block", transform: [1, 0, 0, x, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] });
+    const held = () => bridge?.rhino.mirroredObjects.map((o) => o.id).sort();
+    const settle = async (expected: string[]) => {
+      await expect.poll(held).toEqual(expected);
+    };
+
+    rhino.send(
+      "rhino.objects",
+      rhinoBatch({ reset: true, changed: [placement("a", 0), placement("b", 5000)] }),
+    );
+    await settle(["a", "b"]);
+    // One goes: the other still draws it.
+    rhino.send("rhino.objects", rhinoBatch({ deleted: ["a"] }));
+    await settle(["b"]);
+    expect(existsSync(mirrorFile(asset))).toBe(true);
+    // The only one left is moved, naming the mesh it already has: this must not lose it.
+    rhino.send("rhino.objects", rhinoBatch({ changed: [placement("b", 9000)] }));
+    await expect.poll(() => bridge?.rhino.object("b")?.transform?.[3]).toBe(9000);
+    expect(existsSync(mirrorFile(asset))).toBe(true);
+    rhino.send("rhino.objects", rhinoBatch({ deleted: ["b"] }));
+    await settle([]);
+    await expect.poll(() => existsSync(mirrorFile(asset))).toBe(false);
+  });
+
   it("a page connecting later gets Rhino's objects, and a change reaches a page already open", async () => {
     await start();
     const rhino = await rhinoClient();
@@ -246,7 +276,7 @@ describe("the mirror", () => {
       rhinoBatch({
         reset: true,
         changed: [rhinoObject("big", null)],
-        notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 1 },
+        notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 1, simplified: 0 },
       }),
     );
     const batch = await early.waitFor("rhino.objects");
