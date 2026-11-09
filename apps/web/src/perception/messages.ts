@@ -18,6 +18,11 @@ export type ToWorker =
       rawHands?: boolean;
       /** The camera sends a mirrored image (some phone webcam apps do): flip it back before tracking. */
       mirrored?: boolean;
+      /**
+       * Run face tracking. Off unless a nod or a shake can do something: the face model takes about a third of each
+       * frame, and with it off the hands get those frames back (a hand sweeping over the face is lost less often).
+       */
+      face?: boolean;
     };
 
 export type FromWorker =

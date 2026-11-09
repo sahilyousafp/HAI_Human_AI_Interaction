@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { gestureEvents, startCamera } from "../tracking.ts";
+import { frames, framesDuring, gestureEvents, startCamera } from "../tracking.ts";
 
 /** The parts of a recorded tracking frame (apps/web LandmarkRecorder) this test reads. */
 type TrackingFrame = {
@@ -67,4 +67,29 @@ test("a hand crossing the face keeps its label, two hands never share one, and n
 
   // Every pinch in this clip is lost mid-sweep or held: none of them is a tap.
   expect((await gestureEvents(page)).filter((e) => e.type === "pinch.tap")).toEqual([]);
+});
+
+test("the face is tracked only while a nod or a shake can answer something", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+  await startCamera(page);
+  // Nothing waits for a yes or a no: the hands sweep over the face with no face model in the way.
+  const idle = await framesDuring(page, 3000);
+  expect(idle.filter((f) => f.faceRan).map((f) => f.seq)).toEqual([]);
+
+  // A question a nod or a shake answers: the face in the clip is tracked.
+  const askedAt = (await frames(page)).at(-1)?.seq ?? -1;
+  await page.evaluate(() => window.__HAI_TOOLS__?.confirm("Delete Wall 1?", () => {}));
+  await expect
+    .poll(async () => (await frames(page)).filter((f) => f.seq > askedAt && f.face).length, {
+      timeout: 30_000,
+    })
+    .toBeGreaterThan(5);
+
+  // Answered: the face stops again (a frame or two already under way may still carry it).
+  await page.evaluate(() => window.__HAI_TOOLS__?.respond(false));
+  const answeredAt = ((await frames(page)).at(-1)?.seq ?? -1) + 2;
+  const after = (await framesDuring(page, 2000)).filter((f) => f.seq > answeredAt);
+  expect(after.length).toBeGreaterThan(5);
+  expect(after.filter((f) => f.faceRan).map((f) => f.seq)).toEqual([]);
 });

@@ -37,6 +37,11 @@ export interface GestureConfig {
      */
     tapOpen: number;
     tapOpenMs: number;
+    /**
+     * A pinch whose palm is more than this fraction of the frame width from the frame before, in the frame where it
+     * opens, was lost rather than opened (another hand, or a bad fit, took its label), so it is never a tap.
+     */
+    releaseJumpMax: number;
   };
   posture: {
     /** Tip-to-wrist / knuckle-to-wrist above this means the finger is extended. */
@@ -102,6 +107,9 @@ export const DEFAULT_GESTURES: GestureConfig = {
     holdMaxMove: 0.04,
     tapOpen: 0.3,
     tapOpenMs: 200,
+    // As fingers open the palm stays put: 0.001-0.006 on still pinches, up to 0.043 when released mid-sweep. Hands
+    // that jumped to another place, all on test-assets/clips/hand-cross-face.mp4, moved 0.167-0.179.
+    releaseJumpMax: 0.1,
   },
   posture: { extended: 1.35, curled: 1.15, thumbSpread: 0.45, palmFacing: 0.5 },
   clutch: { debounceMs: 100, moveMin: 0.03 },

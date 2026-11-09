@@ -326,3 +326,15 @@ What it still gets wrong: "Bake" as "Make", "Column" as "Colon" (one voice of tw
 **A preview now ends when the model changes.** Move kept its preview after a commit, relying on it only applying while an element still matched what it was made from, so that nothing jumps back for a frame. But Undo brings an element back to exactly that, so the old preview came alive and the model was drawn at the moved place while the scene said otherwise (`e2e/groups.spec.ts`). The preview still bridges the wait for the change, and is cleared when it arrives.
 
 **Not done.** Groups of mirrored Rhino objects. Entering a group to pick one member. A partly hidden group acts on what is shown.
+
+## The face is tracked only while a nod or a shake can answer (2026-11-09)
+
+**Question.** The owner reported that the pinch misbehaves when the hand crosses the face, and asked for face tracking to be off unless it is needed.
+
+**What was measured.** Played through the fake camera, the hand-cross-face clip ran at 14 fps with the face model on every other frame and 19 fps with it off (the face model and the hands share one worker, one frame at a time). No stray nod or shake fired on that clip, but a hand over the face throws the head pose about, and a shake with nothing waiting cancels the tool, which drops a drag in progress: a lasso or a move simply stops.
+
+**What it does now.** `face-demand.ts` decides, from the stores, whether a nod or a shake can do something: a spoken request under review or just sent, an approval card, a panel offer, or the tool's question. Only then does the worker run the face model; it is still loaded when the camera starts, so it is ready the moment a question appears. A nod or shake bound to a command keeps it on all the time, and **Nod and shake** switched off keeps it off. The cost: a nod no longer finishes a line, and a shake no longer cancels a tool with nothing waiting. Enter, the check mark, Escape and the fist hold still do.
+
+**A freeze found on the way.** With the face off, the "no stray tap" check on the same clip failed about one session in three. The cause was older: the speech detector (`@ricky0123/vad-web`) builds its ONNX runtime on the page, and it was built at the first engagement, holding the main thread, where camera frames are taken, for about 0.4 s just as the hands began to pinch. A pinch hidden by the freeze started too late to join the other hand's, and came out as a tap. ONNX Runtime's proxy worker would have moved the work off the page, but vad-web bundles its own copy of the runtime, which cannot find its script to start one. So the detector is now built when the camera starts, while the hand model loads and before any gesture can be made: the longest gap between frames on the clip went from 370 to about 110 ms.
+
+**Not verified.** With a real camera and a real face. The lasso the owner also reported breaking was not reproduced: on the clip, hands were unseen for more than 250 ms (which ends a drag) about as often with the face off as on, so the fix may not reach it.

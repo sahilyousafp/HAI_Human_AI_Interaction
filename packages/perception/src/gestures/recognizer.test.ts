@@ -2,7 +2,7 @@ import type { GestureEvent, HeadPose, TrackedHand, TrackingFrame } from "@hai/pr
 import { describe, expect, it } from "vitest";
 import { loadFixture } from "../testing/fixtures.ts";
 import { DEFAULT_GESTURES } from "./config.ts";
-import { pinchRatio, posture } from "./features.ts";
+import { palmPoint, pinchRatio, posture } from "./features.ts";
 import { countReversals } from "./head-machine.ts";
 import { GestureRecognizer } from "./recognizer.ts";
 
@@ -173,6 +173,12 @@ const openLeft = mirrorToLeft(openRight);
 const fistRight = template("two-hands", (h) => h.handedness === "Right" && posture(h) === "fist");
 const fistLeft = mirrorToLeft(fistRight);
 const neutralLeft = mirrorToLeft(neutralRight);
+/** A hand opened where `pinched` pinched: fingers opening leave the palm in place (a jump would be a lost hand). */
+const openedFrom = (open: TrackedHand, pinched: TrackedHand): TrackedHand => {
+  const [ox, oy] = palmPoint(open);
+  const [px, py] = palmPoint(pinched);
+  return shift(open, ox - px, py - oy); // palmPoint is mirrored (as seen on screen), the image is not
+};
 
 describe("stop (spec: both fists, then both hands opened, stop the agents)", () => {
   const fists = (n: number) => repeat(n, { hands: [fistLeft, fistRight] });
@@ -235,7 +241,7 @@ describe("independent hands (spec: two pinches are one gesture only when they st
       ...repeat(4, { hands: [neutralLeft, neutralRight] }),
       ...repeat(30, { hands: [neutralLeft, pinchRight] }), // right holds (long pinch at 800 ms)
       ...repeat(6, { hands: [pinchLeft, pinchRight] }), // left pinches while the right still holds
-      ...repeat(4, { hands: [neutralLeft, pinchRight] }), // left lets go
+      ...repeat(4, { hands: [openedFrom(neutralLeft, pinchLeft), pinchRight] }), // left lets go
     ]);
     expect(events).toContainEqual(expect.objectContaining({ type: "pinch.hold", hand: "Right" }));
     expect(twoHandStarts(events)).toEqual([]);
@@ -248,7 +254,9 @@ describe("independent hands (spec: two pinches are one gesture only when they st
       ...repeat(4, { hands: [neutralLeft, neutralRight] }),
       ...repeat(15, (i) => ({ hands: [neutralLeft, shift(pinchRight, -0.006 * i)] })), // right drags
       ...repeat(6, (i) => ({ hands: [pinchLeft, shift(pinchRight, -0.09 - 0.006 * i)] })),
-      ...repeat(4, (i) => ({ hands: [neutralLeft, shift(pinchRight, -0.126 - 0.006 * i)] })),
+      ...repeat(4, (i) => ({
+        hands: [openedFrom(neutralLeft, pinchLeft), shift(pinchRight, -0.126 - 0.006 * i)],
+      })),
     ]);
     expect(twoHandStarts(events)).toEqual([]);
     expect(events).toContainEqual(expect.objectContaining({ type: "pinch.tap", hand: "Left" }));

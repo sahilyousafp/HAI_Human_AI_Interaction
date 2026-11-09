@@ -561,6 +561,20 @@ describe("a held pinch", () => {
     expect(late.stopped()).toBe(0);
   });
 
+  it("listeners told a held request was sent already see that a shake can stop it, until 1.5 s pass", async () => {
+    const { voice, settle, events } = held();
+    const seen: Array<[string, boolean]> = [];
+    voice.subscribe(() => seen.push([voice.getSnapshot().phase, voice.canStopSent]));
+    voice.startHeld("Right", wall);
+    await settle();
+    events()?.speechStart();
+    voice.releaseHeld(true);
+    await settle();
+    expect(seen.at(-1)).toEqual(["sent", true]);
+    vi.advanceTimersByTime(1600);
+    expect(seen.at(-1)).toEqual(["off", false]);
+  });
+
   it("a held tool name picks the tool and sends nothing", async () => {
     const { voice, sent, settle, events } = held({ transcript: "measure", tools: ["measure"] });
     voice.startHeld("Right", null);

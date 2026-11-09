@@ -28,8 +28,9 @@ function cameraLabel(info: CameraInfo | null): string {
   return `${info.width} x ${info.height}${fps}`;
 }
 
-function faceCadenceLabel(state: TrackerState, stats: TrackerStats | null): string {
+function faceCadenceLabel(state: TrackerState, stats: TrackerStats | null, needed: boolean): string {
   if (state.camera !== "on") return "-";
+  if (!needed) return "off until a nod or shake can answer";
   return stats?.faceCadence === 2 ? "every 2nd frame" : "every frame";
 }
 
@@ -44,10 +45,8 @@ export function CameraSettings({
   session: TrackingSession;
   renderLatency: LatencyTracker;
 }) {
-  const { state, prefs, debugView, showRaw, effects, cameraInfo, recording } = useSyncExternalStore(
-    session.subscribe,
-    session.getSnapshot,
-  );
+  const { state, prefs, debugView, showRaw, effects, cameraInfo, recording, faceNeeded } =
+    useSyncExternalStore(session.subscribe, session.getSnapshot);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [stats, setStats] = useState<TrackerStats | null>(null);
   const [face, setFace] = useState<TrackingFrame["face"] | null>(null);
@@ -202,7 +201,7 @@ export function CameraSettings({
         </div>
         <div>
           <dt>Face tracking</dt>
-          <dd data-testid="hud-face-cadence">{faceCadenceLabel(state, stats)}</dd>
+          <dd data-testid="hud-face-cadence">{faceCadenceLabel(state, stats, faceNeeded)}</dd>
         </div>
         <div>
           <dt>Head yaw / pitch / roll</dt>

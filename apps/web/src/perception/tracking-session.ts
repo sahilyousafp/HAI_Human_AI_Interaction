@@ -39,6 +39,8 @@ export interface SessionSnapshot {
   /** Also draw the unsmoothed points (debug view only). */
   showRaw: boolean;
   recording: boolean;
+  /** Head tracking runs: something waits for a nod or a shake (`face-demand.ts`). */
+  faceNeeded: boolean;
 }
 
 /**
@@ -82,6 +84,7 @@ export class TrackingSession {
       debugView: true,
       showRaw: false,
       recording: false,
+      faceNeeded: false,
     };
     this.tracker = new Tracker(
       this.video,
@@ -156,6 +159,12 @@ export class TrackingSession {
     this.tracker.setMirrored(prefs.mirrored);
     void this.tracker.setDevice(prefs.deviceId);
     this.update({ prefs });
+  }
+
+  /** Runs head tracking alongside the hands, or stops it (the app decides, from what waits for a nod or shake). */
+  setFaceNeeded(faceNeeded: boolean): void {
+    this.tracker.setFace(faceNeeded);
+    if (faceNeeded !== this.snapshot.faceNeeded) this.update({ faceNeeded });
   }
 
   setDebugView(debugView: boolean): void {

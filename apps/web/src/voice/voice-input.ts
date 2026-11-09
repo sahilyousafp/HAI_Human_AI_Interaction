@@ -221,6 +221,11 @@ export class VoiceInput {
     return this.state.phase === "review";
   }
 
+  /** A held request was sent within `HELD_STOP_MS`: a shake now stops it. */
+  get canStopSent(): boolean {
+    return this.state.phase === "sent" && Boolean(this.state.held) && this.sendTimer !== null;
+  }
+
   /** Starts listening. Ignored while already listening or transcribing. */
   async start(hoveredId: () => string | null = () => null): Promise<void> {
     const { phase } = this.state;
@@ -499,17 +504,18 @@ export class VoiceInput {
       return;
     }
     this.context.clear();
-    this.update({ phase: "sent", text, held: hand });
+    // The timer first, so listeners told of "sent" already see that a shake can stop it (`canStopSent`).
     this.sendTimer = this.setTimer(() => {
       this.sendTimer = null;
       if (this.state.phase === "sent" && this.state.held) this.update({ phase: "off" });
     }, HELD_STOP_MS);
+    this.update({ phase: "sent", text, held: hand });
   }
 
   /** A shake: stops a held request sent within `HELD_STOP_MS`. Returns whether there was one. */
   stopSent(): boolean {
     const { state } = this;
-    if (state.phase !== "sent" || !state.held || this.sendTimer === null) return false;
+    if (!this.canStopSent || state.phase !== "sent" || !state.held) return false;
     this.clearSendTimer();
     this.deps.stopSent?.();
     this.update({ phase: "stopped", text: state.text, held: state.held });

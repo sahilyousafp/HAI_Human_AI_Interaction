@@ -28,7 +28,7 @@ The camera view floats at the bottom right of the model: the mirrored preview wi
 | Camera delivers | Settings | The size and frame rate the camera actually gives (60 fps is asked for, cameras that cannot give 30) |
 | Backend | Settings | GPU (WebGL in the worker) or CPU (fallback) |
 | Camera effects | Settings | Background blur, automatic framing and eye contact applied by the operating system: "off", the ones still on, or "not reported" when the browser cannot tell |
-| Face tracking | Settings | "every frame", or "every 2nd frame" when the machine is under load |
+| Face tracking | Settings | "off until a nod or shake can answer" while nothing waits for one ([gestures.md](gestures.md#when-the-face-is-tracked)); otherwise "every frame", or "every 2nd frame" when the machine is under load |
 | Head yaw / pitch / roll | Settings | Degrees. Yaw is positive when you turn to your left, pitch when you look up, roll when you tilt to your right |
 | Frames / dropped | Settings | Frames processed and camera frames skipped because the worker was busy |
 
@@ -38,10 +38,10 @@ Readouts refresh once per second; the overlay redraws every animation frame. How
 
 1. The main thread receives camera frames with `requestVideoFrameCallback`, which provides the capture time.
 2. If the worker is free, the frame becomes an `ImageBitmap` and is transferred (not copied) to the worker. If it is busy, the frame is dropped, so latency never builds up.
-3. The worker runs MediaPipe Hand Landmarker (2 hands) and Face Landmarker (blendshapes and transformation matrix) on the GPU when possible.
+3. The worker runs MediaPipe Hand Landmarker (2 hands) on every frame, and Face Landmarker (blendshapes and transformation matrix) only while a nod or a shake can answer something ([gestures.md](gestures.md#when-the-face-is-tracked)), on the GPU when possible. Both models load when the camera starts, so the face is ready the moment it is needed.
 4. Each hand keeps a stable Left/Right label (see below).
 5. Results are converted to a tracking frame, smoothed with a One Euro filter (min cutoff 1 Hz, beta 6, derivative cutoff 2 Hz in normalised image units), and posted back. The bitmap is closed immediately.
-6. When the frame rate stays below 24 fps for 2 seconds, face tracking runs on alternate frames. It returns to every frame above 28 fps. Hands always run on every frame.
+6. While the face is tracked and the frame rate stays below 24 fps for 2 seconds, face tracking runs on alternate frames. It returns to every frame above 28 fps. Hands always run on every frame.
 
 HAI feeds unmirrored camera frames to MediaPipe, which labels them correctly, so "Right" is your right hand. This was checked against recorded footage: a raised right hand is reported as "Right", and turning your head to your right gives negative yaw.
 
