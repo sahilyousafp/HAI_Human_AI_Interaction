@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { closeSettings, openSettings } from "./settings.ts";
-import { frames, framesDuring, startCamera } from "./tracking.ts";
+import { frames, framesDuring, keepAsking, startCamera } from "./tracking.ts";
 
 // These tests use Chromium's built-in fake camera (a synthetic pattern with no hands and no face).
 // Scenarios that need real hands or a face run against recorded clips in e2e/clips/.
@@ -111,6 +111,9 @@ test.describe("tracking on the fake camera", () => {
     await page.goto("/?perfDelay=45");
     await startCamera(page);
     await openSettings(page, "camera");
+    // Nothing waits for a nod or a shake yet, so the face is not tracked at all.
+    await expect(page.getByTestId("hud-face-cadence")).toHaveText("off until a nod or shake can answer");
+    await keepAsking(page);
     await expect(page.getByTestId("hud-face-cadence")).toHaveText("every 2nd frame", { timeout: 20_000 });
     // Only judge frames processed after the back-off; the rate under load varies by machine.
     const switchedAt = (await frames(page)).at(-1)?.seq ?? 0;

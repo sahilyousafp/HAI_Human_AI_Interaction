@@ -48,7 +48,9 @@ type Phase = "idle" | "candidate" | "pinching";
  * - Only pinches that began while engaged emit anything ("pinch before engaging is ignored").
  * - Tracking often loses a hand for a few frames while it sweeps fast or passes over the face. A pinch survives a
  *   loss of up to `lostGraceMs` (a drag carries on from wherever the hand reappears), and a pinch interrupted by a
- *   loss is never a tap: the fingers were not seen opening.
+ *   loss is never a tap: the fingers were not seen opening. Nor is a pinch whose palm, in the frame where it opens,
+ *   is more than `releaseJumpMax` from where it was a frame before: fingers opening leave the palm where it is, so
+ *   that is another hand (or a bad fit) given the same label, and the hand that pinched was lost.
  */
 export class HandMachine {
   private phase: Phase = "idle";
@@ -56,6 +58,8 @@ export class HandMachine {
   private startTs = 0;
   private startPos: Point2 = [0, 0];
   private lastPos: Point2 = [0, 0];
+  /** The palm in the last frame that pinched. */
+  private lastPalm: Point2 = [0, 0];
   private lastEmittedPos: Point2 = [0, 0];
   private maxMove = 0;
   private dragStarted = false;
@@ -252,6 +256,7 @@ export class HandMachine {
     const p = this.config.pinch;
     const aspect = obs.aspect ?? DEFAULT_ASPECT;
     const touching = obs.ratio < p.press && obs.others >= p.othersMin;
+    const palm = obs.palm ?? obs.position;
     switch (this.phase) {
       case "idle":
         this.settleTap(obs, ts, events);
@@ -270,6 +275,7 @@ export class HandMachine {
         this.startTs = this.candidateSince;
         this.startPos = obs.position;
         this.lastPos = obs.position;
+        this.lastPalm = palm;
         this.lastEmittedPos = obs.position;
         this.maxMove = 0;
         this.dragStarted = false;
@@ -280,11 +286,13 @@ export class HandMachine {
         return;
       case "pinching": {
         if (obs.ratio > p.release) {
+          if (screenDistance(this.lastPalm, palm, aspect) > p.releaseJumpMax) this.tapAllowed = false;
           this.endPinch(ts, events);
           this.settleTap(obs, ts, events);
           return;
         }
         this.lastPos = obs.position;
+        this.lastPalm = palm;
         this.maxMove = Math.max(this.maxMove, screenDistance(this.startPos, obs.position, aspect));
         if (!this.valid || this.suppressed || !ctx.engaged) return;
         if (!this.holdDone && this.maxMove >= p.holdMaxMove) this.holdDone = true;

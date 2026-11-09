@@ -78,6 +78,9 @@ interface Window {
       };
       question: string | null;
     };
+    /** Asks a question a nod or Enter answers yes and a shake or Escape no. */
+    confirm(question: string, answer: (yes: boolean) => void): void;
+    respond(yes: boolean): void;
     registry: {
       register(tool: { id: string; label: string; icon: string; shortcut: string; spoken?: string[] }): void;
     };

@@ -41,10 +41,18 @@ Nothing but engagement produces a command until you are engaged. Lowering both h
 | Two-hand pinch | Zoom, pan and turn the view | Nothing |
 | Fist hold (each hand, kept still for 1.5 s) | Cancel, back to Select | Undo, redo, ask or stop the agent, nothing |
 | Nod | Yes: send a spoken request, allow the agent's only waiting approval, open a panel the agent offered, or confirm the tool's question | Undo, redo, cancel, ask or stop the agent, nothing |
-| Shake | No: stop a held request sent in the last 1.5 s, discard a spoken request, deny the only waiting approval, skip a panel offer, or cancel | Undo, redo, cancel, ask or stop the agent, nothing |
+| Shake | No: stop a held request sent in the last 1.5 s, discard a spoken request, deny the only waiting approval, skip a panel offer, or say no to the tool's question | Undo, redo, cancel, ask or stop the agent, nothing |
 | Two fists, then open hands | Stop the agents | Undo, cancel, nothing |
 
 While both hands are fists, neither hand's fist action runs, so the stop never also cancels the tool. Whichever gesture is set to "Yes" or "No" answers what waits for it in a fixed order, and only one thing per gesture: a "no" first stops a held request sent in the last 1.5 s, then a spoken request under review, then an approval card (when exactly one waits), then a panel offer (when it is the only thing waiting), and only then the tool's question. Allowing a card and opening a panel need you to be engaged, so a stray nod never does either. A shake that answers a card or an offer never also cancels the active tool.
+
+### When the face is tracked
+
+The face is tracked only while a nod or a shake can do something: a spoken request under review, the 1.5 s after a held request is sent, an approval card, a panel offer, or the tool's question (Delete asks one). The rest of the time, which is nearly all the time you pinch, place points, drag or lasso, the face model does not run. It is loaded when the camera starts, so it is ready the moment a question appears.
+
+Two reasons. The face model takes about a third of every frame (on the reference laptop, the hand-cross-face clip ran at 14 fps with it and 19 fps without), and those frames go to the hands instead. And a hand passing over the face throws the head pose about, so a stray "shake" could cancel the tool's drag halfway: a lasso or a moved element simply stopped. With nothing to answer, no head gesture can fire.
+
+If Nod or Shake is set to a command (undo, cancel and so on), the face is tracked all the time, because that command can run at any moment. With **Nod and shake** switched off in Settings > Features, the face is never tracked. Settings > Camera and tracking shows which: "off until a nod or shake can answer", or how often it runs.
 
 ## Hold to talk
 
@@ -57,7 +65,7 @@ A long pinch of your non-dominant hand (the left, unless **Dominant hand** says 
 - **Saying nothing shows the ring.** If you have not spoken 0.6 s after the hold fired, the hand's ring fades in around it. Move toward a tool and let go to choose it, as before, or let go in the centre for nothing. You need not wait for the ring: a flick before you speak highlights the slot at once. Speech wins while it goes on: the ring goes and your hand points. When you stop (a pause, or a sound that was not speech, such as a click or a cough) the ring comes back after the same 0.6 s of silence, and letting go in the centre still sends what you said; a flick to a tool after you stopped chooses the tool. A sound too short to be speech never takes the ring away.
 - **Holding something keeps holding it.** A long pinch on a button presses the button; on the section plane, on an element you are moving, or while drawing a wall or a sketch, it keeps holding that. None of these listen.
 
-The speech detector and the speech model load when you first engage, so the microphone is live about 50 ms after the hold fires (the very first hold of a session also opens the audio device, about 0.4 s). It stops within about 20 ms of letting go. To have a long pinch open a ring at once, without listening, set it to **Open the action ring** or **Open the reference ring** above. The Detection card counts long pinches, those with speech, flicks per ring and those let go with nothing chosen; the counts stay on this computer.
+The speech detector loads when the camera starts and the speech model when you first engage, so the microphone is live about 50 ms after the hold fires (the very first hold of a session also opens the audio device, about 0.4 s). It stops within about 20 ms of letting go. To have a long pinch open a ring at once, without listening, set it to **Open the action ring** or **Open the reference ring** above. The Detection card counts long pinches, those with speech, flicks per ring and those let go with nothing chosen; the counts stay on this computer.
 
 ## Hands in a generated panel
 
@@ -87,9 +95,10 @@ All values live in `packages/perception/src/gestures/config.ts`; a unit test che
 | `pinch.othersMin` | 1.3 | Mean extension of the middle, ring and little fingers needed for a pinch to start |
 | `pinch.lostGraceMs` | 250 | A pinching hand lost by tracking for less than this is still pinching |
 | `pinch.holdMs` | 800 | A pinch held this long... |
+| `pinch.holdMaxMove` | 0.04 | ...while moving less than this fraction of the frame width is a hold (long pinch) |
 | `pinch.tapOpen` | 0.3 | A tap counts only once the fingers open past this ratio... |
 | `pinch.tapOpenMs` | 200 | ...within this long of letting go, so a hand that stays half closed after nearly pinching never clicks |
-| `pinch.holdMaxMove` | 0.04 | ...while moving less than this fraction of the frame width is a hold (long pinch) |
+| `pinch.releaseJumpMax` | 0.1 | A pinch whose palm jumps more than this fraction of the frame width in the frame where it opens was lost, not opened: never a tap |
 | `posture.extended` | 1.35 | Finger tip-to-wrist / knuckle-to-wrist above this: extended |
 | `posture.curled` | 1.15 | Below this: curled |
 | `posture.thumbSpread` | 0.45 | Thumb tip to index knuckle / hand size above this: thumb spread |
@@ -117,7 +126,7 @@ Hand size is the distance from the wrist to the middle-finger knuckle. The pinch
 
 So `press` sits between touching and a near miss, with a 5% buffer above 0.16 so fingertips that only just meet still count (53 of the 55 labelled touches pinch; the one near miss closest to touching, at 0.166, falls inside the buffer), and `othersMin` keeps the thumb from triggering a pinch as it passes the index on the way into or out of a fist. A touch that turns into a fist before `minHoldMs` is dropped.
 
-**Tracking loss.** A hand sweeping fast or passing over the face is often lost for a few frames (motion blur, skin against skin). A pinch survives a loss shorter than `lostGraceMs`, so a drag carries on from wherever the hand reappears, and a pinch interrupted by a loss never counts as a tap, because the fingers were not seen opening. Without this, pinching and sweeping a hand across the face fired a stray tap (found on a recorded clip, `test-assets/clips/hand-cross-face.mp4`).
+**Tracking loss.** A hand sweeping fast or passing over the face is often lost for a few frames (motion blur, skin against skin). A pinch survives a loss shorter than `lostGraceMs`, so a drag carries on from wherever the hand reappears, and a pinch interrupted by a loss never counts as a tap, because the fingers were not seen opening. A hand can also be lost without a gap: as one leaves the view, MediaPipe may fit a hand somewhere else and the label follows it. Fingers opening leave the palm where it is (it moved 0.001 to 0.006 of the frame width on the recorded taps), so a pinch whose palm jumps more than `releaseJumpMax` as it opens is treated as lost too. Without this, pinching and sweeping a hand across the face fired a stray tap (found on a recorded clip, `test-assets/clips/hand-cross-face.mp4`). A frame that never arrives is a loss too: the speech detector used to be built on the page at the first engagement and held it for about 0.4 s, so the hands froze just as they began to pinch, and a pinch made then could come out as the wrong gesture. It is now built when the camera starts, before any gesture can be made.
 
 ## State machines
 

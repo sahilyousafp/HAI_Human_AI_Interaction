@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
-// Runs hand and face tracking off the main thread. Camera frames arrive as transferred ImageBitmaps,
-// are closed right after inference, and only pixel-free TrackingFrames are posted back.
+// Runs hand and face tracking off the main thread (the face only while the page asks for it). Camera frames arrive as
+// transferred ImageBitmaps, are closed right after inference, and only pixel-free TrackingFrames are posted back.
 import {
   AdaptiveScheduler,
   FrameSmoother,
@@ -23,6 +23,8 @@ let backend: Delegate = "CPU";
 let perfDelayMs = 0;
 let sendRawHands = false;
 let mirrored = false;
+/** The page wants head tracking: something waits for a nod or a shake. The face model stays loaded either way. */
+let faceWanted = false;
 let flipCanvas: OffscreenCanvas | null = null;
 let fileset: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>> | null = null;
 let handModel = "";
@@ -161,7 +163,7 @@ function onFrame(msg: Extract<ToWorker, { type: "frame" }>) {
       }
     }
     const faceResult =
-      face && scheduler.shouldRunFace(seq) ? face.detectForVideo(bitmap, captureTs) : undefined;
+      face && faceWanted && scheduler.shouldRunFace(seq) ? face.detectForVideo(bitmap, captureTs) : undefined;
     if (perfDelayMs > 0) {
       const until = performance.now() + perfDelayMs;
       while (performance.now() < until) {
@@ -216,5 +218,6 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   } else if (msg.type === "options") {
     if (msg.rawHands !== undefined) sendRawHands = msg.rawHands;
     if (msg.mirrored !== undefined) mirrored = msg.mirrored;
+    if (msg.face !== undefined) faceWanted = msg.face;
   }
 };

@@ -44,6 +44,7 @@ import { OpenDataStore } from "./open-data/open-data-store.ts";
 import { PanelClient } from "./panel/panel-client.ts";
 import { CameraSettings } from "./perception/CameraSettings.tsx";
 import { CameraView } from "./perception/CameraView.tsx";
+import { watchFaceDemand } from "./perception/face-demand.ts";
 import { HandOverlay } from "./perception/HandOverlay.tsx";
 import { TrackingSession } from "./perception/tracking-session.ts";
 import { ModellingSettings } from "./rhino/ModellingSettings.tsx";
@@ -598,13 +599,19 @@ export function App() {
     };
   }, [voice]);
 
-  // Hold to talk listens the moment the hold fires: the speech detector and model load at the first engagement
-  // instead (the microphone stays off until a hold or a request opens it).
+  // Hold to talk listens the moment the hold fires: the speech detector and model load beforehand (the microphone
+  // stays off until a hold or a request opens it). The detector builds on the page and holds it for about 0.4 s, so
+  // it loads as the camera starts, while the hand model loads and no gesture can be made yet: loaded at the first
+  // engagement, it froze the hands just as they began to pinch. The model loads in a worker, at the first engagement.
+  const cameraStarting = camera.camera === "starting";
+  useEffect(() => {
+    if (cameraStarting && features.on("voice") && speechRef.current === "device") preloadOnDevice();
+  }, [cameraStarting, features]);
   useEffect(
     () =>
       bus.onEngaged((engaged) => {
         if (!engaged || !features.on("voice") || speechRef.current !== "device") return;
-        preloadOnDevice();
+        preloadOnDevice(); // the voice may have been switched on, or to this device, since the camera started
         transcriber.load();
       }),
     [bus, features, transcriber],
@@ -670,6 +677,15 @@ export function App() {
     [gestureSettings, agent, bus, tools, voice, speaker, features, panels, talk, session],
   );
 
+  // Head tracking runs only while a nod or a shake can do something, so the hands get every frame while you pinch.
+  useEffect(
+    () =>
+      watchFaceDemand(
+        { features, bindings: gestureSettings, voice, approvals: agent, offers: panels, tools },
+        (needed) => session.setFaceNeeded(needed),
+      ),
+    [features, gestureSettings, voice, agent, panels, tools, session],
+  );
   // The camera session goes on the page once mounted; dev builds hand it to end-to-end tests too.
   useEffect(() => {
     const disconnect = session.connect();

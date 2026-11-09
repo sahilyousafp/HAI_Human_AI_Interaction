@@ -219,9 +219,9 @@ const TRACE_MIN_MM = 300;
  * drawing aids (Ortho for Line, its angle step, snaps) and by a length when one is set. A hand's pinch places the point
  * the preview shows: the preview stands still as the fingers close, drifting while they are closed moves nothing, and
  * the view does not orbit. The hand that placed the first point steers the line, and the other hand's drag orbits.
- * Tapping the last point again, a nod or Enter finishes the line; tapping the first point closes it. Escape or a shake
- * takes back the last point, and with none left goes back to Select, and Undo and Redo step through the points. The
- * line is one undo step once it is finished. In Freeform, set in the tool's panel, a drag traces one line instead,
+ * Tapping the last point again, Enter or the panel's check mark finishes the line; tapping the first point closes it.
+ * Escape takes back the last point, and with none left goes back to Select, and Undo and Redo step through the points.
+ * The line is one undo step once it is finished. In Freeform, set in the tool's panel, a drag traces one line instead,
  * without any drawing aid.
  */
 export function lineTool(): Tool {
@@ -238,7 +238,7 @@ export function lineTool(): Tool {
   let mode: "straight" | "freeform" = "straight";
   /** The freeform trace being drawn. */
   let trace: Point3Mm[] | null = null;
-  const hint = "Pinch or tap to place each point. Tap the last point again, nod or press Enter to finish.";
+  const hint = "Pinch or tap to place each point. Tap the last point again or press Enter to finish.";
   const traceHint = "Pinch and drag to trace a line. It becomes a line in the model when you let go.";
   const hintNow = () => (mode === "freeform" ? traceHint : hint);
 

@@ -95,6 +95,25 @@ describe("tap and drag", () => {
     expect(types(events)).not.toContain("pinch.tap");
   });
 
+  it("a pinch that ends with the hand somewhere else entirely is a lost hand, not a click", () => {
+    // Measured on the hand-cross-face clip: the right hand pinched still, then the next frame's "right hand" was a
+    // quarter of the frame away and open (a hand leaving the bottom of the view, matched to the same label).
+    const events = run([
+      ...repeat(10, () => ({ ratio: 0.13, position: at(0.766, 0.68), palm: at(0.75, 0.6) })),
+      { ratio: 0.847, position: at(0.537, 0.929), palm: at(0.52, 0.85) },
+      ...repeat(3, () => ({ ratio: 0.67, position: at(0.49, 0.95), palm: at(0.48, 0.87) })),
+    ]);
+    expect(types(events)).not.toContain("pinch.tap");
+  });
+
+  it("the palm staying put as the fingers open still clicks, even when the fingertips spring apart", () => {
+    const events = run([
+      ...repeat(10, () => ({ ratio: 0.13, position: at(0.5, 0.5), palm: at(0.5, 0.6) })),
+      ...repeat(3, () => ({ ratio: 0.8, position: at(0.53, 0.47), palm: at(0.505, 0.6) })),
+    ]);
+    expect(types(events)).toEqual(["pinch.tap"]);
+  });
+
   it("a click counts once the fingers open: a slow release that opens within 200 ms still clicks", () => {
     const events = run([
       ...repeat(10, () => ({ ratio: 0.12, position: at(0.5) })),

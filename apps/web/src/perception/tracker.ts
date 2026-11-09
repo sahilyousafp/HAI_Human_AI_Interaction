@@ -71,6 +71,7 @@ export class Tracker {
 
   private rawHands = false;
   private mirrored = false;
+  private face = false;
   /** "" is the system's default camera. */
   private deviceId = "";
 
@@ -95,11 +96,19 @@ export class Tracker {
     await this.start();
   }
 
+  /** Runs face tracking (head pose, nod and shake) alongside the hands, or stops it. */
+  setFace(enabled: boolean): void {
+    if (enabled === this.face) return;
+    this.face = enabled;
+    this.postOptions();
+  }
+
   private postOptions(): void {
     this.worker?.postMessage({
       type: "options",
       rawHands: this.rawHands,
       mirrored: this.mirrored,
+      face: this.face,
     } satisfies ToWorker);
   }
 

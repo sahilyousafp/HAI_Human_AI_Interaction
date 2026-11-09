@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { attachPreview, overlayColorCounts } from "../overlay.ts";
-import { frames, startCamera } from "../tracking.ts";
+import { frames, keepAsking, startCamera } from "../tracking.ts";
 
 // Plays test-assets/clips/head-turn.mp4 as the camera: the maintainer turns right, then left, then looks up.
 // The fake camera loops the clip, so one full loop (about 6 s) plus margin covers every pose.
@@ -10,6 +10,7 @@ test("head turn: yaw goes beyond 15 degrees on both sides and pitch rises when l
 }) => {
   await page.goto("/");
   await startCamera(page);
+  await keepAsking(page);
   // Watch until every pose has been seen, however slowly the machine processes frames. On CPU-only runners face
   // tracking runs on alternate frames and the full look-up has no detectable face, so few frames carry a pose.
   const startSeq = (await frames(page)).at(-1)?.seq ?? -1;
@@ -31,6 +32,7 @@ test("head turn: yaw goes beyond 15 degrees on both sides and pitch rises when l
 test("debug overlay draws the head axes", async ({ page }, testInfo) => {
   await page.goto("/");
   await startCamera(page);
+  await keepAsking(page);
   // The clip includes a full look-up where no face is found and no axes are drawn, so wait (up to one loop)
   // for a frame with a face: one line per axis in the risk (x), ok (y) and axis-z colours.
   const axesDrawn = async () => {

@@ -38,6 +38,18 @@ export async function framesDuring(page: Page, minMs: number, minFrames = 20): P
   return since();
 }
 
+/**
+ * Head tracking runs only while a nod or a shake can answer something. This puts up a tool question that asks again
+ * whenever it is answered (a head turn can read as a shake), so the face is tracked for the rest of the test.
+ */
+export async function keepAsking(page: Page) {
+  await page.evaluate(() => {
+    const ask = () => window.__HAI_TOOLS__?.confirm("Keep tracking the head?", ask);
+    ask();
+  });
+  await expect(page.getByTestId("tool-question")).toBeVisible();
+}
+
 /** Gesture events the app logged in dev builds (window.__HAI_GESTURES__). */
 export const gestureEvents = (page: Page) =>
   page.evaluate(
