@@ -353,10 +353,24 @@ What it still gets wrong: "Bake" as "Make", "Column" as "Colon" (one voice of tw
 
 **Open surfaces are drawn from both sides.** A Rhino model can be surfaces with no inside (82 of the mosque's sandstone parts in that file), and one seen from behind was neither drawn nor pickable, which Rhino's shaded view does not do. `e2e/import.spec.ts` reproduces it. Shadows stay one-sided: from both sides, surfaces shade themselves in a moire over the whole model.
 
-**Framing leaves out backdrops.** That file's sky dome is 5.6 km across, so the view framed on import showed a speck of building, and put the camera's target 1.3 km in the air, where zooming in never reached the model. Framing now leaves out an element over 8 times the size of the typical one (`framingBounds`). This does not yet apply when framing a Rhino mirror.
+**Framing leaves out backdrops.** That file's sky dome is 5.6 km across, so the view framed on import showed a speck of building, and put the camera's target 1.3 km in the air, where zooming in never reached the model. Framing now leaves out an element over 8 times the size of the typical one (`framingBounds`). The mirror frames the same way, and also leaves out blocks placed 8 or more times, since planting can spread for kilometres around a building.
 
-**Known and left.**
+## Imported models were lit as if every face looked up (2026-11-04)
 
-- **The mirror does not draw block instances.** With the Taj file open in Rhino 9, it shows 699 objects and 95 433 triangles, and leaves out 2481 block instances: the minarets, the gate, the trees. This was already documented, and it matters more now that a real model has shown how much can be in blocks. It is the next thing to do for Rhino as the main way to work. It should reuse the same simplification.
-- **Walls can vanish into floors.** Without edge lines on imported models, faces of one colour at different angles can light almost alike: the mosque's sandstone walls blend into its sandstone plinth, and it took looking from another side to tell they were there. Changing the lighting touches every screenshot in the app, so it needs its own look.
+**Found by comparing.** Through the mirror, the Taj model's mosque had walls, towers and ribbed domes. Imported, the same triangles were flat fills: walls melted into the plinth and domes were plain silhouettes. Before that comparison this was put down to the lighting of one colour at different angles, which was wrong, and the owner was told so.
 
+**Cause.** An imported element is first drawn as a box, from geometry with smooth shading, until its mesh arrives. Flat shading and sides are built into the shader, so setting them on the existing material did nothing without a rebuild, and the mesh kept the box's shader. A mesh's normals are placeholders that all point up, since flat shading is meant to work them out, so every face was lit as if it looked up. It has been so for every imported model. A test that only checked for not being black could not see it.
+
+**Fix.** The material has a different `key` once the mesh is there, so it is made new. `e2e/import.spec.ts` compares two sunlit faces of a box of one colour: 25 levels apart with the fix, none without it.
+
+## Blocks in the mirror (2026-11-04)
+
+**Decision.** A block is one asset in the block's own coordinates, with one part per colour, and each placement is an object naming it with a `transform` and `partColors`. The bridge already counted the uses of an asset. It now takes the new use before releasing the old, since a moved placement names the mesh it already has. Sending a mesh per placement would have meant 2481 uploads where 15 do.
+
+**Simplifying** follows the importer's rule (`BlockBudget`, `MeshReducer`, the same rule in C#). The plan is made when a document is first sent and again when a placement is added or removed; if that changes what is simplified, all placements are sent again.
+
+**Drawing.** With a mesh object per placement part, about 5000 draw calls, orbiting ran at about 20 frames per second. Blocks placed 8 or more times are now one `InstancedMesh` per part; hover, selection and owner tags take a placement out of the batch, so it looks as any other object does.
+
+**Measured, real Rhino 9.0, plugin and viewer together, Taj model, Intel Arc 140T.** 3180 objects (697 Breps, 2 meshes, 2481 placements), 3.4 million triangles, 714 assets, no boxes, about 15 s. Orbiting: about 24 frames per second, against about 60 for the same model imported, where it is 19 merged elements. Batching barely moved it, so the draw calls of the batched blocks were not the main cost. The likely remainder is the 697 Breps and non-repeated placements with a mesh and material each, drawn twice for shadows, but this was not measured.
+
+**Not verified.** Editing a block or changing a layer live in Rhino, and adding placements until the plan changes: written, not run on a real Rhino. Hand picking on a real model. Rhino 8 with blocks, though it shares the code.

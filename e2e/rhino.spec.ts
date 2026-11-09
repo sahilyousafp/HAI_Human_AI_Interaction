@@ -131,6 +131,89 @@ test.describe("the mirror layer", () => {
     await expect.poll(() => findElementOnScreen(page, "rhino-slab").catch(() => null)).not.toBeNull();
   });
 
+  test("a block is one mesh placed many times: each placement is where Rhino says, and can be picked", async ({
+    page,
+  }) => {
+    await start(page);
+    const rhino = await connect();
+    const shared = await rhino.uploadMesh(3000);
+    const placed = (id: string, x: number, y: number) =>
+      rhinoObject(id, shared, {
+        type: "block",
+        name: "Tree",
+        color: "#325023",
+        partColors: ["#cc4422"],
+        bounds: { min: [x, y, 0], max: [x + 3000, y + 3000, 0] },
+        transform: [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, 0, 0, 0, 0, 1],
+      });
+    rhino.send(
+      "rhino.objects",
+      rhinoBatch({
+        reset: true,
+        changed: [placed("tree-a", -30000, -30000), placed("tree-b", -20000, -30000)],
+      }),
+    );
+    await expect.poll(() => mirrorObjects(page)).toEqual(["tree-a", "tree-b"]);
+    // Back a little, so neither is under the panels at the sides of the view, where a pick is refused.
+    const box = await page.locator("[data-testid=viewer] canvas").boundingBox();
+    await page.mouse.move((box?.x ?? 0) + (box?.width ?? 0) / 2, (box?.y ?? 0) + (box?.height ?? 0) / 2);
+    await page.mouse.wheel(0, 500);
+    // Inside each triangle, by where its placement puts it: the mesh itself sits at the origin.
+    const pickedAt = (x: number, y: number) =>
+      page.evaluate(
+        ([px, py]) => {
+          const viewer = window.__HAI_VIEWER__;
+          const at = viewer?.project([px as number, py as number, 0]);
+          return at ? viewer?.pick(at[0], at[1]) : null;
+        },
+        [x, y],
+      );
+    await expect.poll(() => pickedAt(-29000, -29000), { timeout: 15_000 }).toBe("tree-a");
+    await expect.poll(() => pickedAt(-19000, -29000), { timeout: 15_000 }).toBe("tree-b");
+  });
+
+  test("a block placed many times is drawn in one go, but each placement can still be picked and selected", async ({
+    page,
+  }) => {
+    await start(page);
+    const rhino = await connect();
+    const shared = await rhino.uploadMesh(3000);
+    const ids = Array.from({ length: 10 }, (_, i) => `tree-${i}`);
+    const xOf = (i: number) => -30000 + i * 1500;
+    const placements = ids.map((id, i) =>
+      rhinoObject(id, shared, {
+        type: "block",
+        name: "Tree",
+        color: "#325023",
+        bounds: { min: [xOf(i), -30000, 0], max: [xOf(i) + 1000, -29000, 0] },
+        transform: [1 / 3, 0, 0, xOf(i), 0, 1 / 3, 0, -30000, 0, 0, 1 / 3, 0, 0, 0, 0, 1],
+      }),
+    );
+    rhino.send("rhino.objects", rhinoBatch({ reset: true, changed: placements }));
+    await expect.poll(() => mirrorObjects(page).then((o) => o.length)).toBe(10);
+    const box = await page.locator("[data-testid=viewer] canvas").boundingBox();
+    await page.mouse.move((box?.x ?? 0) + (box?.width ?? 0) / 2, (box?.y ?? 0) + (box?.height ?? 0) / 2);
+    await page.mouse.wheel(0, 500);
+    const pickedAt = (x: number) =>
+      page.evaluate((px) => {
+        const viewer = window.__HAI_VIEWER__;
+        const at = viewer?.project([px, -29800, 0]);
+        return at ? viewer?.pick(at[0], at[1]) : null;
+      }, x);
+    for (const i of [2, 7]) {
+      await expect.poll(() => pickedAt(xOf(i) + 200), { timeout: 15_000 }).toBe(`tree-${i}`);
+    }
+    // Selected in Rhino, one placement is drawn apart in the selection colour, and the rest stay as they are.
+    rhino.send("rhino.selection", {
+      objects: [{ id: "tree-7", type: "InstanceReference", layer: "Default" }],
+    });
+    await expect
+      .poll(() => page.evaluate(() => window.__HAI_VIEWER__?.wear?.("tree-7")?.color))
+      .not.toBe("#325023");
+    await expect.poll(() => pickedAt(xOf(7) + 200), { timeout: 15_000 }).toBe("tree-7");
+    await expect.poll(() => pickedAt(xOf(2) + 200), { timeout: 15_000 }).toBe("tree-2");
+  });
+
   test("the mirror is not saved: the scene, its history and the project stay as they were", async ({
     page,
   }) => {
@@ -185,7 +268,7 @@ test.describe("the mirror layer", () => {
       rhinoBatch({
         reset: true,
         sync: { done: 5, total: 50 },
-        notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 0 },
+        notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 0, simplified: 0 },
       }),
     );
     await expect(page.getByTestId("rhino-status")).toHaveText("Syncing 5 of 50");

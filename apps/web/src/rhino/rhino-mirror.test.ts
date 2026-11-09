@@ -15,7 +15,7 @@ const object = (id: string, extra: Partial<RhinoObject> = {}): RhinoObject => ({
   tags: {},
   ...extra,
 });
-const notDrawn = { curves: 0, points: 0, annotations: 0, other: 0, heavy: 0 };
+const notDrawn = { curves: 0, points: 0, annotations: 0, other: 0, heavy: 0, simplified: 0 };
 const batch = (partial: Record<string, unknown> = {}) =>
   ({
     type: "rhino.objects",
@@ -119,6 +119,44 @@ describe("RhinoMirror", () => {
       }),
     );
     expect(mirror.bounds()).toEqual({ min: [-500, 0, 0], max: [1000, 2000, 4000] });
+  });
+
+  it("frames what the model is about: not its planting, nor a backdrop such as a sky dome", () => {
+    const { mirror } = setup();
+    const box = (x: number, size: number) => ({
+      min: [x, 0, 0] as [number, number, number],
+      max: [x + size, size, size] as [number, number, number],
+    });
+    const building = [0, 1, 2, 3, 4].map((i) => object(`part-${i}`, { bounds: box(i * 5000, 5000) }));
+    const trees = Array.from({ length: 8 }, (_, i) =>
+      object(`tree-${i}`, {
+        asset: "tree-mesh",
+        transform: [1, 0, 0, 900_000 + i, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        bounds: box(900_000 + i, 5000),
+      }),
+    );
+    const minaret = object("minaret", {
+      asset: "minaret-mesh",
+      transform: [1, 0, 0, 10_000, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      bounds: box(10_000, 5000),
+    });
+    const sky = object("sky", { bounds: box(-1_000_000, 2_000_000) });
+    mirror.handle(batch({ reset: true, changed: [...building, ...trees, minaret, sky] }));
+    expect(mirror.framingBounds()).toEqual({ min: [0, 0, 0], max: [25_000, 5000, 5000] });
+    expect(mirror.bounds()?.max[0]).toBeGreaterThan(900_000);
+  });
+
+  it("frames all of it when all of it is planting", () => {
+    const { mirror } = setup();
+    const trees = Array.from({ length: 8 }, (_, i) =>
+      object(`tree-${i}`, {
+        asset: "tree-mesh",
+        transform: [1, 0, 0, i * 1000, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        bounds: { min: [i * 1000, 0, 0], max: [i * 1000 + 500, 500, 500] },
+      }),
+    );
+    mirror.handle(batch({ reset: true, changed: trees }));
+    expect(mirror.framingBounds()?.max[0]).toBe(7500);
   });
 
   it("Rhino's selection is held, and an object that goes leaves it", () => {

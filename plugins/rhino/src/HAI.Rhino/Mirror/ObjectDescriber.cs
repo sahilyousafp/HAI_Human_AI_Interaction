@@ -29,7 +29,7 @@ namespace HAI.Rhino.Mirror
             return Kind.Other;
         }
 
-        /// <summary>The viewer's name for what is drawn (brep, extrusion, mesh, surface or subd), or null.</summary>
+        /// <summary>The viewer's name for what is drawn (brep, extrusion, mesh, surface, subd or block), or null.</summary>
         public static string? TypeName(RhinoObject obj)
         {
             switch (obj.ObjectType)
@@ -39,6 +39,7 @@ namespace HAI.Rhino.Mirror
                 case ObjectType.Mesh: return "mesh";
                 case ObjectType.Surface: return "surface";
                 case ObjectType.SubD: return "subd";
+                case ObjectType.InstanceReference: return "block";
                 default: return null;
             }
         }
@@ -84,6 +85,19 @@ namespace HAI.Rhino.Mirror
             {
                 Min = new[] { box.Min.X * scale, box.Min.Y * scale, box.Min.Z * scale },
                 Max = new[] { box.Max.X * scale, box.Max.Y * scale, box.Max.Z * scale },
+            };
+        }
+
+        /// <summary>Where a block's placement puts its mesh, row by row: the mesh is in millimetres, so its move is too.</summary>
+        public static double[] PlacementMm(InstanceObject placed, double scale)
+        {
+            var x = placed.InstanceXform;
+            return new[]
+            {
+                x.M00, x.M01, x.M02, x.M03 * scale,
+                x.M10, x.M11, x.M12, x.M13 * scale,
+                x.M20, x.M21, x.M22, x.M23 * scale,
+                x.M30, x.M31, x.M32, x.M33,
             };
         }
 

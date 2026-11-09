@@ -44,7 +44,7 @@ namespace HAI.Rhino.Core.Tests
                 Reset = true,
                 ChangedAt = 1_792_790_022_951,
                 Sync = new SyncProgress { Done = 2, Total = 40 },
-                NotDrawn = new NotDrawn { Curves = 12, Annotations = 1, Heavy = 1 },
+                NotDrawn = new NotDrawn { Curves = 12, Annotations = 1, Heavy = 1, Simplified = 40 },
                 Changed =
                 {
                     new RhinoObjectInfo
@@ -69,6 +69,19 @@ namespace HAI.Rhino.Core.Tests
                         Bounds = new Bounds { Min = new[] { -1.5, 0.0, 0.0 }, Max = new[] { 1.5, 2.0, 4.0 } },
                         Asset = null,
                         Triangles = 0,
+                    },
+                    new RhinoObjectInfo
+                    {
+                        Id = "b3e5d7f9-0000-4000-8000-000000000003",
+                        Name = "Tree",
+                        Type = "block",
+                        Layer = "Garden",
+                        Color = "#325023",
+                        Bounds = new Bounds { Min = new[] { 9000.0, 0.0, 0.0 }, Max = new[] { 13000.0, 4000.0, 6000.0 } },
+                        Asset = "1f8fad5b-d9cb-469f-a165-70867728950e",
+                        Triangles = 800,
+                        Transform = new[] { 1.0, 0, 0, 11000, 0, 1, 0, 2000, 0, 0, 1, 0, 0, 0, 0, 1 },
+                        PartColors = new List<string?> { "#463223", null },
                     },
                 },
                 Deleted = { "b3e5d7f9-0000-4000-8000-000000000003" },

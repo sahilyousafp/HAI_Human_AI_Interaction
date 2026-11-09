@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MirrorState } from "./rhino-mirror.ts";
 import { connectionText, notDrawnText, pythonText, rhinoPill, syncText } from "./rhino-view.ts";
 
-const none = { curves: 0, points: 0, annotations: 0, other: 0, heavy: 0 };
+const none = { curves: 0, points: 0, annotations: 0, other: 0, heavy: 0, simplified: 0 };
 const state = (partial: Partial<MirrorState>): MirrorState => ({
   connected: false,
   mode: "auto",
@@ -40,6 +40,12 @@ describe("notDrawnText", () => {
 });
 
 describe("status words", () => {
+  it("says when blocks are drawn with less detail", () => {
+    expect(notDrawnText({ ...none, simplified: 2430 })).toBe(
+      "2430 placed blocks drawn with less detail, as the model is too heavy to draw in full",
+    );
+  });
+
   it("progress of the first sync", () => {
     expect(syncText({ done: 120, total: 4000 })).toBe("Syncing 120 of 4000");
     expect(syncText(null)).toBeNull();

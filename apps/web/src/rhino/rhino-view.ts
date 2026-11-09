@@ -15,7 +15,10 @@ export function notDrawnText(counts: RhinoNotDrawn): string | null {
     ? `${plural(counts.heavy, "object")} too heavy to draw in full (drawn as ${counts.heavy === 1 ? "a box" : "boxes"})`
     : "";
   const missing = parts.length > 0 ? `${parts.join(", ").replace(/, ([^,]*)$/, " and $1")} not drawn` : "";
-  return [missing, heavy].filter(Boolean).join("; ") || null;
+  const simplified = counts.simplified
+    ? `${plural(counts.simplified, "placed block")} drawn with less detail, as the model is too heavy to draw in full`
+    : "";
+  return [missing, heavy, simplified].filter(Boolean).join("; ") || null;
 }
 
 /** How far the first sync of a document has got ("Syncing 120 of 4000"), or null once it is in. */

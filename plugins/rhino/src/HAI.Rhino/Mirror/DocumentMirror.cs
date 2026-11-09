@@ -44,6 +44,8 @@ namespace HAI.Rhino.Mirror
         private readonly Queue<Job> jobs = new Queue<Job>();
         private readonly HashSet<Guid> mirrored = new HashSet<Guid>();
         private readonly HashSet<Guid> heavy = new HashSet<Guid>();
+        private readonly HashSet<Guid> placedBlocks = new HashSet<Guid>();
+        private BlockMeshes? blocks;
         private readonly SemaphoreSlim uploads = new SemaphoreSlim(ParallelUploads, ParallelUploads);
         private RhinoDoc? doc;
         private ChangeCoalescer? coalescer;
@@ -73,6 +75,7 @@ namespace HAI.Rhino.Mirror
             RhinoDoc.DeleteRhinoObject += OnDeleted;
             RhinoDoc.ModifyObjectAttributes += OnModified;
             RhinoDoc.LayerTableEvent += OnLayerChanged;
+            RhinoDoc.InstanceDefinitionTableEvent += OnBlockChanged;
             RhinoDoc.SelectObjects += OnSelectionChanged;
             RhinoDoc.DeselectObjects += OnSelectionChanged;
             RhinoDoc.DeselectAllObjects += OnAllDeselected;
@@ -88,6 +91,7 @@ namespace HAI.Rhino.Mirror
             RhinoDoc.DeleteRhinoObject -= OnDeleted;
             RhinoDoc.ModifyObjectAttributes -= OnModified;
             RhinoDoc.LayerTableEvent -= OnLayerChanged;
+            RhinoDoc.InstanceDefinitionTableEvent -= OnBlockChanged;
             RhinoDoc.SelectObjects -= OnSelectionChanged;
             RhinoDoc.DeselectObjects -= OnSelectionChanged;
             RhinoDoc.DeselectAllObjects -= OnAllDeselected;
@@ -100,6 +104,8 @@ namespace HAI.Rhino.Mirror
             current = null;
             mirrored.Clear();
             heavy.Clear();
+            placedBlocks.Clear();
+            blocks = null;
             doc = null;
         }
 
@@ -138,7 +144,25 @@ namespace HAI.Rhino.Mirror
             var layer = doc.Layers.FindIndex(e.LayerIndex);
             if (layer == null) return;
             foreach (var obj in doc.Objects.FindByLayer(layer)) coalescer?.Changed(obj.Id);
+            // What a block holds can be on any layer, so its colours or what it shows may have changed too.
+            ResendBlocks();
         }
+
+        // A block was edited, added or removed: the meshes of blocks are made again.
+        private void OnBlockChanged(object? sender, InstanceDefinitionTableEventArgs e)
+        {
+            if (doc != null && ReferenceEquals(e.Document, doc)) Ui(ResendBlocks);
+        }
+
+        private void ResendBlocks()
+        {
+            if (doc == null || blocks == null) return;
+            blocks.Clear();
+            foreach (var id in PlacedBlockIds(doc)) coalescer?.Changed(id);
+        }
+
+        private static IEnumerable<Guid> PlacedBlockIds(RhinoDoc target) =>
+            ShownObjects(target).Where(o => o is InstanceObject).Select(o => o.Id);
 
         private void OnSelectionChanged(object? sender, RhinoObjectSelectionEventArgs e) => ScheduleSelection();
 
@@ -152,7 +176,10 @@ namespace HAI.Rhino.Mirror
             current = null;
             mirrored.Clear();
             heavy.Clear();
+            placedBlocks.Clear();
             var shown = ShownObjects(target).Where(o => ObjectDescriber.Classify(o) == Kind.Drawn).ToList();
+            blocks = new BlockMeshes(target);
+            blocks.Replan(shown);
             // Small objects first: the model is recognisable early, and one huge object does not hold the rest back.
             var ordered = shown.OrderBy(o => o.Geometry.GetBoundingBox(true).Diagonal.Length).Select(o => o.Id).ToList();
             if (ordered.Count == 0)
@@ -183,6 +210,11 @@ namespace HAI.Rhino.Mirror
         {
             if (doc == null) return;
             var ids = changed.ToList();
+            var blocksChanged =
+                deleted.Any(placedBlocks.Contains) || ids.Any(id => doc.Objects.FindId(id) is InstanceObject);
+            // More placements can tip the model over what can be drawn, and fewer can bring it back: then all are sent again.
+            if (blocksChanged && blocks != null && blocks.Replan(ShownObjects(doc)))
+                ids = ids.Union(PlacedBlockIds(doc)).ToList();
             for (var start = 0; start < ids.Count; start += Limits.ObjectsPerBatch)
                 jobs.Enqueue(new Job { Ids = ids.Skip(start).Take(Limits.ObjectsPerBatch).ToList(), Generation = generation });
             var gone = deleted.ToList();
@@ -251,15 +283,26 @@ namespace HAI.Rhino.Mirror
         {
             if (doc == null) return;
             var obj = doc.Objects.FindId(id);
-            if (obj == null || !ObjectDescriber.IsShown(doc, obj) || ObjectDescriber.Classify(obj) != Kind.Drawn)
+            if (obj == null
+                || obj.Attributes.Mode == ObjectMode.InstanceDefinitionObject
+                || !ObjectDescriber.IsShown(doc, obj)
+                || ObjectDescriber.Classify(obj) != Kind.Drawn)
             {
-                // Gone, hidden, or not something the viewer draws; only an object the viewer has needs removing.
+                // Gone, hidden, part of a block's definition, or not something the viewer draws; only an object the viewer
+                // has needs removing.
                 if (mirrored.Remove(id)) job.Deleted.Add(id);
                 heavy.Remove(id);
+                placedBlocks.Remove(id);
                 return;
             }
 
             var scale = RhinoMath.UnitScale(doc.ModelUnitSystem, UnitSystem.Millimeters);
+            if (obj is InstanceObject placed)
+            {
+                PrepareBlock(job, placed, scale);
+                return;
+            }
+
             var meshed = ObjectMesher.Mesh(obj, scale);
             Guid? asset = null;
             var triangles = 0;
@@ -280,6 +323,40 @@ namespace HAI.Rhino.Mirror
 
             mirrored.Add(id);
             job.Described.Add(ObjectDescriber.Describe(doc, obj, asset, triangles));
+        }
+
+        // A placement of a block: the mesh of the block, sent once, and where this one goes.
+        private void PrepareBlock(Job job, InstanceObject placed, double scale)
+        {
+            var definition = placed.InstanceDefinition;
+            var mesh = definition == null ? null : blocks?.For(definition);
+            var triangles = mesh?.Triangles ?? 0;
+            if (mesh == null)
+            {
+                var whole = definition == null ? 0 : blocks?.TrianglesOf(definition) ?? 0;
+                if (whole > 0) heavy.Add(placed.Id);
+                triangles = whole;
+            }
+            else
+            {
+                heavy.Remove(placed.Id);
+                if (mesh.Pending != null)
+                {
+                    job.Uploads.Add(new KeyValuePair<Guid, byte[]>(mesh.Asset, mesh.Pending));
+                    mesh.Pending = null;
+                }
+            }
+
+            mirrored.Add(placed.Id);
+            placedBlocks.Add(placed.Id);
+            var described = ObjectDescriber.Describe(doc!, placed, mesh?.Asset, triangles);
+            if (mesh != null)
+            {
+                described.PartColors = mesh.Colors.ToList();
+                described.Transform = ObjectDescriber.PlacementMm(placed, scale);
+            }
+
+            job.Described.Add(described);
         }
 
         // The job is meshed: count what is not drawn now, then upload the meshes and send the batch, in order.
@@ -317,7 +394,15 @@ namespace HAI.Rhino.Mirror
                 }
             })).ConfigureAwait(false);
             // An object whose mesh did not arrive is drawn as its box rather than named by an asset the bridge does not have.
-            foreach (var described in batch.Changed.Where(o => o.Asset != null && failed.Contains(o.Asset))) described.Asset = null;
+            foreach (var described in batch.Changed.Where(o => o.Asset != null && failed.Contains(o.Asset)))
+            {
+                described.Asset = null;
+                described.Transform = null;
+                described.PartColors = null;
+            }
+
+            // A block's mesh that did not arrive is sent again by its next placement.
+            foreach (var asset in failed) Ui(() => blocks?.Forget(Guid.Parse(asset)));
             if (stamp != generation) return;
             // Stamped when sent: the Rhino to HAI time is how long the bridge and the viewer take after this point.
             batch.ChangedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -326,7 +411,7 @@ namespace HAI.Rhino.Mirror
 
         private NotDrawn CountNotDrawn(RhinoDoc target)
         {
-            var counts = new NotDrawn { Heavy = heavy.Count };
+            var counts = new NotDrawn { Heavy = heavy.Count, Simplified = blocks?.SimplifiedPlacements ?? 0 };
             foreach (var obj in ShownObjects(target))
             {
                 switch (ObjectDescriber.Classify(obj))

@@ -89,6 +89,14 @@ namespace HAI.Rhino.Core.Protocol
 
         [JsonProperty("triangles")] public int Triangles { get; set; }
 
+        /// <summary>A block's placement: where its shared asset goes, row by row, millimetres. Absent for anything else.</summary>
+        [JsonProperty("transform", NullValueHandling = NullValueHandling.Ignore)]
+        public double[]? Transform { get; set; }
+
+        /// <summary>A block's colour per part of its asset; null where a part takes this object's own colour.</summary>
+        [JsonProperty("partColors", NullValueHandling = NullValueHandling.Ignore)]
+        public List<string?>? PartColors { get; set; }
+
         /// <summary>The object's "hai." user strings.</summary>
         [JsonProperty("tags")] public Dictionary<string, string> Tags { get; set; } = new Dictionary<string, string>();
     }
@@ -103,6 +111,9 @@ namespace HAI.Rhino.Core.Protocol
 
         /// <summary>Objects drawn as their bounding box because they are over the triangle cap.</summary>
         [JsonProperty("heavy")] public int Heavy { get; set; }
+
+        /// <summary>Placed blocks drawn, but with less detail, because the model is too heavy to draw in full.</summary>
+        [JsonProperty("simplified")] public int Simplified { get; set; }
     }
 
     public sealed class SyncProgress
@@ -224,6 +235,7 @@ namespace HAI.Rhino.Core.Protocol
         public const int TagKey = 64;
         public const int TagValue = 200;
         public const int TagsPerObject = 20;
+        public const int PartsPerObject = 64;
         public const int ObjectsPerBatch = 500;
         public const int DeletedPerBatch = 2000;
         public const int SelectedObjects = 2000;

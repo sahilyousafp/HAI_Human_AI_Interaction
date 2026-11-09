@@ -36,7 +36,7 @@ Imported models are **reference geometry**: you can select, measure, section, mo
 - A model with **more than 1000 objects** becomes one element per layer and colour, named after the layer and the number of objects it holds (`Facade (4210 objects)`), so the scene file stays small and quick to draw. A stand with 48 692 objects and 2.9 million triangles became 14 elements.
 - **Curves are drawn as thin tubes** along them: lines and polylines keep their corners, a smooth curve is sampled (24 to 160 points by its control points), and the tube is six-sided, 4 to 40 mm thick by the curve's length, with capped ends. It is a picture of the curve for the viewer (picking, bounds, sectioning); the file you saved keeps the real curve. Curves count toward the triangle limit like any geometry, so a plan of many thousands of curves can be over it.
 - Points, text and hatches are not imported; the report counts them.
-- Imported models are drawn with flat shading (each face lit by its own direction) and no edge lines (finding them costs time in proportion to the triangles).
+- Imported models are drawn with flat shading (each face lit by its own direction) and no edge lines (finding them costs time in proportion to the triangles). Open surfaces are drawn from both sides.
 
 ## A model over the limit
 

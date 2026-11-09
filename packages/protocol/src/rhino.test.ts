@@ -18,7 +18,7 @@ const object = {
 const batch = {
   changed: [object],
   deleted: ["a1"],
-  notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 0 },
+  notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 0, simplified: 0 },
   sync: { done: 1, total: 40 },
   reset: true,
   changedAt: 1_700_000_000_000,
@@ -93,6 +93,14 @@ describe("the Rhino plugin's messages", () => {
     const tags = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`hai.t${i}`, "x"]));
     expect(RhinoObject.safeParse({ ...object, tags: tags(20) }).success).toBe(true);
     expect(RhinoObject.safeParse({ ...object, tags: tags(21) }).success).toBe(false);
+  });
+
+  it("a block's placement says where its shared mesh goes, in 16 numbers, and its parts' colours", () => {
+    const block = { ...object, type: "block" as const };
+    const transform = [1, 0, 0, 5000, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    expect(RhinoObject.safeParse({ ...block, transform, partColors: ["#463223", null] }).success).toBe(true);
+    expect(RhinoObject.safeParse({ ...block, transform: transform.slice(1) }).success).toBe(false);
+    expect(RhinoObject.safeParse({ ...block, partColors: ["brown"] }).success).toBe(false);
   });
 
   it("an object too heavy to mirror in full has no asset and is drawn as its box", () => {

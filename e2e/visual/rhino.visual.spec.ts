@@ -54,7 +54,7 @@ for (const scheme of ["light", "dark"] as const) {
       rhinoBatch({
         reset: true,
         sync: { done: 120, total: 4000 },
-        notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 2 },
+        notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 2, simplified: 0 },
       }),
     );
     await openSettings(page, "modelling");

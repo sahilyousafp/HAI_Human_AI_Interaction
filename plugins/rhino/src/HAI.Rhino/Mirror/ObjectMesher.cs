@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using HAI.Rhino.Core.Mesh;
 using Rhino.DocObjects;
 using MeshingParameters = Rhino.Geometry.MeshingParameters;
+using MeshPart = HAI.Rhino.Core.Mesh.MeshPart;
 using MeshType = Rhino.Geometry.MeshType;
+using Point3d = Rhino.Geometry.Point3d;
 using RhinoMesh = Rhino.Geometry.Mesh;
+using Transform = Rhino.Geometry.Transform;
 
 namespace HAI.Rhino.Mirror
 {
@@ -51,6 +54,62 @@ namespace HAI.Rhino.Mirror
             return parts.Count == 0 ? null : new MeshedObject(parts, triangles, false);
         }
 
+        /// <summary>How many triangles an object draws, meshing it if it has no mesh yet.</summary>
+        public static int TriangleCount(RhinoObject obj)
+        {
+            var triangles = 0;
+            foreach (var mesh in RenderMeshes(obj)) triangles += mesh.Faces.TriangleCount + (2 * mesh.Faces.QuadCount);
+            return triangles;
+        }
+
+        /// <summary>An object inside a block, as one part: moved by what places it within the block, in millimetres.</summary>
+        public static MeshPart? Placed(RhinoObject obj, Transform placed, double toMillimetres)
+        {
+            var parts = new List<MeshPart>();
+            foreach (var mesh in RenderMeshes(obj))
+            {
+                var part = ToPart(mesh, placed, toMillimetres);
+                if (part != null) parts.Add(part);
+            }
+
+            return parts.Count == 0 ? null : MeshReducer.Merge(parts);
+        }
+
+        private static MeshPart? ToPart(RhinoMesh mesh, Transform placed, double scale)
+        {
+            var vertices = mesh.Vertices;
+            var positions = new float[vertices.Count * 3];
+            for (var i = 0; i < vertices.Count; i++)
+            {
+                var point = new Point3d(vertices[i]);
+                point.Transform(placed);
+                positions[i * 3] = (float)(point.X * scale);
+                positions[(i * 3) + 1] = (float)(point.Y * scale);
+                positions[(i * 3) + 2] = (float)(point.Z * scale);
+                if (float.IsNaN(positions[i * 3]) || float.IsInfinity(positions[i * 3])) return null;
+            }
+
+            var indices = IndicesOf(mesh);
+            return indices.Length == 0 ? null : new MeshPart(positions, indices);
+        }
+
+        private static uint[] IndicesOf(RhinoMesh mesh)
+        {
+            var indices = new List<uint>(mesh.Faces.Count * 3);
+            foreach (var face in mesh.Faces)
+            {
+                indices.Add((uint)face.A);
+                indices.Add((uint)face.B);
+                indices.Add((uint)face.C);
+                if (!face.IsQuad) continue;
+                indices.Add((uint)face.A);
+                indices.Add((uint)face.C);
+                indices.Add((uint)face.D);
+            }
+
+            return indices.ToArray();
+        }
+
         private static List<RhinoMesh> RenderMeshes(RhinoObject obj)
         {
             var found = new List<RhinoMesh>();
@@ -80,19 +139,8 @@ namespace HAI.Rhino.Mirror
                 if (float.IsNaN(positions[i * 3]) || float.IsInfinity(positions[i * 3])) return null;
             }
 
-            var indices = new List<uint>(mesh.Faces.Count * 3);
-            foreach (var face in mesh.Faces)
-            {
-                indices.Add((uint)face.A);
-                indices.Add((uint)face.B);
-                indices.Add((uint)face.C);
-                if (!face.IsQuad) continue;
-                indices.Add((uint)face.A);
-                indices.Add((uint)face.C);
-                indices.Add((uint)face.D);
-            }
-
-            return indices.Count == 0 ? null : new MeshPart(positions, indices.ToArray());
+            var indices = IndicesOf(mesh);
+            return indices.Length == 0 ? null : new MeshPart(positions, indices);
         }
     }
 }

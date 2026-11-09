@@ -553,6 +553,9 @@ function ElementMesh({
         }}
       >
         <meshStandardMaterial
+          // The model's mesh arrives after its placeholder is drawn, and flat shading and sides are built into the shader:
+          // changed on the same material, the mesh would keep the placeholder's and be lit as if every face looked up.
+          key={model !== null ? "model" : "built"}
           color={color}
           roughness={0.9}
           metalness={0}
@@ -658,7 +661,9 @@ function CameraRig({
       cast(x, y);
       const cut = sectionRef.current;
       for (const h of raycaster.intersectObjects(scene.children, true)) {
-        const id = h.object.userData.elementId;
+        // A block drawn many times in one call: which placement was hit.
+        const batched = h.object.userData.elementIds as string[] | undefined;
+        const id = batched ? batched[h.instanceId ?? -1] : h.object.userData.elementId;
         if (typeof id !== "string") continue;
         if (cut !== null && h.point.z / MM > cut + 1) continue; // hidden above the section
         return { elementId: id, point: [h.point.x / MM, h.point.y / MM, h.point.z / MM] };
@@ -697,7 +702,7 @@ function CameraRig({
       scene.traverse((object) => {
         const id = object.userData.elementId;
         const mesh = object as THREE.Mesh;
-        if (typeof id !== "string" || !mesh.isMesh || !mesh.visible) return;
+        if (typeof id !== "string" || !mesh.isMesh || !mesh.visible || object.userData.elementIds) return;
         if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
         const local = mesh.geometry.boundingBox;
         if (!local) return;
@@ -1339,7 +1344,7 @@ export function Viewer({
   useEffect(() => {
     if (rhinoSynced === syncedSeen.current) return;
     syncedSeen.current = rhinoSynced;
-    const box = mirror.bounds();
+    const box = mirror.framingBounds();
     if (!box) return;
     nav.current = frameBox(
       [box.min[0] * MM, box.min[1] * MM, box.min[2] * MM],

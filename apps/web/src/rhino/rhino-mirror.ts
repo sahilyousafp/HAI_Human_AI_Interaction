@@ -9,7 +9,35 @@ import {
   type RhinoPythonStatus,
   type RhinoSync,
 } from "@hai/protocol";
+import { withoutBackdrops } from "../viewer/backdrop.ts";
 import { LatencyTracker } from "../viewer/latency.ts";
+
+/**
+ * A block placed at least this many times is planting, furniture and the like: its placements are drawn together, and
+ * the view is not framed on them.
+ */
+export const REPEATED_PLACEMENTS = 8;
+
+/** How many placements each block's shared mesh has. */
+export function placementsByAsset(objects: Iterable<RhinoObject>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const { asset, transform } of objects) {
+    if (asset && transform) counts.set(asset, (counts.get(asset) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Whether an object is a placement of a block used many times, given the counts of `placementsByAsset`. */
+export function isRepeatedPlacement(object: RhinoObject, placements: Map<string, number>): boolean {
+  return (
+    object.asset !== null &&
+    object.transform !== undefined &&
+    (placements.get(object.asset) ?? 0) >= REPEATED_PLACEMENTS
+  );
+}
+
+const diagonal = ({ bounds }: RhinoObject): number =>
+  Math.hypot(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]);
 
 export interface MirrorState {
   connected: boolean;
@@ -80,6 +108,20 @@ interface Waiting {
 
 const newId = () => crypto.randomUUID();
 
+function boxOf(objects: Iterable<RhinoObject>): { min: Point3Mm; max: Point3Mm } | null {
+  const min: Point3Mm = [Infinity, Infinity, Infinity];
+  const max: Point3Mm = [-Infinity, -Infinity, -Infinity];
+  let any = false;
+  for (const { bounds } of objects) {
+    any = true;
+    for (let k = 0; k < 3; k++) {
+      min[k] = Math.min(min[k] as number, bounds.min[k] as number);
+      max[k] = Math.max(max[k] as number, bounds.max[k] as number);
+    }
+  }
+  return any ? { min, max } : null;
+}
+
 /**
  * The browser's copy of what the Rhino plugin reports: whether Rhino is connected, how the agent models, and the
  * objects of its open document, kept apart from the HAI scene. It measures how long a change in Rhino takes to be drawn
@@ -111,16 +153,16 @@ export class RhinoMirror {
 
   /** The bounding box of every mirrored object, millimetres, or null when there are none. */
   bounds(): { min: Point3Mm; max: Point3Mm } | null {
-    if (this.byId.size === 0) return null;
-    const min: Point3Mm = [Infinity, Infinity, Infinity];
-    const max: Point3Mm = [-Infinity, -Infinity, -Infinity];
-    for (const { bounds } of this.byId.values()) {
-      for (let k = 0; k < 3; k++) {
-        min[k] = Math.min(min[k] as number, bounds.min[k] as number);
-        max[k] = Math.max(max[k] as number, bounds.max[k] as number);
-      }
-    }
-    return { min, max };
+    return boxOf(this.byId.values());
+  }
+
+  /** The box to frame when a model arrives: what it is about, without its planting or a backdrop such as a sky dome. */
+  framingBounds(): { min: Point3Mm; max: Point3Mm } | null {
+    const all = [...this.byId.values()];
+    const placements = placementsByAsset(all);
+    const main = all.filter((o) => !isRepeatedPlacement(o, placements));
+    const framed = withoutBackdrops(main, diagonal);
+    return boxOf(framed.length > 0 ? framed : all);
   }
 
   /** Handles a bridge message; returns false if it was not about Rhino. */

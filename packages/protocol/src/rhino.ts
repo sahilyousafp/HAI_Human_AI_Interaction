@@ -17,7 +17,7 @@ export const RhinoPythonStatus = z.discriminatedUnion("state", [
 export type RhinoPythonStatus = z.infer<typeof RhinoPythonStatus>;
 
 /** The kinds of Rhino object that are meshed and drawn in HAI. Curves, points and annotations are only counted. */
-export const RhinoObjectType = z.enum(["brep", "extrusion", "mesh", "surface", "subd"]);
+export const RhinoObjectType = z.enum(["brep", "extrusion", "mesh", "surface", "subd", "block"]);
 export type RhinoObjectType = z.infer<typeof RhinoObjectType>;
 
 /**
@@ -43,6 +43,21 @@ export const RhinoObject = z.strictObject({
     .refine(({ min, max }) => min.every((v, i) => v <= (max[i] ?? v)), "min must not exceed max"),
   asset: AssetId.nullable(),
   triangles: z.int().nonnegative(),
+  /**
+   * A block's placement: where its asset goes, row by row, millimetres. Every placement of a block shares one asset, in
+   * the block's own coordinates. Absent for anything else, whose asset is already in place.
+   */
+  transform: z.array(z.number()).length(16).optional(),
+  /** A block's colour per part of its asset; null where a part takes the object's own `color`. */
+  partColors: z
+    .array(
+      z
+        .string()
+        .regex(/^#[0-9a-fA-F]{6}$/)
+        .nullable(),
+    )
+    .max(64)
+    .optional(),
   tags: z
     .record(z.string().max(64), z.string().max(200))
     .refine((t) => Object.keys(t).length <= 20, "at most 20 tags"),
@@ -57,10 +72,19 @@ export const RhinoNotDrawn = z.strictObject({
   other: z.int().nonnegative(),
   /** Objects drawn as their bounding box because they are over the triangle cap. */
   heavy: z.int().nonnegative(),
+  /** Placed blocks drawn, but with less detail, because the model is too heavy to draw in full. */
+  simplified: z.int().nonnegative().default(0),
 });
 export type RhinoNotDrawn = z.infer<typeof RhinoNotDrawn>;
 
-export const EMPTY_NOT_DRAWN: RhinoNotDrawn = { curves: 0, points: 0, annotations: 0, other: 0, heavy: 0 };
+export const EMPTY_NOT_DRAWN: RhinoNotDrawn = {
+  curves: 0,
+  points: 0,
+  annotations: 0,
+  other: 0,
+  heavy: 0,
+  simplified: 0,
+};
 
 /** How far the first sync of a document has got. */
 export const RhinoSync = z.strictObject({ done: z.int().nonnegative(), total: z.int().nonnegative() });
