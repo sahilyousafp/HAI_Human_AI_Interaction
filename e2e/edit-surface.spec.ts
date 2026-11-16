@@ -302,11 +302,16 @@ test.describe("the host selection card", () => {
     await select(rhino, ["canopy-1"], COMPONENTS);
     const card = page.getByTestId("component-card");
     await expect(card).toBeVisible();
-    await card.getByTestId("component-ask-text").fill("delegate architect: work 1500");
+    await card.getByTestId("component-ask-text").fill("delegate architect: work 3000");
     await card.getByTestId("component-ask").click();
-    await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "working");
+    // Mochi hands the work out and its own turn ends at once: the architect's task is what is still running.
+    const team = bridge?.agent as Team;
+    await expect.poll(() => team.board.find((t) => t.agent === "architect")?.status).toBe("running");
     // While the team works, Rhino reports the canopy changed (as the agent's run would).
     await moved(rhino, "canopy-1", [-12_000, -6_000, 0]);
+    // Nothing glows while the architect is still at work, even with Mochi idle.
+    await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
+    expect((await mirror(page))?.changed).toEqual([]);
     await expect.poll(async () => (await mirror(page))?.changed, { timeout: 15_000 }).toEqual(["canopy-1"]);
     // The next selection ends the glow.
     await select(rhino, ["canopy-2"]);

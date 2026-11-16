@@ -56,31 +56,35 @@ test.describe("live preview", () => {
     await slideTo(page, 150, COLUMN);
     const samples: number[] = [];
     for (const value of [160, 190, 220, 250, 280, 310, 340, 300, 260, 220]) {
-      // Time from the control's input event (in the frame) to the viewer drawing the new position.
-      const sentAt = frame(page)
-        .locator("#s")
-        .evaluate((el, v) => {
-          const t0 = performance.timeOrigin + performance.now();
-          (el as HTMLInputElement).value = String(v);
-          el.dispatchEvent(new Event("input", { bubbles: true }));
-          return t0;
-        }, value);
-      const seen = page.evaluate(
-        (target) =>
-          new Promise<number>((resolve) => {
-            const check = () => {
-              const doc = window.__HAI_SCENE__?.getSnapshot().doc ?? null;
-              const column = window.__HAI_PANELS__?.shownDoc(doc)?.elements["col-a1"];
-              if (column?.type === "column" && column.position?.[0] === target)
-                resolve(performance.timeOrigin + performance.now());
-              else requestAnimationFrame(check);
-            };
-            check();
-          }),
+      // Time from the control's input event (in the frame) to the viewer drawing the new position. The watcher is in
+      // place before the input is sent, so a slow test runner's own round trips are not counted.
+      await page.evaluate(
+        (target) => {
+          const w = window as unknown as { __seenAt?: number | null };
+          w.__seenAt = null;
+          const check = () => {
+            const doc = window.__HAI_SCENE__?.getSnapshot().doc ?? null;
+            const column = window.__HAI_PANELS__?.shownDoc(doc)?.elements["col-a1"];
+            if (column?.type === "column" && column.position?.[0] === target)
+              w.__seenAt = performance.timeOrigin + performance.now();
+            else requestAnimationFrame(check);
+          };
+          requestAnimationFrame(check);
+        },
         COLUMN + value - 150,
       );
-      const [t0, t1] = await Promise.all([sentAt, seen]);
-      samples.push(t1 - t0);
+      const t0 = await frame(page)
+        .locator("#s")
+        .evaluate((el, v) => {
+          const t = performance.timeOrigin + performance.now();
+          (el as HTMLInputElement).value = String(v);
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          return t;
+        }, value);
+      const seenAt = () =>
+        page.evaluate(() => (window as unknown as { __seenAt?: number | null }).__seenAt ?? null);
+      await expect.poll(seenAt).not.toBeNull();
+      samples.push(((await seenAt()) as number) - t0);
     }
     samples.sort((a, b) => a - b);
     expect(samples[Math.floor(samples.length / 2)]).toBeLessThan(allow(50, 200));
