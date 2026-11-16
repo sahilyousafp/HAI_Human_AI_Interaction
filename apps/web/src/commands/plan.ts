@@ -1,8 +1,15 @@
-import type { Element, LetterMarker, Point3Mm, SceneDocument, SceneOp } from "@hai/protocol";
+import {
+  type Element,
+  HOST_INFO,
+  type HostEditOp,
+  type HostId,
+  type LetterMarker,
+  type Point3Mm,
+  type SceneDocument,
+  type SceneOp,
+} from "@hai/protocol";
 import {
   applySteps,
-  copiedTags,
-  elementBounds,
   groupOf,
   groupOps,
   newGroupId,
@@ -10,8 +17,17 @@ import {
   type TransformStep,
   ungroupOps,
 } from "@hai/scene";
-import { newId } from "../tools/create.ts";
-import type { Clause, Command, Selector } from "./grammar.ts";
+import {
+  boxOfObjects,
+  describeObjects,
+  type HostTargets,
+  mirrorAcross,
+  multiply,
+  rotationAbout,
+  transformPoint,
+  translation,
+} from "../tools/host-targets.ts";
+import type { Clause, Command, RemovedVerb, Selector } from "./grammar.ts";
 
 /** What a command comes to once it is checked against the model, before anything is changed. */
 export type Plan =
@@ -24,8 +40,18 @@ export type Plan =
   | { kind: "showAll"; label: string }
   | { kind: "error"; message: string };
 
-/** The most elements one command may create. */
-export const MAX_NEW_ELEMENTS = 500;
+/** What a command comes to on a host's objects: one edit sent to the host, a delete asked first, or why not. */
+export type HostPlan =
+  | { kind: "hostEdit"; host: HostId; label: string; op: HostEditOp }
+  | { kind: "hostDelete"; host: HostId; label: string; ids: string[] }
+  | { kind: "error"; message: string };
+
+/** What the reply says to a command that made geometry: the agent has the host make it. */
+export const REMOVED_COMMAND: Record<RemovedVerb, string> = {
+  copy: "HAI does not copy any more. Ask the agent, and it makes the copies in the host.",
+  array: "HAI does not make arrays any more. Ask the agent, and it makes the array in the host.",
+  scale: "HAI does not scale any more. Ask the agent, and it scales it in the host.",
+};
 
 const NOTHING_TO_ACT_ON = "Select something first.";
 
@@ -75,15 +101,8 @@ function clauseText(clause: Clause): string {
       return `move ${offsetText(clause.by)}`;
     case "moveTo":
       return `move to marker ${clause.marker}`;
-    case "copy": {
-      const times = clause.count > 1 ? ` ${clause.count} times` : "";
-      if (clause.spaced) return `array${times || " once"}`;
-      return `copy${times}${clause.by ? ` ${offsetText(clause.by)}` : ""}`;
-    }
     case "rotate":
       return `rotate ${clause.deg}°${aboutText(clause.about)}`;
-    case "scale":
-      return `scale ${clause.factor}${aboutText(clause.about)}`;
     case "mirror":
       return `mirror ${clause.axis}${aboutText(clause.about)}`;
     case "select":
@@ -99,10 +118,12 @@ function clauseText(clause: Clause): string {
     case "group":
     case "ungroup":
       return clause.kind;
+    case "removed":
+      return clause.what;
   }
 }
 
-/** What a command says in a few words, for the undo step and the chip: "Copy, rotate 90°". */
+/** What a command says in a few words, for the undo step and the chip: "Move 2 m east, rotate 90°". */
 export function commandLabel(clauses: Clause[]): string {
   const text = clauses.map(clauseText).join(", ");
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -138,7 +159,6 @@ function markerOf(clause: Clause): string | undefined {
     case "moveTo":
       return clause.marker;
     case "rotate":
-    case "scale":
     case "mirror":
       return clause.about;
     default:
@@ -163,9 +183,6 @@ function stepsOf(clauses: Clause[], markers: LetterMarker[]): TransformStep[] | 
       case "rotate":
         steps.push({ kind: "rotate", deg: clause.deg, ...(point ? { about: [point[0], point[1]] } : {}) });
         break;
-      case "scale":
-        steps.push({ kind: "scale", factor: clause.factor, ...(point ? { about: point } : {}) });
-        break;
       case "mirror":
         steps.push({
           kind: "mirror",
@@ -181,26 +198,7 @@ function stepsOf(clauses: Clause[], markers: LetterMarker[]): TransformStep[] | 
 const namesOf = (doc: SceneDocument, ids: string[]) =>
   ids.length === 1 ? (doc.elements[ids[0] as string] as Element).name : `${ids.length} elements`;
 
-/** One width of what is being copied along an axis: an array with no distance puts its copies side by side. */
-function spacingOf(
-  elements: Element[],
-  along: { axis: 0 | 1 | 2; sign: 1 | -1 },
-  doc: SceneDocument,
-): Point3Mm {
-  let low = Number.POSITIVE_INFINITY;
-  let high = Number.NEGATIVE_INFINITY;
-  for (const element of elements) {
-    const { min, max } = elementBounds(element, doc.levels);
-    low = Math.min(low, min[along.axis]);
-    high = Math.max(high, max[along.axis]);
-  }
-  const width = Number.isFinite(high - low) ? high - low : 0;
-  const by: Point3Mm = [0, 0, 0];
-  by[along.axis] = along.sign * width;
-  return by;
-}
-
-/** The changes of place a command asks for, as `update` ops, and `create` ops for the copies. */
+/** The changes of place a command asks for, as `update` ops. */
 function planEdit(
   clauses: Clause[],
   doc: SceneDocument,
@@ -209,57 +207,12 @@ function planEdit(
   markers: LetterMarker[],
 ): Plan {
   const elements = ids.map((id) => doc.elements[id] as Element);
-  const copyAt = clauses.findIndex((c) => c.kind === "copy");
-  if (copyAt < 0) {
-    const steps = stepsOf(clauses, markers);
-    if (typeof steps === "string") return { kind: "error", message: steps };
-    const done = applySteps(elements, steps, doc.levels);
-    if (!done.ok) return { kind: "error", message: done.error };
-    const ops = Object.entries(done.patches).map(([id, patch]): SceneOp => ({ op: "update", id, patch }));
-    return { kind: "edit", label, ops, select: null };
-  }
-
-  // What comes before the copy moves the originals; what follows (and the copy's own offset) makes the copies.
-  const copy = clauses[copyAt] as Extract<Clause, { kind: "copy" }>;
-  if (elements.length * copy.count > MAX_NEW_ELEMENTS) {
-    return { kind: "error", message: `That makes more than ${MAX_NEW_ELEMENTS} copies.` };
-  }
-  const ops: SceneOp[] = [];
-  let working = elements;
-  const before = stepsOf(clauses.slice(0, copyAt), markers);
-  if (typeof before === "string") return { kind: "error", message: before };
-  if (before.length > 0) {
-    const moved = applySteps(elements, before, doc.levels);
-    if (!moved.ok) return { kind: "error", message: moved.error };
-    for (const [id, patch] of Object.entries(moved.patches)) ops.push({ op: "update", id, patch });
-    working = elements.map((e) => ({ ...e, ...moved.patches[e.id] }) as Element);
-  }
-  const step = copy.spaced ? spacingOf(working, copy.spaced, doc) : copy.by;
-  const unit: TransformStep[] = step ? [{ kind: "translate", by: step }] : [];
-  const after = stepsOf(clauses.slice(copyAt + 1), markers);
-  if (typeof after === "string") return { kind: "error", message: after };
-  const created: string[] = [];
-  for (let i = 1; i <= copy.count; i++) {
-    const fresh = new Map<string, string>(); // each copy of a group is a group of its own
-    const steps = [...Array.from({ length: i }, () => unit).flat(), ...after];
-    const done = applySteps(working, steps, doc.levels);
-    if (!done.ok) return { kind: "error", message: done.error };
-    for (const element of working) {
-      const id = newId(element.type);
-      created.push(id);
-      ops.push({
-        op: "create",
-        element: {
-          ...element,
-          ...done.patches[element.id],
-          ...(groupOf(element) ? { tags: copiedTags(element, fresh) } : {}),
-          id,
-          name: copy.count > 1 ? `${element.name} copy ${i}` : `${element.name} copy`,
-        } as Element,
-      });
-    }
-  }
-  return { kind: "edit", label, ops, select: created };
+  const steps = stepsOf(clauses, markers);
+  if (typeof steps === "string") return { kind: "error", message: steps };
+  const done = applySteps(elements, steps, doc.levels);
+  if (!done.ok) return { kind: "error", message: done.error };
+  const ops = Object.entries(done.patches).map(([id, patch]): SceneOp => ({ op: "update", id, patch }));
+  return { kind: "edit", label, ops, select: null };
 }
 
 /**
@@ -273,6 +226,8 @@ export function planCommand(
   markers: LetterMarker[] = [],
 ): Plan {
   const label = commandLabel(command.clauses);
+  const removed = command.clauses.find((c) => c.kind === "removed");
+  if (removed?.kind === "removed") return { kind: "error", message: REMOVED_COMMAND[removed.what] };
   let rest = command.clauses;
   let ids = thisIds.filter((id) => doc.elements[id]);
 
@@ -316,4 +271,65 @@ export function planCommand(
         : planned;
     }
   }
+}
+
+/**
+ * A command on a host's objects (what is selected in Rhino, Blender or Revit): moves, turns and mirrors come to one
+ * matrix, sent to the host as one edit and one undo step there; a delete is asked first. What only HAI's elements have
+ * (hide, isolate, groups) says so. A move to a marker takes the middle of the objects' footprint there, at their height.
+ */
+export function planHostCommand(
+  command: Command,
+  targets: HostTargets,
+  markers: LetterMarker[] = [],
+): HostPlan {
+  const removed = command.clauses.find((c) => c.kind === "removed");
+  if (removed?.kind === "removed") return { kind: "error", message: REMOVED_COMMAND[removed.what] };
+  const { host, objects } = targets;
+  const ids = objects.map((o) => o.id);
+  const what = describeObjects(objects);
+  const [only] = command.clauses;
+  if (command.clauses.length === 1 && only?.kind === "delete" && only.selector === null)
+    return { kind: "hostDelete", host, label: `Delete ${what}`, ids };
+  const { min, max } = boxOfObjects(objects);
+  // The middle of the footprint, at the base: what a turn or a mirror goes about, followed through each step.
+  let centre: Point3Mm = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, min[2]];
+  let matrix = translation(0, 0, 0);
+  for (const clause of command.clauses) {
+    const marker = markerOf(clause);
+    const point = marker ? markers.find((m) => m.letter === marker)?.point : undefined;
+    if (marker && !point) return { kind: "error", message: `There is no marker ${marker}.` };
+    let step: number[];
+    switch (clause.kind) {
+      case "translate":
+        step = translation(clause.by[0], clause.by[1], clause.by[2]);
+        break;
+      case "moveTo":
+        step = translation((point as Point3Mm)[0] - centre[0], (point as Point3Mm)[1] - centre[1], 0);
+        break;
+      case "rotate": {
+        const about: [number, number] = point ? [point[0], point[1]] : [centre[0], centre[1]];
+        step = rotationAbout(clause.deg, about);
+        break;
+      }
+      case "mirror": {
+        const axis = clause.axis === "x" ? 0 : 1;
+        step = mirrorAcross(axis, point ? point[axis] : centre[axis]);
+        break;
+      }
+      default:
+        return {
+          kind: "error",
+          message: `That works on HAI's own elements. Ask the agent to do it in ${HOST_INFO[host].label}.`,
+        };
+    }
+    matrix = multiply(step, matrix);
+    centre = transformPoint(step, centre);
+  }
+  return {
+    kind: "hostEdit",
+    host,
+    label: commandLabel(command.clauses).replace(/^(\w+)/, (verb) => `${verb} ${what}`),
+    op: { op: "transform", ids, matrix },
+  };
 }

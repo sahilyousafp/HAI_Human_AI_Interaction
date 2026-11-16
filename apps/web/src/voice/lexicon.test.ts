@@ -67,9 +67,8 @@ describe("putting a transcript right with the app's word sets", () => {
   });
 
   it("a tool name heard as a word that sounds like it is put right", () => {
-    expect(fixed("colon")).toBe("column");
-    expect(fixed("slap")).toBe("slab");
-    expect(fixed("use the colon tool")).toBe("use the column tool");
+    expect(fixed("laso")).toBe("lasso");
+    expect(fixed("use the laso tool")).toBe("use the lasso tool");
   });
 
   it("a command word heard as a word that sounds like it is put right", () => {
@@ -92,7 +91,7 @@ describe("putting a transcript right with the app's word sets", () => {
 
 describe("the transcript the app acts on", () => {
   it("is put right, tools and spoken words included", () => {
-    expect(heardAs("colon", tools)).toBe("column");
+    expect(heardAs("laso", tools)).toBe("lasso");
     expect(heardAs("scale to", tools)).toBe("scale two");
     expect(heardAs("copy and rotate 90", tools)).toBeNull();
   });

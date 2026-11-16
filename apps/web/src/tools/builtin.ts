@@ -11,17 +11,25 @@ import {
   unionBounds,
 } from "@hai/scene";
 import { actedOn, confirmDelete, describeElements } from "./acted-on.ts";
-import { columnTool, copyTool, lineTool, slabTool, wallTool } from "./create.ts";
 import { snap } from "./grid.ts";
+import {
+  boxOfObjects,
+  confirmHostDelete,
+  describeObjects,
+  type HostTargets,
+  hostTargetsOf,
+  rotationAbout,
+  selectedHostTargets,
+  translation,
+} from "./host-targets.ts";
 import { lassoTool } from "./lasso.ts";
-import { movedOffset } from "./placement.ts";
+import { movedOffset, offsetFrom } from "./placement.ts";
 import { placeMarkerTool, referenceAt, sketchAreaTool, sketchLineTool } from "./reference.ts";
 import type { ToolRegistry } from "./registry.ts";
 import type { Tool, ToolContext } from "./types.ts";
 
 export { SNAP_MM, snap } from "./grid.ts";
-/** Size of a new massing block: width, depth, height, millimetres. */
-export const MASSING_SIZE: [number, number, number] = [6000, 6000, 3500];
+
 /** Section: a full camera-frame height of hand movement sweeps this many times the model's height. */
 const SECTION_GAIN = 1.5;
 /** The section height moves in steps of this, millimetres. */
@@ -87,10 +95,19 @@ const previewOf = (elements: Element[]): Record<string, string> =>
 /**
  * Move: drag an element on the ground plane, snapped to 100 mm or to the drawing aids, one "Move" transaction on
  * release. With several elements selected, a drag that starts on one of them carries all of them. A pinch on a line's
- * point moves that point alone, through the drawing aids, as one "Move point" transaction.
+ * point moves that point alone, through the drawing aids, as one "Move point" transaction. A host's object moves the
+ * same way, and the move is one undo step in its host.
  */
 export function moveTool(): Tool {
   let pointDrag: { line: LineElement; index: number; from: Point3Mm; to: Point3Mm } | null = null;
+  let hostDrag: {
+    targets: HostTargets;
+    ids: string[];
+    ref: Point3Mm;
+    heightMm: number;
+    start: Point3Mm;
+    offset: [number, number];
+  } | null = null;
   let drag: {
     element: Element;
     carried: Element[];
@@ -110,6 +127,8 @@ export function moveTool(): Tool {
     },
     deactivate(ctx) {
       pointDrag = null;
+      if (hostDrag) ctx.previewHost(hostDrag.targets.host, hostDrag.ids, null);
+      hostDrag = null;
       ctx.setOverlay({ notice: null, draft: null, draftOf: null });
     },
     onDragStart(ctx, at, hit) {
@@ -121,6 +140,21 @@ export function moveTool(): Tool {
         return true;
       }
       const element = hit ? ctx.doc()?.elements[hit.elementId] : undefined;
+      const targets = hit && !element ? hostTargetsOf(ctx, hit.elementId) : null;
+      if (hit && targets) {
+        const start = ctx.ground(at, hit.point[2]);
+        if (!start) return false;
+        const { min } = boxOfObjects(targets.objects);
+        hostDrag = {
+          targets,
+          ids: targets.objects.map((o) => o.id),
+          ref: min,
+          heightMm: hit.point[2],
+          start,
+          offset: [0, 0],
+        };
+        return true;
+      }
       if (!hit || !element) return false; // empty space: the view orbits instead
       const start = ctx.ground(at, hit.point[2]);
       if (!start) return false;
@@ -143,6 +177,14 @@ export function moveTool(): Tool {
         });
         return;
       }
+      if (hostDrag) {
+        const p = ctx.ground(at, hostDrag.heightMm);
+        if (!p) return;
+        hostDrag.offset = offsetFrom(ctx, hostDrag.ref, [], hostDrag.start, p, at);
+        const [dx, dy] = hostDrag.offset;
+        ctx.previewHost(hostDrag.targets.host, hostDrag.ids, translation(dx, dy));
+        return;
+      }
       if (!drag) return;
       const p = ctx.ground(at, drag.heightMm);
       if (!p) return;
@@ -157,6 +199,20 @@ export function moveTool(): Tool {
         if (to[0] !== from[0] || to[1] !== from[1] || to[2] !== from[2])
           ctx.apply("Move point", [{ op: "update", id: line.id, patch: linePointMoved(line, index, to) }]);
         else ctx.setOverlay({ draft: null, draftOf: null });
+        return;
+      }
+      if (hostDrag) {
+        const { targets, ids, offset } = hostDrag;
+        hostDrag = null;
+        ctx.clearSnap();
+        // As for elements, the preview holds until the host's result arrives (see `HostMirror.edit`).
+        if (offset[0] !== 0 || offset[1] !== 0)
+          ctx.applyHost(targets.host, `Move ${describeObjects(targets.objects)}`, {
+            op: "transform",
+            ids,
+            matrix: translation(offset[0], offset[1]),
+          });
+        else ctx.previewHost(targets.host, ids, null);
         return;
       }
       if (!drag) return;
@@ -174,6 +230,8 @@ export function moveTool(): Tool {
     onDragCancel(ctx) {
       drag = null;
       pointDrag = null;
+      if (hostDrag) ctx.previewHost(hostDrag.targets.host, hostDrag.ids, null);
+      hostDrag = null;
       ctx.setOverlay({ movePreview: null, draft: null, draftOf: null });
     },
   };
@@ -186,6 +244,8 @@ export function moveTool(): Tool {
 export function rotateTool(): Tool {
   let drag: {
     carried: Element[];
+    /** Set when what turns is a host's objects: they are drawn turned by the mirror, and the turn goes to the host. */
+    host: { targets: HostTargets; ids: string[] } | null;
     about: Point3Mm;
     startDeg: number;
     deg: number;
@@ -196,7 +256,10 @@ export function rotateTool(): Tool {
     const p = ctx.ground(at, about[2]);
     return p ? (Math.atan2(p[1] - about[1], p[0] - about[0]) * 180) / Math.PI : null;
   };
-  const clear = (ctx: ToolContext) => ctx.setOverlay({ drafts: [], draftsOf: {}, pivot: null });
+  const clear = (ctx: ToolContext) => {
+    if (drag?.host) ctx.previewHost(drag.host.targets.host, drag.host.ids, null);
+    ctx.setOverlay({ drafts: [], draftsOf: {}, pivot: null });
+  };
   return {
     id: "rotate",
     label: "Rotate",
@@ -213,20 +276,34 @@ export function rotateTool(): Tool {
     },
     onTap(ctx, _at, hit) {
       const element = hit ? ctx.doc()?.elements[hit.elementId] : undefined;
-      ctx.select(element ? actedOn(ctx, element).map((e) => e.id) : []);
+      const targets = hit && !element ? hostTargetsOf(ctx, hit.elementId) : null;
+      if (targets) ctx.select(targets.objects.map((o) => o.id));
+      else ctx.select(element ? actedOn(ctx, element).map((e) => e.id) : []);
     },
     onDragStart(ctx, at, hit) {
       const doc = ctx.doc();
       if (!doc) return false;
       const grabbed = hit ? doc.elements[hit.elementId] : undefined;
+      // A host's objects: the one grabbed (with the host's selection), or with nothing grabbed what a host has selected.
+      const targets = grabbed
+        ? null
+        : hit
+          ? hostTargetsOf(ctx, hit.elementId)
+          : ctx.selection().length === 0
+            ? selectedHostTargets(ctx)
+            : null;
       const hidden = ctx.hidden();
-      const carried = grabbed
-        ? actedOn(ctx, grabbed)
-        : ctx.selection().flatMap((id) => {
-            const element = doc.elements[id];
-            return element && !hidden.has(id) ? [element] : [];
-          });
-      const box = unionBounds(carried.map((element) => elementBounds(element, doc.levels)));
+      const carried = targets
+        ? []
+        : grabbed
+          ? actedOn(ctx, grabbed)
+          : ctx.selection().flatMap((id) => {
+              const element = doc.elements[id];
+              return element && !hidden.has(id) ? [element] : [];
+            });
+      const box = targets
+        ? boxOfObjects(targets.objects)
+        : unionBounds(carried.map((element) => elementBounds(element, doc.levels)));
       if (!box) return false; // nothing to turn: the view orbits instead
       const about: Point3Mm = [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, box.min[2]];
       const startDeg = angleAt(ctx, at, about);
@@ -237,6 +314,7 @@ export function rotateTool(): Tool {
       clear(ctx);
       drag = {
         carried,
+        host: targets ? { targets, ids: targets.objects.map((o) => o.id) } : null,
         about,
         startDeg,
         deg: 0,
@@ -253,6 +331,14 @@ export function rotateTool(): Tool {
       const turned = Math.round((((((raw - drag.startDeg + 180) % 360) + 360) % 360) - 180) / step) * step;
       drag.deg = turned;
       const about: [number, number] = [drag.about[0], drag.about[1]];
+      if (drag.host) {
+        ctx.previewHost(drag.host.targets.host, drag.host.ids, rotationAbout(turned, about));
+        ctx.setOverlay({
+          pivot: { point: drag.about, label: `${turned}°` },
+          notice: `Rotate ${turned} deg. Let go to keep it.`,
+        });
+        return;
+      }
       const t = { kind: "rotate" as const, deg: turned, about };
       ctx.setOverlay({
         drafts: drag.carried.map(
@@ -266,13 +352,23 @@ export function rotateTool(): Tool {
     onDragEnd(ctx) {
       const doc = ctx.doc();
       const current = drag;
-      drag = null;
       ctx.setOverlay({ pivot: null, notice: hint });
       if (!current || !doc || current.deg === 0) {
         clear(ctx);
+        drag = null;
         return;
       }
+      drag = null;
       const about: [number, number] = [current.about[0], current.about[1]];
+      if (current.host) {
+        const { targets, ids } = current.host;
+        ctx.applyHost(targets.host, `Rotate ${describeObjects(targets.objects)} ${current.deg} deg`, {
+          op: "transform",
+          ids,
+          matrix: rotationAbout(current.deg, about),
+        });
+        return;
+      }
       const done = applySteps(current.carried, [{ kind: "rotate", deg: current.deg, about }], doc.levels);
       if (!done.ok) {
         clear(ctx);
@@ -286,8 +382,8 @@ export function rotateTool(): Tool {
       );
     },
     onDragCancel(ctx) {
-      drag = null;
       clear(ctx);
+      drag = null;
     },
   };
 }
@@ -379,44 +475,6 @@ export function sectionTool(): Tool {
   };
 }
 
-/** Add massing: a tap on the ground places a 6000 x 6000 x 3500 mm block, centred and snapped to 100 mm. */
-export const massingTool: Tool = {
-  id: "massing",
-  label: "Add massing",
-  spoken: ["massing", "add massing", "block"],
-  icon: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12 4 7.5",
-  shortcut: "b",
-  activate(ctx) {
-    ctx.setOverlay({ notice: "Tap the ground to place a block." });
-  },
-  deactivate(ctx) {
-    ctx.setOverlay({ notice: null });
-  },
-  onTap(ctx, at) {
-    const doc = ctx.doc();
-    const p = ctx.ground(at, 0);
-    if (!doc || !p) return;
-    const [w, d, h] = MASSING_SIZE;
-    const [cx, cy] = [snap(p[0]), snap(p[1])];
-    const count = Object.values(doc.elements).filter((e) => e.type === "massing").length;
-    const ground = doc.levels.find((l) => l.elevation === 0);
-    ctx.apply("Add massing", [
-      {
-        op: "create",
-        element: {
-          id: `massing-${crypto.randomUUID().slice(0, 8)}`,
-          name: `Massing ${count + 1}`,
-          type: "massing",
-          ...(ground ? { level: ground.id } : {}),
-          properties: {},
-          origin: [cx - w / 2, cy - d / 2, 0],
-          size: [w, d, h],
-        },
-      },
-    ]);
-  },
-};
-
 /** Delete: a tap marks an element; a nod or Enter deletes it, a shake or Escape keeps it. */
 export const deleteTool: Tool = {
   id: "delete",
@@ -456,6 +514,11 @@ export const deleteTool: Tool = {
     }
     const hitElement = hit ? ctx.doc()?.elements[hit.elementId] : undefined;
     const element = point?.line ?? hitElement;
+    const targets = hit && !element ? hostTargetsOf(ctx, hit.elementId) : null;
+    if (targets) {
+      confirmHostDelete(ctx, targets);
+      return;
+    }
     if (!element) {
       // The section plane is not part of the model; tapping it with Delete simply removes it.
       if (overSectionPlane(ctx, at) || ctx.onSectionLine(at)) {
@@ -507,8 +570,8 @@ export const askAgentTool: Tool = {
 };
 
 /**
- * The tools ring at first start, clockwise from the top: the right hand's long pinch opens it. Redo is in the create
- * ring, by key and in settings.
+ * Every built-in tool. None builds geometry: the host applications model, and HAI edits and points things out. The
+ * rings' layouts are in `@hai/protocol` (rings.ts).
  */
 export function registerBuiltinTools(registry: ToolRegistry): void {
   for (const tool of [
@@ -517,16 +580,10 @@ export function registerBuiltinTools(registry: ToolRegistry): void {
     rotateTool(),
     measureTool,
     sectionTool(),
-    massingTool,
     deleteTool,
     undoTool,
     redoTool,
     askAgentTool,
-    wallTool(),
-    lineTool(),
-    slabTool(),
-    columnTool,
-    copyTool(),
     sketchLineTool(),
     sketchAreaTool(),
     placeMarkerTool,

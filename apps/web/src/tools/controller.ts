@@ -6,6 +6,8 @@ import {
   type GestureEvent,
   type Hand,
   type HeldTarget,
+  type HostEditOp,
+  type HostId,
   type Point2,
   type Point3Mm,
   type Ring,
@@ -25,7 +27,9 @@ import {
   type SnapKind,
   type WorkPlane,
 } from "@hai/scene";
+import type { HostEditOutcome } from "../hosts/host-mirror.ts";
 import { confirmDelete } from "./acted-on.ts";
+import { confirmHostDelete, type HostTarget, hostTargetsOf } from "./host-targets.ts";
 import type { DragMode, RouterTargets } from "./input-router.ts";
 import { PaletteMachine, type PaletteSpace, type PaletteState, SLOT_COUNT } from "./palette.ts";
 import { ReferenceLayer } from "./reference-layer.ts";
@@ -77,6 +81,13 @@ export interface ToolEnvironment {
   select(ids: string[]): void;
   /** The ids selected now. */
   selection?(): string[];
+  /** The hosts' mirrored objects, for the tools that edit them; without it no host object is a target. */
+  hosts?: {
+    target(id: string): HostTarget | null;
+    selection(): string[];
+    preview(host: HostId, ids: string[], matrix: number[] | null): void;
+    edit(host: HostId, label: string, op: HostEditOp): Promise<HostEditOutcome>;
+  };
   /** What is at a viewer position; for a hand (`source`) the nearest model in reach when none is exactly there. */
   pick(at: Point2, source?: PointerSource): Hit | null;
   ground(at: Point2, heightMm?: number): Point3Mm | null;
@@ -456,6 +467,12 @@ export class ToolController {
     const ctx = this.ctx();
     const doc = ctx?.doc();
     if (!ctx || !doc) return;
+    // A host's objects (the host selection card): asked the same way, and deleted in the host as one step.
+    const targets = ids[0] ? hostTargetsOf(ctx, ids[0] as string) : null;
+    if (targets) {
+      confirmHostDelete(ctx, targets);
+      return;
+    }
     confirmDelete(
       ctx,
       ids.flatMap((id) => doc.elements[id] ?? []),
@@ -720,6 +737,14 @@ export class ToolController {
       redo: () => this.redo(),
       select: (ids) => env.select(ids),
       selection: () => env.selection?.() ?? [],
+      hostTarget: (id) => env.hosts?.target(id) ?? null,
+      hostSelection: () => env.hosts?.selection() ?? [],
+      previewHost: (host, ids, matrix) => env.hosts?.preview(host, ids, matrix),
+      applyHost: (host, label, op) => {
+        void env.hosts?.edit(host, label, op).then((outcome) => {
+          if (!outcome.ok) this.flash(outcome.error);
+        });
+      },
       choose: (id) => this.choose(id),
       hidden: () => env.hidden?.() ?? NO_HIDDEN,
       pick: (at) => env.pick(at, this.pickSource),

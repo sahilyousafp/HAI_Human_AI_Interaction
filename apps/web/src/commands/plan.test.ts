@@ -1,7 +1,14 @@
 import { type Element, Element as ElementSchema, type SceneDocument } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { parseCommand } from "./grammar.ts";
-import { commandLabel, lengthText, type Plan, planCommand } from "./plan.ts";
+import {
+  commandLabel,
+  lengthText,
+  type Plan,
+  planCommand,
+  planHostCommand,
+  REMOVED_COMMAND,
+} from "./plan.ts";
 
 const common = { properties: {} };
 const element = (value: Record<string, unknown>): Element => ElementSchema.parse({ ...common, ...value });
@@ -113,51 +120,6 @@ describe("a change of place", () => {
   });
 });
 
-describe("copies", () => {
-  it("copy and rotate leaves the original and turns the copy about itself", () => {
-    const result = plan("copy and rotate 90", doc(block), ["block"]);
-    if (result.kind !== "edit") throw new Error("kind");
-    expect(result.label).toBe("Copy, rotate 90°");
-    expect(result.ops).toHaveLength(1);
-    const [op] = result.ops;
-    expect(op).toMatchObject({
-      op: "create",
-      element: { type: "massing", name: "Block copy", rotationDeg: 90 },
-    });
-    expect(result.select).toHaveLength(1);
-  });
-
-  it("an array puts each copy one step further along", () => {
-    const result = plan("copy 3 times 6 m along y", doc(block), ["block"]);
-    if (result.kind !== "edit") throw new Error("kind");
-    const origins = result.ops.map((op) =>
-      op.op === "create" && op.element.type === "massing" ? op.element.origin[1] : null,
-    );
-    expect(origins).toEqual([6000, 12000, 18000]);
-    expect(result.ops.map((op) => op.op === "create" && op.element.name)).toEqual([
-      "Block copy 1",
-      "Block copy 2",
-      "Block copy 3",
-    ]);
-    expect(new Set(result.select).size).toBe(3);
-  });
-
-  it("what comes after the copy acts on each copy, what comes before on the original", () => {
-    const result = plan("rotate 90 then copy 3 m x", doc(block), ["block"]);
-    if (result.kind !== "edit") throw new Error("kind");
-    expect(result.ops[0]).toMatchObject({ op: "update", id: "block", patch: { rotationDeg: 90 } });
-    expect(result.ops[1]).toMatchObject({ op: "create", element: { rotationDeg: 90 } });
-  });
-
-  it("will not make more than 500 elements", () => {
-    const many = doc(block, wallA, wallB);
-    expect(plan("copy 200 times 1 m x", many, ["block", "wall-a", "wall-b"])).toEqual({
-      kind: "error",
-      message: "That makes more than 500 copies.",
-    });
-  });
-});
-
 describe("delete, hide and isolate", () => {
   it("delete waits to be confirmed and names what it deletes", () => {
     expect(plan("delete this", doc(block, wallA), ["block"])).toEqual({
@@ -192,8 +154,8 @@ describe("the words for what happened", () => {
   });
 
   it("labels a chain in the order it runs", () => {
-    const command = parseCommand("copy 4 times 6 m north, then scale 0.5 and mirror x");
-    expect(commandLabel(command?.clauses ?? [])).toBe("Copy 4 times 6 m north, scale 0.5, mirror x");
+    const command = parseCommand("move 6 m north, then rotate 90 and mirror x");
+    expect(commandLabel(command?.clauses ?? [])).toBe("Move 6 m north, rotate 90°, mirror x");
   });
 });
 
@@ -245,35 +207,75 @@ describe("markers", () => {
   });
 });
 
-describe("an array with no distance", () => {
-  const created = (result: Plan) => {
-    if (result.kind !== "edit") throw new Error(`kind ${result.kind}`);
-    return result.ops.flatMap((op) => (op.op === "create" ? [op.element] : []));
+describe("commands that made geometry", () => {
+  it("a removed command: array 5 times changes nothing, and says arrays are made by asking the agent", () => {
+    expect(plan("array 5 times", doc(block), ["block"])).toEqual({
+      kind: "error",
+      message: REMOVED_COMMAND.array,
+    });
+    expect(REMOVED_COMMAND.array).toMatch(/Ask the agent/);
+    expect(plan("copy 3 m east", doc(block), ["block"])).toMatchObject({ kind: "error" });
+    expect(plan("scale 2", doc(block), ["block"])).toMatchObject({ kind: "error" });
+  });
+});
+
+describe("a command on a host's objects", () => {
+  const canopy = {
+    id: "a1",
+    name: "Canopy",
+    type: "brep",
+    layer: "Roof",
+    color: null,
+    bounds: { min: [0, 0, 3000], max: [4000, 2000, 3200] },
+    asset: null,
+    triangles: 0,
+    tags: {},
+  } as const;
+  const targets = { host: "rhino" as const, objects: [{ ...canopy, bounds: { ...canopy.bounds } }] };
+  const onHost = (text: string) => {
+    const command = parseCommand(text);
+    if (!command) throw new Error(`not a command: ${text}`);
+    return planHostCommand(command, targets as never, [{ letter: "A", point: [10_000, 0, 0] }]);
   };
 
-  it("array 5 times stands five copies side by side along x, one width apart", () => {
-    const copies = created(plan("array 5 times", doc(block), ["block"]));
-    expect(copies).toHaveLength(5);
-    expect(copies.map((c) => (c.type === "massing" ? c.origin[0] : null))).toEqual([
-      4000, 8000, 12000, 16000, 20000,
+  it("a spoken move on a host object: one transform of 2000 mm along x", () => {
+    expect(onHost("move this 2 metres to the right")).toEqual({
+      kind: "hostEdit",
+      host: "rhino",
+      label: "Move Canopy 2 m east",
+      op: { op: "transform", ids: ["a1"], matrix: [1, 0, 0, 2000, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
+    });
+  });
+
+  it("a turn goes about the middle of the footprint, and a chain is one matrix", () => {
+    const turned = onHost("rotate 90");
+    if (turned.kind !== "hostEdit" || turned.op.op !== "transform") throw new Error("not an edit");
+    // 90 degrees about (2000, 1000): x' = -y + 3000, y' = x - 1000.
+    expect(turned.op.matrix.map((v) => Math.round(v))).toEqual([
+      0, -1, 0, 3000, 1, 0, 0, -1000, 0, 0, 1, 0, 0, 0, 0, 1,
+    ]);
+    const chained = onHost("move 1 m east and rotate 90");
+    if (chained.kind !== "hostEdit" || chained.op.op !== "transform") throw new Error("not an edit");
+    // The turn is about the middle after the move, (3000, 1000).
+    expect(chained.op.matrix.map((v) => Math.round(v))).toEqual([
+      0, -1, 0, 4000, 1, 0, 0, -1000, 0, 0, 1, 0, 0, 0, 0, 1,
     ]);
   });
 
-  it("along y it goes one depth apart, and with left it goes the other way", () => {
-    const north = created(plan("array 2 times along y", doc(block), ["block"]));
-    expect(north.map((c) => (c.type === "massing" ? c.origin[1] : null))).toEqual([2000, 4000]);
-    const west = created(plan("array 2 times to the x axis towards left", doc(block), ["block"]));
-    expect(west.map((c) => (c.type === "massing" ? c.origin[0] : null))).toEqual([-4000, -8000]);
+  it("moves the middle of the footprint to a marker, at its own height", () => {
+    const moved = onHost("move to marker A");
+    if (moved.kind !== "hostEdit" || moved.op.op !== "transform") throw new Error("not an edit");
+    expect(moved.op.matrix).toEqual([1, 0, 0, 8000, 0, 1, 0, -1000, 0, 0, 1, 0, 0, 0, 0, 1]);
   });
 
-  it("a group of elements is spaced by its whole width, not each one's", () => {
-    const copies = created(plan("array 1 times", doc(wallA, wallB), ["wall-a", "wall-b"]));
-    expect(copies).toHaveLength(2);
-    expect(copies.map((c) => (c.type === "wall" ? c.start[0] : null))).toEqual([4000, 4000]);
-  });
-
-  it("is named an array in what the bar says", () => {
-    const result = plan("array 5 times", doc(block), ["block"]);
-    expect(result).toMatchObject({ kind: "edit", label: expect.stringContaining("Array") });
+  it("a delete is asked first; hide and groups are HAI's own and say so", () => {
+    expect(onHost("delete this")).toEqual({
+      kind: "hostDelete",
+      host: "rhino",
+      label: "Delete Canopy",
+      ids: ["a1"],
+    });
+    expect(onHost("hide")).toMatchObject({ kind: "error", message: expect.stringContaining("Rhino") });
+    expect(onHost("array 5 times")).toEqual({ kind: "error", message: REMOVED_COMMAND.array });
   });
 });

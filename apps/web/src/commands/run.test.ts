@@ -73,13 +73,21 @@ describe("running a command", () => {
     expect(calls.applied).toEqual([]);
   });
 
-  it("applies a chain as one change, labelled with what was said, and selects the copies", () => {
+  it("applies a chain as one change, labelled with what was said", () => {
     const { host: h, calls } = host();
-    expect(runCommand("copy and rotate 90", h, ["block"])).toEqual({ label: "Copy, rotate 90°" });
+    expect(runCommand("move 2 m east and rotate 90", h, ["block"])).toEqual({
+      label: "Move 2 m east, rotate 90°",
+    });
     expect(calls.applied).toHaveLength(1);
-    expect(calls.applied[0]?.label).toBe("Copy, rotate 90°");
-    expect(calls.selected).toHaveLength(1);
-    expect(calls.selected[0]).toHaveLength(1);
+    expect(calls.applied[0]?.label).toBe("Move 2 m east, rotate 90°");
+  });
+
+  it("a removed command changes nothing, and is said in the passing message", () => {
+    const { host: h, calls } = host();
+    const run = runCommand("array 5 times", h, ["block"]);
+    expect(run?.label).toMatch(/Ask the agent/);
+    expect(calls.applied).toEqual([]);
+    expect(calls.flashed).toEqual([run?.label]);
   });
 
   it("with nothing to act on, says so and changes nothing", () => {
@@ -91,7 +99,7 @@ describe("running a command", () => {
 
   it("says when the bridge could not take the change, and does not move the selection", () => {
     const { host: h, calls } = host(false);
-    expect(runCommand("copy 3 m x", h, ["block"])).toEqual({ label: "The change could not be made." });
+    expect(runCommand("move 3 m x", h, ["block"])).toEqual({ label: "The change could not be made." });
     expect(calls.selected).toEqual([]);
     expect(calls.flashed).toEqual(["The change could not be made."]);
   });
@@ -163,26 +171,17 @@ describe("correcting the last command", () => {
     expect(originX(h)).toBe(3000);
   });
 
-  it("changes an array's count, a rotation's angle and a scale's factor", () => {
+  it("changes a rotation's angle", () => {
     const h = host();
     const memory = new CommandMemory();
-    ran("copy 5 times 6 m along y", h, memory);
-    reviseCommand("make it 3 times", h.host, memory);
-    expect(lastApplied(h)?.ops.filter((op) => op.op === "create")).toHaveLength(3);
     ran("rotate 90", h, memory);
     reviseCommand("actually 45 degrees", h.host, memory);
     expect(JSON.stringify(lastApplied(h)?.ops)).toContain('"rotationDeg":45');
-    ran("scale 2", h, memory);
-    reviseCommand("make it 3", h.host, memory); // a bare number is a scale's factor
-    expect(JSON.stringify(lastApplied(h)?.ops)).toContain("12000");
   });
 
-  it("a bare number for an array is its count, and for a move it is metres when the old one was whole metres", () => {
+  it("a bare number for a move is metres when the old one was whole metres", () => {
     const h = host();
     const memory = new CommandMemory();
-    ran("array 5 times", h, memory);
-    reviseCommand("make it 2", h.host, memory);
-    expect(lastApplied(h)?.ops.filter((op) => op.op === "create")).toHaveLength(2);
     ran("move 5 m east", h, memory);
     reviseCommand("make it 4", h.host, memory);
     expect(originX(h)).toBe(4000);
@@ -224,5 +223,54 @@ describe("correcting the last command", () => {
     const run = reviseCommand("make it 45 degrees", h.host, memory);
     expect(run?.label).toMatch(/no angle/i);
     expect(h.calls.undone).toBe(0);
+  });
+});
+
+describe("a command on what a host has selected", () => {
+  const canopy = {
+    id: "a1",
+    name: "Canopy",
+    type: "brep",
+    layer: "Roof",
+    color: null,
+    bounds: { min: [0, 0, 0], max: [1000, 1000, 1000] },
+    asset: null,
+    triangles: 0,
+    tags: {},
+  };
+  const onHost = () => {
+    const made = host();
+    const sent: Array<{ host: string; label: string; op: unknown }> = [];
+    made.host.hostTargets = (ids) =>
+      ids.length === 1 && ids[0] === "a1" ? { host: "rhino", objects: [canopy as never] } : null;
+    made.host.applyHost = (h, label, op) => void sent.push({ host: h, label, op });
+    return { ...made, sent };
+  };
+
+  it("a spoken move on a host object goes to the host as one edit, and nothing in HAI's scene changes", () => {
+    const { host: h, calls, sent } = onHost();
+    runCommand("move this 2 metres to the right", h, ["a1"]);
+    expect(sent).toEqual([
+      {
+        host: "rhino",
+        label: "Move Canopy 2 m east",
+        op: { op: "transform", ids: ["a1"], matrix: [1, 0, 0, 2000, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
+      },
+    ]);
+    expect(calls.applied).toEqual([]);
+  });
+
+  it("a delete is asked first, and sent only on a yes", () => {
+    const { host: h, calls, sent } = onHost();
+    runCommand("delete this", h, ["a1"]);
+    expect(sent).toEqual([]);
+    calls.asked[0]?.answer(true);
+    expect(sent).toEqual([{ host: "rhino", label: "Delete Canopy", op: { op: "delete", ids: ["a1"] } }]);
+  });
+
+  it("a leading select names HAI's own elements, whatever the host has selected", () => {
+    const { host: h, sent } = onHost();
+    runCommand("select all walls and move 2 m up", h, ["a1"]);
+    expect(sent).toEqual([]);
   });
 });

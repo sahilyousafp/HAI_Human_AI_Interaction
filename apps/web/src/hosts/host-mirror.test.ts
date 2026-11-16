@@ -1,6 +1,6 @@
 import type { HostId, HostObject, Message } from "@hai/protocol";
-import { describe, expect, it } from "vitest";
-import { HostMirror, HostMirrors } from "./host-mirror.ts";
+import { describe, expect, it, vi } from "vitest";
+import { EDIT_TIMEOUT_MS, HostMirror, HostMirrors } from "./host-mirror.ts";
 
 const ASSET = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const object = (id: string, extra: Partial<HostObject> = {}): HostObject => ({
@@ -353,5 +353,142 @@ describe("HostMirrors", () => {
     const { mirrors } = many();
     expect(mirrors.synced).toBe(2);
     expect(mirrors.framingBounds()).toEqual({ min: [0, 0, 0], max: [1000, 1000, 500] });
+  });
+});
+
+describe("the user's edits of host objects", () => {
+  const MOVE = [1, 0, 0, 2000, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+  const editable = () => {
+    const { mirror, sent } = setup();
+    mirror.handle(
+      state({
+        objects: [object("a1"), object("a2")],
+        capabilities: {
+          languages: ["python"],
+          capture: true,
+          placeImage: true,
+          apiLookup: true,
+          describe: true,
+          edit: true,
+        },
+      }),
+    );
+    return { mirror, sent };
+  };
+  const edited = (id: string, ok: boolean, error?: string) =>
+    ({
+      type: "host.edited",
+      id: "e",
+      payload: { host: "rhino", id, ok, ...(error ? { error } : {}) },
+    }) as Message;
+  const editOf = (sent: Message[]) => {
+    const m = sent.find((x) => x.type === "host.edit");
+    if (m?.type !== "host.edit") throw new Error("no edit sent");
+    return m.payload;
+  };
+
+  it("a drag is drawn as a preview, and letting go of nothing clears it", () => {
+    const { mirror } = editable();
+    mirror.preview(["a1"], MOVE);
+    expect(mirror.getSnapshot().preview).toEqual({ ids: ["a1"], matrix: MOVE });
+    mirror.preview(["a1"], null);
+    expect(mirror.getSnapshot().preview).toBeNull();
+  });
+
+  it("no jump back: the preview holds after the host says yes, until the batch with the object arrives", async () => {
+    const { mirror, sent } = editable();
+    const outcome = mirror.edit("Move", { op: "transform", ids: ["a1"], matrix: MOVE });
+    const edit = editOf(sent);
+    expect(edit).toMatchObject({ host: "rhino", label: "Move", op: { op: "transform", ids: ["a1"] } });
+    mirror.handle(edited(edit.id, true));
+    expect(await outcome).toEqual({ ok: true });
+    expect(mirror.getSnapshot().preview).toEqual({ ids: ["a1"], matrix: MOVE });
+    mirror.handle(batch({ changed: [object("a2")] }));
+    expect(mirror.getSnapshot().preview).not.toBeNull();
+    mirror.handle(
+      batch({ changed: [object("a1", { bounds: { min: [2000, 0, 0], max: [3000, 1000, 500] } })] }),
+    );
+    expect(mirror.getSnapshot().preview).toBeNull();
+  });
+
+  it("the batch may come before the answer: the preview goes with it", async () => {
+    const { mirror, sent } = editable();
+    const outcome = mirror.edit("Delete", { op: "delete", ids: ["a1"] });
+    expect(mirror.getSnapshot().preview).toEqual({ ids: ["a1"], deleted: true });
+    mirror.handle(batch({ deleted: ["a1"] }));
+    expect(mirror.getSnapshot().preview).toBeNull();
+    expect(await outcome).toEqual({ ok: true });
+    mirror.handle(edited(editOf(sent).id, true));
+  });
+
+  it("a refused edit: the preview goes and the host's reason is the outcome", async () => {
+    const { mirror, sent } = editable();
+    const outcome = mirror.edit("Move", { op: "transform", ids: ["a1"], matrix: MOVE });
+    mirror.handle(edited(editOf(sent).id, false, "There is no object a1 in Rhino any more."));
+    expect(await outcome).toEqual({ ok: false, error: "There is no object a1 in Rhino any more." });
+    expect(mirror.getSnapshot().preview).toBeNull();
+  });
+
+  it("no answer within 5 s: the preview goes and the outcome says so", async () => {
+    vi.useFakeTimers();
+    try {
+      const { mirror } = editable();
+      const outcome = mirror.edit("Move", { op: "transform", ids: ["a1"], matrix: MOVE });
+      vi.advanceTimersByTime(EDIT_TIMEOUT_MS);
+      expect(await outcome).toEqual({ ok: false, error: "Rhino did not answer within 5 seconds." });
+      expect(mirror.getSnapshot().preview).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("an edit for a host that cannot take edits is refused at once, and nothing is sent", async () => {
+    const { mirror, sent } = setup();
+    mirror.handle(state({ objects: [object("a1")] }));
+    expect(await mirror.edit("Move", { op: "delete", ids: ["a1"] })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("does not take edits from HAI"),
+    });
+    expect(sent.some((m) => m.type === "host.edit")).toBe(false);
+  });
+
+  it("one edit at a time, and a drag cannot replace the preview of an edit on its way", async () => {
+    const { mirror } = editable();
+    void mirror.edit("Move", { op: "transform", ids: ["a1"], matrix: MOVE });
+    expect(await mirror.edit("Move", { op: "delete", ids: ["a2"] })).toMatchObject({ ok: false });
+    mirror.preview(["a2"], MOVE);
+    expect(mirror.getSnapshot().preview?.ids).toEqual(["a1"]);
+  });
+});
+
+describe("what the agent changed for a request about a selection", () => {
+  const mirrorsWith = () => {
+    const mirrors = new HostMirrors(() => true);
+    mirrors.handle(state({ objects: [object("a1"), object("a2"), object("b1")] }));
+    return mirrors;
+  };
+
+  it("the changed objects glow: what changed while the team worked, shown once it is idle", async () => {
+    const { RequestChanges } = await import("./request-changes.ts");
+    const mirrors = mirrorsWith();
+    const changes = new RequestChanges(mirrors);
+    changes.start("rhino");
+    changes.working(false); // not yet started: nothing is shown
+    expect(mirrors.byHost.rhino.getSnapshot().changed).toEqual([]);
+    changes.working(true);
+    mirrors.handle(batch({ changed: [object("a1")] }));
+    mirrors.handle(batch({ changed: [object("a2"), object("a1")] }));
+    changes.working(false);
+    expect(mirrors.byHost.rhino.getSnapshot().changed).toEqual(["a1", "a2"]);
+    // Later changes are not this request's.
+    mirrors.handle(batch({ changed: [object("b1")] }));
+    expect(mirrors.byHost.rhino.getSnapshot().changed).toEqual(["a1", "a2"]);
+  });
+
+  it("the glow goes with the next selection", () => {
+    const mirrors = mirrorsWith();
+    mirrors.byHost.rhino.showChanged(["a1"]);
+    mirrors.select(["b1"]);
+    expect(mirrors.byHost.rhino.getSnapshot().changed).toEqual([]);
   });
 });

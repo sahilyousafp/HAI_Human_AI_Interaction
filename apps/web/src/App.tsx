@@ -34,9 +34,11 @@ import { ContextLegend } from "./context/ContextLegend.tsx";
 import { ContextClient } from "./context/context-client.ts";
 import { ProjectExporter } from "./export/exporter.ts";
 import { buildInWorker } from "./export/rhino-client.ts";
+import { cardLimit } from "./hosts/ComponentCard.tsx";
 import { HostChips } from "./hosts/HostChips.tsx";
 import { HostsSettings } from "./hosts/HostsSettings.tsx";
 import { HostMirrors } from "./hosts/host-mirror.ts";
+import { RequestChanges } from "./hosts/request-changes.ts";
 import { ModelImporter } from "./import/importer.ts";
 import { assetUrl, ModelAssets, mirrorAssetUrl } from "./import/model-assets.ts";
 import { convertInWorker } from "./import/rhino-client.ts";
@@ -64,6 +66,7 @@ import { SetupSettings } from "./setup/SetupSettings.tsx";
 import { updatesView } from "./setup/updates-view.ts";
 import { registerBuiltinTools } from "./tools/builtin.ts";
 import { ToolController } from "./tools/controller.ts";
+import { EditHistory } from "./tools/history.ts";
 import type { HoldReport, RouterTalk } from "./tools/input-router.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { PaletteSettings, ToolIcon } from "./tools/ToolOverlays.tsx";
@@ -192,6 +195,31 @@ export function App() {
     () => new HostMirrors((message: Message) => connection.current?.send(message) ?? false),
     [],
   );
+  const requestChanges = useMemo(() => new RequestChanges(mirror), [mirror]);
+  // The user's edits in the order made, wherever they landed, so Undo takes back the last one (tools/history.ts).
+  const history = useMemo(
+    () =>
+      new EditHistory({
+        undoScene: () => sceneClient.undo(),
+        redoScene: () => sceneClient.redo(),
+        undoHost: (host) => mirror.byHost[host].undo(),
+        redoHost: (host) => mirror.byHost[host].redo(),
+      }),
+    [sceneClient, mirror],
+  );
+  // A host that opens another document, or goes, takes its steps with it: Undo then goes on to the edit before.
+  useEffect(() => {
+    const seen = new Map(mirror.all.map((m) => [m.host, m.getStatus()] as const));
+    return mirror.subscribe(() => {
+      for (const m of mirror.all) {
+        const before = seen.get(m.host);
+        const now = m.getStatus();
+        if (before && (before.document !== now.document || before.connected !== now.connected))
+          history.forgetHost(m.host);
+        seen.set(m.host, now);
+      }
+    });
+  }, [mirror, history]);
   const mirrorAssets = useMemo(
     () =>
       Object.fromEntries(
@@ -387,16 +415,31 @@ export function App() {
   const commandHost = useMemo<CommandHost>(
     () => ({
       doc: () => sceneClient.getSnapshot().doc,
-      apply: (label, ops) => sceneClient.apply(label, ops),
+      apply: (label, ops) => {
+        const sent = sceneClient.apply(label, ops);
+        if (sent) history.record({ kind: "scene" });
+        return sent;
+      },
       select: (ids) => sceneClient.select(ids),
       ask: (question, answer) => tools.confirm(question, answer),
       flash: (message) => tools.flash(message),
       markers: () => tools.references.markers,
       seq: () => sceneClient.getSnapshot().seq,
-      undo: () => sceneClient.undo(),
+      undo: () => history.undo(),
       visibility,
+      hostTargets: (ids) => {
+        const owner = ids.length > 0 ? mirror.owner(ids[0] as string) : undefined;
+        const objects = owner ? ids.flatMap((id) => owner.object(id) ?? []) : [];
+        return owner && objects.length === ids.length ? { host: owner.host, objects } : null;
+      },
+      applyHost: (host, label, op) => {
+        void mirror.edit(host, label, op).then((outcome) => {
+          if (outcome.ok) history.record({ kind: "host", host });
+          else tools.flash(outcome.error);
+        });
+      },
     }),
-    [sceneClient, tools, visibility],
+    [sceneClient, tools, visibility, history, mirror],
   );
   // The last change a spoken command made, so that "make it 4 m" can put its number right.
   const commandMemory = useMemo(() => new CommandMemory(), []);
@@ -432,9 +475,19 @@ export function App() {
         sceneClient.apply("Group for the agent", ops);
         sceneClient.select(selection);
       }
-      return prepared;
+      // While a host selection's card is open, whatever is asked is about those objects only, and what the agent
+      // changes for it glows once the team is done.
+      const limit = prepared?.limitTo ?? cardLimit(mirror, tools.getSnapshot().activeId);
+      if (limit) requestChanges.start(limit.host);
+      return limit
+        ? { ...(prepared ?? { references: [], selection: [], groundPoint: null }), limitTo: limit }
+        : prepared;
     };
-  }, [agent, sceneClient]);
+  }, [agent, sceneClient, mirror, tools, requestChanges]);
+  useEffect(
+    () => agent.subscribe(() => requestChanges.working(agent.getSnapshot().status?.state === "working")),
+    [agent, requestChanges],
+  );
   // A request carries the sketches the user drew for it (without which hand drew them), and clears them once sent.
   useEffect(
     () =>
@@ -1136,6 +1189,13 @@ export function App() {
             panels={panels}
             mirror={mirror}
             mirrorAssets={mirrorAssets}
+            history={history}
+            onAskAbout={(text, limit) => {
+              const context = { references: [], selection: [], groundPoint: null, limitTo: limit };
+              const sent = agent.ask(text, context);
+              if (sent) agent.requestOpen();
+              return sent;
+            }}
             markers={markers}
             voice={voice}
             owners={owners}

@@ -7,8 +7,8 @@ HAI gives you a small design team made of your own Claude. **Mochi** leads it: e
 | Agent | What it does | Changes the model |
 |---|---|---|
 | **Mochi** | Takes every request, hands work to the specialists, reports what everyone is doing. Runs on Claude Sonnet. | No |
-| **Architect** | Massing, levels, walls, slabs, columns, cores and stairs | Yes |
-| **Product** | Furniture, fixtures and components at product scale | Yes |
+| **Architect** | Massing, levels, walls, slabs, columns, cores and stairs, modelled in a host (Rhino, Blender, Revit) | Yes, in a host |
+| **Product** | Furniture, fixtures and components at product scale, modelled in a host | Yes, in a host |
 | **Climate** | Sun path, shadows, orientation and daylight (sun studies), and with Open data on the weather now, the forecast and the climate normals of the site | No |
 | **Urban** | The place around the project: the neighbouring buildings and trees, green cover, urban metrics and the datasets of open-data portals (needs Open data on) | No |
 | **Simulation** | Performance: the ground's surface temperature from open satellite data, sun and shade, and daylight and energy studies when you have installed Ladybug Tools MCP. Reports method, data and age, never a verdict | No |
@@ -85,7 +85,7 @@ The **Agents** tab lists the team from the project's files, with each agent's mo
 | Name | The file name and Claude Code's `name` (lower-case letters, digits and -) |
 | What it does | Claude Code's `description`; Mochi reads it to choose the agent |
 | Model | Claude Code's `model` (`sonnet`, `opus`, `haiku`, or the same as Claude Code) |
-| What it may do | Its `hai` tools: read the model, change the model, sun studies, read the city context, open data, urban open data, weather and climate data, simulation inputs (what fetches open data only while Open data is on) |
+| What it may do | Its `hai` tools: read the model, change the model (run code and place images in a host), sun studies, read the city context, open data, urban open data, weather and climate data, simulation inputs (what fetches open data only while Open data is on) |
 | Other Claude Code tools | Any other tools it may use, for example `Read` or `WebSearch` |
 | Instructions | The file's body |
 | Other names it is heard as, colour | `.hai/agents.json` |
@@ -97,8 +97,8 @@ A change applies from that agent's next task: its session restarts with the new 
 A specialist that changes the model can split its **own** task into parts that are made at the same time. Asked for a pavilion, Architect starts a worker for the dome and one for the minarets (`spawn_worker`: a title, an instruction and a scope) and does the rest itself.
 
 - **A worker is another session of the same agent**, started by the app under its own name (`architect.2`, `architect.3`, shown as "Architect 2"), with its own token and its own conversation. It gets the instruction it was given, the shared brief and its scope, and the tools of its specialist without `spawn_worker` and `delegate`: workers cannot start workers or hand tasks to other agents.
-- **Its scope is cut from its specialist's claim.** It must lie inside what the specialist holds and must not overlap another worker's. When the specialist holds a part, a worker's part is a sub-part, written `<part>/<name>` (`pavilion/dome`); a part outside the claim, or a name that is not a sub-part, is refused and says how to write one. While a worker runs, its specialist cannot change that part (the refusal names the worker), and the part returns to the specialist when the worker ends.
-- **Each worker is its own undo step**, labelled "Architect 2: Dome", and what it creates is owned by `architect.2` and shows in its specialist's colour.
+- **Its scope is cut from its specialist's claim.** It must lie inside what the specialist holds and must not overlap another worker's. When the specialist holds a part, a worker's part is a sub-part, written `<part>/<name>` (`pavilion/dome`); a part outside the claim, or a name that is not a sub-part, is refused and says how to write one. While a worker runs, its specialist must leave that part alone (a run that changes it is reported, naming the worker), and the part returns to the specialist when the worker ends.
+- **Each of a worker's host runs is one undo step there**, and what it adds is stamped `hai.owner` `architect.2` and shows in its specialist's colour.
 - **The specialist's task ends after its workers.** It is told how each ended, with its summary, as a short turn of its own, so it can fix a part or report. Stopping the task, a failure or a crash stops its workers, and every claim is released within 3 seconds; Stop all and a project switch do the same, and a worker waiting for a free session is taken off the queue.
 - **Cost.** Every worker is a model session of your own Claude Code, with its own cost: a run with workers uses several times the tokens of one agent. Settings > Hosts > **Sessions at once** (6 by default; `maxSessions`) limits Mochi, the specialists working and their workers together; a worker over the limit waits for a free session and says so.
 - **Workers need Parallel modelling** ([parallel.md](parallel.md)); with it off, `spawn_worker` is refused and says so.
@@ -132,7 +132,7 @@ A set of four 1024-pixel pictures takes about 0.2 s and eight about 0.3 s on a l
 
 With **Open data** on (Settings > Open data, off by default, see [open-data.md](open-data.md)) three specialists can read what is known about the place. None of them changes the model.
 
-- **Urban** finds datasets in open-data portals (`open_data_search`, `open_data_get`), fetches the neighbouring buildings and trees around the site (`urban_buildings`), the green cover and greenness (`urban_vegetation`) and works out the metrics of the site (`urban_metrics`: building coverage, mean height, green share, tree count). What it fetches is drawn in the grey **context layer** beside your model, which no hand can select. To use a neighbour in the model, Urban asks an agent that changes the model, which can adopt it (`context_adopt`).
+- **Urban** finds datasets in open-data portals (`open_data_search`, `open_data_get`), fetches the neighbouring buildings and trees around the site (`urban_buildings`), the green cover and greenness (`urban_vegetation`) and works out the metrics of the site (`urban_metrics`: building coverage, mean height, green share, tree count). What it fetches is drawn in the grey **context layer** beside your model, which no hand can select. To use a neighbour in the model, Urban asks an agent that changes the model, which models it in a host from the layer's footprints and heights.
 - **Climate** gains `weather_now`, `weather_forecast` and `climate_normals` next to its sun studies. Every answer says its source and how old it is.
 - **Simulation** reads the ground's temperature (`surface_temperature`: the temperature of the surface seen from a satellite, not of the air, from a scene that is days old, with its date and a colour overlay), describes the model for a simulation (`simulation_geometry`) and, when you installed the Ladybug Tools MCP server as an extension, uses it for daylight and energy studies. Each of its calls asks for your approval. Without it Simulation tells you how to install it and offers sun studies and the data above instead.
 

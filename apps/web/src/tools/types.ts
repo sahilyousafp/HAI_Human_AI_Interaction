@@ -4,12 +4,15 @@ import type {
   Element,
   FeatureId,
   Hand,
+  HostEditOp,
+  HostId,
   Point2,
   Point3Mm,
   SceneDocument,
   SceneOp,
 } from "@hai/protocol";
 import type { Resolved, SnapKind } from "@hai/scene";
+import type { HostTarget } from "./host-targets.ts";
 import type { ReferenceLayer } from "./reference-layer.ts";
 
 /** What is under a viewer position: an element and the surface point that was hit, millimetres. */
@@ -80,6 +83,17 @@ export interface ToolContext {
   select(ids: string[]): void;
   /** The ids selected now (the model's own selection). */
   selection(): string[];
+  /** The host object with this id (a pick on a mirrored object) and its host, or null when it is no host's. */
+  hostTarget(id: string): HostTarget | null;
+  /** The ids selected in the hosts: one host's objects, or none. */
+  hostSelection(): string[];
+  /** Draws a move or turn of a host's objects before it is made (a 4 x 4 matrix row by row, mm); null stops. */
+  previewHost(host: HostId, ids: string[], matrix: number[] | null): void;
+  /**
+   * The user's edit of a host's objects: sent to the host, which makes it one undo step there, and put in the undo
+   * order. A refusal is said in a passing message.
+   */
+  applyHost(host: HostId, label: string, op: HostEditOp): void;
   /** Switches to another tool (a tool that does its one job and steps back to Select). */
   choose(id: string): void;
   /** The elements the user has hidden. */

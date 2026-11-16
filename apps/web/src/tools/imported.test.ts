@@ -2,7 +2,6 @@ import type { Element } from "@hai/protocol";
 import { elementBounds } from "@hai/scene";
 import { describe, expect, it } from "vitest";
 import { moveOp } from "./builtin.ts";
-import { shifted } from "./create.ts";
 import { referencePoint } from "./placement.ts";
 
 const imported: Element = {
@@ -23,11 +22,6 @@ describe("imported elements in the tools", () => {
       id: "imp-1",
       patch: { translation: [1500, -200, 250] },
     });
-  });
-
-  it("Copy shifts the translation of the copy", () => {
-    const copy = shifted(imported, 4000, 0);
-    expect(copy).toMatchObject({ asset: imported.asset, part: 0, translation: [4500, 0, 250] });
   });
 
   it("its bounds and its reference point follow the translation", () => {

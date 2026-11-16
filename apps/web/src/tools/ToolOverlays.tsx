@@ -4,6 +4,7 @@ import type { SceneClient } from "../scene/scene-client.ts";
 import { ListGroup, ListRow, Segmented } from "../ui/controls.tsx";
 import { redoTool, undoTool } from "./builtin.ts";
 import type { Ring, ToolController } from "./controller.ts";
+import type { EditHistory } from "./history.ts";
 import { SLOT_COUNT, SLOT_NAMES } from "./palette.ts";
 import { spokenNames } from "./registry.ts";
 
@@ -197,8 +198,10 @@ const UNDO_STRIP_MS = 6000;
  * After an undo or redo: what was undone, with Undo again and Redo buttons that hands can press, so stepping back
  * several changes is a few taps instead of reopening the palette each time.
  */
-export function UndoStrip({ client }: { client: SceneClient }) {
+export function UndoStrip({ client, history }: { client: SceneClient; history: EditHistory }) {
   const { lastChange, canUndo, canRedo } = useSyncExternalStore(client.subscribe, client.getSnapshot);
+  // Again and Redo follow the one undo order, so a host edit before this one is next.
+  useSyncExternalStore(history.subscribe, () => `${history.hostUndo}|${history.hostRedo}`);
   const [visible, setVisible] = useState(false);
   const recent = lastChange && lastChange.kind !== "apply" ? lastChange : null;
   useEffect(() => {
@@ -221,8 +224,8 @@ export function UndoStrip({ client }: { client: SceneClient }) {
         className="secondary"
         data-testid="undo-again"
         data-hand-press
-        disabled={!canUndo}
-        onClick={() => client.undo()}
+        disabled={!canUndo && !history.hostUndo}
+        onClick={() => history.undo()}
       >
         <ToolIcon path={undoTool.icon} size={14} /> Undo again
       </button>
@@ -231,8 +234,8 @@ export function UndoStrip({ client }: { client: SceneClient }) {
         className="secondary"
         data-testid="redo-again"
         data-hand-press
-        disabled={!canRedo}
-        onClick={() => client.redo()}
+        disabled={!canRedo && !history.hostRedo}
+        onClick={() => history.redo()}
       >
         <ToolIcon path={redoTool.icon} size={14} /> Redo
       </button>

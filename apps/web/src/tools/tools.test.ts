@@ -1,6 +1,5 @@
 import {
   DEFAULT_ACTION_LAYOUT,
-  DEFAULT_DRAWING_AIDS,
   DEFAULT_REFERENCE_LAYOUT,
   type GestureEvent,
   type Point2,
@@ -8,7 +7,7 @@ import {
   type SceneOp,
 } from "@hai/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MASSING_SIZE, registerBuiltinTools } from "./builtin.ts";
+import { registerBuiltinTools } from "./builtin.ts";
 import {
   DEFAULT_TOOL,
   FIST_RESET_MS,
@@ -17,7 +16,6 @@ import {
   ToolController,
   type ToolEnvironment,
 } from "./controller.ts";
-import { COLUMN, SLAB, WALL } from "./create.ts";
 import { InputRouter } from "./input-router.ts";
 import { ToolRegistry } from "./registry.ts";
 
@@ -120,11 +118,11 @@ describe("palette and active tool", () => {
     expect(DEFAULT_TOOL).toBe("select");
   });
 
-  it("flick right to choose: Copy is in the action ring's right-hand slot and becomes active", () => {
+  it("flick right to choose: Rotate is in the action ring's right-hand slot and becomes active", () => {
     const { controller } = setup();
-    expect(controller.getSnapshot().layouts.action[2]).toBe("copy");
+    expect(controller.getSnapshot().layouts.action[2]).toBe("rotate");
     flick(controller, [0.2, 0]);
-    expect(controller.getSnapshot().activeId).toBe("copy");
+    expect(controller.getSnapshot().activeId).toBe("rotate");
     expect(controller.getSnapshot().palette).toBeNull();
   });
 
@@ -143,10 +141,10 @@ describe("palette and active tool", () => {
     navigated.length = 0;
     router.handle(ev("pinch.hold", [0.4, 0.4]));
     expect(controller.getSnapshot().palette?.center).toEqual([0.4, 0.4]);
-    router.handle(ev("pinch.drag.update", [0.6, 0.4])); // right: Copy
+    router.handle(ev("pinch.drag.update", [0.6, 0.4])); // right: Rotate
     expect(controller.getSnapshot().palette?.highlighted).toBe(2);
     router.handle(ev("pinch.drag.end", [0.6, 0.4]));
-    expect(controller.getSnapshot().activeId).toBe("copy");
+    expect(controller.getSnapshot().activeId).toBe("rotate");
     // Navigation only hears the orbit end (so it stops orbiting); steering never reaches it.
     expect(navigated.map((e) => e.type)).toEqual(["pinch.drag.end"]);
   });
@@ -334,18 +332,6 @@ describe("built-in tools", () => {
     expect(controller.getSnapshot().overlay.sectionMm).toBeNull();
   });
 
-  it("place a block: a 6000 x 6000 x 3500 mm massing centred on the snapped tap point", () => {
-    const { controller, applied } = setup();
-    controller.choose("massing");
-    controller.tap(toViewer(10_040, 20_960));
-    expect(applied).toHaveLength(1);
-    expect(applied[0]?.label).toBe("Add massing");
-    const op = applied[0]?.ops[0];
-    if (op?.op !== "create" || op.element.type !== "massing") throw new Error("expected a massing create");
-    expect(op.element.size).toEqual(MASSING_SIZE);
-    expect(op.element.origin).toEqual([10_000 - 3_000, 21_000 - 3_000, 0]);
-  });
-
   it("confirm with nod: the marked element is deleted in one Delete transaction", () => {
     const { controller, applied } = setup();
     controller.choose("delete");
@@ -424,235 +410,36 @@ describe("two hands", () => {
   });
 });
 
-describe("create tools", () => {
-  /** The single element a create transaction adds. */
-  const created = (applied: Array<{ label: string; ops: SceneOp[] }>) => {
-    const op = applied[0]?.ops[0];
-    if (applied.length !== 1 || op?.op !== "create") throw new Error("expected one create");
-    return { label: applied[0]?.label, element: op.element };
-  };
-
-  it("wall: a drag on the ground draws a 200 mm thick, 3000 mm high wall between the snapped ends", () => {
-    const { controller, applied } = setup();
-    controller.choose("wall");
-    expect(controller.dragStart(toViewer(2_030, 2_040))).toBe(true);
-    controller.drag(toViewer(5_000, 2_000));
-    const draft = controller.getSnapshot().overlay.draft;
-    expect(draft).toMatchObject({ type: "wall", start: [2_000, 2_000], end: [5_000, 2_000] });
-    expect(controller.getSnapshot().overlay.notice).toMatch(/^Wall 3000 mm/);
-    expect(applied).toEqual([]); // nothing is created until the hand lets go
-    controller.drag(toViewer(6_210, 2_000));
-    controller.dragEnd(toViewer(6_210, 2_000));
-    const { label, element } = created(applied);
-    expect(label).toBe("Add Wall 1");
-    expect(element).toMatchObject({
-      type: "wall",
-      level: "L0",
-      start: [2_000, 2_000],
-      end: [6_200, 2_000],
-      thickness: WALL.thickness,
-      height: WALL.height,
-    });
-    expect(controller.getSnapshot().overlay.draft).toBeNull();
-  });
-
-  it("wall: a drag shorter than 300 mm places nothing and says why", () => {
-    const { controller, applied } = setup();
-    controller.choose("wall");
-    controller.dragStart(toViewer(2_000, 2_000));
-    controller.drag(toViewer(2_200, 2_000));
-    controller.dragEnd(toViewer(2_200, 2_000));
-    expect(applied).toEqual([]);
-    expect(controller.getSnapshot().overlay.notice).toMatch(/at least 300 mm/);
-  });
-
-  it("slab: a drag between two corners draws a counter-clockwise rectangle, 200 mm thick", () => {
-    const { controller, applied } = setup();
-    controller.choose("slab");
-    controller.dragStart(toViewer(8_000, 6_000));
-    controller.drag(toViewer(2_000, 1_000)); // dragged down and to the left
-    controller.dragEnd(toViewer(2_000, 1_000));
-    const { element } = created(applied);
-    expect(element).toMatchObject({
-      type: "slab",
-      thickness: SLAB.thickness,
-      outline: [
-        [2_000, 1_000],
-        [8_000, 1_000],
-        [8_000, 6_000],
-        [2_000, 6_000],
-      ],
-    });
-  });
-
-  it("column: a tap places a 400 x 400 mm column, 3000 mm high, snapped to 100 mm", () => {
-    const { controller, applied } = setup();
-    controller.choose("column");
-    controller.tap(toViewer(3_040, 7_960));
-    const { element } = created(applied);
-    expect(element).toMatchObject({
-      type: "column",
-      position: [3_000, 8_000],
-      section: COLUMN.section,
-      height: COLUMN.height,
-    });
-  });
-
-  it("copy: dragging an element places a snapped copy and leaves the original", () => {
-    const { controller, applied } = setup();
-    controller.choose("copy");
-    expect(controller.dragStart(toViewer(30_000, 10_000))).toBe(true);
-    controller.drag(toViewer(30_000, 23_040));
-    expect(controller.getSnapshot().overlay.drafts[0]).toMatchObject({ origin: [24_000, 17_000, 0] });
-    controller.dragEnd(toViewer(30_000, 23_040));
-    const { label, element } = created(applied);
-    expect(label).toBe("Copy Block B");
-    expect(element).toMatchObject({ type: "massing", name: "Block B copy", origin: [24_000, 17_000, 0] });
-    expect(element.id).not.toBe("block-b");
-  });
-
-  it("copy: a drag that starts off the model does not take the drag (the view orbits)", () => {
-    const { controller } = setup();
-    controller.choose("copy");
-    expect(controller.dragStart(toViewer(2_000, 2_000))).toBe(false);
-  });
-
+describe("the default rings", () => {
   it("every tool in the default rings is registered", () => {
     const { registry } = setup();
     for (const id of [...DEFAULT_ACTION_LAYOUT, ...DEFAULT_REFERENCE_LAYOUT])
       if (id) expect(registry.get(id), id).toBeDefined();
   });
+
+  it("no tool builds geometry: wall, slab, column, copy, massing and line are gone", () => {
+    const { registry } = setup();
+    for (const id of ["wall", "slab", "column", "copy", "massing", "line"])
+      expect(registry.get(id), id).toBeUndefined();
+  });
 });
 
 describe("tools tied to a feature", () => {
-  it("with the create tools switched off they are not listed, cannot be chosen, and an active one hands back to Select", () => {
+  it("with its feature switched off a tool is not listed, cannot be chosen, and an active one hands back to Select", () => {
     const { registry, controller } = setup();
-    let createOn = true;
-    registry.setAvailability((tool) => tool.feature !== "createTools" || createOn);
-    controller.choose("wall");
-    expect(controller.getSnapshot().activeId).toBe("wall");
-    createOn = false;
+    registry.register({ id: "survey", label: "Survey", icon: "M4 4h16", shortcut: "y", feature: "voice" });
+    let on = true;
+    registry.setAvailability((tool) => tool.feature !== "voice" || on);
+    controller.choose("survey");
+    expect(controller.getSnapshot().activeId).toBe("survey");
+    on = false;
     registry.refresh();
     expect(controller.getSnapshot().activeId).toBe("select");
-    expect(registry.list().map((t) => t.id)).not.toContain("wall");
-    expect(registry.byShortcut("w")).toBeUndefined();
-    controller.choose("slab");
-    expect(controller.getSnapshot().activeId).toBe("select");
+    expect(registry.list().map((t) => t.id)).not.toContain("survey");
+    expect(registry.byShortcut("y")).toBeUndefined();
     // Tools without a feature stay.
-    controller.choose("massing");
-    expect(controller.getSnapshot().activeId).toBe("massing");
-  });
-});
-
-describe("Line tool", () => {
-  /** Taps ground points (mm) with the Line tool active. */
-  function draw(controller: ToolController, ...points: Array<[number, number]>) {
-    for (const [x, y] of points) controller.tap(toViewer(x, y));
-  }
-  const lines = (applied: Array<{ ops: SceneOp[] }>) =>
-    applied
-      .flatMap((a) => a.ops)
-      .flatMap((op) => (op.op === "create" && op.element.type === "line" ? [op.element] : []));
-
-  it("each tap places a point, the segment follows the pointer, and a nod finishes one undo step", () => {
-    const { controller, applied } = setup();
-    controller.choose("line");
-    draw(controller, [2000, 3000], [8000, 3000]);
-    controller.hover(toViewer(8000, 9000));
-    expect(controller.getSnapshot().overlay.draft).toMatchObject({ type: "line" });
-    expect(controller.getSnapshot().overlay.notice).toContain("6000 mm at 90 deg");
-    expect(controller.accept()).toBe(true);
-    expect(applied).toHaveLength(1);
-    expect(applied[0]?.label).toBe("Add Line 1");
-    expect(lines(applied)[0]).toMatchObject({
-      points: [
-        [2000, 3000, 0],
-        [8000, 3000, 0],
-      ],
-      closed: false,
-      level: "L0",
-    });
-    expect(controller.getSnapshot().overlay.draft).toBeNull();
-  });
-
-  it("one point is not a line: a nod with fewer than two does nothing", () => {
-    const { controller, applied } = setup();
-    controller.choose("line");
-    draw(controller, [2000, 3000]);
-    expect(controller.accept()).toBe(false);
-    expect(applied).toHaveLength(0);
-  });
-
-  it("tapping the last point again finishes, and tapping the first of three or more closes the line", () => {
-    const open = setup(withCamera);
-    open.controller.choose("line");
-    draw(open.controller, [2000, 3000], [8000, 3000], [8000, 3000]);
-    expect(lines(open.applied)).toHaveLength(1);
-    expect(lines(open.applied)[0]).toMatchObject({ closed: false });
-    expect(lines(open.applied)[0]?.points).toHaveLength(2);
-
-    const closed = setup(withCamera);
-    closed.controller.choose("line");
-    draw(closed.controller, [2000, 3000], [8000, 3000], [8000, 9000], [2000, 3000]);
-    expect(lines(closed.applied)[0]).toMatchObject({ closed: true });
-    expect(lines(closed.applied)[0]?.points).toHaveLength(3);
-  });
-
-  it("Escape takes back the last point, then the line, then returns to Select", () => {
-    const { controller, applied } = setup();
-    controller.choose("line");
-    draw(controller, [2000, 3000], [8000, 3000], [8000, 9000]);
-    controller.cancel();
-    controller.hover(toViewer(8000, 3000));
-    expect(controller.getSnapshot().activeId).toBe("line");
-    // Two points are left, and the segment to the pointer is the third of the draft.
-    const draft = controller.getSnapshot().overlay.draft;
-    expect(draft?.type === "line" ? draft.points.slice(0, 2) : null).toEqual([
-      [2000, 3000, 0],
-      [8000, 3000, 0],
-    ]);
-    controller.cancel();
-    controller.cancel();
-    expect(controller.getSnapshot().overlay.draft).toBeNull();
-    expect(controller.getSnapshot().activeId).toBe("line");
-    controller.cancel();
-    expect(controller.getSnapshot().activeId).toBe(DEFAULT_TOOL);
-    expect(applied).toHaveLength(0);
-  });
-
-  it("Ortho locks every segment to its angle step, and a typed length fixes the next one", () => {
-    const { controller, applied } = setup({ aids: () => ({ ...DEFAULT_DRAWING_AIDS, ortho: true }) });
-    controller.choose("line");
-    draw(controller, [2000, 3000]);
-    // A hand 20 degrees off the X axis still draws along it.
-    const off: [number, number] = [12_000, 3000 + 3640];
-    controller.hover(toViewer(...off));
-    expect(controller.getSnapshot().overlay.notice).toContain("0 deg");
-    controller.setLength(2500);
-    draw(controller, off);
-    expect(controller.getSnapshot().constraints.lengthMm).toBeNull(); // used up by the point
-    expect(controller.accept()).toBe(true);
-    expect(lines(applied)[0]?.points[1]).toEqual([4500, 3000, 0]);
-  });
-
-  it("the angle step is remembered between sessions", () => {
-    const stored = new Map<string, string>();
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => stored.get(key) ?? null,
-      setItem: (key: string, value: string) => void stored.set(key, value),
-    });
-    try {
-      setup().controller.setAngleStep(15);
-      expect(setup().controller.getSnapshot().constraints.angleStepDeg).toBe(15);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it("Line is Wall's neighbour in the reference ring and is picked by its name", () => {
-    const { registry } = setup();
-    expect(registry.get("line")?.shortcut).toBe("n");
-    expect(DEFAULT_REFERENCE_LAYOUT).toContain("line");
+    controller.choose("measure");
+    expect(controller.getSnapshot().activeId).toBe("measure");
   });
 });
 
@@ -671,9 +458,9 @@ describe("Lasso select", () => {
     [0.6, 0.85],
   ];
 
-  it("takes the reference ring's free slot, top left", () => {
+  it("is in the reference ring, after the markers", () => {
     const { controller } = setup();
-    expect(controller.getSnapshot().layouts.reference[7]).toBe("lasso");
+    expect(controller.getSnapshot().layouts.reference[3]).toBe("lasso");
   });
 
   it("selects what a loop surrounds and turns itself off: back to Select", () => {
@@ -725,5 +512,104 @@ describe("Lasso select", () => {
     hidden.controller.choose("lasso");
     drawLoop(hidden.controller, AROUND_BLOCK);
     expect(hidden.calls).toContain("select:");
+  });
+});
+
+describe("tools on a host's objects", () => {
+  // A Rhino object where the stand-in view's block is: 24..36 m east, 4..16 m north.
+  const canopy = {
+    id: "h1",
+    name: "Canopy",
+    type: "brep",
+    layer: "Roof",
+    color: null,
+    bounds: { min: [24_000, 4_000, 0], max: [36_000, 16_000, 3_000] },
+    asset: null,
+    triangles: 0,
+    tags: {},
+  } as const;
+  function onHost(selection: string[] = []) {
+    const previews: Array<number[] | null> = [];
+    const edits: Array<{ host: string; label: string; op: unknown }> = [];
+    let outcome: { ok: true } | { ok: false; error: string } = { ok: true };
+    const made = setup({
+      pick: (at) => {
+        const [x, y] = toMm(at);
+        const inside = x >= 24_000 && x <= 36_000 && y >= 4_000 && y <= 16_000;
+        return inside ? { elementId: "h1", point: [x, y, 0] } : null;
+      },
+      hosts: {
+        target: (id) => (id === "h1" ? { host: "rhino", object: canopy as never } : null),
+        selection: () => selection,
+        preview: (_host, _ids, matrix) => void previews.push(matrix),
+        edit: (host, label, op) => {
+          edits.push({ host, label, op });
+          return Promise.resolve(outcome);
+        },
+      },
+    });
+    const refuse = (error: string) => {
+      outcome = { ok: false, error };
+    };
+    return { ...made, previews, edits, refuse };
+  }
+
+  it("Move drags a host object with a preview, and sends one transform on release, snapped to 100 mm", () => {
+    const { controller, previews, edits, applied } = onHost();
+    controller.choose("move");
+    expect(controller.dragStart(toViewer(30_000, 10_000))).toBe(true);
+    controller.drag(toViewer(31_230, 10_000));
+    expect(previews.at(-1)).toEqual([1, 0, 0, 1200, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    controller.dragEnd(toViewer(31_230, 10_000));
+    expect(edits).toEqual([
+      {
+        host: "rhino",
+        label: "Move Canopy",
+        op: { op: "transform", ids: ["h1"], matrix: [1, 0, 0, 1200, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
+      },
+    ]);
+    expect(applied).toEqual([]);
+  });
+
+  it("a drag that goes nowhere sends nothing and clears its preview", () => {
+    const { controller, previews, edits } = onHost();
+    controller.choose("move");
+    controller.dragStart(toViewer(30_000, 10_000));
+    controller.dragEnd(toViewer(30_000, 10_000));
+    expect(edits).toEqual([]);
+    expect(previews.at(-1)).toBeNull();
+  });
+
+  it("Rotate turns a host object about the middle of its footprint", () => {
+    const { controller, edits } = onHost();
+    controller.choose("rotate");
+    controller.dragStart(toViewer(36_000, 10_000)); // east of the middle (30 m, 10 m)
+    controller.drag(toViewer(30_000, 16_000)); // north of it: a quarter turn
+    controller.dragEnd(toViewer(30_000, 16_000));
+    const [edit] = edits as Array<{ label: string; op: { matrix: number[] } }>;
+    expect(edit?.label).toBe("Rotate Canopy 90 deg");
+    expect(edit?.op.matrix.map((v) => Math.round(v))).toEqual([
+      0, -1, 0, 40_000, 1, 0, 0, -20_000, 0, 0, 1, 0, 0, 0, 0, 1,
+    ]);
+  });
+
+  it("Delete asks first, then sends one delete to the host", () => {
+    const { controller, edits } = onHost();
+    controller.choose("delete");
+    controller.tap(toViewer(30_000, 10_000));
+    expect(edits).toEqual([]);
+    controller.accept();
+    expect(edits).toEqual([{ host: "rhino", label: "Delete Canopy", op: { op: "delete", ids: ["h1"] } }]);
+  });
+
+  it("a refused edit is said in a passing message", async () => {
+    const { controller, refuse } = onHost();
+    refuse("There is no object h1 in Rhino any more.");
+    controller.choose("delete");
+    controller.tap(toViewer(30_000, 10_000));
+    controller.accept();
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot().overlay.notice).toBe("There is no object h1 in Rhino any more."),
+    );
   });
 });

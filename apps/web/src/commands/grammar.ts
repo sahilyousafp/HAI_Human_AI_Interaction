@@ -13,27 +13,26 @@ export type Clause =
   | { kind: "translate"; by: Point3Mm }
   /** Takes what is acted on to a lettered marker ("move to marker A"). */
   | { kind: "moveTo"; marker: string }
-  /**
-   * `count` copies, each `by` further along than the one before (in place when `by` is null); what follows acts on the
-   * copies. `spaced` (an array with no distance said): each is one width of what is copied along the axis, side by
-   * side; the planner works the width out from the model.
-   */
-  | { kind: "copy"; count: number; by: Point3Mm | null; spaced?: Axis }
   | { kind: "rotate"; deg: number; about?: string }
-  | { kind: "scale"; factor: number; about?: string }
   | { kind: "mirror"; axis: "x" | "y"; about?: string }
+  /**
+   * A command HAI no longer has, because it made geometry ("copy", "array", "scale"): heard, so that the reply can say
+   * to ask the agent, and nothing is changed.
+   */
+  | { kind: "removed"; what: RemovedVerb }
   | { kind: "select"; selector: Selector }
   | { kind: "delete" | "hide" | "isolate"; selector: Selector | null }
   | { kind: "showAll" }
   | { kind: "group" | "ungroup" };
 
+/** The commands that made geometry, gone with the creation tools: the hosts model, through the agent. */
+export type RemovedVerb = "copy" | "array" | "scale";
+const REMOVED_VERBS: ReadonlySet<string> = new Set<RemovedVerb>(["copy", "array", "scale"]);
+
 /** What a whole transcript says: its clauses, in the order they run. */
 export interface Command {
   clauses: Clause[];
 }
-
-/** The most copies one command may make. */
-export const MAX_COPIES = 200;
 
 /** A transcript as lower-case words: units and numbers apart, punctuation gone, commas as "and". */
 export function wordsOf(text: string): string[] {
@@ -51,7 +50,6 @@ export function wordsOf(text: string): string[] {
         /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) and a half\b/g,
         "$1 point five",
       )
-      .replace(/(\d)\s*[x×]\s*(?=\d)/g, "$1 times ") // "copy 4 x 6 m" is four times, six metres each
       .replace(/°/g, " degrees ")
       .replace(/%/g, " percent ")
       .replace(/[,;]/g, " and ")
@@ -316,8 +314,6 @@ function readSelector(words: string[]): { selector: Selector | null } | null {
   return type && typeWords.length === 1 ? { selector: { kind: "type", type } } : null;
 }
 
-const COUNT_WORDS = new Set(["times", "time", "copies", "copy"]);
-
 /**
  * Every word the grammar reads: the reference set for putting a mishearing right (voice/lexicon.ts). Words it only
  * uses inside a rule (a marker's letter, a level's name) are not here; they are what the speaker said.
@@ -329,67 +325,11 @@ export const COMMAND_VOCABULARY: ReadonlySet<string> = new Set([
   ...POLITE,
   ...FILLER,
   ...SEPARATORS,
-  ...COUNT_WORDS,
   ...NUMBER_WORDS,
   ...UNIT_WORDS,
   ...["all", "everything", "none", "nothing", "level", "marker", "percent", "double", "clockwise"],
   ...["anticlockwise", "counterclockwise", "counter", "about", "around", "at", "onto", "from"],
 ]);
-
-/**
- * "copy 4 times 6 m along y" and "array 5 times": a count, then how far apart. An array may leave the distance out
- * ("array 5 times", "array 5 times along y"): the copies then stand side by side along +x, or the axis said.
- */
-function parseCopy(args: string[], array: boolean): Clause | null {
-  let count = 1;
-  let from = 0;
-  const number = readNumber(args, 0);
-  if (number && COUNT_WORDS.has(args[number.next] ?? "")) {
-    count = number.value;
-    from = number.next + 1;
-  } else if (array && number && (number.next === args.length || AXES[args[number.next] ?? ""])) {
-    // "array 5" and "array 5 along y": the number is the count when no distance follows it.
-    count = number.value;
-    from = number.next;
-  } else if (args[0] === "twice") {
-    count = 2;
-    from = 1;
-  } else if (args[0] === "once") from = 1;
-  if (!Number.isInteger(count) || count < 1 || count > MAX_COPIES) return null;
-  const rest = args.slice(from);
-  if (rest.length === 0)
-    return array
-      ? { kind: "copy", count, by: null, spaced: { axis: 0, sign: 1 } }
-      : { kind: "copy", count, by: null };
-  const by = readOffset(rest);
-  if (by) return { kind: "copy", count, by };
-  if (array) {
-    // "array 4 times 6 m": a distance with no axis is along x, as an array with no distance at all is.
-    const length = readLength(rest, 0);
-    if (length && length.next === rest.length) return { kind: "copy", count, by: [length.value, 0, 0] };
-  }
-  const spaced = array ? readAxisOnly(rest) : null;
-  return spaced ? { kind: "copy", count, by: null, spaced } : null;
-}
-
-/** An axis and nothing else ("y", "y towards right", "up"), or null. */
-function readAxisOnly(words: string[]): Axis | null {
-  let axis: Axis | null = null;
-  let fromLetter = false;
-  for (const word of words) {
-    const direction = AXES[word];
-    if (!direction) return null;
-    const letter = AXIS_LETTERS.has(word);
-    if (!axis) {
-      axis = direction;
-      fromLetter = letter;
-    } else if (letter !== fromLetter) {
-      axis = { axis: letter ? direction.axis : axis.axis, sign: letter ? axis.sign : direction.sign };
-      fromLetter = true;
-    } else return null;
-  }
-  return axis;
-}
 
 /** What a marker is called in a clause: its letter, "marker B", set apart from the words round it. */
 type MarkerWord = string | null;
@@ -405,23 +345,6 @@ function parseRotate(args: string[], about: MarkerWord): Clause | null {
   return { kind: "rotate", deg: clockwise ? -number.value : number.value, ...(about ? { about } : {}) };
 }
 
-function parseScale(wordsGiven: string[], about: MarkerWord): Clause | null {
-  // "scale it up to 2" and "scale down to half": which way is in the number.
-  const args =
-    ["up", "down"].includes(wordsGiven[0] ?? "") && wordsGiven.length > 1 ? wordsGiven.slice(1) : wordsGiven;
-  const keyword: Record<string, number> = { double: 2, triple: 3 };
-  const named = keyword[args[0] ?? ""];
-  if (args.length === 1 && named !== undefined)
-    return { kind: "scale", factor: named, ...(about ? { about } : {}) };
-  const number = readNumber(args, 0);
-  if (!number) return null;
-  const tail = args.slice(number.next);
-  let factor = number.value;
-  if (tail.length === 1 && tail[0] === "percent") factor /= 100;
-  else if (!(tail.length === 0 || (tail.length === 1 && tail[0] === "times"))) return null;
-  return factor > 0 && factor !== 1 ? { kind: "scale", factor, ...(about ? { about } : {}) } : null;
-}
-
 function parseMirror(given: string[], about: MarkerWord): Clause | null {
   // "mirror this across x", "mirror it about the y axis": which way round is in the axis.
   const args = given.filter((word) => !["across", "about", "around"].includes(word));
@@ -430,23 +353,46 @@ function parseMirror(given: string[], about: MarkerWord): Clause | null {
   return { kind: "mirror", axis: direction.axis === 0 ? "x" : "y", ...(about ? { about } : {}) };
 }
 
+/**
+ * The words a removed command took, besides the grammar's own: its counts and factors. "Copy 4 times 6 m along y" and
+ * "scale it by half" are the removed commands; "copy this onto every floor" is a request for the agent.
+ */
+const REMOVED_ARGS = new Set([
+  "times",
+  "time",
+  "copies",
+  "copy",
+  "twice",
+  "once",
+  "by",
+  "double",
+  "triple",
+  "half",
+]);
+/** The words that name elements: a removed command never took them ("copy the wall" is the agent's). */
+const SELECTOR_WORDS = new Set(["all", "everything", "none", "nothing", "level", "marker"]);
+const removedArg = (word: string) =>
+  /^-?\d+(\.\d+)?$/.test(word) ||
+  REMOVED_ARGS.has(word) ||
+  (COMMAND_VOCABULARY.has(word) && !(word in VERBS) && !(word in TYPE_WORDS) && !SELECTOR_WORDS.has(word));
+
 function parseClause(verb: string, args: string[], marker: MarkerWord): Clause | null {
-  // A marker is the pivot of a rotate, scale or mirror and the place of a move; nothing else takes one.
-  if (marker && !["move", "rotate", "scale", "mirror"].includes(verb)) return null;
+  // A command that made geometry, said as it used to be said, is only heard; with anything else it is the agent's.
+  // Scale took a marker as its pivot; copy and array never did.
+  if (REMOVED_VERBS.has(verb))
+    return (!marker || verb === "scale") && args.every(removedArg)
+      ? { kind: "removed", what: verb as RemovedVerb }
+      : null;
+  // A marker is the pivot of a rotate or mirror and the place of a move; nothing else takes one.
+  if (marker && !["move", "rotate", "mirror"].includes(verb)) return null;
   switch (verb) {
     case "move": {
       if (marker) return args.length === 0 ? { kind: "moveTo", marker } : null;
       const by = readOffset(args);
       return by ? { kind: "translate", by } : null;
     }
-    case "copy":
-      return parseCopy(args, false);
-    case "array":
-      return parseCopy(args, true);
     case "rotate":
       return parseRotate(args, marker);
-    case "scale":
-      return parseScale(args, marker);
     case "mirror":
       return parseMirror(args, marker);
     case "deselect":
@@ -509,14 +455,14 @@ function validSequence(clauses: Clause[]): boolean {
     const doubled = clauses.length === 2 && "selector" in action && action.selector !== null;
     return only && !doubled;
   }
-  if (rest.some((c) => c.kind === "select")) return false;
-  return rest.filter((c) => c.kind === "copy").length <= 1;
+  return !rest.some((c) => c.kind === "select");
 }
 
 /**
  * The command a transcript is, or null. Everything said must be understood: one word the grammar does not know and the
- * transcript is the agent's. Clauses are joined by "and", "then" or a comma ("copy and rotate 90"); a clause that is
- * only a distance goes on the move or copy before it ("move 2 m up and 3 m east").
+ * transcript is the agent's. Clauses are joined by "and", "then" or a comma ("move 2 m east and rotate 90"); a clause
+ * that is only a distance goes on the move before it ("move 2 m up and 3 m east"). A removed command in a transcript
+ * understood in full ("copy", "array", "scale") makes the whole of it that command, which changes nothing.
  */
 export function parseCommand(text: string): Command | null {
   const words = wordsOf(text);
@@ -546,24 +492,24 @@ export function parseCommand(text: string): Command | null {
       clauses.push(clause);
       continue;
     }
-    // No verb: more distance for the move or copy before.
+    // No verb: more distance for the move before.
     const previous = clauses[clauses.length - 1];
     const more = readOffset(part.filter((w) => !FILLER.has(w)));
-    if (!more || !previous || (previous.kind !== "translate" && previous.kind !== "copy")) return null;
-    const by = previous.kind === "copy" && previous.by === null ? ([0, 0, 0] as Point3Mm) : previous.by;
-    if (!by) return null;
+    if (!more || previous?.kind !== "translate") return null;
+    const { by } = previous;
     previous.by = [by[0] + more[0], by[1] + more[1], by[2] + more[2]];
   }
+  // Understood, with a removed command in it: that command is the whole of it, and nothing is changed.
+  const removed = clauses.find((c) => c.kind === "removed");
+  if (removed) return { clauses: [removed] };
   return validSequence(clauses) ? { clauses } : null;
 }
 
-/** What a correction says the number was meant to be: "make it 4 m", "change it to 5 times", "no, 45 degrees". */
+/** What a correction says the number was meant to be: "make it 4 m", "no, 45 degrees". */
 export type Correction =
   | { kind: "length"; mm: number }
-  | { kind: "count"; count: number }
   | { kind: "angle"; deg: number }
-  | { kind: "factor"; factor: number }
-  /** A bare number: for whichever number the last command had (its distance, count, angle or factor). */
+  /** A bare number: for whichever number the last command had (its distance or angle). */
   | { kind: "number"; value: number };
 
 /** Words that say a number is being put right rather than a new thing asked for. */
@@ -623,7 +569,7 @@ const AROUND_CORRECTION = new Set([
 
 /**
  * A correction of the last command, or null: it must say it is one ("make it 4 m", "change it to 4m", "no, 4 metres",
- * "actually 5 times", "4 metres instead") and be nothing but the new number with its unit. "Make this 300 thick" is not
+ * "actually 30 degrees", "4 metres instead") and be nothing but the new number with its unit. "Make this 300 thick" is not
  * one (it says what thickness), nor is a bare "4 m": without a word like make, change or no it is a new request.
  */
 export function parseCorrection(text: string): Correction | null {
@@ -647,17 +593,14 @@ export function parseCorrection(text: string): Correction | null {
       ? { kind: "length", mm: Math.round(length.value * 100) / 100 }
       : null;
   }
-  if (COUNT_WORDS.has(unit) && Number.isInteger(number.value) && number.value >= 1)
-    return { kind: "count", count: number.value };
   if (["degrees", "degree", "deg"].includes(unit)) return { kind: "angle", deg: number.value };
-  if (unit === "percent") return { kind: "factor", factor: number.value / 100 };
   return null;
 }
 
 /**
- * The command with its number put right, or a sentence saying why it cannot be: the last distance, count, angle or
- * scale it has. A bare number goes to whichever the command is about: a rotate's angle, a scale's factor, an array's
- * count, a move's or copy's distance (in metres when the old one was whole metres, else millimetres).
+ * The command with its number put right, or a sentence saying why it cannot be: the last distance or angle it has. A
+ * bare number goes to whichever the command is about: a rotate's angle, a move's distance (in metres when the old one
+ * was whole metres, else millimetres).
  */
 export function correctCommand(command: Command, correction: Correction): Command | string {
   const clauses = command.clauses.map((clause) => ({ ...clause })) as Clause[];
@@ -665,73 +608,35 @@ export function correctCommand(command: Command, correction: Correction): Comman
     for (let i = clauses.length - 1; i >= 0; i--) if (match(clauses[i] as Clause)) return i;
     return -1;
   };
-  const hasDistance = (c: Clause) =>
-    (c.kind === "translate" || c.kind === "copy") && (c.by !== null || !!(c as { spaced?: Axis }).spaced);
-  const resized = (from: Point3Mm, mm: number): Point3Mm | null => {
-    const length = Math.hypot(from[0], from[1], from[2]);
-    return length === 0 ? null : [(from[0] * mm) / length, (from[1] * mm) / length, (from[2] * mm) / length];
-  };
   const setLength = (mm: number): Command | string => {
-    const i = at(hasDistance);
+    const i = at((c) => c.kind === "translate");
     if (i < 0) return "There is no distance in that to change.";
-    const clause = clauses[i] as Extract<Clause, { kind: "translate" | "copy" }>;
-    if (clause.kind === "copy" && clause.by === null && clause.spaced) {
-      const by: Point3Mm = [0, 0, 0];
-      by[clause.spaced.axis] = clause.spaced.sign * mm;
-      const { spaced: _gone, ...rest } = clause;
-      clauses[i] = { ...rest, by };
-    } else {
-      const by = resized(clause.by as Point3Mm, mm);
-      if (!by) return "There is no distance in that to change.";
-      clauses[i] = { ...clause, by } as Clause;
-    }
+    const clause = clauses[i] as Extract<Clause, { kind: "translate" }>;
+    const length = Math.hypot(clause.by[0], clause.by[1], clause.by[2]);
+    if (length === 0) return "There is no distance in that to change.";
+    const by = clause.by.map((v) => (v * mm) / length) as Point3Mm;
+    clauses[i] = { ...clause, by };
     return { clauses };
   };
-  const setCount = (count: number): Command | string => {
-    const i = at((c) => c.kind === "copy");
-    if (i < 0) return "There is no count in that to change.";
-    if (count > MAX_COPIES) return `That is more than ${MAX_COPIES} copies.`;
-    clauses[i] = { ...(clauses[i] as Extract<Clause, { kind: "copy" }>), count };
-    return { clauses };
-  };
-  const setAngle = (deg: number, signed: boolean): Command | string => {
+  const setAngle = (deg: number): Command | string => {
     const i = at((c) => c.kind === "rotate");
     if (i < 0) return "There is no angle in that to change.";
     const clause = clauses[i] as Extract<Clause, { kind: "rotate" }>;
     if (deg === 0) return "A rotation of 0 turns nothing.";
-    clauses[i] = { ...clause, deg: signed || deg < 0 ? deg : Math.sign(clause.deg) * Math.abs(deg) };
-    return { clauses };
-  };
-  const setFactor = (factor: number): Command | string => {
-    const i = at((c) => c.kind === "scale");
-    if (i < 0) return "There is no scale in that to change.";
-    if (!(factor > 0)) return "A scale has to be more than 0.";
-    clauses[i] = { ...(clauses[i] as Extract<Clause, { kind: "scale" }>), factor };
+    clauses[i] = { ...clause, deg: deg < 0 ? deg : Math.sign(clause.deg) * Math.abs(deg) };
     return { clauses };
   };
   switch (correction.kind) {
     case "length":
       return setLength(correction.mm);
-    case "count":
-      return setCount(correction.count);
     case "angle":
-      return setAngle(correction.deg, false);
-    case "factor":
-      return setFactor(correction.factor);
+      return setAngle(correction.deg);
     case "number": {
-      const last = clauses[at((c) => c.kind !== "select") ?? -1];
+      const last = clauses[at((c) => c.kind !== "select")];
       if (!last) return "There is nothing to change.";
       switch (last.kind) {
         case "rotate":
-          return setAngle(correction.value, false);
-        case "scale":
-          return setFactor(correction.value);
-        case "copy":
-          if (last.spaced || (last.by === null && last.count > 1) || last.count > 1)
-            return Number.isInteger(correction.value)
-              ? setCount(correction.value)
-              : "A count is a whole number.";
-          return setLength(correction.value * wholeMetres(last.by));
+          return setAngle(correction.value);
         case "translate":
           return setLength(correction.value * wholeMetres(last.by));
         default:
@@ -742,7 +647,7 @@ export function correctCommand(command: Command, correction: Correction): Comman
 }
 
 /** The unit a bare number is in: metres when the old distance was a whole number of them, else millimetres. */
-function wholeMetres(by: Point3Mm | null): number {
-  const length = by ? Math.hypot(by[0], by[1], by[2]) : 0;
+function wholeMetres(by: Point3Mm): number {
+  const length = Math.hypot(by[0], by[1], by[2]);
   return length >= 1000 && Math.abs(length / 1000 - Math.round(length / 1000)) < 1e-6 ? 1000 : 1;
 }

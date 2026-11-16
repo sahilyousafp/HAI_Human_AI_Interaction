@@ -448,3 +448,17 @@ What it still gets wrong: "Bake" as "Make", "Column" as "Colon" (one voice of tw
   - A panel is worked fully by hand: drag, scroll, hover, and moving and resizing it by its header, building on the presses and sliders `frame-runtime.ts` already handles.
 
 The work is split into ten OpenSpec changes, listed in `openspec/changes/pivot-to-host-orchestration/proposal.md`.
+
+## The creation tools and the geometry kernel go; HAI edits host objects directly (2026-11-16)
+
+**Question.** With the hosts modelling, what happens to what built geometry in HAI: the creation tools (Wall, Slab, Column, Copy, Add massing, Line), the agents' scene write tools, and the OpenCascade geometry kernel added for lofts, sweeps, booleans and offsets? And how does a move or a delete made in HAI reach a host?
+
+**Decided.**
+
+- **Deleted, not hidden.** The creation tools, their feature switch, the spoken copy, array and scale, the agents' `create_elements`, `update_elements`, `transform_elements`, `delete_elements`, `group_elements`, `ungroup_elements`, `set_tags` and `context_adopt`, and the geometry tools with the kernel, its Python recipes and its tests all go. Code kept behind a switch must still be kept working, and nothing would use it.
+- **The user's edits are not code.** A move, a turn or a delete of host objects is sent as `host.edit`: a 4 x 4 matrix in millimetres, or a delete, by ids. The connector applies it as one undo record and runs no script, so no approval card is shown, as a drag in the host's window needs none. Sending Python for each drag was rejected: an approval for every drag, and the agent's channel used for the user's hand.
+- **One undo order, kept in the page.** It records each of the user's edits with where it was made; Undo pops the last and sends it to the scene or to that host. An agent's run stays out of it, with its own Undo in the run report. Sending every Undo to the hosts was rejected: it would take back an agent's run the user did not mean.
+- **The preview stays until the host's batch arrives**, so a moved object never jumps back for a frame. A refusal, or no answer within 5 seconds, drops it with a notice.
+- **A request from the selection card is limited** to the selected objects: a `[limit]` line in the agent's text, and the lead's tasks for it scoped to them, which the run check then holds runs to.
+
+**What is lost.** Without a host, HAI can no longer loft, sweep, boolean or offset: the Python workbench still writes geometry with `rhino3dm`, and any host does those far better. The superseded change `add-geometry-kernel` is left unarchived and recorded as removed here. Existing elements of the removed kinds stay in projects as references: they render and can be selected, moved, turned and deleted.

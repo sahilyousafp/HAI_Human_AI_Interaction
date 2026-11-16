@@ -27,7 +27,6 @@ Every feature can be switched off on its own, so a demo or a release shows exact
 | Feature | Off means |
 |---|---|
 | Tool rings | No ring opens by a long pinch, Space or a held right button |
-| Create tools | Wall, Slab, Column and Copy disappear from the rings and their keys do nothing; if one was active, Select takes over |
 | Two-hand navigation | Pinching with both hands does not zoom, pan or turn the view |
 | Scroll by hand | A pinch-drag over a list does not scroll it |
 | Press controls by hand | A pinch on a button, switch or link does not press it |

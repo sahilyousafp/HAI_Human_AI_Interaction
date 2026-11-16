@@ -1011,6 +1011,115 @@ kbd {
 .selection-action-risk {
   color: var(--risk);
 }
+/* What a host has selected, as it describes it: the scene's selection card, a little wider for the rows. */
+.component-card {
+  width: 268px;
+}
+.component-host {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.component-rows {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.component-row {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: var(--r-s);
+  background: var(--fill);
+  font: 400 11px / 1.35 var(--f-body);
+  color: var(--muted);
+}
+.component-name {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.component-name strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 12px / 1.3 var(--f-body);
+  color: var(--ink);
+}
+.component-type {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.component-facts {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.component-properties {
+  display: grid;
+  gap: 1px;
+  margin: 2px 0 0;
+}
+.component-properties div {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.component-properties dt {
+  flex: none;
+  color: var(--muted);
+}
+.component-properties dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.component-more {
+  margin: 0;
+  font: 400 11px / 1.3 var(--f-body);
+  color: var(--muted);
+}
+.component-ask {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+}
+.component-ask input {
+  min-width: 0;
+  padding: 0 10px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--fill);
+  color: var(--ink);
+  font: 400 12.5px / 1 var(--f-body);
+}
+.component-ask input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.component-ask .selection-action-wide {
+  grid-column: auto;
+  min-height: 36px;
+  padding: 0 12px;
+}
+.component-ask .selection-action-wide:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .selection-leader {
   position: absolute;
   inset: 0;

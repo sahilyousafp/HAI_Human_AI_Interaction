@@ -17,9 +17,9 @@ describe("features", () => {
   });
 
   it("stored choices apply, and unknown names are ignored", () => {
-    const features = resolveFeatures({ createTools: false, teleport: false });
-    expect(features.createTools).toBe(false);
-    expect(features.voice).toBe(true);
+    const features = resolveFeatures({ voice: false, teleport: false, createTools: false });
+    expect(features.voice).toBe(false);
+    expect(features.snapToModels).toBe(true);
     expect(Object.keys(features)).toEqual(FEATURE_IDS);
   });
 

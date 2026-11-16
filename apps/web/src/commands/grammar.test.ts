@@ -46,21 +46,27 @@ describe("move", () => {
   });
 });
 
-describe("copy", () => {
-  it("is one copy, or an array with a count", () => {
-    expect(clauses("copy 6 m y")).toEqual([{ kind: "copy", count: 1, by: [0, 6000, 0] }]);
-    expect(clauses("copy 4 times 6 m along y")).toEqual([{ kind: "copy", count: 4, by: [0, 6000, 0] }]);
-    expect(clauses("copy twice 3 metres east")).toEqual([{ kind: "copy", count: 2, by: [3000, 0, 0] }]);
-    expect(clauses("duplicate this")).toEqual([{ kind: "copy", count: 1, by: null }]);
+describe("commands that made geometry", () => {
+  const removed = (what: string) => [{ kind: "removed", what }];
+
+  it("copy, array and scale are heard, however they go on, so the reply can say to ask the agent", () => {
+    expect(clauses("copy 6 m y")).toEqual(removed("copy"));
+    expect(clauses("copy 4 times 6 m along y")).toEqual(removed("copy"));
+    expect(clauses("duplicate this")).toEqual(removed("copy"));
+    expect(clauses("array 5 times")).toEqual(removed("array"));
+    expect(clauses("array this 5 times along y")).toEqual(removed("array"));
+    expect(clauses("scale 2")).toEqual(removed("scale"));
+    expect(clauses("shrink this by half")).toEqual(removed("scale"));
+    expect(clauses("copy and rotate 90")).toEqual(removed("copy"));
   });
 
-  it("refuses a count that is not a whole number or is too big", () => {
-    expect(parseCommand("copy 2.5 times 3 m x")).toBeNull();
-    expect(parseCommand("copy 500 times 3 m x")).toBeNull();
+  it("with something else the grammar does not know, the transcript is still the agent's", () => {
+    expect(parseCommand("copy and paint it red")).toBeNull();
+    expect(parseCommand("do not copy that")).toBeNull();
   });
 });
 
-describe("rotate, scale and mirror", () => {
+describe("rotate and mirror", () => {
   it("rotates by degrees, counter-clockwise unless it says clockwise", () => {
     expect(clauses("rotate 90")).toEqual([{ kind: "rotate", deg: 90 }]);
     expect(clauses("rotate 45 degrees clockwise")).toEqual([{ kind: "rotate", deg: -45 }]);
@@ -68,16 +74,6 @@ describe("rotate, scale and mirror", () => {
     expect(clauses("rotate minus 30")).toEqual([{ kind: "rotate", deg: -30 }]);
     expect(parseCommand("rotate")).toBeNull();
     expect(parseCommand("rotate 0")).toBeNull();
-  });
-
-  it("scales by a factor, a percentage, half or double", () => {
-    expect(clauses("scale 2")).toEqual([{ kind: "scale", factor: 2 }]);
-    expect(clauses("scale by 0.5")).toEqual([{ kind: "scale", factor: 0.5 }]);
-    expect(clauses("scale 50 percent")).toEqual([{ kind: "scale", factor: 0.5 }]);
-    expect(clauses("scale half")).toEqual([{ kind: "scale", factor: 0.5 }]);
-    expect(clauses("scale double")).toEqual([{ kind: "scale", factor: 2 }]);
-    expect(parseCommand("scale 0")).toBeNull();
-    expect(parseCommand("scale 1")).toBeNull();
   });
 
   it("mirrors across x or y, and nothing else", () => {
@@ -90,13 +86,13 @@ describe("rotate, scale and mirror", () => {
 
 describe("chains", () => {
   it("run in the order said", () => {
-    expect(clauses("copy and rotate 90")).toEqual([
-      { kind: "copy", count: 1, by: null },
+    expect(clauses("move 2 m east and rotate 90")).toEqual([
+      { kind: "translate", by: [2000, 0, 0] },
       { kind: "rotate", deg: 90 },
     ]);
-    expect(clauses("copy 3 m x then scale 0.5")).toEqual([
-      { kind: "copy", count: 1, by: [3000, 0, 0] },
-      { kind: "scale", factor: 0.5 },
+    expect(clauses("rotate 90 then mirror y")).toEqual([
+      { kind: "rotate", deg: 90 },
+      { kind: "mirror", axis: "y" },
     ]);
     expect(clauses("please move 1 m up, rotate 10 and mirror y")).toEqual([
       { kind: "translate", by: [0, 0, 1000] },
@@ -106,17 +102,16 @@ describe("chains", () => {
   });
 
   it("take a comma and then, or and then, as one break", () => {
-    expect(clauses("copy, then rotate 90")).toEqual([
-      { kind: "copy", count: 1, by: null },
+    expect(clauses("mirror x, then rotate 90")).toEqual([
+      { kind: "mirror", axis: "x" },
       { kind: "rotate", deg: 90 },
     ]);
-    expect(clauses("copy and then rotate 90")).toEqual(clauses("copy and rotate 90"));
+    expect(clauses("mirror x and then rotate 90")).toEqual(clauses("mirror x and rotate 90"));
   });
 
   it("are all or nothing: one clause the grammar does not know hands the whole transcript to the agent", () => {
-    expect(parseCommand("copy and paint it red")).toBeNull();
+    expect(parseCommand("move 1 m up and paint it red")).toBeNull();
     expect(parseCommand("rotate 90 and make it taller")).toBeNull();
-    expect(parseCommand("copy and copy 3 m x")).toBeNull();
   });
 });
 
@@ -182,24 +177,18 @@ describe("requests for the agent", () => {
 });
 
 describe("markers", () => {
-  it("rotates, scales and mirrors about a marker", () => {
+  it("rotates and mirrors about a marker", () => {
     expect(clauses("rotate 45 about marker B")).toEqual([{ kind: "rotate", deg: 45, about: "B" }]);
-    expect(clauses("scale half about marker a")).toEqual([{ kind: "scale", factor: 0.5, about: "A" }]);
     expect(clauses("mirror x at marker c")).toEqual([{ kind: "mirror", axis: "x", about: "C" }]);
   });
 
   it("moves to a marker", () => {
     expect(clauses("move to marker A")).toEqual([{ kind: "moveTo", marker: "A" }]);
-    // The copy is the one that goes: "copy and move to marker b".
-    expect(clauses("copy and move to marker b")).toEqual([
-      { kind: "copy", count: 1, by: null },
-      { kind: "moveTo", marker: "B" },
-    ]);
   });
 
   it("chains with the other clauses", () => {
-    expect(clauses("copy and rotate 90 about marker B")).toEqual([
-      { kind: "copy", count: 1, by: null },
+    expect(clauses("move to marker A and rotate 90 about marker B")).toEqual([
+      { kind: "moveTo", marker: "A" },
       { kind: "rotate", deg: 90, about: "B" },
     ]);
   });
@@ -212,14 +201,7 @@ describe("markers", () => {
   });
 });
 
-describe("a count written as the speech model writes it", () => {
-  it("reads 4 x 6 m as four times, six metres each", () => {
-    const written = parseCommand("copy 4 x 6 meters along y");
-    expect(written).not.toBeNull();
-    expect(written).toEqual(parseCommand("copy four times six metres along y"));
-    expect(parseCommand("copy 4x6 m along y")).toEqual(written);
-  });
-
+describe("an axis called x", () => {
   it("leaves an axis called x alone", () => {
     expect(parseCommand("move 3 m along x")).toEqual(parseCommand("move 3 m east"));
   });
@@ -249,7 +231,6 @@ describe("how people actually say it", () => {
 
   it("other verbs and units for the same things", () => {
     same("slide this 3 metres east", "move 3 m east");
-    same("shrink this by half", "scale half");
     same("pick all walls", "select all walls");
     same("conceal the selection", "hide");
     same("move this 2 feet east", "move 609.6 mm east");
@@ -258,7 +239,7 @@ describe("how people actually say it", () => {
 
   it("a unit with no number is one of it", () => {
     same("move this a metre up", "move 1 m up");
-    same("copy it half a metre east", "copy 0.5 m east");
+    same("move it half a metre east", "move 0.5 m east");
   });
 
   it("anything that would change what it does is still the agent's", () => {
@@ -277,13 +258,7 @@ describe("how people actually say it", () => {
   });
 });
 
-describe("an axis and its way, and arrays", () => {
-  const copyOf = (said: string) => {
-    const command = parseCommand(said);
-    expect(command, said).not.toBeNull();
-    return command?.clauses[0] as Extract<Clause, { kind: "copy" }>;
-  };
-
+describe("an axis and its way", () => {
   it("an axis letter and a way along it can both be said, in either order", () => {
     same("move 5 meters to the y axis towards right", "move 5 m north");
     same("move 5 meters along y towards left", "move 5 m south");
@@ -296,27 +271,5 @@ describe("an axis and its way, and arrays", () => {
   it("two ways, or two letters, for one distance are not guessed", () => {
     expect(parseCommand("move 5 m right left")).toBeNull();
     expect(parseCommand("move 5 m x y")).toBeNull();
-  });
-
-  it("array 5 times puts five copies side by side along x; an axis and a way change that", () => {
-    expect(copyOf("array 5 times")).toMatchObject({ count: 5, by: null, spaced: { axis: 0, sign: 1 } });
-    expect(copyOf("array 5")).toMatchObject({ count: 5, spaced: { axis: 0, sign: 1 } });
-    expect(copyOf("array this 5 times along y")).toMatchObject({ count: 5, spaced: { axis: 1, sign: 1 } });
-    expect(copyOf("array 3 times up")).toMatchObject({ count: 3, spaced: { axis: 2, sign: 1 } });
-    expect(copyOf("array 4 times to the y axis towards left")).toMatchObject({
-      count: 4,
-      spaced: { axis: 1, sign: -1 },
-    });
-  });
-
-  it("an array with a distance is a copy line, like copy", () => {
-    same("array 4 times 6 m along y", "copy 4 times 6 m along y");
-    same("array 4 times 6 m", "copy 4 times 6 m x");
-  });
-
-  it("an array of nothing sensible is the agent's", () => {
-    expect(parseCommand("array")).not.toBeNull(); // one copy, side by side
-    expect(parseCommand("array 5 banana")).toBeNull();
-    expect(parseCommand("array 0 times")).toBeNull();
   });
 });

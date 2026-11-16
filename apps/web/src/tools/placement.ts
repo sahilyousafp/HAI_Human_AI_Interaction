@@ -46,16 +46,32 @@ export function movedOffset(
   at: Point2,
 ): [number, number] {
   const doc = ctx.doc();
+  if (!doc) return offsetFrom(ctx, null, [], start, pointer, at);
+  const ref = referencePoint(element, doc);
+  return offsetFrom(ctx, [ref[0], ref[1], referenceHeight(element, doc)], [element.id], start, pointer, at);
+}
+
+/**
+ * The same for anything with a reference point `ref` (a host object's box corner): how far to move it, with the
+ * drawing aids having their say about where `ref` lands. `exclude` lists what must not be snapped to.
+ */
+export function offsetFrom(
+  ctx: ToolContext,
+  ref: Point3Mm | null,
+  exclude: string[],
+  start: Point3Mm,
+  pointer: Point3Mm,
+  at: Point2,
+): [number, number] {
   const dx = pointer[0] - start[0];
   const dy = pointer[1] - start[1];
   const gridOffset = (): [number, number] =>
     ctx.aids().grid ? [snap(dx), snap(dy)] : [Math.round(dx), Math.round(dy)];
-  if (!doc) return gridOffset();
-  const ref = referencePoint(element, doc);
-  const z = referenceHeight(element, doc);
+  if (!ref) return gridOffset();
+  const z = ref[2];
   const result = ctx.resolve(at, {
-    anchor: [ref[0], ref[1], z],
-    exclude: [element.id],
+    anchor: ref,
+    exclude,
     probe: [ref[0] + dx, ref[1] + dy, z],
   });
   if (!result) return gridOffset();
