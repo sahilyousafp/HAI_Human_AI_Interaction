@@ -15,7 +15,7 @@ export function DrawingAidsSettings({ store, tools }: { store: DrawingAidsStore;
   const { angleStepDeg } = useSyncExternalStore(tools.subscribe, tools.getSnapshot).constraints;
   return (
     <div className="settings-page-body" data-testid="drawing-aids-settings">
-      <ListGroup footer="When several aids could apply, the first of Endpoint, Midpoint, Centre, Perpendicular and Project within reach wins, then Grid. Ortho holds a line to an axis first. The choice is kept for this workspace, in every browser.">
+      <ListGroup footer="When several aids could apply, the first of Endpoint, Midpoint, Centre, Perpendicular and Project within reach wins, then Grid. Ortho holds a line to an axis first. The switches are kept for this workspace, in every browser; the angle step in this browser.">
         {DRAWING_AIDS.map((aid) => (
           <ListRow
             key={aid.id}
