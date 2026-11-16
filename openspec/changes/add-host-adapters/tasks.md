@@ -4,7 +4,8 @@
 
 - [ ] 1.1 Add `host.ts` (`HostId`, `HostObjectType`, `HostObject`, `HostNotDrawn`, `HostSync`, `HostBatch`, `HostSelected`, `HostChange`, `HostRunChanges`, `HostRunResult`, `HostCapabilities`). Move `ViewRequest` and `VIEW_MODES` to `view.ts` and delete `rhino.ts`. Verify by moving `rhino.test.ts` to `host.test.ts`, adding cases for the Blender and Revit object types.
 - [ ] 1.2 Replace the `rhino.*` messages with the `host.*` messages of the design, with `host.refused` and the versioned hello. Verify the schema tests, including "an old hello without a protocol version is refused".
-- [ ] 1.3 Add the tool names and the `host` and `hostRead` groups to `HAI_TOOLS`, removing `rhino` and `rhinoRead`. Verify with `pnpm typecheck` across the workspace, which lists every place still to move.
+- [ ] 1.3 Add `HostComponent`, `host.describe` and `host.described`, the described components on `host.selection`, and `components` in `RequestContext`. Verify the schema tests, including the 100-property and 200-character limits.
+- [ ] 1.4 Add the tool names and the `host` and `hostRead` groups to `HAI_TOOLS`, removing `rhino` and `rhinoRead`. Verify with `pnpm typecheck` across the workspace, which lists every place still to move.
 
 ## 2. The bridge: registry and links
 
@@ -22,7 +23,8 @@
 - [ ] 3.3 Add `host_place_image` (path checks against the project, claim check, undo label) and `host_api`. Verify "a site photo behind the model", "outside the project" and "look up a Rhino method" with the fake host.
 - [ ] 3.4 Grant tools by role in `roster.ts` and `agent-config.ts`, and offer host tools only for hosts in use, with descriptions naming them. Verify "roles get their tools", "Reviewer cannot run code in a host" and "no host, no host tools" in `roster.test.ts` and `agent-config.test.ts`.
 - [ ] 3.5 Migrate saved approvals and old tool names in agent files in `legacy.ts`. Verify "old approvals carry over" and a unit test for an agent file naming `rhino_run_python`.
-- [ ] 3.6 Name the host in the user context (pointed object and selections) in `scene-tools.ts`, and frame every host's bounds in `agent-eyes.ts`. Verify "'this' in Rhino" and "two hosts' selections".
+- [ ] 3.6 Describe each selection 150 ms after it changes, keep it with the selection, send it to the viewer, put it in a request's context, and add `host_describe`. Verify "a selected Brep is described", "a request knows what 'this' is" and "describe by id" with the fake host, and the 300 ms budget for 50 objects.
+- [ ] 3.7 Name the host in the user context (pointed object and selections) in `scene-tools.ts`, and frame every host's bounds in `agent-eyes.ts`. Verify "'this' in Rhino" and "two hosts' selections".
 
 ## 4. The viewer and the HUD
 
@@ -39,7 +41,8 @@
 - [ ] 5.4 Check the mirror, selection both ways and the not-drawn counts in the viewer with a real Rhino, carried over from 3.2 to 3.4. Verify "a new object appears", "a moved object follows", "a deleted object goes", "Rhino minimised", "tap selects a Rhino object" and "mouse selection mirrored" by the manual script, and record the p90.
 - [ ] 5.5 Add `Capture.cs` (`ViewCapture`, named views, asset upload). Verify by the manual script in Rhino 8 and Rhino 9's Direct3D display, recording the time at 1280 x 720.
 - [ ] 5.6 Add `PictureFrames.cs` (`AddPictureFrame`, embedded, one undo record) and `ApiLookup.cs` (a reflection index built after connect). Verify by the manual script: one Undo removes the frame, and a lookup of `Brep.CreateFromLoft` answers in under 300 ms.
-- [ ] 5.7 Show the run status on the host chip, and the run timing in the tool chip, carried over from 5.5. Verify in e2e with the fake host that a trivial run's overhead stays under 500 ms.
+- [ ] 5.7 Add `Describe.cs` (user strings, material, area and volume with a 10 ms cap per object). Verify by the manual script on a closed Brep, an open surface and a block, and unit-test the property limits in `HAI.Rhino.Core`.
+- [ ] 5.8 Show the run status on the host chip, and the run timing in the tool chip, carried over from 5.5. Verify in e2e with the fake host that a trivial run's overhead stays under 500 ms.
 
 ## 6. Docs
 

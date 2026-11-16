@@ -102,3 +102,23 @@ The agent SHALL have a read-only tool, `host_api`, that lists the types and memb
 #### Scenario: Look up a Rhino method
 - **WHEN** the agent asks Rhino's API for "Brep.CreateFromLoft"
 - **THEN** it receives that method's overloads with their parameters
+
+### Requirement: Selected components are described
+When a host's selection changes, the bridge SHALL ask the host to describe the selected objects (at most 50). The description holds name, type, layer, bounds, quantities, material and the object's own properties. The bridge SHALL keep it with the selection and send it to the viewer, and a request made while objects are selected SHALL carry it in its context. The answer SHALL come within 300 ms for 50 objects.
+
+#### Scenario: A selected Brep is described
+- **GIVEN** Rhino is connected and the user taps a closed Brep with the user string `hai.part = canopy`
+- **WHEN** the selection reaches the bridge
+- **THEN** the viewer receives the Brep's name, type, layer, volume, material and the property `hai.part = canopy`
+
+#### Scenario: A request knows what "this" is
+- **GIVEN** two Rhino objects are selected and described
+- **WHEN** the user asks "make these 200 mm thinner"
+- **THEN** the agent's request context holds both components with their properties and quantities
+
+### Requirement: The agent can describe components on demand
+Every agent SHALL have a read-only tool, `host_describe`, that describes given objects of a host in the same form, without approval.
+
+#### Scenario: Describe by id
+- **WHEN** the agent calls `host_describe` for Rhino with two object ids
+- **THEN** it receives both components' descriptions, with no approval card

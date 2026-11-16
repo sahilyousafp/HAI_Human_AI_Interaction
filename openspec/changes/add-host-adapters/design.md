@@ -84,7 +84,23 @@
 - **Migration.** `legacy.ts` moves saved approvals once: `mcp__hai__rhino_run_python` becomes `host_run:rhino` and `mcp__hai__rhino_get_document` becomes `mcp__hai__host_read`. An agent file whose `tools:` line names an old tool gets the new one, because the bridge takes the app's tools from the role (`--agents`) and ignores old names.
 - Rejected: one set of tools per host. That means six more tools per host, and the agent's prompt grows with each host.
 
-**Tools by role**, as today. `HAI_TOOLS.host` (`host_run`, `host_place_image`) goes to agents that change the model, and `HAI_TOOLS.hostRead` (`host_list`, `host_read`, `host_capture`, `host_api`) goes to every agent. The host tools are offered only while at least one host is switched on, and then only for the hosts in use.
+**Tools by role**, as today. `HAI_TOOLS.host` (`host_run`, `host_place_image`) goes to agents that change the model, and `HAI_TOOLS.hostRead` (`host_list`, `host_read`, `host_capture`, `host_api`, `host_describe`) goes to every agent. The host tools are offered only while at least one host is switched on, and then only for the hosts in use.
+
+**Selected components describe themselves.**
+- *The message.* `host.describe { host, id, ids }` is answered by `host.described { host, id, components }`, at most 50 per request. Each `HostComponent` is `{ id, name, type, layer, bounds, quantities, material, properties }`:
+  - `quantities` holds whichever of `areaMm2`, `volumeMm3` and `lengthMm` apply.
+  - `properties` holds at most 100 entries of a string, number or boolean, each value at most 200 characters.
+- *What each host fills in.*
+  - Rhino: user strings, the material name, and `AreaMassProperties` and `VolumeMassProperties` for closed Breps and meshes, skipped above 10 ms per object and marked so.
+  - Blender: custom properties, modifiers, the material, mesh area and volume.
+  - Revit: instance and type parameters, with their units.
+- *When it is sent.*
+  - The bridge asks whenever a host's selection changes, 150 ms after the last change, and keeps the answer with the selection.
+  - The viewer gets it in `host.selection` for the selection card.
+  - A request made while something is selected carries the components in its context (`RequestContext.components`, at most 50, cut to 20 000 characters in the agent's prompt), so the agent knows what "this" is without a call.
+- *The tool.* `host_describe { host, ids }` describes any objects, read-only, for every agent.
+- *The budget.* 300 ms for 50 selected objects, measured by the bridge.
+- Rejected: describing every object in the mirror batch, which multiplies the stream for detail the user rarely looks at.
 
 **Captures travel as assets.** The plugin renders with `ViewCapture` at the asked size (at most 1280 px on the long side) and uploads the PNG to the asset store, as it does meshes. It answers with the asset id, and the bridge reads the asset and returns it to the agent. The asset is dropped after 10 minutes. The budget is 1.5 s from request to answer for 1280 x 720 on the reference laptop, measured by the bridge and shown in the tool chip. Rejected: base64 in the WebSocket message. Large frames block the socket for the mirror.
 

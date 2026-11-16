@@ -85,7 +85,7 @@ Weeks 1-8 are built and their changes archived (`openspec/specs/` holds the curr
 The turn to orchestration (`pivot-to-host-orchestration`) replaces weeks 14 and 17 of the table above. "More modelling by hand" no longer fits, and an overlay over Rhino is not needed now that Rhino's window can stay minimised. It adds these changes, in order:
 
 1. `add-host-adapters`: one host contract (`host.*` messages, a host registry, `host_run`, `host_capture`, `host_place_image` and the rest), with Rhino as the reference adapter. It finishes the open plugin tasks of `add-rhino-connector`.
-2. `make-hai-the-edit-surface`: the edit ring and the reference ring, edits on host objects applied by their host, and the scene write tools and creation tools removed.
+2. `make-hai-the-edit-surface`: the edit ring and the reference ring, and edits on host objects applied by their host. It adds asking about a selection, as with a selected area of an artifact: the card describes each selected component, and a request from it carries them with a close-up picture and limits the task to them. It also removes the scene write tools and the creation tools.
 3. `add-host-zones`: live zones with the host's glyph and the agent's state. The look is chosen by the owner from options first.
 4. `add-image-flow`: pictures from HAI into a host, and the host's own captures back to the agent.
 5. `add-capability-connectors`: other MCP servers and the hosts' own plugins as extra capabilities. It adds a catalogue per host, gives each server to the agents working on its hosts, and has each host report its installed plugins to `host_run`.

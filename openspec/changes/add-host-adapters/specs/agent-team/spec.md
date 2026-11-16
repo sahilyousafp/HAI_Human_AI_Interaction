@@ -9,7 +9,7 @@
 ## ADDED Requirements
 
 ### Requirement: Host and Python tools go to the agents that should have them
-The agents that change the model (Architect, Product) SHALL be able to use `host_run`, `host_place_image` and `python_run`. Every agent SHALL be able to use the read-only host tools (`host_list`, `host_read`, `host_capture`, `host_api`), and Climate SHALL also be able to use `python_run`. The bridge SHALL NOT offer `host_run` or `host_place_image` to an agent not marked as changing the model.
+The agents that change the model (Architect, Product) SHALL be able to use `host_run`, `host_place_image` and `python_run`. Every agent SHALL be able to use the read-only host tools (`host_list`, `host_read`, `host_capture`, `host_api`, `host_describe`), and Climate SHALL also be able to use `python_run`. The bridge SHALL NOT offer `host_run` or `host_place_image` to an agent not marked as changing the model.
 
 #### Scenario: Roles get their tools
 - **GIVEN** Rhino is connected and switched on

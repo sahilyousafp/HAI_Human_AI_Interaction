@@ -30,15 +30,23 @@ The agent also needs two things it cannot do in Rhino today:
   | `host_capture` | Returns the host's own viewport image |
   | `host_place_image` | Puts a project image into the host as a picture frame, as one undo step |
   | `host_api` | Looks up the host's API inside the host, by reflection |
+| `host_describe` | Describes components by id: properties, quantities, material |
 
   Projects that always allowed the old tool names keep their choice under the new names.
 - **Settings > Hosts replaces Settings > Modelling.** Each host has a switch: use it when it is connected (on by default). An old "Python only" choice turns Rhino's switch off. The Python workbench (`python_run`) is unchanged and works with no host.
 - **The viewer draws one mirror layer per host.** A pick names the host and the object. The HUD shows each host's connection, run status and latency. Picking, selection and owner tints work as they do for Rhino today.
 - **The user context names the host** of the object under the pointer and of each selected object.
+- **Selected components describe themselves.** A host answers `host.describe` for selected objects with what the agent and the user need:
+  - name, type, layer or category, bounds
+  - quantities (area, volume, length)
+  - material
+  - the object's own properties: Rhino user strings, Blender custom properties and modifiers, Revit parameters
+
+  The bridge asks for this whenever a host's selection changes (at most 50 objects). The viewer gets it for the selection card, and a request made while something is selected carries it, so the agent knows exactly what "this" is without a call. The agent can also ask with `host_describe`.
 - **The Rhino plugin speaks the new contract.** It adds capture (`ViewCapture`, uploaded as an asset), picture frames (`AddPictureFrame`) and API lookup by reflection over RhinoCommon. It also finishes the open tasks of `add-rhino-connector` (archived): CI for the plugin, connect and reconnect, the mirror, selection and their manual checks, Python status, the docs and the demo.
 
 Out of scope:
-- Edits made in HAI on host objects (`make-hai-the-edit-surface`).
+- Edits made in HAI on host objects, and asking for a change to a selection from its card (`make-hai-the-edit-surface`).
 - Zones (`add-host-zones`).
 - Sending HAI's own pictures to a host (`add-image-flow`). This change only places an image file that is already in the project.
 - Connected MCP servers and the host's installed plugins (`add-capability-connectors`).
@@ -59,7 +67,7 @@ Script: `demos/23-host-adapters.md`.
 ### New Capabilities
 
 - `host-link`: connecting any host to the bridge, the versioned hello and what the host can do, the mirror per host, picking and selection both ways, the host's status, and the user's choice of hosts.
-- `host-code`: running code in a host with approval, one undo record and a time limit; reading the document; the host's own viewport image; placing an image; looking up the host's API.
+- `host-code`: running code in a host with approval, one undo record and a time limit; reading the document; the host's own viewport image; placing an image; looking up the host's API; describing selected components.
 
 ### Modified Capabilities
 
