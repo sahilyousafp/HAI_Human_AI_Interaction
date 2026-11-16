@@ -116,7 +116,7 @@ Some tool calls need your say-so.
   - Head gestures only decide a card while it is the only one waiting.
   - A shake that answers a card does not also cancel the active tool.
 - **Unanswered cards are denied after 60 seconds**, and the card says it timed out.
-- **The request is also in the model.** A pulsing badge, in the asking agent's colour, sits on top of what the request concerns: the elements its input names, else the ones that agent owns, else the middle of the model. A pinch (or a click) on the badge opens a small tag next to it with the question, a short summary and **Allow** and **Deny**; the nod and shake still answer without opening it. A request that runs a script (`python_run`, `rhino_run_python`) shows **Show it in the chat** instead, so the whole script is read in the card first. Always allow stays on the card.
+- **The request is also in the model.** A pulsing badge, in the asking agent's colour, sits on top of what the request concerns: the elements its input names, else the ones that agent owns, else the middle of the model. A pinch (or a click) on the badge opens a small tag next to it with the question, a short summary and **Allow** and **Deny**; the nod and shake still answer without opening it. A request that runs a script (`python_run`, `host_run`) shows **Show it in the chat** instead, so the whole script is read in the card first. Always allow stays on the card.
 - **Always allow** pre-approves that tool in this project, kept in `.hai/approvals.json`. Remove it under **Settings > Agent permissions**, and the next call asks again.
 
 ## Extensions

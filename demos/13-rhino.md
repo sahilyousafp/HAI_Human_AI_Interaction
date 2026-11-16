@@ -7,7 +7,7 @@ Target length 75-90 s, 16:9, captions burned in. Rhino 8 runs minimised in the b
 ## Setup (before recording)
 
 1. `pnpm dev`; open http://127.0.0.1:5173 in Edge, light theme. Claude Code is installed and signed in (the agent panel says Ready).
-2. Build and install the plugin (`docs/rhino.md`, Connecting) and run `HaiConnect` in Rhino 8 with an empty document, then **minimise Rhino**. The top bar shows **Rhino connected**, and Settings > Modelling says **Rhino** in use and **Python ready**.
+2. Build and install the plugin (`docs/hosts.md`, Rhino, Connecting) and run `HaiConnect` in Rhino 8 with an empty document, then **minimise Rhino**. The top bar shows **Rhino connected**, and Settings > Hosts says **Rhino** in use and **Python ready**.
 3. Settings > Features: everything on. Show my hands: on. Front light on both hands; Studio Effects off. Start the camera, hold an open palm until engaged.
 4. A project folder where `python_run` has been allowed once (so `ladybug-core` and `numpy` are installed and the sun-hours study does not wait for a download). Do one practice run of the whole clip first: the agent writes its own geometry, so the look differs each time.
 5. Recorder at 1080p, 30 fps, capturing the browser window only (Rhino is not in frame).
@@ -22,7 +22,7 @@ Target length 75-90 s, 16:9, captions burned in. Rhino 8 runs minimised in the b
 | 4 | 32-42 s | Point at the canopy and tap: it highlights. Cut to Rhino for two seconds (restored window): the same surface is selected. Minimise again. | "A tap in HAI selects in Rhino." |
 | 5 | 42-54 s | Say: "Rotate this thirty degrees about the vertical, then show it from the south-west." The card, a nod, the canopy turns, the camera swings to the south-west. | "Rotating is a Rhino script. The camera is the agent's." |
 | 6 | 54-68 s | Say: "Climate, run a sun-hours study on the canopy for June." Allow the script; a result with hours appears in the chat. | "Ladybug, run inside Rhino." |
-| 7 | 68-84 s | Close Rhino. Settings > Modelling shows **Python only** in use. Say: "Product, make a box 2 by 1 by 3 metres and save it." The workbench card, a nod, then **Import into viewer**: the box appears. | "No Rhino at all: the same project, a `.3dm` on disk." |
+| 7 | 68-84 s | Close Rhino. Settings > Hosts shows **Python only** in use. Say: "Product, make a box 2 by 1 by 3 metres and save it." The workbench card, a nod, then **Import into viewer**: the box appears. | "No Rhino at all: the same project, a `.3dm` on disk." |
 
 ## Check on the real Rhino and camera (fill in before posting)
 

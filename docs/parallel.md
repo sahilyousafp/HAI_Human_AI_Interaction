@@ -84,7 +84,7 @@ Python and Rhino scripts are not sandboxed, so for them HAI reserves what it can
 
 The panel shows a claim within 200 ms of it being granted (measured 44 ms at the 90th percentile).
 
-Settings > Modelling > **Show owners** turns the tint and the boxes off while keeping parallel work; the panel still lists the claims.
+Settings > Hosts > **Show owners** turns the tint and the boxes off while keeping parallel work; the panel still lists the claims.
 
 ## Checking it by hand
 

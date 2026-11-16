@@ -9,7 +9,7 @@ The first page lists the sections; each opens its own page with a back button, a
 | **For recordings** (top of the first page) | **Show my hands**: see below |
 | **Camera and tracking** | Which camera, whether its image is mirrored, what is drawn over the preview, the live Gestures and Detection cards, and the frame rate, inference time and backend ([perception.md](perception.md)) |
 | **Features** | One switch per feature: see below |
-| **Modelling** | How the agent models: Automatic, Rhino or Python only, and what is connected now: see below |
+| **Hosts** | Which design applications the agent may use, one switch each, and what is connected now: see below |
 | **Open data** | The Open data switch, each source with its host and licence, the portals, the project's site, Show context and the requests made ([open-data.md](open-data.md)) |
 | **Chat rail** | What the collapsed chat rail shows and in what order of priority: Quiet, Needs you first, Team or Custom (tick the items, move them up or down). When the strip is short the lower items drop first ([agent.md](agent.md)) |
 | **Drawing aids** | Grid, Ortho (with its angle step), Ortho for Line, Endpoint, Midpoint, Centre, Project and Perpendicular for the create tools, Line and Move ([tools.md](tools.md)) |
@@ -45,19 +45,11 @@ Every feature can be switched off on its own, so a demo or a release shows exact
 
 The list lives in `packages/protocol/src/features.ts`. To put a new feature behind a switch, add it there and check `features.on("<id>")` where the feature acts (a tool can name its feature in `Tool.feature` instead).
 
-## Modelling
+## Hosts
 
-The agent can model in two ways, and you choose which in Settings > Modelling ([rhino.md](rhino.md)).
+The design applications the agent works in: Rhino, Blender and Revit ([hosts.md](hosts.md)). Each has a switch, on by default; a host that is off is not drawn and the agent cannot use it, even while it is connected. For each host the page says whether it is connected and how to connect it, whether the agent can run code in it (and what to do when it cannot), the progress of a first sync of a large document, and what the viewer leaves out (curves, points, annotations, objects too heavy to draw in full). The top bar shows one pill per connected host: **Rhino connected 46 ms**, where the number is how long the last changes took to be drawn here, **Syncing 120 of 4000** while a document arrives, or **Rhino: cannot run code**.
 
-| Choice | The agent works in | The Rhino model |
-|---|---|---|
-| **Automatic** (the default) | Rhino while it is connected, the Python workbench otherwise | Drawn in the viewer while Rhino is connected |
-| **Rhino** | Rhino; it says so when Rhino is not connected | Drawn in the viewer while Rhino is connected |
-| **Python only** | The Python workbench, which writes `.3dm` files without Rhino | Not drawn; Rhino's own tools are not offered to the agent |
-
-The page also says what is connected now: the mode in use, the Rhino document, whether Python runs inside Rhino (and what to do when it does not), the progress of a first sync of a large document, and what the viewer leaves out (curves, points, annotations, objects too heavy to draw in full). The top bar shows the same as a pill: **Rhino connected**, **Syncing 120 of 4000**, **Rhino not connected** (when you chose Rhino) or **Python only**, and next to it **Rhino to HAI 80 ms**, how long the last changes in Rhino took to be drawn here.
-
-The choice is kept in `.hai/settings.json` with the others, so it follows the workspace from a machine with Rhino to one without.
+The switches are kept in `.hai/settings.json` with the others, so they follow the workspace from a machine with an application to one without. A workspace that had chosen **Python only** in the old Settings > Modelling opens with Rhino switched off.
 
 The page also has **Show owners** (on by default): while agents work on separate parts, each element an agent owns is outlined and tinted in its colour and region claims are drawn as boxes. Off, the model is drawn plainly and the agent panel still lists who holds what ([parallel.md](parallel.md)).
 
