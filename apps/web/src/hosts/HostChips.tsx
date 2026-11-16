@@ -41,13 +41,11 @@ function HostChip({ mirror }: { mirror: HostMirror }) {
       meta={
         <>
           {latency && (
-            <span
-              className="meta"
-              data-testid="host-latency"
-              data-host={mirror.host}
-              aria-label={`${label} to HAI ${latency}`}
-            >
-              {latency}
+            <span className="meta">
+              <span data-testid="host-latency" data-host={mirror.host} aria-hidden="true">
+                {latency}
+              </span>
+              <span className="visually-hidden">{`${label} to HAI ${latency}`}</span>
             </span>
           )}
           {progress && (

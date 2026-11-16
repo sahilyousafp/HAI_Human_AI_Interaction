@@ -5,12 +5,10 @@ import {
   CONTEXT_MAX_BUILDINGS,
   CONTEXT_MAX_RASTERS,
   CONTEXT_MAX_TREES,
-  type ContextBuilding,
   type ContextCredit,
   ContextItem,
   type Message,
   OPEN_DATA_SOURCES,
-  type SceneOp,
   Site,
 } from "@hai/protocol";
 import { z } from "zod";
@@ -256,27 +254,4 @@ export function signedArea(points: ReadonlyArray<readonly [number, number]>): nu
     sum += x0 * y1 - x1 * y0;
   }
   return sum / 2;
-}
-
-/**
- * The element a building becomes when a writer adopts it: its footprint extruded to its height (a slab whose thickness
- * is the height, counter-clockwise as the scene wants), tagged with where it came from so it is not taken for the
- * agent's own design.
- */
-export function adoptOp(building: ContextBuilding, id: string, sourceName: string): SceneOp {
-  const outline =
-    signedArea(building.footprint) >= 0 ? building.footprint : [...building.footprint].reverse();
-  return {
-    op: "create",
-    element: {
-      id,
-      type: "slab",
-      name: building.label ?? `Neighbour ${building.id}`,
-      base: building.baseMm + building.heightMm,
-      outline: outline.map(([x, y]) => [x, y] as [number, number]),
-      thickness: building.heightMm,
-      properties: { heightSource: building.heightSource },
-      tags: { "context.source": sourceName, "context.id": building.id },
-    },
-  };
 }

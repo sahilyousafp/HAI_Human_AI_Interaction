@@ -5,9 +5,7 @@
 //   "slow"       streams text for 20 s (to test stopping)
 //   "stubborn"   like slow, but ignores the interrupt request (to test the kill-and-resume fallback)
 //   "shell: X"   runs the shell command X as a Bash tool call, asking the permission prompt tool first
-//   "column"     creates a column with the app's create_elements tool, asking the permission prompt tool first
-//   "bad column" the same with a zero height, so the scene tool fails validation
-//   "columns N"  creates N columns, one create_elements call each
+//   "looks N"    reads the scene summary N times, one get_scene_summary call each (tool calls to watch)
 //   "panel"      offers a panel (offer_panel); if the user accepts, opens a clearance slider that moves col-a1
 //   "panel HTML" the same with HTML as the panel document, for tests that need a particular panel
 //   "panel wait N"  the same, but writes the panel N ms after the user accepted (the loading state shows meanwhile)
@@ -24,18 +22,14 @@
 //   "stream"     a reply in five pieces, 150 ms apart (to watch it stream)
 //   "work N"     streams for N ms, then replies "Finished work N" (stoppable, like slow)
 //   anything     replies "agent=<--agent> pid=<pid> turn=<n> previous=<the previous request>" in three pieces
-//   "columns N every MS"  the same, MS milliseconds apart (so several agents' work can be seen to overlap)
+//   "looks N every MS"  the same, MS milliseconds apart (so several agents' work can be seen to overlap)
 //   "rhino run TITLE"  runs a script in Rhino (host_run with host rhino) with that title and replies with the outcome
-//   "touch ID"   renames the element ID with update_elements and replies "Touched ID", or "Refused: <why>"
 //   "tool NAME JSON"  calls the app's tool NAME with JSON as its input (asking the permission prompt tool first) and
 //                replies with its output, or "Refused: <why>" (for tools that need no script of their own, like site_set)
 //   "mcp SERVER TOOL JSON"  calls a tool of an extension the user added (mcp__SERVER__TOOL), asking the permission prompt
 //                tool first, and replies "Ran: <server> ran <tool>" or "Not run: <why>"
-//   "mcp SERVER TOOL JSON"  calls a tool of an extension the user added (mcp__SERVER__TOOL), asking the permission prompt
-//                tool first, and replies "Ran: <server> ran <tool>" or "Not run: <why>"
 //   "claims"     reads get_claims and replies with its JSON
 //   "request ID" asks for the element ID with request_claim; "release ID" gives it back (release_claim)
-//   "tag ID k=v" sets a tag with set_tags and replies "Tagged ID" or "Refused: <why>"
 //   "preface"    replies with the lines the task arrived with ("[task] ...", "[brief] ...", "[scope] ...", "[worker] ...")
 //   "spawn T[part]: X ;; U(x0,y0,x1,y1): Y"  starts a worker for each part (spawn_worker) with instruction X or Y, then
 //                replies "Spawned: <name> <status>, ..." (T<ids> scopes by ids); "[worker report] ..." turns reply "Heard: ..."
@@ -540,7 +534,7 @@ function onRequest(raw) {
   // What the user pointed at ("[context] ..."), drew ("[sketches] ...") and marked ("[markers] ...") comes before what
   // they said, one line each; what is selected in a host ("[components] ...") is a heading and a line per component.
   const said = text.replace(
-    /^(\[(context|sketches|markers)\][^\n]*\n|\[components\][^\n]*\n(- [^\n]*\n)*)+/,
+    /^(\[(context|sketches|markers|limit)\][^\n]*\n|\[components\][^\n]*\n(- [^\n]*\n)*)+/,
     "",
   );
   if (asLead(forAgent ? text : said, forAgent)) return;
@@ -570,25 +564,6 @@ function onRequest(raw) {
     );
     return;
   }
-  if (text === "column" || text === "bad column") {
-    const tool = "mcp__hai__create_elements";
-    const element = {
-      type: "column",
-      name: "Fake column",
-      position: [0, -8000],
-      section: [400, 400],
-      height: text === "column" ? 3000 : 0,
-    };
-    toolCall(tool, { elements: [element] }, async (input) => {
-      const created = await callAppTool("create_elements", input);
-      const output = created.content[0].text;
-      return created.isError ? { error: output } : output;
-    }).then(({ output, failed }) => {
-      delta(failed ? `That failed: ${output}` : "Added a column.");
-      result();
-    });
-    return;
-  }
   if (text === "preface") {
     delta(preface.join(" | "));
     result();
@@ -598,14 +573,6 @@ function onRequest(raw) {
   if (rhinoRun) {
     appTool("host_run", { host: "rhino", title: rhinoRun[1], code: "result = 1\n" }).then((out) => {
       delta(out.error ? `Rhino refused: ${out.error}` : `Rhino ran: ${JSON.stringify(out)}`);
-      result();
-    });
-    return;
-  }
-  const touch = /^touch (\S+)$/.exec(text);
-  if (touch) {
-    appTool("update_elements", { updates: [{ id: touch[1], patch: { name: "Touched" } }] }).then((out) => {
-      delta(out.error ? `Refused: ${out.error}` : `Touched ${touch[1]}`);
       result();
     });
     return;
@@ -641,14 +608,6 @@ function onRequest(raw) {
     );
     return;
   }
-  const tag = /^tag (\S+) (\S+)=(.*)$/.exec(text);
-  if (tag) {
-    appTool("set_tags", { ids: [tag[1]], tags: { [tag[2]]: tag[3] } }).then((out) => {
-      delta(out.error ? `Refused: ${out.error}` : `Tagged ${tag[1]}`);
-      result();
-    });
-    return;
-  }
   if (text === "claims") {
     appTool("get_claims", {}).then((out) => {
       delta(JSON.stringify(out));
@@ -668,21 +627,14 @@ function onRequest(raw) {
     });
     return;
   }
-  const columns = /^columns (\d+)(?: every (\d+))?$/.exec(text);
-  if (columns) {
+  const looks = /^looks (\d+)(?: every (\d+))?$/.exec(text);
+  if (looks) {
     (async () => {
-      for (let i = 0; i < Number(columns[1]); i++) {
-        if (i > 0 && columns[2]) await new Promise((resolve) => setTimeout(resolve, Number(columns[2])));
-        const element = {
-          type: "column",
-          name: `Fake column ${i + 1}`,
-          position: [i * 4000, -8000],
-          section: [400, 400],
-          height: 3000,
-        };
-        await appTool("create_elements", { elements: [element] });
+      for (let i = 0; i < Number(looks[1]); i++) {
+        if (i > 0 && looks[2]) await new Promise((resolve) => setTimeout(resolve, Number(looks[2])));
+        await appTool("get_scene_summary", {});
       }
-      delta(`Added ${columns[1]} columns.`);
+      delta(`Looked ${looks[1]} times.`);
       result();
     })();
     return;

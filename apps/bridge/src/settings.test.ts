@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { readLastProject, writeLastProject } from "./project.ts";
 import { migrateHostSettings, SettingsHub, updateSettingsFile } from "./settings.ts";
 
-const LAYOUT = ["section", "select", "measure", null, "move", "massing", "delete", "undo"];
+const LAYOUT = ["section", "select", "measure", null, "move", "rotate", "delete", "undo"];
 const tempRoot = () => mkdtempSync(join(tmpdir(), "hai-settings-"));
 const settingsFile = (root: string) => join(root, ".hai", "settings.json");
 const setSettings = (payload: unknown): Message => {

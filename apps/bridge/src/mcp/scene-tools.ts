@@ -9,7 +9,6 @@ import {
   MAX_AGENT_CAMERAS,
   PanelDocument,
   type Point3Mm,
-  RESERVED_TAG_PREFIX,
   type SceneDocument,
   type SceneOp,
   type Sketch,
@@ -22,29 +21,16 @@ import {
   type ViewCamera,
   ViewRequest,
 } from "@hai/protocol";
-import {
-  applySteps,
-  copiedTags,
-  elementBounds,
-  expandToGroups,
-  groupOf,
-  groupOps,
-  newGroupId,
-  sunPosition,
-  type TransformStep,
-  ungroupOps,
-  unionBounds,
-} from "@hai/scene";
+import { elementBounds, expandToGroups, sunPosition, unionBounds } from "@hai/scene";
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { HAI_SERVER } from "../agent/agent-config.ts";
 import { type AgentEyes, describeCamera, PRESETS, presetCameras } from "../agent/agent-eyes.ts";
 import type { PermissionDecision } from "../agent/approvals.ts";
-import { countByTag, writesGroupTag } from "../agent/ownership.ts";
+import { countByTag } from "../agent/ownership.ts";
 import type { PanelResult } from "../agent/panels.ts";
 import type { Caller } from "./agent-tokens.ts";
 import { type ContextTools, registerContextTools } from "./context-tools.ts";
-import { type GeometryTools, registerGeometryTools } from "./geometry-tools.ts";
 import { type HostTools, registerHostTools } from "./host-tools.ts";
 import { type OpenDataTools, registerOpenDataTools } from "./open-data-tools.ts";
 import { openPanelDescription } from "./panel-api.ts";
@@ -56,20 +42,12 @@ import {
   type SurfaceTools,
 } from "./simulation-tools.ts";
 import { failure, text } from "./tool-results.ts";
-import { freshId, stopSignal } from "./tool-util.ts";
+import { stopSignal } from "./tool-util.ts";
 import { registerUrbanTools, type UrbanTools } from "./urban-tools.ts";
 import { registerWeatherTools, type WeatherTools } from "./weather-tools.ts";
 
 /** At most this many elements come back from one get_elements call. */
-
 const MAX_ELEMENTS = 200;
-
-/** The fields that say where an element is, not what shape it is: patching one on a group's member scatters the group. */
-const PLACE_FIELDS = new Set(["origin", "position", "translation", "rotationDeg"]);
-
-/** The answer to an agent writing a group's tag itself. */
-const GROUP_TAG_REFUSED =
-  "Nothing was changed: the hai.group tag belongs to the system. Use group_elements and ungroup_elements.";
 
 export interface SceneToolDeps {
   doc(): SceneDocument;
@@ -103,8 +81,6 @@ export interface SceneToolDeps {
   mirror?: MirrorContext;
   /** The Python workbench: runs a script in the managed environment. */
   python?: PythonTools;
-  /** The geometry tools (array along a curve, and OpenCascade's loft, sweep, boolean and offset). */
-  geometry?: GeometryTools;
   /** Code, captures, images, API lookup and descriptions in the hosts in use; absent while no host is in use. */
   hosts?: HostTools;
   /** Aborted when the agent ends the request before it is answered (Stop): long tool calls end their work. */
@@ -260,37 +236,27 @@ const COMPASS = [
   "NNW",
 ];
 
-/** The tool's steps as the scene package takes them (a move may leave out its height). */
-const stepsOf = (steps: Array<Record<string, unknown>>): TransformStep[] =>
-  steps.map((step) => {
-    if (step.kind === "translate") {
-      const [x = 0, y = 0, z = 0] = step.by as number[];
-      return { kind: "translate", by: [x, y, z] };
-    }
-    return step as unknown as TransformStep;
-  });
-
 /** The name an agent's cameras are kept under. */
 const callerName = (caller: Caller) => caller.agent ?? "agent";
 
 /** The compass point an azimuth is nearest. */
 const compass = (azimuth: number) => COMPASS[Math.round(azimuth / 22.5) % 16] as string;
 
-const ELEMENT_SHAPES = `Lengths are millimetres, Z up. Element shapes (id is optional when creating):
+const ELEMENT_SHAPES = `Lengths are millimetres, Z up. Element shapes:
 - massing: { type: "massing", name, level?, origin: [x, y, z] (minimum corner), size: [width, depth, height], rotationDeg? (turned counter-clockwise about its centre in plan) }
 - wall: { type: "wall", name, level?, start: [x, y], end: [x, y], height, thickness } (centred on its baseline, rising from its level)
 - column: { type: "column", name, level?, position: [x, y], section: [width, depth], height, rotationDeg? (about its position) }
 - slab: { type: "slab", name, level?, outline: [[x, y], ...] (counter-clockwise), thickness } (extruded down from its level)
 - line: { type: "line", name, level?, points: [[x, y, z], ...] (at least 2, at their real heights), closed? } (a polyline the user drew or a curve for you to use as a path, a rail or a guide; it is a curve, not a solid)
-- imported: reference geometry from the user's Rhino file: { type: "imported", name, layer?, color?, bounds: { min: [x, y, z], max: [x, y, z] } (before translation), translation: [x, y, z], rotationDeg? (about the centre of its box in plan), scale? (about the foot of its box centre) }. You see its box, never its triangles. Move, turn and scale it with transform_elements (or change translation, rotationDeg and scale); delete it as any element; copy it by creating another with the same asset, part and bounds. You cannot change its shape.
+- imported: reference geometry from the user's Rhino file: { type: "imported", name, layer?, color?, bounds: { min: [x, y, z], max: [x, y, z] } (before translation), translation: [x, y, z], rotationDeg? (about the centre of its box in plan), scale? (about the foot of its box centre) }. You see its box, never its triangles.
 Walls, slabs and columns may also have base: the height of their base in millimetres, which wins over their level's elevation (for elements placed off any level, such as on a roof).
 All may have properties: { key: string | number | boolean }.`;
 
 /**
- * The app's own MCP server ("hai"): how the agent reads and changes the shared scene and sees the view. Every
- * write is validated as a whole and applied into the running turn's transaction, so one undo reverts the turn.
- * The server offers only the calling agent's tools (and the permission prompt tool, which Claude Code itself calls),
- * so an agent without write tools cannot change the model whatever it asks for.
+ * The app's own MCP server ("hai"): how the agent reads the shared scene, sees the view and works in the hosts. No
+ * tool writes the scene's geometry: the model is changed in the hosts. The server offers only the calling agent's
+ * tools (and the permission prompt tool, which Claude Code itself calls), so an agent without the host tools cannot
+ * change the model whatever it asks for.
  */
 export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpServer {
   const server = new McpServer({ name: HAI_SERVER, version: "0.1.0" });
@@ -461,220 +427,6 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
         ...(sketches?.length ? { sketches } : {}),
         markers: markers ?? [],
       });
-    },
-  );
-
-  register(
-    "create_elements",
-    {
-      description: `Creates elements. The whole batch is validated first: if any element is invalid, nothing is created and the error names it. ${ELEMENT_SHAPES}`,
-      inputSchema: z.object({ elements: z.array(z.record(z.string(), z.unknown())).min(1) }),
-    },
-    async ({ elements }) => {
-      const doc = deps.doc();
-      const taken = new Set(Object.keys(doc.elements));
-      const created: Array<Record<string, unknown> & { id: string }> = [];
-      for (const e of elements) {
-        if (writesGroupTag(e.tags, undefined)) return failure(GROUP_TAG_REFUSED);
-        const id = typeof e.id === "string" && e.id ? e.id : freshId(e.type, taken);
-        const existing = doc.elements[id];
-        if (existing || created.some((c) => c.id === id)) {
-          const owner = existing?.tags?.[TAG_OWNER];
-          return failure(
-            `Element "${id}" already exists${owner ? ` and belongs to ${owner}` : ""}. Nothing was created. Choose another id, or leave the id out and one is made for you.`,
-          );
-        }
-        taken.add(id);
-        created.push({ properties: {}, ...e, id });
-      }
-      const result = deps.apply(
-        created.map((element) => ({ op: "create", element }) as SceneOp),
-        caller.agent,
-      );
-      return result.ok ? text({ created: created.map((e) => e.id) }) : failure(result.error);
-    },
-  );
-
-  register(
-    "update_elements",
-    {
-      description: `Changes fields of existing elements (a shallow patch per element). Validated as a whole: if any result is invalid, nothing changes. ${ELEMENT_SHAPES}`,
-      inputSchema: z.object({
-        updates: z.array(z.object({ id: z.string(), patch: z.record(z.string(), z.unknown()) })).min(1),
-      }),
-    },
-    async ({ updates }) => {
-      const doc = deps.doc();
-      if (
-        updates.some(({ id, patch }) => "tags" in patch && writesGroupTag(patch.tags, doc.elements[id]?.tags))
-      )
-        return failure(GROUP_TAG_REFUSED);
-      const scattering = updates.filter(
-        ({ id, patch }) =>
-          groupOf(doc.elements[id]) && Object.keys(patch).some((field) => PLACE_FIELDS.has(field)),
-      );
-      if (scattering.length > 0) {
-        const ids = scattering.map((u) => u.id).join(", ");
-        return failure(
-          `Nothing was changed: ${ids} belong to a group, and moving or turning a member alone scatters it. Use transform_elements, which takes the whole group about its middle, or ungroup_elements first if the user asked to split it.`,
-        );
-      }
-      const result = deps.apply(
-        updates.map(({ id, patch }) => ({ op: "update", id, patch })),
-        caller.agent,
-      );
-      return result.ok ? text({ updated: updates.map((u) => u.id) }) : failure(result.error);
-    },
-  );
-
-  register(
-    "transform_elements",
-    {
-      description:
-        "Moves, turns, scales or mirrors elements, whatever their type, in one change. An element in a group brings the whole group with it, and a copied group is a new group. Steps run in order, each on what the one before left. A rotate, scale or mirror turns about the centre of the elements together unless it names a point. With copies: N the originals stay and N copies are made, copy i being the originals put through the steps i times (copy 4 times 6 m along y: one translate step of [0, 6000, 0] and copies 4). Lengths are millimetres, angles degrees counter-clockwise seen from above. An imported model cannot be mirrored.",
-      inputSchema: z.object({
-        ids: z.array(z.string()).min(1),
-        steps: z
-          .array(
-            z.discriminatedUnion("kind", [
-              z.object({ kind: z.literal("translate"), by: z.array(z.number()).min(2).max(3) }),
-              z.object({
-                kind: z.literal("rotate"),
-                deg: z.number(),
-                about: z.array(z.number()).length(2).optional(),
-              }),
-              z.object({
-                kind: z.literal("scale"),
-                factor: z.number().positive(),
-                about: z.array(z.number()).length(3).optional(),
-              }),
-              z.object({ kind: z.literal("mirror"), axis: z.enum(["x", "y"]), at: z.number().optional() }),
-            ]),
-          )
-          .min(1),
-        copies: z.number().int().min(1).max(200).optional(),
-      }),
-    },
-    async ({ ids: named, steps, copies }) => {
-      const doc = deps.doc();
-      const ids = expandToGroups(doc, named);
-      const elements = ids.map((id) => doc.elements[id]);
-      const missing = ids.filter((_, i) => !elements[i]);
-      if (missing.length) return failure(`Nothing was changed: no element ${missing.join(", ")}.`);
-      const found = elements as Element[];
-      const run = (times: number) =>
-        applySteps(found, Array.from({ length: times }, () => stepsOf(steps)).flat(), doc.levels);
-      if (!copies) {
-        const done = run(1);
-        if (!done.ok) return failure(`Nothing was changed: ${done.error}`);
-        const result = deps.apply(
-          Object.entries(done.patches).map(([id, patch]): SceneOp => ({ op: "update", id, patch })),
-          caller.agent,
-        );
-        return result.ok ? text({ transformed: ids }) : failure(result.error);
-      }
-      const taken = new Set(Object.keys(doc.elements));
-      const created: SceneOp[] = [];
-      const createdIds: string[] = [];
-      for (let i = 1; i <= copies; i++) {
-        const fresh = new Map<string, string>(); // each copy of a group is a group of its own
-        const done = run(i);
-        if (!done.ok) return failure(`Nothing was changed: ${done.error}`);
-        for (const element of found) {
-          const id = freshId(element.type, taken);
-          taken.add(id);
-          createdIds.push(id);
-          // The copy is the agent's own: the system's tags (owner, part, source) are not carried over.
-          const tags: Record<string, string> = Object.fromEntries(
-            Object.entries(element.tags ?? {}).filter(([name]) => !name.startsWith(RESERVED_TAG_PREFIX)),
-          );
-          const group = copiedTags(element, fresh)?.[TAG_GROUP];
-          if (group) tags[TAG_GROUP] = group;
-          created.push({
-            op: "create",
-            element: { ...element, ...done.patches[element.id], id, tags } as Element,
-          });
-        }
-      }
-      const result = deps.apply(created, caller.agent);
-      return result.ok ? text({ created: createdIds }) : failure(result.error);
-    },
-  );
-
-  register(
-    "delete_elements",
-    {
-      description: "Deletes elements by id. If any id does not exist, nothing is deleted.",
-      inputSchema: z.object({ ids: z.array(z.string()).min(1) }),
-    },
-    async ({ ids }) => {
-      const result = deps.apply(
-        ids.map((id) => ({ op: "delete", id })),
-        caller.agent,
-      );
-      return result.ok ? text({ deleted: ids }) : failure(result.error);
-    },
-  );
-
-  register(
-    "set_tags",
-    {
-      description: `Sets or removes your own tags on elements (labels such as "style" = "gothic"). A value of null removes a tag. Names starting with "${RESERVED_TAG_PREFIX}" belong to the system and are refused. Like any change it must lie inside your claim.`,
-      inputSchema: z.object({
-        ids: z.array(z.string()).min(1),
-        tags: z.record(z.string(), z.string().nullable()),
-      }),
-    },
-    async ({ ids, tags }) => {
-      const doc = deps.doc();
-      if (TAG_GROUP in tags) return failure(GROUP_TAG_REFUSED);
-      const unknown = ids.filter((id) => !doc.elements[id]);
-      if (unknown.length) return failure(`Nothing was changed: no element ${unknown.join(", ")}.`);
-      const updates = ids.map((id): SceneOp => {
-        const merged: Record<string, string> = { ...(doc.elements[id]?.tags ?? {}) };
-        for (const [name, value] of Object.entries(tags)) {
-          if (value === null) delete merged[name];
-          else merged[name] = value;
-        }
-        return { op: "update", id, patch: { tags: merged } };
-      });
-      const result = deps.apply(updates, caller.agent);
-      return result.ok ? text({ tagged: ids }) : failure(result.error);
-    },
-  );
-
-  register(
-    "group_elements",
-    {
-      description:
-        "Makes elements one group, one object from now on: selecting, moving or turning any of them takes all of them. An element in another group brings its whole group in. Groups do not nest. Do this when the user asks, or for a thing you made of several parts that should stay together.",
-      inputSchema: z.object({ ids: z.array(z.string()).min(2) }),
-    },
-    async ({ ids: named }) => {
-      const doc = deps.doc();
-      const ids = expandToGroups(doc, named);
-      const missing = ids.filter((id) => !doc.elements[id]);
-      if (missing.length) return failure(`Nothing was changed: no element ${missing.join(", ")}.`);
-      const group = newGroupId();
-      const result = deps.apply(groupOps(doc, ids, group), caller.agent);
-      return result.ok ? text({ group, members: ids }) : failure(result.error);
-    },
-  );
-
-  register(
-    "ungroup_elements",
-    {
-      description:
-        "Takes the groups these elements belong to apart: every member of each is on its own again. Only when the user asks to split a group, or to change one member's place.",
-      inputSchema: z.object({ ids: z.array(z.string()).min(1) }),
-    },
-    async ({ ids: named }) => {
-      const doc = deps.doc();
-      const ids = expandToGroups(doc, named);
-      const ops = ungroupOps(doc, ids);
-      if (ops.length === 0) return failure("Nothing was changed: none of these is in a group.");
-      const result = deps.apply(ops, caller.agent);
-      return result.ok ? text({ ungrouped: ids }) : failure(result.error);
     },
   );
 
@@ -972,19 +724,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
   if (deps.weather) registerWeatherTools(register, deps.weather);
   if (deps.simulation) registerSimulationGeometry(register, deps.simulation);
   if (deps.surface) registerSurfaceTemperature(register, deps.surface);
-  if (deps.context) registerContextTools(register, deps.context, (ops) => deps.apply(ops, caller.agent));
-
-  if (deps.geometry)
-    registerGeometryTools(
-      register,
-      {
-        doc: deps.doc,
-        apply: deps.apply,
-        geometry: deps.geometry,
-        requestSignal: deps.requestSignal,
-      },
-      caller,
-    );
+  if (deps.context) registerContextTools(register, deps.context);
 
   const { python, hosts } = deps;
   if (python) {

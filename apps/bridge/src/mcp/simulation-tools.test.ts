@@ -87,25 +87,33 @@ describe("Simulation tools", () => {
     const browser = await page(address);
     browser.send("site.set", { site: { lat: 52.37, lon: 4.9, northDeg: 15 } });
     await browser.waitFor("site.snapshot", (m) => m.payload.site !== null);
-    const writer = await mcp(address, { agent: "architect", tools: null });
-    const made = await writer.callTool({
-      name: "create_elements",
-      arguments: {
-        elements: [
-          {
-            id: "w1",
-            name: "North wall",
-            type: "wall",
-            level: "L0",
-            start: [0, 0],
-            end: [6000, 0],
-            height: 3000,
-            thickness: 200,
-          },
-        ],
+    // An element of the scene (from an imported file or a project from before the hosts modelled).
+    bridge?.scene.handle(
+      {
+        type: "scene.apply",
+        id: "m1",
+        payload: {
+          label: "Wall",
+          ops: [
+            {
+              op: "create",
+              element: {
+                id: "w1",
+                properties: {},
+                name: "North wall",
+                type: "wall",
+                level: "L0",
+                start: [0, 0],
+                end: [6000, 0],
+                height: 3000,
+                thickness: 200,
+              },
+            },
+          ],
+        },
       },
-    });
-    expect(made.isError).toBeFalsy();
+      () => {},
+    );
     const geometry = json(
       await (await mcp(address, SIMULATION)).callTool({ name: "simulation_geometry", arguments: {} }),
     );

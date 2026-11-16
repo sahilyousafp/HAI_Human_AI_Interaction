@@ -149,6 +149,22 @@ export interface TeamOptions {
  *   labelled "<Agent>: <title>". Agents that only read run alongside.
  * - When every task Mochi handed out in one turn has finished, Mochi gets a digest turn and reports.
  */
+/**
+ * A task's scope under a request limited to selected objects: the selection when the lead gave no scope, and a given
+ * scope's ids narrowed to it (a part or a region the lead named stays, so new objects can still be tagged). Without a
+ * limit the scope is as the lead gave it.
+ */
+export function limitedScope(
+  scope: TaskScope | undefined,
+  limit: { ids: string[] } | undefined,
+): TaskScope | undefined {
+  if (!limit) return scope;
+  if (!scope) return { ids: limit.ids };
+  const allowed = new Set(limit.ids);
+  const ids = scope.ids?.filter((id) => allowed.has(id)) ?? limit.ids;
+  return { ...scope, ids: ids.length > 0 ? ids : limit.ids };
+}
+
 /** How many recent requests are remembered for stopping one of them. */
 const REQUESTS_KEPT = 20;
 
@@ -183,6 +199,8 @@ export class Team {
   readonly claims: ClaimTable;
   /** The shared brief of the tasks one of Mochi's turns handed out. */
   private readonly briefs = new Map<string, string>();
+  /** The objects a request was limited to (asked from the selection card), by the lead's turn that took it. */
+  private readonly limits = new Map<string, NonNullable<RequestContext["limitTo"]>>();
   /** A worker's name, and the specialist it was started from (its definition, tools and colour are that agent's). */
   private readonly workerBase = new Map<string, string>();
   /** How many workers each specialist has started, so a name is never used twice. */
@@ -345,6 +363,7 @@ export class Team {
       const turn = lead.request(text, context, { kind: "request", ...(preface ? { preface } : {}) });
       const started = lead.runningTurn?.id;
       if (requestId && started) this.remember(requestId, started);
+      if (started && context?.limitTo) this.limits.set(started, context.limitTo);
       return await turn;
     } finally {
       this.checkBatches();
@@ -563,6 +582,7 @@ export class Team {
       for (const other of this.tasks) if (other.fromTurn === fromTurn) other.brief = brief;
     }
     const shared = brief || (fromTurn ? this.briefs.get(fromTurn) : undefined);
+    const scope = limitedScope(task.scope, fromTurn ? this.limits.get(fromTurn) : undefined);
     const record: TeamTask = {
       id: randomUUID(),
       agent,
@@ -571,7 +591,7 @@ export class Team {
       status: "queued",
       createdAt: Date.now(),
       ...(fromTurn ? { fromTurn } : {}),
-      ...(task.scope ? { scope: task.scope } : {}),
+      ...(scope ? { scope } : {}),
       ...(shared ? { brief: shared } : {}),
     };
     const note = member.writes ? this.overlapNote(record) : undefined;

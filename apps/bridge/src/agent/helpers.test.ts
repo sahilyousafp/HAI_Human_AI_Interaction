@@ -15,8 +15,6 @@ const member = (name: string) => {
 
 /** Everything an agent could change the model or run code with, which no helper may be given. */
 const FORBIDDEN = [
-  ...HAI_TOOLS.write,
-  ...HAI_TOOLS.tags,
   ...HAI_TOOLS.panel,
   ...HAI_TOOLS.python,
   ...HAI_TOOLS.host,
@@ -70,9 +68,9 @@ describe("subagents that only look", () => {
     const product = helperDefinitions(member("architect"), team).product;
     expect(product?.prompt).toContain(member("product").prompt);
     expect(product?.prompt).toContain("you cannot change the model or run scripts");
-    expect(product?.tools.some((t) => t.includes("create_elements") || t.includes("python_run"))).toBe(false);
+    expect(product?.tools.some((t) => t.includes("host_run") || t.includes("python_run"))).toBe(false);
     // The teammate's own tools are still its own: Product, run as an agent, can change the model.
-    expect(managedDefinition(member("product")).tools).toContain("mcp__hai__create_elements");
+    expect(managedDefinition(member("product")).tools).toContain("mcp__hai__host_run");
   });
 
   it("only scout may search the web", () => {
@@ -112,6 +110,6 @@ describe("subagents that only look", () => {
       "simulation",
       "urban",
     ]);
-    expect(written.architect?.tools).toContain("mcp__hai__create_elements");
+    expect(written.architect?.tools).toContain("mcp__hai__host_run");
   });
 });

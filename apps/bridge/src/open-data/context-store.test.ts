@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ContextItem, type Message, Site } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
-import { adoptOp, ContextStore, contextFile, signedArea } from "./context-store.ts";
+import { ContextStore, contextFile } from "./context-store.ts";
 
 const site = Site.parse({ lat: 52.37, lon: 4.9 });
 const other = Site.parse({ lat: 40, lon: -3 });
@@ -171,41 +171,5 @@ describe("ContextStore", () => {
     expect(summary.buildingHeights).toEqual({ measured: 1, inferred: 1, default: 1 });
     expect(summary.stale).toBe(false);
     expect(summary.credits[0]?.source).toContain("OpenStreetMap");
-  });
-});
-
-describe("adopting a building", () => {
-  it("becomes a slab of the footprint whose thickness is the height, standing from the ground, tagged with its source", () => {
-    const op = adoptOp(building("b1", 0, 0) as never, "ctx-b1", "OpenStreetMap contributors");
-    expect(op).toMatchObject({
-      op: "create",
-      element: {
-        id: "ctx-b1",
-        type: "slab",
-        base: 12_000,
-        thickness: 12_000,
-        tags: { "context.source": "OpenStreetMap contributors", "context.id": "b1" },
-      },
-    });
-  });
-
-  it("turns a clockwise footprint counter-clockwise, as the scene wants", () => {
-    const cw = building("b1", 0, 0, {
-      footprint: [
-        [0, 0],
-        [0, 8_000],
-        [10_000, 8_000],
-        [10_000, 0],
-      ],
-    } as never);
-    const op = adoptOp(cw as never, "x", "s");
-    if (op.op !== "create" || op.element.type !== "slab") throw new Error("not a slab");
-    expect(signedArea(op.element.outline)).toBeGreaterThan(0);
-  });
-
-  it("stands on its own base", () => {
-    const op = adoptOp(building("b1", 0, 0, { baseMm: 2_000 } as never) as never, "x", "s");
-    if (op.op !== "create" || op.element.type !== "slab") throw new Error("not a slab");
-    expect(op.element.base).toBe(14_000);
   });
 });

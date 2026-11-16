@@ -9,8 +9,8 @@
 
 - [x] 2.1 Relay `host.edit` to its host and `host.edited` to the pages, `host.redo` like `host.undo`, and refuse an edit for a host that cannot edit. Verify with the fake host: "move a host object by hand" (bridge side), "a refused edit", "a host without edits".
 - [x] 2.2 Apply `host.edit` in the Rhino plugin as one undo record (transform with the matrix in the document's units, or delete), and `host.redo`; fixtures and contract tests. Verify the C# tests in the container and the contract test.
-- [ ] 2.3 Put the limit in the agent's text (`[limit]`), keep it with the lead's turn, and scope delegated tasks by it. Verify "ask about this" (bridge side) and "the scope follows the limit".
-- [ ] 2.4 Remove the scene write tools, the geometry kernel and `context_adopt` from the bridge, with their code and tests, and from `HAI_TOOLS`, the roster, the approvals and the prompts. Verify "no scene write tools" and "the scene can still be read".
+- [x] 2.3 Put the limit in the agent's text (`[limit]`), keep it with the lead's turn, and scope delegated tasks by it. Verify "ask about this" (bridge side) and "the scope follows the limit".
+- [x] 2.4 Remove the scene write tools, the geometry kernel and `context_adopt` from the bridge, with their code and tests, and from `HAI_TOOLS`, the roster, the approvals and the prompts. Verify "no scene write tools" and "the scene can still be read".
 
 ## 3. Web
 

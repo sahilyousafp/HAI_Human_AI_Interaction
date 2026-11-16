@@ -230,19 +230,6 @@ describe("the team with the fake Claude Code CLI", () => {
     );
   });
 
-  it("one undo per specialist task: four columns go with one undo labelled with Architect's task", async () => {
-    const { team, viewer, scene } = await start();
-    await team.request("delegate architect: columns 4");
-    await team.settled();
-    const fake = () =>
-      Object.values(scene.scene.doc.elements).filter((e) => e.name.startsWith("Fake column"));
-    expect(fake()).toHaveLength(4);
-    viewer.send("scene.undo", {});
-    const undo = await viewer.waitFor("scene.patch", (m) => m.payload.kind === "undo");
-    expect(undo.payload.label).toBe("Architect: columns 4");
-    expect(fake()).toEqual([]);
-  });
-
   it("report when done: once both tasks finish, Mochi reports both results", async () => {
     const { team } = await start();
     await team.request("delegate architect: work 200 | climate: work 400");
@@ -371,7 +358,7 @@ describe("the team with the fake Claude Code CLI", () => {
       name: "structure",
       description: "Sizes beams and columns.",
       model: "sonnet",
-      tools: ["mcp__hai__get_elements", "mcp__hai__update_elements"],
+      tools: ["mcp__hai__get_elements", "mcp__hai__host_place_image"],
       aliases: ["struct"],
       color: "#aa5500",
       prompt: "You are Structure.",
@@ -384,7 +371,7 @@ describe("the team with the fake Claude Code CLI", () => {
       lead: false,
     });
     expect(readFileSync(join(agentsDir(projectDir), "structure.md"), "utf8")).toBe(
-      "---\nname: structure\ndescription: Sizes beams and columns.\ntools: mcp__hai__get_elements, mcp__hai__update_elements\nmodel: sonnet\n---\n\nYou are Structure.\n",
+      "---\nname: structure\ndescription: Sizes beams and columns.\ntools: mcp__hai__get_elements, mcp__hai__host_place_image\nmodel: sonnet\n---\n\nYou are Structure.\n",
     );
     expect(JSON.parse(readFileSync(join(projectDir, ".hai", "agents.json"), "utf8")).structure).toEqual({
       aliases: ["struct"],

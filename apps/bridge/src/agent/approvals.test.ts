@@ -181,12 +181,11 @@ describe("approvals with the fake Claude Code CLI", () => {
       .map((e) => e.text)
       .join("");
 
-  it("scene edit runs without a prompt", async () => {
-    const { viewer, agent, scene } = await start();
-    await agent?.request("delegate architect: column");
+  it("a tool of the app's own that changes no model runs without a prompt", async () => {
+    const { viewer, agent } = await start();
+    await agent?.request("claims");
     await agent?.settled();
     expect(viewer.received.some((m) => m.type === "approval.pending")).toBe(false);
-    expect(Object.values(scene.scene.doc.elements).some((e) => e.name === "Fake column")).toBe(true);
   });
 
   it("shell command needs approval: a card with the command, and the turn waits for the decision", async () => {

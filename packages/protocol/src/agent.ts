@@ -241,24 +241,17 @@ export const TeamMemberInfo = z.strictObject({
 });
 export type TeamMemberInfo = z.infer<typeof TeamMemberInfo>;
 
-/** The app's own MCP server's tools (`mcp__hai__<name>`), grouped by what they let an agent do. */
+/**
+ * The app's own MCP server's tools (`mcp__hai__<name>`), grouped by what they let an agent do. No tool writes HAI's own
+ * scene: agents change the model only in a host (`host`) or by writing files (`python`).
+ */
 export const HAI_TOOLS = {
-  read: ["get_scene_summary", "get_elements", "get_user_context", "capture_view"],
-  write: [
-    "create_elements",
-    "update_elements",
-    "transform_elements",
-    "delete_elements",
-    "set_selection",
-    "group_elements",
-    "ungroup_elements",
-  ],
+  /** Reading the scene's sketches, markers and references, what the user points at, and their view; selecting in it. */
+  read: ["get_scene_summary", "get_elements", "get_user_context", "capture_view", "set_selection"],
   /** Offering and showing a generated panel; granted to every agent (a reader's panel is information only). */
   panel: ["offer_panel", "open_panel", "update_panel", "close_panel"],
   /** What the city context layer holds, and its items near a point; every agent (reading changes nothing). */
   context: ["context_list", "context_get"],
-  /** Bringing items of the context layer into the model; agents that change the model. */
-  contextWrite: ["context_adopt"],
   /** Emptying the context layer (fetched buildings, trees and ground data; never the model); every agent, when the user asks. */
   contextClear: ["context_clear"],
   /** Searching open-data portals, buildings, vegetation and urban metrics around the site; Urban (only while Open data is on). */
@@ -277,18 +270,8 @@ export const HAI_TOOLS = {
   cameras: ["camera_set", "camera_list", "camera_capture", "camera_delete"],
   /** Who holds which part of the model, and asking for or giving back scope; every agent has them. */
   claims: ["get_claims", "request_claim", "release_claim"],
-  /** Changing an element's own tags; granted to every agent that changes the model. */
-  tags: ["set_tags"],
   /** Starting a worker for a part of the agent's own task; granted to the specialists that change the model. */
   workers: ["spawn_worker"],
-  /** Copies along a curve, and lofts, sweeps, booleans and offsets through OpenCascade; granted to the agents that change the model. */
-  geometry: [
-    "geometry_array_along_curve",
-    "geometry_loft",
-    "geometry_sweep",
-    "geometry_boolean",
-    "geometry_offset",
-  ],
   /** Runs Python in the managed environment; granted to the agents that change the model, and to any agent whose file lists it. */
   python: ["python_run"],
   /** Runs code in a connected host and places images in it, one undo step each; granted to the agents that change the model. */

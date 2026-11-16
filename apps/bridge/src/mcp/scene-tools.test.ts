@@ -155,32 +155,19 @@ describe("MCP endpoint access", () => {
         "camera_set",
         "capture_view",
         "close_panel",
-        "context_adopt",
         "context_clear",
         "context_get",
         "context_list",
-        "create_elements",
-        "delete_elements",
-        "geometry_array_along_curve",
-        "geometry_boolean",
-        "geometry_loft",
-        "geometry_offset",
-        "geometry_sweep",
         "get_elements",
         "get_scene_summary",
         "get_user_context",
-        "group_elements",
         "offer_panel",
         "open_panel",
         "python_run",
         "set_selection",
-        "set_tags",
         "set_view",
         "simulation_geometry",
         "sun_study",
-        "transform_elements",
-        "ungroup_elements",
-        "update_elements",
         "update_panel",
       ].sort(),
     );
@@ -217,7 +204,7 @@ describe("read tools", () => {
     expect(byId.notFound).toEqual(["nope"]);
   });
 
-  it("imported geometry: the agent sees layer, colour and box, never triangles, and can move it", async () => {
+  it("imported geometry: the agent sees layer, colour and box, never triangles", async () => {
     const address = await start();
     const agent = await mcp(address);
     const element: Element = {
@@ -241,27 +228,6 @@ describe("read tools", () => {
     expect(JSON.stringify(found)).not.toMatch(/positions|indices|vertices/);
     const summary = json(await agent.callTool({ name: "get_scene_summary", arguments: {} }));
     expect(summary.counts.imported).toBe(1);
-
-    const moved = await agent.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "imp-1", patch: { translation: [1000, 0, 0] } }] },
-    });
-    expect(moved.isError).toBeFalsy();
-    const after = json(await agent.callTool({ name: "get_elements", arguments: { ids: ["imp-1"] } }));
-    expect(after.elements[0].translation).toEqual([1000, 0, 0]);
-    expect(after.elements[0].asset).toBe(element.asset);
-
-    const copied = await agent.callTool({
-      name: "create_elements",
-      arguments: {
-        elements: [{ ...element, id: "imp-2", name: "Facade panel copy", translation: [5000, 0, 0] }],
-      },
-    });
-    expect(copied.isError).toBeFalsy();
-    const both = json(await agent.callTool({ name: "get_elements", arguments: { type: "imported" } }));
-    expect(both.elements.map((e: { id: string }) => e.id)).toEqual(["imp-1", "imp-2"]);
-    const deleted = await agent.callTool({ name: "delete_elements", arguments: { ids: ["imp-2"] } });
-    expect(deleted.isError).toBeFalsy();
   });
 
   it("pointed element reported: the column under the hand pointer, and the selection", async () => {
@@ -327,6 +293,55 @@ describe("read tools", () => {
     expect(context.points).toEqual([{ label: "P1", point: [4000, 2000, 0] }]);
     expect(context.markers).toEqual([]);
   });
+  it("set_selection selects for everyone", async () => {
+    const address = await start();
+    const viewer = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
+    await (await mcp(address)).callTool({ name: "set_selection", arguments: { ids: ["block-c"] } });
+    await viewer.waitFor("selection.changed", (m) => m.payload.ids[0] === "block-c");
+  });
+
+  it("set_selection takes the rest of a group", async () => {
+    const address = await start();
+    const box = (id: string, x: number) => ({
+      id,
+      type: "massing" as const,
+      name: id,
+      properties: {},
+      origin: [x, 0, 0] as [number, number, number],
+      size: [1000, 1000, 1000] as [number, number, number],
+      tags: { "hai.group": "group-1" },
+    });
+    bridge?.scene.handle(
+      {
+        type: "scene.apply",
+        id: "m1",
+        payload: {
+          label: "Group",
+          ops: [
+            { op: "create", element: box("g-a", 100_000) },
+            { op: "create", element: box("g-b", 110_000) },
+          ],
+        },
+      },
+      () => {},
+    );
+    const selected = json(
+      await (await mcp(address)).callTool({ name: "set_selection", arguments: { ids: ["g-a"] } }),
+    );
+    expect(selected.selected.sort()).toEqual(["g-a", "g-b"]);
+  });
+
+  it("there is no tool that builds in the scene", async () => {
+    const { tools } = await (await mcp(await start())).listTools();
+    for (const removed of [
+      "create_elements",
+      "update_elements",
+      "transform_elements",
+      "delete_elements",
+      "set_tags",
+    ])
+      expect(tools.map((t) => t.name)).not.toContain(removed);
+  });
 });
 
 describe("sun study", () => {
@@ -378,96 +393,6 @@ describe("sun study", () => {
     const address = await start();
     const reviewer = await mcp(address, agentToken({ agent: "reviewer", tools: new Set(["get_elements"]) }));
     expect((await reviewer.listTools()).tools.map((t) => t.name)).not.toContain("sun_study");
-  });
-});
-
-describe("write tools", () => {
-  const wall = (id: string, height: number) => ({
-    id,
-    name: id,
-    type: "wall",
-    level: "L0",
-    start: [0, 30_000],
-    end: [6000, 30_000],
-    height,
-    thickness: 200,
-  });
-
-  it("invalid batch is atomic: one zero-height wall of three, nothing created, the error names it", async () => {
-    const address = await start();
-    const agent = await mcp(address);
-    const result = await agent.callTool({
-      name: "create_elements",
-      arguments: { elements: [wall("w1", 3000), wall("w2", 0), wall("w3", 3000)] },
-    });
-    expect(result.isError).toBe(true);
-    expect(textOf(result)).toMatch(/w2/);
-    expect(textOf(result)).toMatch(/height/);
-    expect(Object.keys(bridge?.scene.scene.doc.elements ?? {}).filter((id) => /^w\d$/.test(id))).toEqual([]);
-  });
-
-  it("creates, updates and deletes; created elements get ids when the agent gives none", async () => {
-    const address = await start();
-    const agent = await mcp(address);
-    const created = json(
-      await agent.callTool({
-        name: "create_elements",
-        arguments: { elements: [{ ...wall("", 3000), id: undefined, name: "North fence" }] },
-      }),
-    );
-    const [newId] = created.created;
-    expect(newId).toMatch(/^wall-/);
-    await agent.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: newId, patch: { height: 1200 } }] },
-    });
-    expect(bridge?.scene.scene.doc.elements[newId]).toMatchObject({ height: 1200 });
-    await agent.callTool({ name: "delete_elements", arguments: { ids: [newId] } });
-    expect(bridge?.scene.scene.doc.elements[newId]).toBeUndefined();
-  });
-
-  it("set_selection selects for everyone", async () => {
-    const address = await start();
-    const viewer = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
-    await (await mcp(address)).callTool({ name: "set_selection", arguments: { ids: ["block-c"] } });
-    await viewer.waitFor("selection.changed", (m) => m.payload.ids[0] === "block-c");
-  });
-
-  it("undo a whole turn: four columns and a moved wall are reverted by one undo", async () => {
-    const address = await start();
-    const viewer = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
-    const agent = await mcp(address, agentToken({ agent: "architect", tools: null }));
-    const wallBefore = structuredClone(bridge?.scene.scene.doc.elements["wall-s"]);
-    bridge?.scene.beginTurn("architect", "add four columns and move the south wall");
-    for (const x of [0, 4000, 8000, 12_000]) {
-      await agent.callTool({
-        name: "create_elements",
-        arguments: {
-          elements: [
-            {
-              type: "column",
-              name: `Agent column ${x}`,
-              position: [x, -5000],
-              section: [400, 400],
-              height: 3000,
-            },
-          ],
-        },
-      });
-    }
-    await agent.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "wall-s", patch: { start: [4000, 3500], end: [20_000, 3500] } }] },
-    });
-    bridge?.scene.endTurn("architect");
-    // The viewer saw each change live...
-    await viewer.waitFor("scene.patch", (m) => m.payload.ops.some((op) => op.op === "update"));
-    // ...and one undo reverts the whole turn.
-    viewer.send("scene.undo", {});
-    await viewer.waitFor("scene.patch", (m) => m.payload.kind === "undo");
-    const doc = bridge?.scene.scene.doc;
-    expect(Object.values(doc?.elements ?? {}).filter((e) => e.name.startsWith("Agent column"))).toEqual([]);
-    expect(doc?.elements["wall-s"]).toEqual(wallBefore);
   });
 });
 
@@ -527,7 +452,7 @@ describe("panel tools", () => {
 
   describe("information panels", () => {
     const READ = new Set(["get_elements", "offer_panel", "open_panel", "update_panel", "close_panel"]);
-    const WRITE = new Set([...READ, "create_elements", "update_elements"]);
+    const WRITE = new Set([...READ, "host_run"]);
     /** Offers, accepts and opens a panel as an agent with these tools; returns what the page was sent. */
     async function openAs(tools: Set<string>, input: Record<string, unknown> = {}) {
       const address = await start();
@@ -868,176 +793,5 @@ describe("reading the model by owner, part and tag", () => {
       owners: { architect: 1, product: 1 },
       parts: { garden: 1, hall: 1 },
     });
-  });
-});
-
-describe("groups", () => {
-  const massings = async (agent: Awaited<ReturnType<typeof mcp>>) =>
-    json(await agent.callTool({ name: "get_elements", arguments: { type: "massing" } })).elements as Array<{
-      id: string;
-      origin: [number, number, number];
-      size: [number, number, number];
-      rotationDeg?: number;
-      tags?: Record<string, string>;
-    }>;
-  const makeTwo = async (agent: Awaited<ReturnType<typeof mcp>>) => {
-    const box = (id: string, x: number) => ({
-      id,
-      type: "massing",
-      name: id,
-      origin: [x, 0, 0],
-      size: [1000, 1000, 1000],
-    });
-    await agent.callTool({
-      name: "create_elements",
-      arguments: { elements: [box("g-a", 100_000), box("g-b", 110_000)] },
-    });
-    return json(await agent.callTool({ name: "group_elements", arguments: { ids: ["g-a", "g-b"] } }));
-  };
-
-  it("group_elements makes one group, which get_elements and the summary can see", async () => {
-    const agent = await mcp(await start());
-    const { group, members } = await makeTwo(agent);
-    expect(group).toMatch(/^group-/);
-    expect(members).toEqual(["g-a", "g-b"]);
-    const found = json(await agent.callTool({ name: "get_elements", arguments: { group } }));
-    expect(found.elements.map((e: { id: string }) => e.id).sort()).toEqual(["g-a", "g-b"]);
-    const summary = json(await agent.callTool({ name: "get_scene_summary", arguments: {} }));
-    expect(summary.groups[group]).toBe(2);
-  });
-
-  it("transform_elements on one member turns the whole group about its middle, so it holds its shape", async () => {
-    const agent = await mcp(await start());
-    await makeTwo(agent);
-    await agent.callTool({
-      name: "transform_elements",
-      arguments: { ids: ["g-a"], steps: [{ kind: "rotate", deg: 180 }] },
-    });
-    const all = await massings(agent);
-    const [a, b] = [all.find((e) => e.id === "g-a"), all.find((e) => e.id === "g-b")];
-    // A half turn about the middle of the two swaps them, and neither went anywhere else.
-    expect(a?.origin[0]).toBeCloseTo(110_000, 6);
-    expect(b?.origin[0]).toBeCloseTo(100_000, 6);
-  });
-
-  it("copies of a group are groups of their own", async () => {
-    const agent = await mcp(await start());
-    const { group } = await makeTwo(agent);
-    const { created } = json(
-      await agent.callTool({
-        name: "transform_elements",
-        arguments: { ids: ["g-b"], steps: [{ kind: "translate", by: [0, 5000] }], copies: 2 },
-      }),
-    );
-    expect(created).toHaveLength(4);
-    const all = await massings(agent);
-    const groups = created.map((id: string) => all.find((e) => e.id === id)?.tags?.["hai.group"]);
-    expect(groups).not.toContain(group);
-    expect(groups[0]).toBe(groups[1]);
-    expect(groups[2]).toBe(groups[3]);
-    expect(groups[0]).not.toBe(groups[2]);
-  });
-
-  it("update_elements refuses to move or turn one member, and allows reshaping it", async () => {
-    const agent = await mcp(await start());
-    await makeTwo(agent);
-    const refused = await agent.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "g-a", patch: { rotationDeg: 45 } }] },
-    });
-    expect(refused.isError).toBe(true);
-    expect(JSON.stringify(refused.content)).toContain("transform_elements");
-    expect((await massings(agent)).find((e) => e.id === "g-a")?.rotationDeg).toBeUndefined();
-    const reshaped = await agent.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "g-a", patch: { size: [1000, 1000, 2000] } }] },
-    });
-    expect(reshaped.isError).toBeFalsy();
-  });
-
-  it("set_selection takes the rest of the group, and ungroup_elements frees all of it", async () => {
-    const agent = await mcp(await start());
-    await makeTwo(agent);
-    const selected = json(await agent.callTool({ name: "set_selection", arguments: { ids: ["g-a"] } }));
-    expect(selected.selected.sort()).toEqual(["g-a", "g-b"]);
-    await agent.callTool({ name: "ungroup_elements", arguments: { ids: ["g-b"] } });
-    const all = await massings(agent);
-    expect(all.find((e) => e.id === "g-a")?.tags?.["hai.group"]).toBeUndefined();
-    expect(all.find((e) => e.id === "g-b")?.tags?.["hai.group"]).toBeUndefined();
-    const again = await agent.callTool({ name: "ungroup_elements", arguments: { ids: ["g-b"] } });
-    expect(again.isError).toBe(true);
-  });
-
-  it("set_tags cannot make a group: the tag is the system's", async () => {
-    const agent = await mcp(await start());
-    await makeTwo(agent);
-    const refused = await agent.callTool({
-      name: "set_tags",
-      arguments: { ids: ["g-a"], tags: { "hai.group": "mine" } },
-    });
-    expect(refused.isError).toBe(true);
-  });
-});
-
-describe("transform_elements", () => {
-  it("moves, turns and scales elements in one change, whatever their type", async () => {
-    const address = await start();
-    const agent = await mcp(address);
-    const before = json(await agent.callTool({ name: "get_elements", arguments: { ids: ["block-b"] } }))
-      .elements[0];
-    const moved = await agent.callTool({
-      name: "transform_elements",
-      arguments: {
-        ids: ["block-b"],
-        steps: [
-          { kind: "translate", by: [1000, 2000] },
-          { kind: "rotate", deg: 90 },
-        ],
-      },
-    });
-    expect(moved.isError).toBeFalsy();
-    const after = json(await agent.callTool({ name: "get_elements", arguments: { ids: ["block-b"] } }))
-      .elements[0];
-    expect(after.rotationDeg).toBe(90);
-    // The box was moved and then turned about its own centre, so its centre is where the move put it.
-    type Box = { origin: [number, number, number]; size: [number, number, number] };
-    const centre = (e: Box): [number, number] => [e.origin[0] + e.size[0] / 2, e.origin[1] + e.size[1] / 2];
-    const [bx, by] = centre(before);
-    const [ax, ay] = centre(after);
-    expect(ax).toBeCloseTo(bx + 1000, 6);
-    expect(ay).toBeCloseTo(by + 2000, 6);
-  });
-
-  it("makes copies, each put through the steps once more than the one before, and keeps the original", async () => {
-    const address = await start();
-    const agent = await mcp(address);
-    const result = json(
-      await agent.callTool({
-        name: "transform_elements",
-        arguments: { ids: ["block-b"], steps: [{ kind: "translate", by: [0, 6000] }], copies: 3 },
-      }),
-    );
-    expect(result.created).toHaveLength(3);
-    const original = json(await agent.callTool({ name: "get_elements", arguments: { ids: ["block-b"] } }))
-      .elements[0];
-    const copies = json(
-      await agent.callTool({ name: "get_elements", arguments: { ids: result.created } }),
-    ).elements;
-    expect(
-      copies.map((c: { origin: number[] }) => (c.origin[1] ?? 0) - (original.origin[1] as number)),
-    ).toEqual([6000, 12000, 18000]);
-    expect(
-      json(await agent.callTool({ name: "get_elements", arguments: { ids: ["block-b"] } })).elements[0],
-    ).toEqual(original);
-  });
-
-  it("changes nothing when an id is unknown", async () => {
-    const address = await start();
-    const agent = await mcp(address);
-    const refused = await agent.callTool({
-      name: "transform_elements",
-      arguments: { ids: ["block-b", "nope"], steps: [{ kind: "translate", by: [1, 1] }] },
-    });
-    expect(refused.isError).toBe(true);
   });
 });

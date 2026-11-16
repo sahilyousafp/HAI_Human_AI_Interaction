@@ -6,6 +6,7 @@ import type { AgentEvent, AgentTurn, Message } from "@hai/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WebSocket } from "ws";
 import { fakeProvider } from "../../test/fake-provider.ts";
+import { connectFakeHost } from "../../test/host-client.ts";
 import { connectClient } from "../../test/ws-client.ts";
 import { MCP_PATH } from "../mcp/mcp-endpoint.ts";
 import { type Bridge, createBridge } from "../server.ts";
@@ -58,7 +59,7 @@ async function start(agent: string) {
   );
   hubs.push(hub);
   await hub.ready;
-  return { hub, viewer, scene: bridge.scene };
+  return { hub, viewer, scene: bridge.scene, address };
 }
 
 const replyOf = (turn?: AgentTurn) =>
@@ -75,19 +76,23 @@ function lastTurn(hub: AgentHub): AgentTurn | undefined {
 }
 
 describe("each agent is known by its own token", () => {
-  it("reviewer cannot edit: its write call is refused by the bridge and the model is unchanged", async () => {
-    const { hub, scene } = await start("reviewer");
-    const before = structuredClone(scene.scene.doc);
-    await hub.request("column");
-    expect(replyOf(lastTurn(hub))).toMatch(/^That failed: .*create_elements/);
-    expect(scene.scene.doc).toEqual(before);
+  /** Places an image in Rhino, a call that changes the model, with a fake Rhino connected so the host tools exist. */
+  const placeImage = async (agent: string) => {
+    const { hub, address } = await start(agent);
+    await connectFakeHost(address, { token: TOKEN, track: sockets });
+    await hub.request('tool host_place_image {"host":"rhino","image":"missing","plane":"top"}');
+    return replyOf(lastTurn(hub));
+  };
+
+  it("reviewer cannot change the model: the call is refused by the bridge, as a tool it does not have", async () => {
+    expect(await placeImage("reviewer")).toMatch(/^Refused: .*host_place_image.*not found/i);
   });
 
-  it("architect can edit with its own token", async () => {
-    const { hub, scene } = await start("architect");
-    await hub.request("column");
-    expect(replyOf(lastTurn(hub))).toBe("Added a column.");
-    expect(Object.values(scene.scene.doc.elements).some((e) => e.name === "Fake column")).toBe(true);
+  it("architect has the tools that change the model with its own token", async () => {
+    // The tool is there: it answers for itself (there is no such image), and is not unknown.
+    const reply = await placeImage("architect");
+    expect(reply).not.toMatch(/not found/i);
+    expect(reply.length).toBeGreaterThan(0);
   });
 
   it("an approval card names the agent asking", async () => {

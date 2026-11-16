@@ -282,9 +282,14 @@ export class HostLink {
         id: randomUUID(),
         payload: { host: this.id, id, ok: false, error },
       });
-    if (!this.connection || !this.inUse) return refuse(`${this.adapter.label} is not connected.`);
-    if (!this.capabilities?.edit)
-      return refuse(`${this.adapter.label} does not take edits from HAI. Update its connector.`);
+    if (!this.connection || !this.inUse) {
+      refuse(`${this.adapter.label} is not connected.`);
+      return;
+    }
+    if (!this.capabilities?.edit) {
+      refuse(`${this.adapter.label} does not take edits from HAI. Update its connector.`);
+      return;
+    }
     this.connection.send({ type: "host.edit", id: randomUUID(), payload: message.payload });
   }
 

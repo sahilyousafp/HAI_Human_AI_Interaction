@@ -226,7 +226,7 @@ button {
   height: 16px;
   color: var(--ink);
 }
-.icon-pill-icon .dot {
+.status .icon-pill-icon .dot {
   position: absolute;
   right: -3px;
   bottom: -3px;

@@ -80,11 +80,9 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
   },
   architect: {
     description:
-      "Architecture: massing, levels, walls, slabs, columns and cores. Creates and edits building elements.",
+      "Architecture: massing, levels, walls, slabs, columns and cores, modelled in the host applications (Rhino, Blender, Revit).",
     tools: [
       ...hai(HAI_TOOLS.read),
-      ...hai(HAI_TOOLS.write),
-      ...hai(HAI_TOOLS.geometry),
       ...hai(HAI_TOOLS.panel),
       ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.cameras),
@@ -93,16 +91,14 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
       ...hai(HAI_TOOLS.hostRead),
     ],
     model: "sonnet",
-    prompt: `You are Architect, the team's architectural designer. You plan and model massing, levels, walls, slabs,
-columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIALIST_CLOSE}`,
+    prompt: `You are Architect, the team's architectural designer. You plan massing, levels, walls, slabs, columns, cores
+and stairs with sensible proportions and clearances, and model them in a host application with host_run.\n\n${SPECIALIST_CLOSE}`,
     meta: { aliases: ["architects", "archie"], color: "#52bcc6", writes: true, lead: false, grants: [] },
   },
   product: {
     description: "Product design: furniture, fixtures and components at product scale.",
     tools: [
       ...hai(HAI_TOOLS.read),
-      ...hai(HAI_TOOLS.write),
-      ...hai(HAI_TOOLS.geometry),
       ...hai(HAI_TOOLS.panel),
       ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.cameras),
@@ -112,8 +108,8 @@ columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIAL
     ],
     model: "sonnet",
     prompt: `You are Product, the team's product designer. You design furniture, fixtures and components at product
-scale, with attention to ergonomics, materials and how they are made. Model simple shapes with the scene elements
-(massing for blocks, columns for legs and posts) and anything curved or detailed with Python (python_run).\n\n${SPECIALIST_CLOSE}`,
+scale, with attention to ergonomics, materials and how they are made. Model them in a host application with
+host_run, or as a .3dm file with Python (python_run) when no host is in use.\n\n${SPECIALIST_CLOSE}`,
     meta: { aliases: ["products", "producer"], color: "#e2ab4f", writes: true, lead: false, grants: [] },
   },
   climate: {
@@ -318,7 +314,7 @@ function readMeta(projectDir: string): Record<string, Partial<AgentMeta>> {
 export function saveDefinition(projectDir: string, agent: AgentDefinitionInput): void {
   mkdirSync(agentsDir(projectDir), { recursive: true });
   writeFileSync(join(agentsDir(projectDir), `${agent.name}.md`), definitionFile(agent));
-  const writeTools = new Set(hai(HAI_TOOLS.write));
+  const writeTools = new Set(hai(HAI_TOOLS.host));
   const meta = readMeta(projectDir);
   meta[agent.name] = {
     ...meta[agent.name],
@@ -366,12 +362,18 @@ export function readRoster(projectDir: string): TeamMember[] {
   return members.sort(byLeadThenName);
 }
 
+/** Every tool the app's server serves. */
+const SERVED: ReadonlySet<string> = new Set(Object.values(HAI_TOOLS).flat());
+
 /** The `HAI_TOOLS` groups a role may grant: the ones that read or ask and change nothing. */
 const GRANTABLE: ReadonlySet<string> = new Set(["openData", "urban", "weather", "simulation"]);
 
-/** Whether an agent with these `hai` tools may change the model (no list means every tool, as for a single session). */
+/**
+ * Whether an agent with these `hai` tools may change the model (no list means every tool, as for a single session).
+ * The model is changed in the hosts: an agent that may run code there changes it.
+ */
 export function changesModel(tools: ReadonlySet<string> | null): boolean {
-  return tools === null || HAI_TOOLS.write.some((t) => tools.has(t));
+  return tools === null || HAI_TOOLS.host.some((t) => tools.has(t));
 }
 
 /**
@@ -384,33 +386,17 @@ export function changesModel(tools: ReadonlySet<string> | null): boolean {
  */
 export function allowedHaiTools(member: TeamMember): Set<string> {
   const prefix = `mcp__${HAI_SERVER}__`;
-  const writeTools: readonly string[] = member.writes
-    ? []
-    : [
-        ...HAI_TOOLS.write,
-        ...HAI_TOOLS.geometry,
-        ...HAI_TOOLS.tags,
-        ...HAI_TOOLS.host,
-        ...HAI_TOOLS.workers,
-        ...HAI_TOOLS.contextWrite,
-      ];
+  const writeTools: readonly string[] = member.writes ? [] : [...HAI_TOOLS.host, ...HAI_TOOLS.workers];
   const tools = new Set(
     member.tools
       .filter((t) => t.startsWith(prefix))
       .map((t) => t.slice(prefix.length))
-      .filter((t) => !writeTools.includes(t)),
+      // A file written before a tool was removed (create_elements, the geometry tools) still names it: it is dropped.
+      .filter((t) => SERVED.has(t) && !writeTools.includes(t)),
   );
   // Starting a worker for a part of its own task is for the specialists that change the model.
   if (member.writes)
-    for (const tool of [
-      ...HAI_TOOLS.tags,
-      ...HAI_TOOLS.geometry,
-      ...HAI_TOOLS.python,
-      ...HAI_TOOLS.host,
-      ...HAI_TOOLS.workers,
-      ...HAI_TOOLS.contextWrite,
-    ])
-      tools.add(tool);
+    for (const tool of [...HAI_TOOLS.python, ...HAI_TOOLS.host, ...HAI_TOOLS.workers]) tools.add(tool);
   // The lead may show the user its plan before handing work out, whatever its file lists (older files do not).
   if (member.lead) for (const tool of HAI_TOOLS.team) tools.add(tool);
   // The read-only tools its role grants (open data, weather...): only groups that change nothing can be granted.
