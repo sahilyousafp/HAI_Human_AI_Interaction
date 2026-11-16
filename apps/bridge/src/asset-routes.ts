@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, posix, relative, resolve, win32 } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { AssetStore } from "./assets.ts";
 
@@ -101,6 +101,10 @@ export function projectImagePath(
   relativePath: string,
 ): { ok: true; path: string } | { ok: false; error: string } {
   if (!projectDir) return { ok: false, error: "No project is open." };
+  // The path is the project's own: one that is absolute in either form ("C:/...", "\\server\...", "/etc/...") is
+  // outside it on every system, not a folder of that name in the project.
+  if (win32.isAbsolute(relativePath) || posix.isAbsolute(relativePath))
+    return { ok: false, error: "That path is outside the project." };
   const path = resolve(projectDir, relativePath);
   const inside = relative(projectDir, path);
   if (inside.startsWith("..") || isAbsolute(inside))
