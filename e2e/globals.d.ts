@@ -69,6 +69,10 @@ interface Window {
           }>;
           selection: string[];
           sync: { done: number; total: number } | null;
+          /** The user's edit drawn ahead of the host. */
+          preview: { ids: string[]; matrix?: number[]; deleted?: true } | null;
+          /** What the agent changed for the last request about a selection. */
+          changed: string[];
         };
         latencyP90(): number | null;
       }

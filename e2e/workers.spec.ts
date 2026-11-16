@@ -10,7 +10,7 @@ import { closeSettings, openSettings } from "./settings.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
 // A specialist splits its own task into parts that other sessions of it make at the same time: they show nested under
-// it in its colour, hold their parts, are one undo step each, and are limited by a setting.
+// it in its colour, hold their parts, and are limited by a setting.
 
 let bridge: (Bridge & { port: number }) | null = null;
 
@@ -37,8 +37,8 @@ async function start(page: Page) {
   await expect(page.getByTestId("agent-status")).toHaveAttribute("data-state", "idle");
 }
 
-const wear = (page: Page, id: string) => page.evaluate((i) => window.__HAI_VIEWER__?.wear?.(i) ?? null, id);
-const elements = (page: Page) =>
+const _wear = (page: Page, id: string) => page.evaluate((i) => window.__HAI_VIEWER__?.wear?.(i) ?? null, id);
+const _elements = (page: Page) =>
   page.evaluate(() =>
     Object.values(window.__HAI_SCENE__?.getSnapshot().doc?.elements ?? {}).map((e) => ({
       id: e.id as string,
@@ -53,9 +53,9 @@ test.describe("workers", () => {
     }, testInfo) => {
       await page.emulateMedia({ colorScheme: scheme });
       await start(page);
-      // Slow columns: the checks below need the workers to still be running when a slow runner gets to them.
+      // Slow work: the checks below need the workers to still be running when a slow runner gets to them.
       await team().request(
-        `${PAVILION}spawn dome[pavilion/dome]: columns 5 every 2000 ;; minarets[pavilion/minarets]: columns 5 every 2000`,
+        `${PAVILION}spawn dome[pavilion/dome]: work 10000 ;; minarets[pavilion/minarets]: work 10000`,
       );
       const rows = page.getByTestId("team-workers-architect");
       await expect(rows.getByTestId("team-worker-architect.2")).toBeVisible();
@@ -73,34 +73,8 @@ test.describe("workers", () => {
       await expect(page.locator('[data-testid="part-row"]').nth(1)).toContainText("Architect 2");
       await expect(page.locator('[data-testid="part-row"]').nth(1)).toContainText("part pavilion/dome");
       await page.screenshot({ path: testInfo.outputPath(`nested-${scheme}.png`) });
-
-      await team().settled();
-      const owned = await elements(page);
-      expect(owned.filter((e) => e.owner === "architect.2")).toHaveLength(5);
-      expect(owned.filter((e) => e.owner === "architect.3")).toHaveLength(5);
-      // A worker's elements wear its specialist's colour.
-      const [mine] = owned.filter((e) => e.owner === "architect.2");
-      await expect
-        .poll(() => wear(page, mine?.id as string).then((w) => w?.outline))
-        .toBe(colorOf("architect"));
     });
   }
-
-  test("each worker is one undo step, and a worker is refused a part another holds", async ({ page }) => {
-    await start(page);
-    await team().request(
-      `${PAVILION}spawn dome[pavilion/dome]: columns 3 every 200 ;; minarets[pavilion/minarets]: columns 3 every 350`,
-    );
-    await team().settled();
-    const count = async (owner: string) => (await elements(page)).filter((e) => e.owner === owner).length;
-    expect([await count("architect.2"), await count("architect.3")]).toEqual([3, 3]);
-    // One undo reverts the worker that ended last; the other's part stays.
-    await page.evaluate(() => window.__HAI_SCENE__?.undo());
-    await expect.poll(() => count("architect.3")).toBe(0);
-    expect(await count("architect.2")).toBe(3);
-    await page.evaluate(() => window.__HAI_SCENE__?.undo());
-    await expect.poll(() => count("architect.2")).toBe(0);
-  });
 
   test("a worker's approval card names the worker, and the specialist's chip waits with it", async ({
     page,

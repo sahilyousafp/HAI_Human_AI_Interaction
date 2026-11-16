@@ -6,6 +6,7 @@
 //   "stubborn"   like slow, but ignores the interrupt request (to test the kill-and-resume fallback)
 //   "shell: X"   runs the shell command X as a Bash tool call, asking the permission prompt tool first
 //   "looks N"    reads the scene summary N times, one get_scene_summary call each (tool calls to watch)
+//   "fails N"    calls a tool the app does not have N times, so each call fails (failed tool calls to watch)
 //   "panel"      offers a panel (offer_panel); if the user accepts, opens a clearance slider that moves col-a1
 //   "panel HTML" the same with HTML as the panel document, for tests that need a particular panel
 //   "panel wait N"  the same, but writes the panel N ms after the user accepted (the loading state shows meanwhile)
@@ -625,6 +626,15 @@ function onRequest(raw) {
       delta(out.error ? `Refused: ${out.error}` : `${claim[1]}d ${claim[2]}`);
       result();
     });
+    return;
+  }
+  const fails = /^fails (\d+)$/.exec(text);
+  if (fails) {
+    (async () => {
+      for (let i = 0; i < Number(fails[1]); i++) await appTool("no_such_tool", {});
+      delta(`Tried ${fails[1]} times.`);
+      result();
+    })();
     return;
   }
   const looks = /^looks (\d+)(?: every (\d+))?$/.exec(text);

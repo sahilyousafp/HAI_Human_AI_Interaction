@@ -5,6 +5,10 @@ import { handDraw, openGround, references, run } from "./hands.ts";
 import { ENDED, start, until } from "./live-support.ts";
 
 const live = process.env.HAI_LIVE_CLAUDE === "1";
+test.skip(
+  true,
+  "stale: agents model in a host now, not in HAI's scene; to be rewritten against a real Rhino (openspec/changes/make-hai-the-edit-surface task 5.1)",
+);
 test.skip(!live, "manual: needs the signed-in Claude Code CLI (HAI_LIVE_CLAUDE=1)");
 test.setTimeout(600_000);
 

@@ -15,21 +15,21 @@ Week 10 clip. Target length 40-50 s, 16:9, captions burned in. Shows the new stu
 |---|---|---|---|
 | 1 | 0-5 s | The full-width model; the camera floats at the bottom right. | "The model gets the whole screen now." |
 | 2 | 5-12 s | Point at the gear with the left hand (it lights amber), tap: the settings slide in. Open Features. | "Settings slide in, and my hands reach them." |
-| 3 | 12-20 s | Tap **Create tools** off: long pinch with the left hand, no ring. Tap it on again. | "Every feature has a switch, for each release." |
+| 3 | 12-20 s | Tap **Tool rings** off: a long pinch with the right hand opens no ring. Tap it on again: the edit ring opens. | "Every feature has a switch, for each release." |
 | 4 | 20-26 s | Back, tap **Show my hands** on, close with the close button. White hands appear over the screen. | "And for you watching: my hands, drawn over the screen." |
-| 5 | 26-40 s | Left hand: create ring, Wall; draw a wall while the right hand orbits. | "Now you can see what each hand does." |
+| 5 | 26-40 s | Left hand: reference ring, Sketch line; sketch a path beside the building while the right hand orbits. | "Now you can see what each hand does." |
 | 6 | 40-45 s | Hide the camera view into the Camera pill; lower your hands. | "Next: snapping, ortho, and importing my Rhino model." |
 
 ## Check on the real camera (fill in before posting)
 
 - Shot 2: the gear pressed by hand on the first try in two of three takes: ___ / 3
-- Shot 5: the white hands stayed on their pointers through the whole wall in two of three takes: ___ / 3
+- Shot 5: the white hands stayed on their pointers through the whole sketch in two of three takes: ___ / 3
 - Frame rate with Show my hands on (Settings > Camera and tracking): ______ fps (target: within 2 fps of it off)
 
 ## Expected result
 
 - The white hands sit on the pointers and never block a press.
-- Create tools off removes them from the rings and keys; on brings them back.
+- Tool rings off: no ring opens by a long pinch, Space or a held right button; on brings them back.
 - The camera keeps tracking while the settings open and close and while the view is hidden.
 
 ## Check after recording

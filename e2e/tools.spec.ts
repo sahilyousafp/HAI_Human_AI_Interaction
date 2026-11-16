@@ -63,7 +63,7 @@ test.describe("palette", () => {
     await expect(activeTool(page)).toContainText("Select");
   });
 
-  test("keyboard opens the action ring at the pointer; moving right and releasing chooses Copy", async ({
+  test("keyboard opens the edit ring at the pointer; moving right and releasing chooses Rotate", async ({
     page,
   }) => {
     await start(page);
@@ -80,7 +80,7 @@ test.describe("palette", () => {
     await expect(page.getByTestId("palette-slot-2")).toHaveAttribute("data-highlighted", "true");
     await page.keyboard.up(" ");
     await expect(palette).toHaveCount(0);
-    await expect(activeTool(page)).toHaveAttribute("data-tool", "copy");
+    await expect(activeTool(page)).toHaveAttribute("data-tool", "rotate");
   });
 
   test("release in the centre cancels: the tool is unchanged", async ({ page }) => {
@@ -110,7 +110,7 @@ test.describe("palette", () => {
     expect((await camera(page)).target).not.toEqual(before.target);
   });
 
-  test("a silent long pinch opens the action ring at the hand; flicking right and releasing chooses Copy", async ({
+  test("a silent long pinch opens the edit ring at the hand; flicking right and releasing chooses Rotate", async ({
     page,
   }) => {
     await start(page);
@@ -140,7 +140,7 @@ test.describe("palette", () => {
       (events) => window.__HAI_INPUT__?.gestures(events),
       [ev("pinch.drag.end", 700, right)],
     );
-    await expect(activeTool(page)).toHaveAttribute("data-tool", "copy");
+    await expect(activeTool(page)).toHaveAttribute("data-tool", "rotate");
   });
 
   test("a still fist returns to Select after 1.5 s; a shorter fist does not", async ({ page }) => {
@@ -168,7 +168,7 @@ test.describe("palette", () => {
       ["m", "move"],
       ["d", "measure"],
       ["s", "section"],
-      ["b", "massing"],
+      ["o", "rotate"],
       ["x", "delete"],
       ["v", "select"],
     ]) {
@@ -347,46 +347,6 @@ test.describe("built-in tools", () => {
     await expect(page.getByTestId("section-status")).toBeVisible(); // stays after leaving the tool
     await page.getByTestId("section-clear").click();
     await expect(page.getByTestId("section-status")).toHaveCount(0);
-  });
-
-  test("place a block: Add massing creates a 6000 x 6000 x 3500 mm block at the snapped tap point", async ({
-    page,
-  }) => {
-    await start(page);
-    await page.keyboard.press("b");
-    const before = Object.keys(
-      (await page.evaluate(() => window.__HAI_SCENE__?.getSnapshot().doc?.elements)) ?? {},
-    );
-    let target: Mm | null = null;
-    for (const candidate of [
-      [44_040, 10_960, 0],
-      [12_040, 30_960, 0],
-      [-4_960, 10_040, 0],
-    ] as Mm[]) {
-      if ((await screenOf(page, candidate)).inView) {
-        target = candidate;
-        break;
-      }
-    }
-    if (!target) throw new Error("no empty ground in view");
-    const at = await screenOf(page, target);
-    await page.mouse.click(at.x, at.y);
-    await expect
-      .poll(
-        async () =>
-          Object.keys((await page.evaluate(() => window.__HAI_SCENE__?.getSnapshot().doc?.elements)) ?? {})
-            .length,
-      )
-      .toBe(before.length + 1);
-    const elements = (await page.evaluate(() => window.__HAI_SCENE__?.getSnapshot().doc?.elements)) ?? {};
-    const added = Object.values(elements).find((e) => !before.includes(e.id as string));
-    expect(added?.type).toBe("massing");
-    expect(added?.size).toEqual([6_000, 6_000, 3_500]);
-    const [ox, oy] = (added?.origin ?? []) as number[];
-    // Centred on the tap point snapped to 100 mm (the tap lands within a few mm of the target).
-    expect(Math.abs((ox ?? 0) + 3_000 - Math.round(target[0] / 100) * 100)).toBeLessThanOrEqual(100);
-    expect(Math.abs((oy ?? 0) + 3_000 - Math.round(target[1] / 100) * 100)).toBeLessThanOrEqual(100);
-    expect(((ox ?? 0) + 3_000) % 100).toBe(0);
   });
 
   test("delete: a nod confirms, a shake cancels", async ({ page }) => {

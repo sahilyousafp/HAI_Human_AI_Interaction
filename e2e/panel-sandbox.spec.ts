@@ -133,8 +133,8 @@ test.describe("what a panel may send", () => {
     await expect(shell(page).getByTestId("panel-reason")).toContainText("late failure");
     // The viewer and the agent panel keep working.
     await expect(page.getByTestId("agent-input")).toBeEnabled();
-    await page.keyboard.press("w");
-    await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "wall");
+    await page.keyboard.press("m");
+    await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "move");
     await shell(page).getByTestId("panel-close").click();
     await expect(shell(page)).toHaveCount(0);
   });

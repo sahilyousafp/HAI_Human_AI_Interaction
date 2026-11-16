@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
 import { closeSettings, openSettings } from "./settings.ts";
-import { handAt, openViewer, startTestBridge } from "./viewer.ts";
+import { openViewer, startTestBridge } from "./viewer.ts";
 
 // The studio layout: the settings sheet, the feature switches, the floating camera view and Show my hands.
 let bridge: Bridge | null = null;
@@ -45,39 +45,29 @@ test("the settings slide in from the right and close with the close button, Esca
   await expect(page.getByTestId("settings-root")).toBeVisible();
 });
 
-test("switching Create tools off removes them everywhere, and the choice survives a reload", async ({
-  page,
-}) => {
+test("switching Tool rings off: no ring opens, and the choice survives a reload", async ({ page }) => {
   await start(page);
   await openSettings(page, "features");
-  await page.getByTestId("feature-createTools").click();
-  await expect(page.getByTestId("feature-createTools")).toHaveAttribute("aria-checked", "false");
+  await page.getByTestId("feature-toolRings").click();
+  await expect(page.getByTestId("feature-toolRings")).toHaveAttribute("aria-checked", "false");
   await closeSettings(page);
-  await page.keyboard.press("w"); // Wall's shortcut
-  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "select");
-  // The left hand's long pinch opens no ring without the create tools.
-  await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
-  const centre = await handAt(page, [0.6, 0.5]);
-  const send = (type: string) =>
-    page.evaluate(
-      (e) => window.__HAI_INPUT__?.gestures([{ confidence: 1, delta: [0, 0], hand: "Left", ...e } as never]),
-      { type, position: centre, ts: Date.now() },
-    );
-  await send("pinch.drag.start");
-  await send("pinch.hold");
-  await expect(page.getByTestId("tool-palette")).toHaveCount(0);
-  await send("pinch.drag.end");
+  const ringOnSpace = async () => {
+    await page.keyboard.down(" ");
+    await page.waitForTimeout(200);
+    const shown = await page.getByTestId("tool-palette").count();
+    await page.keyboard.up(" ");
+    return shown;
+  };
+  expect(await ringOnSpace()).toBe(0);
 
   await page.waitForTimeout(300); // the bridge writes .hai/settings.json
   await page.reload();
   await openViewer(page);
-  await page.keyboard.press("w");
-  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "select");
+  expect(await ringOnSpace()).toBe(0);
   await openSettings(page, "features");
-  await page.getByTestId("feature-createTools").click();
+  await page.getByTestId("feature-toolRings").click();
   await closeSettings(page);
-  await page.keyboard.press("w");
-  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "wall");
+  expect(await ringOnSpace()).toBe(1);
 });
 
 test("switching the agent off takes the agent panel away", async ({ page }) => {

@@ -25,33 +25,17 @@ const rotationOf = (id: string) =>
   (bridge?.scene.scene.doc.elements[id] as { rotationDeg?: number } | undefined)?.rotationDeg;
 const massings = () => elements().filter((e) => e.type === "massing");
 
-test("copy 2 times 6 m along y makes two copies in one undo step, selected", async ({ page }) => {
+test("a removed command: array 5 times changes nothing, and says arrays are made by asking the agent", async ({
+  page,
+}) => {
   await start(page);
-  const before = massings().length;
-  const original = bridge?.scene.scene.doc.elements["block-b"] as { origin: number[] };
   await select(page, "block-b");
+  const before = JSON.stringify(bridge?.scene.scene.doc.elements);
+  await say(page, "array 5 times");
+  await expect(page.getByTestId("voice-picked")).toContainText("Ask the agent");
   await say(page, "copy 2 times 6 m along y");
-  await expect.poll(() => massings().length).toBe(before + 2);
-  const ys = massings()
-    .filter((e) => e.id !== "block-b" && String(e.name).includes("copy"))
-    .map((e) => (e.origin as number[])[1] ?? 0)
-    .sort((x, y) => x - y);
-  const y0 = original.origin[1] ?? 0;
-  expect(ys).toEqual([y0 + 6000, y0 + 12000]);
-  await expect(page.getByTestId("voice-picked")).toContainText("Copy 2 times 6 m north");
-  await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
-
-  // One undo takes both copies away.
-  await page.evaluate(() => window.__HAI_SCENE__?.undo());
-  await expect.poll(() => massings().length).toBe(before);
-});
-
-test("copy and rotate 90 leaves the original and turns the copy", async ({ page }) => {
-  await start(page);
-  await select(page, "block-b");
-  await say(page, "copy and rotate 90");
-  await expect.poll(() => massings().find((e) => e.rotationDeg === 90)).toBeTruthy();
-  expect(bridge?.scene.scene.doc.elements["block-b"]).not.toHaveProperty("rotationDeg");
+  await expect(page.getByTestId("voice-picked")).toContainText("HAI does not copy any more");
+  expect(JSON.stringify(bridge?.scene.scene.doc.elements)).toBe(before);
 });
 
 test("rotate 90 turns what is selected about its centre", async ({ page }) => {
@@ -73,13 +57,10 @@ test("what the speech model mishears is put right by sound, against the app's ow
 }) => {
   await start(page);
   await select(page, "block-b");
-  await say(page, "colon"); // Column, as the model hears it
-  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "column");
-  const width = () =>
-    (bridge?.scene.scene.doc.elements["block-b"] as { size: number[] } | undefined)?.size[0];
-  const before = width() ?? 0;
-  await say(page, "scale to");
-  await expect.poll(width).toBe(before * 2);
+  await say(page, "laso"); // Lasso, as the model hears it
+  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "lasso");
+  await say(page, "rotate ate degrees"); // eight
+  await expect.poll(() => rotationOf("block-b")).toBe(8);
   await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
 });
 
@@ -98,9 +79,7 @@ test("it does not have to be said precisely: talk around a command is dropped, a
   await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
 });
 
-test("move 5 meters to the y axis towards right, and array 5 times, run as commands with no agent", async ({
-  page,
-}) => {
+test("move 5 meters to the y axis towards right runs as a command with no agent", async ({ page }) => {
   await start(page);
   await select(page, "block-b");
   const origin = () =>
@@ -109,15 +88,6 @@ test("move 5 meters to the y axis towards right, and array 5 times, run as comma
   await say(page, "move 5 meters to the y axis towards right");
   await expect.poll(() => origin()[1]).toBe((y ?? 0) + 5000);
   expect(origin()[0]).toBe(x);
-  const before = massings().length;
-  await say(page, "array 5 times");
-  await expect.poll(() => massings().length).toBe(before + 5);
-  const xs = massings()
-    .filter((e) => String(e.name).includes("copy"))
-    .map((e) => (e.origin as number[])[0] ?? 0)
-    .sort((a, b) => a - b);
-  const width = 12_000; // Block B is 12 m wide: the copies stand side by side
-  expect(xs).toEqual([1, 2, 3, 4, 5].map((i) => (x ?? 0) + i * width));
   await expect(page.getByTestId("voice-picked")).toContainText("Nothing was sent to the agent");
 });
 
@@ -141,22 +111,20 @@ test("say 5 m, then make it 4 m: the move is taken back and made again, one undo
   await expect.poll(() => origin()[0]).toBe(x);
 });
 
-test("array 5 times, then make it 3: three copies, and what was done by hand since is not corrected", async ({
-  page,
-}) => {
+test("what was done by hand since a command is not corrected", async ({ page }) => {
   await start(page);
   await select(page, "block-b");
-  const before = massings().length;
-  await say(page, "array 5 times");
-  await expect.poll(() => massings().length).toBe(before + 5);
-  await say(page, "change it to 3 times");
-  await expect.poll(() => massings().length).toBe(before + 3);
-  // Something else changes the model: the next "make it" is no longer a correction of that array.
+  const originX = () =>
+    (bridge?.scene.scene.doc.elements["block-b"] as { origin: number[] } | undefined)?.origin[0] ?? 0;
+  const x = originX();
+  await say(page, "move 5 meters east");
+  await expect.poll(originX).toBe(x + 5000);
+  // Something else changes the model: the next "make it" is no longer a correction of that move.
   await page.evaluate(() => window.__HAI_SCENE__?.apply("by hand", [{ op: "delete", id: "block-c" }]));
-  await expect.poll(() => massings().length).toBe(before + 2);
-  await say(page, "make it 6 times");
+  await expect.poll(() => bridge?.scene.scene.doc.elements["block-c"]).toBeUndefined();
+  await say(page, "make it 4 m");
   await page.waitForTimeout(600);
-  expect(massings().length).toBe(before + 2);
+  expect(originX()).toBe(x + 5000);
 });
 
 test("but what would change the meaning is not guessed: it is not a command", async ({ page }) => {

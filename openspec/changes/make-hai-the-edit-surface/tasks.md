@@ -14,16 +14,16 @@
 
 ## 3. Web
 
-- [ ] 3.1 Targets in `actedOn` (scene elements or host objects), `hostTarget` and `applyHost` in `ToolContext`, and the edit path in Move, Rotate and Delete. Verify the tool unit tests for host targets.
-- [ ] 3.2 The mirror preview (`HostMirror.preview`, drawn by `MirrorLayer`), held until the host's batch, dropped on a refusal or after 5 s. Verify "no jump back" and "a refused edit" in e2e with the fake host.
-- [ ] 3.3 `EditHistory`: one undo order across the scene and the hosts, for the ring, the keys and spoken undo. Verify "undo a host edit, then a scene edit" and "redo a host edit".
-- [ ] 3.4 Remove the creation tools (`tools/create.ts`, massing, copy, line), their feature switch, tests and screenshots; the new rings. Verify "the default rings" in e2e and the ring screenshots, looked at.
-- [ ] 3.5 Spoken commands: remove copy, array and scale; move, rotate and delete on host targets. Verify "a removed command" and "a spoken move on a host object", and the phrase set.
-- [ ] 3.6 The selection card (`ComponentCard`) with Ask about this, placed beside the selection without covering a panel, and the changed objects highlighted after the request. Verify "a selected canopy", "ask about this" and "the changed objects glow" in e2e, screenshots at 1280, 1024 and 900 px in both themes, and `hud-layout.spec.ts`.
+- [x] 3.1 Targets in `actedOn` (scene elements or host objects), `hostTarget` and `applyHost` in `ToolContext`, and the edit path in Move, Rotate and Delete. Verify the tool unit tests for host targets.
+- [x] 3.2 The mirror preview (`HostMirror.preview`, drawn by `MirrorLayer`), held until the host's batch, dropped on a refusal or after 5 s. Verify "no jump back" and "a refused edit" in e2e with the fake host.
+- [x] 3.3 `EditHistory`: one undo order across the scene and the hosts, for the ring, the keys and spoken undo. Verify "undo a host edit, then a scene edit" and "redo a host edit".
+- [x] 3.4 Remove the creation tools (`tools/create.ts`, massing, copy, line), their feature switch, tests and screenshots; the new rings. Verify "the default rings" in e2e and the ring screenshots, looked at.
+- [x] 3.5 Spoken commands: remove copy, array and scale; move, rotate and delete on host targets. Verify "a removed command" and "a spoken move on a host object", and the phrase set.
+- [x] 3.6 The selection card (`ComponentCard`) with Ask about this, placed beside the selection without covering a panel, and the changed objects highlighted after the request. Verify "a selected canopy", "ask about this" and "the changed objects glow" in e2e, screenshots at 1280, 1024 and 900 px in both themes, and `hud-layout.spec.ts`.
 
 ## 4. Docs
 
-- [ ] 4.1 Update `docs/tools.md`, `docs/gestures.md`, `docs/voice.md`, `docs/hosts.md`, `docs/agent.md` and `docs/agents.md`, and add the removal of the creation tools and the geometry kernel to `docs/decisions.md`. Verify the docs test.
+- [x] 4.1 Update `docs/tools.md`, `docs/gestures.md`, `docs/voice.md`, `docs/hosts.md`, `docs/agent.md` and `docs/agents.md`, and add the removal of the creation tools and the geometry kernel to `docs/decisions.md`. Verify the docs test.
 
 ## 5. Demo
 

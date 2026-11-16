@@ -36,7 +36,7 @@ async function drawLoop(page: Page, corners: Point[], options: { release?: boole
   if (options.release !== false) await handEvent(page, "Left", "pinch.drag.end", first);
 }
 
-test("the other hand's ring has Lasso select at the top left, and flicking there picks it", async ({
+test("the other hand's ring has Lasso select at the bottom right, and flicking there picks it", async ({
   page,
 }) => {
   await start(page);
@@ -46,12 +46,12 @@ test("the other hand's ring has Lasso select at the top left, and flicking there
       | undefined;
     return tools?.layouts.reference ?? [];
   });
-  expect(reference[7]).toBe("lasso");
+  expect(reference[3]).toBe("lasso");
   const at: Point = [0.5, 0.5];
   await holdAt(page, at, "Left");
   await expect(page.getByTestId("tool-palette")).toHaveAttribute("data-ring", "reference");
-  await expect(page.getByTestId("palette-slot-7")).toContainText("lasso");
-  await releaseAt(page, [at[0] - 0.1, at[1] - 0.14], "Left");
+  await expect(page.getByTestId("palette-slot-3")).toContainText("lasso");
+  await releaseAt(page, [at[0] + 0.1, at[1] + 0.14], "Left");
   await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "lasso");
 });
 

@@ -9,6 +9,10 @@ import { ClaudeCliProvider } from "../packages/agent-core/src/index.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
 const live = process.env.HAI_LIVE_CLAUDE === "1";
+test.skip(
+  true,
+  "stale: agents model in a host now, not in HAI's scene; to be rewritten against a real Rhino (openspec/changes/make-hai-the-edit-surface task 5.1)",
+);
 test.skip(!live, "manual: needs the signed-in Claude Code CLI (HAI_LIVE_CLAUDE=1)");
 
 test("the real Architect splits its own task into workers that make the parts at the same time", async ({
