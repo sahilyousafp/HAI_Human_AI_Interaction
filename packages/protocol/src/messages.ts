@@ -23,24 +23,31 @@ import { ContextCredit, ContextItem } from "./context.ts";
 import { DrawingAidChoices } from "./drawing-aids.ts";
 import { BridgeStatusMessage, Envelope, HelloMessage, MessageId } from "./envelope.ts";
 import { FeatureChoices } from "./features.ts";
+import {
+  HOST_API_MAX_ENTRIES,
+  HOST_DESCRIBE_MAX,
+  HOST_MAX_CODE,
+  HostApiEntry,
+  HostApp,
+  HostBatch,
+  HostCapabilities,
+  HostChoices,
+  HostComponent,
+  HostId,
+  HostLanguage,
+  HostNotDrawn,
+  HostObject,
+  HostRunResult,
+  HostRunStatus,
+  HostSelected,
+  HostSync,
+} from "./host.ts";
 import { OPEN_DATA_SOURCE_IDS, OpenDataRecordEntry, PortalHost, Site } from "./open-data.ts";
 import { PanelDocument, PanelId, PanelOfferState, PanelOutcome } from "./panel.ts";
 import { LetterMarkers } from "./references.ts";
-import {
-  ModellingInUse,
-  ModellingMode,
-  RHINO_PYTHON_MAX_CODE,
-  RhinoBatch,
-  RhinoNotDrawn,
-  RhinoObject,
-  RhinoPythonResult,
-  RhinoPythonStatus,
-  RhinoSelected,
-  RhinoSync,
-  ViewRequest,
-} from "./rhino.ts";
 import { DominantHand } from "./rings.ts";
-import { ElementId, SceneDocument, SceneOp } from "./scene.ts";
+import { AssetId, ElementId, Point3Mm, SceneDocument, SceneOp } from "./scene.ts";
+import { VIEW_MODES, ViewRequest } from "./view.ts";
 
 function message<T extends string, P extends z.ZodType>(type: T, payload: P) {
   return z.strictObject({ type: z.literal(type), id: MessageId, payload });
@@ -110,8 +117,8 @@ export const Settings = z.strictObject({
   drawingAids: DrawingAidChoices.nullable().default(null),
   /** Draw the user's hands as white shapes over the whole screen, so people watching a recording can follow. */
   showHands: z.boolean().default(false),
-  /** How the agent models: with Rhino when it is connected (default), always with Rhino, or only with Python. */
-  modelling: ModellingMode.default("auto"),
+  /** Which hosts the agent may use: Settings > Hosts. Each is on until switched off. */
+  hosts: HostChoices.default({ rhino: true, blender: true, revit: true }),
   /** Tint and outline the elements agents own in their colour, and draw region claims (the panel lists claims anyway). */
   showOwners: z.boolean().default(true),
   /** Draw a small marker for each camera an agent placed (the panel shows its pictures either way). */
@@ -362,22 +369,27 @@ export const PanelCloseMessage = message(
 );
 
 /**
- * Everything the viewer needs to know about Rhino: whether it is connected, how the agent models now, and the
- * mirrored objects. Sent on connect and whenever the connection, the mode or the document is replaced; changes in
- * between arrive as `rhino.objects` and `rhino.selection`.
+ * Everything the viewer needs to know about one host: whether the user switched it on, whether it is connected, what
+ * it can do, and its mirrored objects and selection. One per host, sent on connect and whenever the host connects,
+ * disconnects, is switched on or off, or replaces its document; changes in between arrive as `host.objects` and
+ * `host.selection`.
  */
-export const RhinoStateMessage = message(
-  "rhino.state",
+export const HostStateMessage = message(
+  "host.state",
   z.strictObject({
+    host: HostId,
+    switchedOn: z.boolean(),
     connected: z.boolean(),
-    mode: ModellingMode,
-    inUse: ModellingInUse,
-    python: RhinoPythonStatus.nullable(),
+    app: HostApp.nullable(),
+    run: HostRunStatus.nullable(),
+    capabilities: HostCapabilities.nullable(),
     document: z.string().nullable(),
-    objects: z.array(RhinoObject),
-    notDrawn: RhinoNotDrawn,
-    sync: RhinoSync.nullable(),
+    objects: z.array(HostObject),
+    notDrawn: HostNotDrawn,
+    sync: HostSync.nullable(),
     selection: z.array(z.string()),
+    /** The selection as the host describes it, for the selection card. */
+    components: z.array(HostComponent).max(HOST_DESCRIBE_MAX),
   }),
 );
 /** A Python run left these `.3dm` files in the project: the HUD offers to import them or open them in Rhino. */
@@ -401,12 +413,18 @@ export const PythonWrittenMessage = message(
 );
 /** The agent asked for a different view; the viewer animates to it. */
 export const ViewSetMessage = message("view.set", ViewRequest);
-/** Bridge -> Rhino: run a Python script in the open document. */
-export const RhinoPythonRunMessage = message(
-  "rhino.python.run",
+
+// Bridge -> host
+/** The bridge will not take this connector: it is built for an older protocol. The connector says so and stops. */
+export const HostRefusedMessage = message("host.refused", z.strictObject({ reason: z.string().max(500) }));
+/** Run a script in the open document, as one undo step. */
+export const HostRunMessage = message(
+  "host.run",
   z.strictObject({
+    host: HostId,
     id: z.string().min(1).max(64),
-    code: z.string().min(1).max(RHINO_PYTHON_MAX_CODE),
+    language: HostLanguage,
+    code: z.string().min(1).max(HOST_MAX_CODE),
     timeoutMs: z.int().positive().max(600_000),
     /** The agent that asked and the run's title, kept with the undo step. */
     agent: z.string().max(64).optional(),
@@ -417,12 +435,55 @@ export const RhinoPythonRunMessage = message(
     claim: TaskScope.optional(),
   }),
 );
-/** Bridge -> Rhino: undo the last Python run (it is one undo step). */
-export const RhinoUndoMessage = message("rhino.undo", z.strictObject({}));
-/** What a Rhino script did outside its claim, found after the run: for the user's panel, with the way to undo it. */
-export const RhinoRunReportMessage = message(
-  "rhino.run.report",
+/** Undo the last run (it is one undo step). */
+export const HostUndoMessage = message("host.undo", z.strictObject({ host: HostId }));
+/** Capture the host's own viewport: a named view, or the active one. The connector uploads a PNG as an asset. */
+export const HostCaptureMessage = message(
+  "host.capture",
   z.strictObject({
+    host: HostId,
+    id: z.string().min(1).max(64),
+    view: z.enum(VIEW_MODES).optional(),
+    width: z.int().min(64).max(1280),
+    height: z.int().min(64).max(1280),
+  }),
+);
+/** Place an image file in the document on a plane, embedded, as one undo step. The path is absolute. */
+export const HostImagePlaceMessage = message(
+  "host.image.place",
+  z.strictObject({
+    host: HostId,
+    id: z.string().min(1).max(64),
+    path: z.string().min(1).max(1024),
+    origin: Point3Mm,
+    /** The direction the picture faces. */
+    normal: Point3Mm,
+    widthMm: z.number().positive(),
+    /** Left out to keep the image's own proportions. */
+    heightMm: z.number().positive().optional(),
+    agent: z.string().max(64).optional(),
+    title: z.string().max(80).optional(),
+  }),
+);
+/** Look up the host's scripting API by reflection. */
+export const HostApiMessage = message(
+  "host.api",
+  z.strictObject({ host: HostId, id: z.string().min(1).max(64), query: z.string().min(1).max(200) }),
+);
+/** Describe these objects: what they are, how big, of what, and their own properties. */
+export const HostDescribeMessage = message(
+  "host.describe",
+  z.strictObject({
+    host: HostId,
+    id: z.string().min(1).max(64),
+    ids: z.array(ElementId).min(1).max(HOST_DESCRIBE_MAX),
+  }),
+);
+/** What a script did outside its claim, found after the run: for the user's panel, with the way to undo it. */
+export const HostRunReportMessage = message(
+  "host.run.report",
+  z.strictObject({
+    host: HostId,
     agent: z.string().max(64).nullable(),
     title: z.string().max(80),
     strays: z
@@ -442,31 +503,90 @@ export const RhinoRunReportMessage = message(
   }),
 );
 
-// Rhino plugin -> bridge (the bridge relays objects and selection to the viewers)
-/** The Python status or the document changed. */
-export const RhinoStatusMessage = message(
-  "rhino.status",
-  z.strictObject({ python: RhinoPythonStatus, document: z.string().max(260).nullable() }),
+// Host -> bridge (the bridge relays objects and selection to the viewers)
+/** The run status or the document changed. */
+export const HostStatusMessage = message(
+  "host.status",
+  z.strictObject({ host: HostId, run: HostRunStatus, document: z.string().max(260).nullable() }),
 );
 /** What changed in the document: objects added or replaced (with their meshes already uploaded), and objects deleted. */
-export const RhinoObjectsMessage = message("rhino.objects", RhinoBatch);
-/** The selection in Rhino changed. */
-export const RhinoSelectionMessage = message(
-  "rhino.selection",
-  z.strictObject({ objects: z.array(RhinoSelected).max(2000) }),
+export const HostObjectsMessage = message(
+  "host.objects",
+  z.strictObject({ host: HostId, ...HostBatch.shape }),
 );
-export const RhinoPythonResultMessage = message("rhino.python.result", RhinoPythonResult);
+/**
+ * The selection in a host changed. From the host, `components` is absent; to the viewers, the bridge adds the
+ * components once the host has described them.
+ */
+export const HostSelectionMessage = message(
+  "host.selection",
+  z.strictObject({
+    host: HostId,
+    objects: z.array(HostSelected).max(2000),
+    components: z.array(HostComponent).max(HOST_DESCRIBE_MAX).optional(),
+  }),
+);
+export const HostResultMessage = message(
+  "host.result",
+  z.strictObject({ host: HostId, ...HostRunResult.shape }),
+);
+export const HostCapturedMessage = message(
+  "host.captured",
+  z.strictObject({
+    host: HostId,
+    id: z.string().min(1).max(64),
+    ok: z.boolean(),
+    /** The uploaded PNG. */
+    asset: AssetId.optional(),
+    error: z.string().max(2000).optional(),
+    durationMs: z.number().nonnegative(),
+  }),
+);
+export const HostImagePlacedMessage = message(
+  "host.image.placed",
+  z.strictObject({
+    host: HostId,
+    id: z.string().min(1).max(64),
+    ok: z.boolean(),
+    /** The picture's object id in the host. */
+    objectId: ElementId.optional(),
+    error: z.string().max(2000).optional(),
+  }),
+);
+export const HostApiResultMessage = message(
+  "host.api.result",
+  z.strictObject({
+    host: HostId,
+    id: z.string().min(1).max(64),
+    entries: z.array(HostApiEntry).max(HOST_API_MAX_ENTRIES),
+    /** More entries matched than are listed. */
+    truncated: z.boolean(),
+    /** The index is still being built: these are the entries indexed so far. */
+    partial: z.boolean().default(false),
+  }),
+);
+export const HostDescribedMessage = message(
+  "host.described",
+  z.strictObject({
+    host: HostId,
+    id: z.string().min(1).max(64),
+    components: z.array(HostComponent).max(HOST_DESCRIBE_MAX),
+  }),
+);
 
 // Clients -> bridge
 /**
- * Open a project file in Rhino. From a page the path is relative to the project folder; the bridge checks it and sends
- * the plugin the absolute path.
+ * Open a project file in a host. From a page the path is relative to the project folder; the bridge checks it and
+ * sends the connector the absolute path.
  */
-export const RhinoOpenMessage = message("rhino.open", z.strictObject({ path: z.string().min(1).max(1024) }));
-/** Select these Rhino objects (a pick in the viewer); the bridge passes it on to the plugin. Empty clears. */
-export const RhinoSelectMessage = message(
-  "rhino.select",
-  z.strictObject({ ids: z.array(ElementId).max(500) }),
+export const HostOpenMessage = message(
+  "host.open",
+  z.strictObject({ host: HostId, path: z.string().min(1).max(1024) }),
+);
+/** Select these objects in their host (a pick in the viewer); the bridge passes it on and clears the other hosts. */
+export const HostSelectMessage = message(
+  "host.select",
+  z.strictObject({ host: HostId, ids: z.array(ElementId).max(500) }),
 );
 export const SceneApplyMessage = message(
   "scene.apply",
@@ -496,7 +616,8 @@ export const SettingsSetMessage = message(
     features: FeatureChoices.optional(),
     drawingAids: DrawingAidChoices.optional(),
     showHands: z.boolean().optional(),
-    modelling: ModellingMode.optional(),
+    /** Hosts switched on or off; merged into the saved choices. */
+    hosts: HostChoices.partial().optional(),
     showOwners: z.boolean().optional(),
     showCameras: z.boolean().optional(),
     maxSessions: z.number().int().min(2).max(12).optional(),
@@ -660,17 +781,26 @@ export const Message = z.discriminatedUnion("type", [
   ApprovalResolvedMessage,
   ApprovalsAllowedMessage,
   ExtensionsSnapshotMessage,
-  RhinoStateMessage,
+  HostStateMessage,
   ViewSetMessage,
-  RhinoPythonRunMessage,
-  RhinoUndoMessage,
-  RhinoRunReportMessage,
-  RhinoStatusMessage,
-  RhinoObjectsMessage,
-  RhinoSelectionMessage,
-  RhinoPythonResultMessage,
-  RhinoSelectMessage,
-  RhinoOpenMessage,
+  HostRefusedMessage,
+  HostRunMessage,
+  HostUndoMessage,
+  HostCaptureMessage,
+  HostImagePlaceMessage,
+  HostApiMessage,
+  HostDescribeMessage,
+  HostRunReportMessage,
+  HostStatusMessage,
+  HostObjectsMessage,
+  HostSelectionMessage,
+  HostResultMessage,
+  HostCapturedMessage,
+  HostImagePlacedMessage,
+  HostApiResultMessage,
+  HostDescribedMessage,
+  HostSelectMessage,
+  HostOpenMessage,
   PythonWrittenMessage,
   PanelOfferMessage,
   PanelOpenMessage,

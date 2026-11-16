@@ -8,7 +8,21 @@ import { packageName } from "../python/python-env.ts";
 import { HAI_SERVER } from "./agent-config.ts";
 
 /** The tools that run code: they always show a card with the script and its packages, however the scene tools are treated. */
-export const CODE_TOOLS = [`mcp__${HAI_SERVER}__python_run`, `mcp__${HAI_SERVER}__rhino_run_python`] as const;
+export const CODE_TOOLS = [`mcp__${HAI_SERVER}__python_run`, `mcp__${HAI_SERVER}__host_run`] as const;
+
+/** Running code in a host: "always allow" is kept per host, so allowing Python in Rhino never allows C# in Revit. */
+const HOST_RUN = `mcp__${HAI_SERVER}__host_run`;
+
+/**
+ * What "always allow" remembers for a call: the tool, and for a run in a host the host with it
+ * (`mcp__hai__host_run:rhino`).
+ */
+export function allowKey(tool: string, input: Record<string, unknown>): string {
+  return tool === HOST_RUN && typeof input.host === "string" ? `${tool}:${input.host}` : tool;
+}
+
+/** The tool an "always allow" entry is for, without its host. */
+const baseTool = (key: string): string => (key.startsWith(`${HOST_RUN}:`) ? HOST_RUN : key);
 
 /**
  * The geometry tools that need OpenCascade, a large package: they ask once, listing what would be installed, and run
@@ -57,7 +71,9 @@ export function summarizeInput(tool: string, input: Record<string, unknown>): st
 
 /** A one-line card summary of a code run: its title (the card shows the script and what it would install below). */
 function summarizeCode(input: Record<string, unknown>): string {
-  return typeof input.title === "string" && input.title ? input.title : "Python script";
+  const title = typeof input.title === "string" && input.title ? input.title : "Script";
+  const host = typeof input.host === "string" ? input.host : null;
+  return host ? `${title} (in ${host.charAt(0).toUpperCase()}${host.slice(1)})` : title;
 }
 
 /** The card for a geometry tool that must first install OpenCascade: what it is for (the card lists the packages). */
@@ -144,12 +160,14 @@ export class ApprovalBroker {
     return projectDir ? readAlwaysAllowed(projectDir) : [];
   }
 
-  isPreApproved(tool: string, installs: string[] = []): boolean {
+  /** Whether a call may run without a card; `tool` is the call's allow key (see `allowKey`). */
+  isPreApproved(key: string, installs: string[] = []): boolean {
+    const tool = baseTool(key);
     if ((CODE_TOOLS as readonly string[]).includes(tool)) {
       // Code runs only with the user's say-so: always allow covers a tool, but never a package the user has not seen.
       const projectDir = this.options.projectDir();
       const approved = new Set(projectDir ? readApprovedPackages(projectDir) : []);
-      return this.alwaysAllowed.includes(tool) && installs.every((spec) => approved.has(packageName(spec)));
+      return this.alwaysAllowed.includes(key) && installs.every((spec) => approved.has(packageName(spec)));
     }
     if (ASK_EVERY_TIME.includes(tool)) return false;
     if (KERNEL_TOOLS.includes(tool)) return installs.length === 0;
@@ -171,8 +189,8 @@ export class ApprovalBroker {
     const isCode = (CODE_TOOLS as readonly string[]).includes(tool);
     const installing = isCode || KERNEL_TOOLS.includes(tool);
     const installs = installing ? (this.options.pythonInstalls?.(tool, input) ?? []) : [];
-    if (this.isPreApproved(tool, installs))
-      return Promise.resolve({ behavior: "allow", updatedInput: input });
+    const key = allowKey(tool, input);
+    if (this.isPreApproved(key, installs)) return Promise.resolve({ behavior: "allow", updatedInput: input });
     const timeoutMs = this.options.timeoutMs ?? APPROVAL_TIMEOUT_MS;
     const request: ApprovalRequest = {
       id: randomUUID(),
@@ -225,7 +243,11 @@ export class ApprovalBroker {
     const { id, decision } = message.payload;
     const entry = this.pending.get(id);
     if (!entry) return true; // already decided (another client, or it timed out)
-    if (decision === "always") this.remember(entry.request.tool, entry.request.installs);
+    if (decision === "always")
+      this.remember(
+        allowKey(entry.request.tool, entry.request.input as Record<string, unknown>),
+        entry.request.installs,
+      );
     entry.settle(decision === "deny" ? "denied" : "allowed");
     return true;
   }

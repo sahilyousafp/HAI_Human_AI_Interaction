@@ -1,8 +1,9 @@
 {
-  "type": "rhino.status",
+  "type": "host.status",
   "id": "message-1",
   "payload": {
-    "python": {
+    "host": "rhino",
+    "run": {
       "state": "unavailable",
       "reason": "no engine"
     },

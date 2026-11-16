@@ -6,13 +6,11 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { afterEach, describe, expect, it } from "vitest";
 import type { WebSocket } from "ws";
 import { sharedPythonEnv } from "../../test/python-env.ts";
-import { connectFakeRhino } from "../../test/rhino-client.ts";
 import { connectClient } from "../../test/ws-client.ts";
 import type { PythonEnv } from "../python/python-env.ts";
 import { type Bridge, createBridge } from "../server.ts";
 import type { Caller } from "./agent-tokens.ts";
 import { pythonRunDescription, WORKBENCH_CAN, WORKBENCH_CANNOT } from "./python-api.ts";
-import { RHINO_DOCUMENT_SCRIPT, requirementPackages } from "./rhino-tools.ts";
 
 const ORIGIN = "http://localhost:5173";
 const TOKEN = "python-tools-token-0123456789";
@@ -66,7 +64,7 @@ describe("the capability description", () => {
     for (const name of [...WORKBENCH_CAN, ...WORKBENCH_CANNOT]) expect(description).toContain(name);
     expect(description).toMatch(/CANNOT loft, sweep, boolean/);
     expect(description).toContain("hai_3dm.save");
-    expect(description).toMatch(/rhino_run_python/);
+    expect(description).toMatch(/host_run/);
   });
 
   it.skipIf(!process.env.HAI_CHECK_RHINO3DM && false)(
@@ -221,135 +219,6 @@ describe("python_run through the MCP endpoint", () => {
     const reviewer = await mcp(address, { agent: "reviewer", tools: new Set(["get_elements"]) });
     const names = (await reviewer.listTools()).tools.map((t) => t.name);
     expect(names).not.toContain("python_run");
-    expect(names).not.toContain("rhino_run_python");
-  });
-});
-
-describe("Rhino tools through the MCP endpoint", () => {
-  const rhinoTools = new Set(["python_run", "rhino_run_python", "rhino_get_document", "get_elements"]);
-
-  it("with Rhino connected the agent has the Rhino tools, and without it (or in Python only) it does not", async () => {
-    const address = await start();
-    const names = async () => {
-      const agent = await mcp(address, { agent: "architect", tools: rhinoTools });
-      return (await agent.listTools()).tools.map((t) => t.name);
-    };
-    expect(await names()).not.toContain("rhino_run_python");
-    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
-    expect(await names()).toEqual(expect.arrayContaining(["rhino_run_python", "rhino_get_document"]));
-    const page = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
-    page.send("settings.set", { modelling: "python" });
-    await page.waitFor("rhino.state", (m) => m.payload.mode === "python");
-    expect(await names()).not.toContain("rhino_run_python");
-    rhino.ws.close();
-  });
-
-  it("a run goes to Rhino, the answer comes back, and the run is kept as a script that says it ran in Rhino", async () => {
-    const address = await start();
-    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
-    const agent = await mcp(address, { agent: "architect", tools: rhinoTools });
-    const call = agent.callTool({
-      name: "rhino_run_python",
-      arguments: { code: "# r: ladybug-core\nresult = 'lofted'", title: "Loft the canopy" },
-    });
-    const asked = await rhino.waitFor("rhino.python.run");
-    expect(asked.payload.code).toContain("lofted");
-    rhino.send("rhino.python.result", {
-      id: asked.payload.id,
-      ok: true,
-      stdout: "done\n",
-      result: "lofted",
-      durationMs: 40,
-    });
-    const body = json(await call);
-    expect(body).toMatchObject({ ok: true, output: "done\n", result: "lofted" });
-    const kept = readFileSync(join(bridge?.scene.projectDir ?? "", body.script), "utf8");
-    expect(kept).toContain("in Rhino");
-    expect(kept).toContain("# packages: ladybug-core");
-    expect(kept).toContain("# result: lofted");
-  }, 30_000);
-
-  it("a Python error in Rhino comes back as a failed result the agent can fix", async () => {
-    const address = await start();
-    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
-    const agent = await mcp(address, { agent: "architect", tools: rhinoTools });
-    const call = agent.callTool({ name: "rhino_run_python", arguments: { code: "boom()", title: "Boom" } });
-    const asked = await rhino.waitFor("rhino.python.run");
-    rhino.send("rhino.python.result", {
-      id: asked.payload.id,
-      ok: false,
-      stdout: "",
-      error: "NameError: name 'boom' is not defined",
-      durationMs: 3,
-    });
-    const result = await call;
-    expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("NameError");
-  }, 30_000);
-
-  it("a requirement line that is not a package is refused before Rhino is asked", async () => {
-    const address = await start();
-    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
-    const agent = await mcp(address, { agent: "architect", tools: rhinoTools });
-    const result = await agent.callTool({
-      name: "rhino_run_python",
-      arguments: { code: "# r: --index-url=https://evil.example\nresult = 1", title: "Bad" },
-    });
-    expect(result.isError).toBe(true);
-    expect(rhino.received.some((m) => m.type === "rhino.python.run")).toBe(false);
-  });
-
-  it("read the document: the bridge runs its own read-only script and returns what Rhino said", async () => {
-    const address = await start();
-    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
-    const agent = await mcp(address, { agent: "reviewer", tools: new Set(["rhino_get_document"]) });
-    const call = agent.callTool({ name: "rhino_get_document", arguments: {} });
-    const asked = await rhino.waitFor("rhino.python.run");
-    expect(asked.payload.code).toBe(RHINO_DOCUMENT_SCRIPT);
-    expect(asked.payload.code).not.toMatch(/\.(Add|Delete|Select|Transform|Rotate|Move)\w*\(/); // it only reads
-    rhino.send("rhino.python.result", {
-      id: asked.payload.id,
-      ok: true,
-      stdout: "",
-      result: JSON.stringify({
-        name: "tower.3dm",
-        units: "Millimeters",
-        layers: [],
-        objectCounts: {},
-        selected: [],
-      }),
-      durationMs: 9,
-    });
-    expect(json(await call)).toMatchObject({ name: "tower.3dm", units: "Millimeters" });
-  }, 30_000);
-
-  it("Python not available in Rhino: the Rhino tools are not offered (the run would fail), and the reason is shown to pages", async () => {
-    const address = await start();
-    const page = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
-    await connectFakeRhino(address, {
-      token: TOKEN,
-      python: { state: "unavailable", reason: "Python 3 is not installed in Rhino" },
-      track: sockets,
-    });
-    const state = await page.waitFor("rhino.state", (m) => m.payload.python?.state === "unavailable");
-    expect(state.payload.python).toEqual({
-      state: "unavailable",
-      reason: "Python 3 is not installed in Rhino",
-    });
-    const agent = await mcp(address, { agent: "architect", tools: rhinoTools });
-    const run = await agent.callTool({ name: "rhino_run_python", arguments: { code: "1", title: "T" } });
-    expect(run.isError).toBe(true);
-    expect(textOf(run)).toMatch(/Python is not available in Rhino: Python 3 is not installed in Rhino/);
-  });
-});
-
-describe("requirement lines", () => {
-  it("reads packages from '# r:' lines, once each, and reports what is not a package", () => {
-    expect(
-      requirementPackages(
-        "# r: ladybug-core, numpy==2.1\nimport x\n  # R: ladybug-core\n# r: --index-url=https://x\nprint()",
-      ),
-    ).toEqual({ packages: ["ladybug-core", "numpy==2.1"], invalid: ["--index-url=https://x"] });
-    expect(requirementPackages("print('# r: not a line')").packages).toEqual([]);
+    expect(names).not.toContain("host_run");
   });
 });

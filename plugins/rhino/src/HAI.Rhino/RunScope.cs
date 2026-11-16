@@ -26,7 +26,7 @@ namespace HAI.Rhino
         private readonly Dictionary<string, ObjectSnapshot> before;
         private bool finished;
 
-        private RunScope(RhinoDoc doc, PythonRunRequest request)
+        private RunScope(RhinoDoc doc, RunRequest request)
         {
             this.doc = doc;
             agent = string.IsNullOrWhiteSpace(request.Agent) ? null : request.Agent;
@@ -37,7 +37,7 @@ namespace HAI.Rhino
         }
 
         /// <summary>Starts the undo step and remembers what the document holds.</summary>
-        public static RunScope Begin(RhinoDoc doc, PythonRunRequest request) => new RunScope(doc, request);
+        public static RunScope Begin(RhinoDoc doc, RunRequest request) => new RunScope(doc, request);
 
         /// <summary>Stamps what the script added, closes the undo step and returns what changed.</summary>
         public RunChanges Finish()

@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { RhinoPythonStatus } from "./rhino.ts";
+import { HostApp, HostCapabilities, HostId, HostRunStatus } from "./host.ts";
 
 /** Bumped whenever a message shape changes incompatibly. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /** WebSocket path and subprotocol the bridge speaks. Browsers cannot set headers on a WebSocket, so the
  *  session token travels as a second subprotocol entry: `hai.token.<token>`. */
@@ -25,24 +25,39 @@ const WebHello = z.strictObject({
   protocolVersion: z.literal(PROTOCOL_VERSION),
 });
 
-/** What the Rhino plugin tells the bridge about itself when it connects. */
-export const RhinoHello = z.strictObject({
-  client: z.literal("rhino"),
+/** What a host's connector tells the bridge about itself when it connects. */
+export const HostHello = z.strictObject({
+  client: HostId,
   protocolVersion: z.literal(PROTOCOL_VERSION),
-  rhinoVersion: z.string().max(40),
-  pluginVersion: z.string().max(40),
-  python: RhinoPythonStatus,
+  app: HostApp,
+  connectorVersion: z.string().max(40),
+  run: HostRunStatus,
   /** The open document's name, or null for an unsaved one. */
   document: z.string().max(260).nullable(),
+  capabilities: HostCapabilities,
 });
-export type RhinoHello = z.infer<typeof RhinoHello>;
+export type HostHello = z.infer<typeof HostHello>;
 
-/** First message a client sends after connecting: a browser page, or the Rhino plugin. */
+/** First message a client sends after connecting: a browser page, or a host's connector. */
 export const HelloMessage = z.strictObject({
   type: z.literal("hello"),
   id: MessageId,
-  payload: z.discriminatedUnion("client", [WebHello, RhinoHello]),
+  payload: z.union([WebHello, HostHello]),
 });
+
+/**
+ * A hello from a host's connector built for an older protocol, so the bridge can tell it to update instead of only
+ * closing. Read loosely: an old connector's other fields are not this protocol's.
+ */
+export function olderHostHello(raw: unknown): HostId | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { type, payload } = raw as { type?: unknown; payload?: unknown };
+  if (type !== "hello" || typeof payload !== "object" || payload === null) return null;
+  const { client, protocolVersion } = payload as { client?: unknown; protocolVersion?: unknown };
+  const host = HostId.safeParse(client);
+  if (!host.success) return null;
+  return typeof protocolVersion === "number" && protocolVersion < PROTOCOL_VERSION ? host.data : null;
+}
 export type HelloMessage = z.infer<typeof HelloMessage>;
 
 /** Sent by the bridge in reply to hello, and whenever its state changes. */

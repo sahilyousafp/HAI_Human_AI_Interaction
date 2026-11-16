@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { ApprovalBroker, approvalsFile, readAlwaysAllowed, readApprovedPackages } from "./approvals.ts";
 
 const PYTHON = "mcp__hai__python_run";
-const RHINO = "mcp__hai__rhino_run_python";
+const HOST_RUN = "mcp__hai__host_run";
 
 function setup(installs: (tool: string, input: Record<string, unknown>) => string[]) {
   const projectDir = mkdtempSync(join(tmpdir(), "hai-pyapproval-"));
@@ -107,24 +107,49 @@ describe("Python approvals", () => {
     expect(t.cards()).toHaveLength(cardsBefore);
   });
 
-  it("Rhino runs are code too: they ask, list their requirement lines, and the scene tools still do not", async () => {
+  it("a run waits for the user: runs in a host are code too, they ask naming the host and list their requirement lines, and the scene tools still do not", async () => {
     const t = setup((tool, input) =>
-      tool === RHINO ? [...String(input.code).matchAll(/# r: (\S+)/g)].map((m) => m[1] as string) : [],
+      tool === HOST_RUN ? [...String(input.code).matchAll(/# r: (\S+)/g)].map((m) => m[1] as string) : [],
     );
-    const decision = t.broker.decide(RHINO, {
+    const decision = t.broker.decide(HOST_RUN, {
+      host: "rhino",
       code: "# r: ladybug-core\nimport Rhino",
       title: "Sun",
       timeoutSeconds: 60,
     });
-    expect(t.lastCard()).toMatchObject({ tool: RHINO, installs: ["ladybug-core"] });
+    expect(t.lastCard()).toMatchObject({
+      tool: HOST_RUN,
+      summary: "Sun (in Rhino)",
+      installs: ["ladybug-core"],
+    });
     t.decide(t.lastCard().id, "allow");
     await decision;
     const before = t.cards().length;
     expect(await t.broker.decide("mcp__hai__update_elements", { updates: [] })).toMatchObject({
       behavior: "allow",
     });
-    expect(await t.broker.decide("mcp__hai__rhino_get_document", {})).toMatchObject({ behavior: "allow" });
+    expect(await t.broker.decide("mcp__hai__host_read", { host: "rhino" })).toMatchObject({
+      behavior: "allow",
+    });
     expect(t.cards()).toHaveLength(before);
+  });
+
+  it("always allow is per host: allowing runs in Rhino does not allow them in Blender", async () => {
+    const t = setup(() => []);
+    const first = t.broker.decide(HOST_RUN, { host: "rhino", code: "1", title: "A" });
+    t.decide(t.lastCard().id, "always");
+    await first;
+    expect(readAlwaysAllowed(t.projectDir)).toEqual([`${HOST_RUN}:rhino`]);
+    const before = t.cards().length;
+    expect(await t.broker.decide(HOST_RUN, { host: "rhino", code: "2", title: "B" })).toMatchObject({
+      behavior: "allow",
+    });
+    expect(t.cards()).toHaveLength(before);
+    const blender = t.broker.decide(HOST_RUN, { host: "blender", code: "3", title: "C" });
+    expect(t.cards()).toHaveLength(before + 1);
+    expect(t.lastCard().summary).toBe("C (in Blender)");
+    t.decide(t.lastCard().id, "deny");
+    await blender;
   });
 
   it("an unanswered code card is denied, like any other", async () => {

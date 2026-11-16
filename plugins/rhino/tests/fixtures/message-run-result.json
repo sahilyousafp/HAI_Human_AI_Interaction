@@ -1,0 +1,12 @@
+{
+  "type": "host.result",
+  "id": "message-1",
+  "payload": {
+    "host": "rhino",
+    "id": "run-1",
+    "ok": true,
+    "stdout": "42\n",
+    "result": "{\"a\": 1}",
+    "durationMs": 12.5
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "type": "host.refused",
+  "id": "bridge-10",
+  "payload": {
+    "reason": "This HAI for Rhino is older than the bridge: install the new one."
+  }
+}

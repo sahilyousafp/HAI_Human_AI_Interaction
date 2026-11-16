@@ -38,6 +38,9 @@ namespace HAI.Rhino.Bridge
         /// <summary>The connection is up and hello has been sent (the document can be shared now), or it went down.</summary>
         public event Action<bool>? ConnectionChanged;
 
+        /// <summary>The bridge will not take this connector (it is built for an older protocol): the reason, to show. No retry follows.</summary>
+        public event Action<string>? Refused;
+
         public bool Connected => socket?.State == WebSocketState.Open;
 
         public BridgeClient(Func<BridgeAddress?> find, Func<Hello> hello)
@@ -126,6 +129,14 @@ namespace HAI.Rhino.Bridge
                         while (!result.EndOfMessage);
 
                         var incoming = Codec.Read(Encoding.UTF8.GetString(text.ToArray()));
+                        if (incoming?.Type == Wire.Refused)
+                        {
+                            // Trying again would only be refused again: stop, and let the user know what to do.
+                            stop.Cancel();
+                            Refused?.Invoke(incoming.As<Refused>()?.Reason ?? "The bridge refused this connector.");
+                            return;
+                        }
+
                         if (incoming != null) Received?.Invoke(incoming);
                     }
                 }
@@ -164,16 +175,22 @@ namespace HAI.Rhino.Bridge
             }
         }
 
-        /// <summary>Stores one mesh asset in the bridge before the descriptor that names it is sent.</summary>
-        public async Task<bool> UploadMesh(Guid asset, byte[] bytes)
+        /// <summary>Stores one mesh asset in this host's mirror store in the bridge, before the descriptor that names it is sent.</summary>
+        public Task<bool> UploadMesh(Guid asset, byte[] bytes) =>
+            Upload($"/mirror/{Wire.HostId}/{asset:D}", bytes, "application/octet-stream");
+
+        /// <summary>Stores a capture of the viewport (a PNG) in the bridge, before the answer that names it is sent.</summary>
+        public Task<bool> UploadCapture(Guid asset, byte[] png) => Upload($"/captures/{asset:D}", png, "image/png");
+
+        private async Task<bool> Upload(string path, byte[] bytes, string contentType)
         {
             var target = address;
             if (target == null) return false;
-            using (var request = new HttpRequestMessage(HttpMethod.Put, $"http://127.0.0.1:{target.Port}/mirror/{asset:D}"))
+            using (var request = new HttpRequestMessage(HttpMethod.Put, $"http://127.0.0.1:{target.Port}{path}"))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", target.Token);
                 request.Content = new ByteArrayContent(bytes);
-                request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                request.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
                 try
                 {
                     using (var response = await http.SendAsync(request, stop.Token).ConfigureAwait(false))

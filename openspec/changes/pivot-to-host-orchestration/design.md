@@ -51,6 +51,12 @@ Rejected:
 - *Anything else goes to the agent.* An edit that needs the host's own tools ("make this 300 thick", "fillet this edge") is a request, and the agent writes code for it.
 - Rejected: editing inside the host windows, because the user would leave HAI's view, and the hands and gestures work only there.
 
+**Asking about a selection.** The pattern is a selected area of an artifact: point at the part, say what should change, and only that part changes.
+- *The card.* The selection card lists each selected component as its host describes it (`host.describe`, from `add-host-adapters`), and adds an "Ask about this" field. A request from it, or one spoken while the selection holds, carries the components, a close-up picture of them from `agent-eyes`, and a task scope of their ids.
+- *The limit.* The bridge checks every run against that scope (`run-check.ts`). What a run changed outside it is reported on the card with the way to undo it.
+- *The result.* When the task ends, its changed, added and deleted components are highlighted until the next selection.
+- It lives in `make-hai-the-edit-surface`.
+
 **Zones.** A zone is a `TaskScope.region` claimed for a task on a host.
 - *How a zone starts.* The user draws one with the zone tool on the reference ring, or the orchestrator picks one.
 - *What it shows.* Its box reuses `ClaimBoxes`. A floating badge reuses the `ApprovalBadges` pin and shows the host's glyph, the agent's face and its state: modelling, waiting for approval, done or handed off. The objects inside update live from the host's mirror stream (100 ms coalescing, 300 ms p90 budget).

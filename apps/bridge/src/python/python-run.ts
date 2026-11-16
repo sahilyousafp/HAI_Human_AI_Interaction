@@ -70,13 +70,14 @@ export function keptHeader(
   run: { title: string; packages: string[]; agent: string | null; where?: string },
   outcome: string,
   details: string[] = [],
+  comment = "#",
 ): string {
   return [
-    `# HAI run ${stamp}${run.agent ? ` by ${run.agent}` : ""}${run.where ? ` ${run.where}` : ""}`,
-    `# title: ${run.title.replace(/\r?\n/g, " ")}`,
-    `# packages: ${run.packages.join(", ") || "none"}`,
-    `# outcome: ${outcome}`,
-    ...details.flatMap((line) => line.split(/\r?\n/).map((l) => `# ${l}`)),
+    `${comment} HAI run ${stamp}${run.agent ? ` by ${run.agent}` : ""}${run.where ? ` ${run.where}` : ""}`,
+    `${comment} title: ${run.title.replace(/\r?\n/g, " ")}`,
+    `${comment} packages: ${run.packages.join(", ") || "none"}`,
+    `${comment} outcome: ${outcome}`,
+    ...details.flatMap((line) => line.split(/\r?\n/).map((l) => `${comment} ${l}`)),
     "",
   ].join("\n");
 }
@@ -169,8 +170,17 @@ export class PythonWorkbench {
    * Keeps a script that ran somewhere else (in Rhino) the same way as one that ran here, and returns its path relative
    * to the project. The header says where it ran.
    */
+  /** Keeps a run in a host as a readable script, in the host's language, and returns its path in the project. */
   record(
-    input: { code: string; title: string; packages: string[]; agent: string | null },
+    input: {
+      code: string;
+      title: string;
+      packages: string[];
+      agent: string | null;
+      /** The host it ran in, "Rhino", and its language. */
+      host: string;
+      language: "python" | "csharp";
+    },
     result: {
       ok: boolean;
       stdout: string;
@@ -190,17 +200,23 @@ export class PythonWorkbench {
       writeFileSync(join(project, ".hai", ".gitignore"), "*\n");
     const path = join(
       dir,
-      `${freshStem(dir, `${stamp.replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}-${slug(input.title)}`)}.py`,
+      `${freshStem(dir, `${stamp.replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}-${slug(input.title)}`)}${input.language === "csharp" ? ".cs" : ".py"}`,
     );
     const outcome = result.stopped ? "stopped" : result.timedOut ? "timed out" : result.ok ? "ok" : "error";
     writeFileSync(
       path,
-      `${keptHeader(stamp, { ...input, where: "in Rhino" }, outcome, [
-        `duration: ${result.durationMs} ms`,
-        ...(result.result !== undefined ? [`result: ${result.result}`] : []),
-        ...(result.error ? [`error: ${result.error}`] : []),
-        ...(result.stdout ? ["output:", ...result.stdout.split(/\r?\n/).map((l) => `  ${l}`)] : []),
-      ])}${input.code}\n`,
+      `${keptHeader(
+        stamp,
+        { ...input, where: `in ${input.host}` },
+        outcome,
+        [
+          `duration: ${result.durationMs} ms`,
+          ...(result.result !== undefined ? [`result: ${result.result}`] : []),
+          ...(result.error ? [`error: ${result.error}`] : []),
+          ...(result.stdout ? ["output:", ...result.stdout.split(/\r?\n/).map((l) => `  ${l}`)] : []),
+        ],
+        input.language === "csharp" ? "//" : "#",
+      )}${input.code}\n`,
     );
     return relative(project, path).replace(/\\/g, "/");
   }

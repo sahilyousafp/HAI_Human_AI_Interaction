@@ -53,10 +53,11 @@ export interface SimulationGeometry {
 const m = (mm: number) => Math.round(mm) / 1000;
 const pt = ([x, y]: readonly [number, number]): Pt => [m(x), m(y)];
 
-/** The Rhino objects the mirror knows only by their boxes. */
+/** The host objects the mirror knows only by their boxes, with their host's name ("Rhino"). */
 export interface MirroredBox {
   id: string;
   name: string;
+  host: string;
   bounds: { min: [number, number, number]; max: [number, number, number] };
 }
 
@@ -69,7 +70,7 @@ export function simulationGeometry(input: {
   doc: SceneDocument;
   site: Site | null;
   context?: ReadonlyArray<ContextItem>;
-  rhino?: ReadonlyArray<MirroredBox>;
+  hosts?: ReadonlyArray<MirroredBox>;
 }): SimulationGeometry {
   const { doc } = input;
   const levels: Level[] = doc.levels;
@@ -151,12 +152,12 @@ export function simulationGeometry(input: {
       }
     }
   }
-  for (const r of input.rhino ?? [])
+  for (const r of input.hosts ?? [])
     objects.push({
       id: r.id,
       name: r.name,
       kind: "box",
-      of: "Rhino object",
+      of: `${r.host} object`,
       min: [m(r.bounds.min[0]), m(r.bounds.min[1]), m(r.bounds.min[2])],
       max: [m(r.bounds.max[0]), m(r.bounds.max[1]), m(r.bounds.max[2])],
     });
@@ -169,8 +170,10 @@ export function simulationGeometry(input: {
     ...(imported > 0
       ? [`${imported} imported model(s) are given as their bounding boxes (kind "box"), not their meshes.`]
       : []),
-    ...((input.rhino?.length ?? 0) > 0
-      ? ['Rhino objects are given as their bounding boxes (kind "box"), not their geometry.']
+    ...((input.hosts?.length ?? 0) > 0
+      ? [
+          'Host objects (from Rhino, Blender or Revit) are given as their bounding boxes (kind "box"), not their geometry.',
+        ]
       : []),
     ...(input.context
       ? [

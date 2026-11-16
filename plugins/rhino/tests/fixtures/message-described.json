@@ -1,0 +1,49 @@
+{
+  "type": "host.described",
+  "id": "message-1",
+  "payload": {
+    "host": "rhino",
+    "id": "describe-1",
+    "components": [
+      {
+        "id": "7f1c0b0e-3f0a-4a53-9d0e-5d3f1c9a1b11",
+        "name": "Canopy",
+        "type": "Closed Brep",
+        "layer": "Roof::Canopy",
+        "bounds": {
+          "min": [
+            0.0,
+            0.0,
+            3000.0
+          ],
+          "max": [
+            6000.0,
+            6000.0,
+            3900.0
+          ]
+        },
+        "quantities": {
+          "areaMm2": 79200000.0,
+          "volumeMm3": 32400000000.0
+        },
+        "quantitiesSkipped": false,
+        "material": "Timber",
+        "properties": {
+          "hai.part": "canopy",
+          "fireRating": "60"
+        }
+      },
+      {
+        "id": "a2d4c6e8-0000-4000-8000-000000000002",
+        "name": "",
+        "type": "Open Mesh",
+        "layer": "Default",
+        "bounds": null,
+        "quantities": {},
+        "quantitiesSkipped": true,
+        "material": null,
+        "properties": {}
+      }
+    ]
+  }
+}

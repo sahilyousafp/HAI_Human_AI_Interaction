@@ -1,0 +1,12 @@
+{
+  "type": "host.result",
+  "id": "message-1",
+  "payload": {
+    "host": "rhino",
+    "id": "run-2",
+    "ok": false,
+    "stdout": "",
+    "error": "NameError: name x is not defined",
+    "durationMs": 3.0
+  }
+}

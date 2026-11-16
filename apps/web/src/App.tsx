@@ -4,9 +4,11 @@ import {
   DEFAULT_STRIP,
   type FeatureId,
   type Hand,
+  HOST_IDS,
+  HOST_INFO,
+  type HostId,
   type Message,
   type MessageOf,
-  type ModellingMode,
   type ReplyVoice,
   type SpeechMode,
   type StripLayout,
@@ -32,6 +34,9 @@ import { ContextLegend } from "./context/ContextLegend.tsx";
 import { ContextClient } from "./context/context-client.ts";
 import { ProjectExporter } from "./export/exporter.ts";
 import { buildInWorker } from "./export/rhino-client.ts";
+import { HostChips } from "./hosts/HostChips.tsx";
+import { HostsSettings } from "./hosts/HostsSettings.tsx";
+import { HostMirrors } from "./hosts/host-mirror.ts";
 import { ModelImporter } from "./import/importer.ts";
 import { assetUrl, ModelAssets, mirrorAssetUrl } from "./import/model-assets.ts";
 import { convertInWorker } from "./import/rhino-client.ts";
@@ -47,9 +52,6 @@ import { CameraView } from "./perception/CameraView.tsx";
 import { watchFaceDemand } from "./perception/face-demand.ts";
 import { HandOverlay } from "./perception/HandOverlay.tsx";
 import { TrackingSession } from "./perception/tracking-session.ts";
-import { ModellingSettings } from "./rhino/ModellingSettings.tsx";
-import { RhinoMirror } from "./rhino/rhino-mirror.ts";
-import { rhinoPill } from "./rhino/rhino-view.ts";
 import { SceneClient } from "./scene/scene-client.ts";
 import { DrawingAidsSettings } from "./settings/DrawingAidsSettings.tsx";
 import { DrawingAidsStore } from "./settings/drawing-aids.ts";
@@ -66,6 +68,7 @@ import type { HoldReport, RouterTalk } from "./tools/input-router.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { PaletteSettings, ToolIcon } from "./tools/ToolOverlays.tsx";
 import { ListGroup, ListRow, Switch } from "./ui/controls.tsx";
+import { IconPill, PillGlyph } from "./ui/IconPill.tsx";
 import type { ApprovalBadge } from "./viewer/ApprovalBadges.tsx";
 import { cameraMarkers } from "./viewer/camera-markers.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
@@ -86,7 +89,7 @@ declare global {
   interface Window {
     __HAI_SCENE__?: SceneClient;
     __HAI_PANELS__?: PanelClient;
-    __HAI_MIRROR__?: RhinoMirror;
+    __HAI_MIRROR__?: HostMirrors;
     __HAI_CAMERA__?: TrackingSession;
     __HAI_VOICE__?: VoiceInput;
     __HAI_SPEECH__?: {
@@ -103,8 +106,6 @@ const SETTINGS_ICON =
 
 /** The microphone indicator: listening for names looks different from a request being spoken. */
 const MIC_LABEL = { on: "Mic on", names: "Listening for names", off: "Mic off" } as const;
-/** The Rhino pill reuses the connection pill's look: green when connected, pulsing while syncing, amber when absent. */
-const RHINO_PILL_STATE = { on: "connected", busy: "connecting", off: "offline" } as const;
 const LABELS: Record<ConnectionState["status"], { text: string; hint?: string }> = {
   "no-session": { text: "Bridge not started", hint: "Run pnpm dev from the repository root, then reload." },
   connecting: { text: "Connecting" },
@@ -186,16 +187,28 @@ export function App() {
         : new ModelAssets(() => window.__HAI_SESSION__ ?? null),
     [local],
   );
-  // Rhino's objects, drawn read-only beside the scene while Rhino is connected, and their meshes from the bridge.
+  // Every host's objects, drawn read-only beside the scene while the host is connected, and their meshes from the bridge.
   const mirror = useMemo(
-    () => new RhinoMirror((message: Message) => connection.current?.send(message) ?? false),
+    () => new HostMirrors((message: Message) => connection.current?.send(message) ?? false),
     [],
   );
   const mirrorAssets = useMemo(
-    () => new ModelAssets(() => window.__HAI_SESSION__ ?? null, undefined, mirrorAssetUrl),
+    () =>
+      Object.fromEntries(
+        HOST_IDS.map((host) => [
+          host,
+          new ModelAssets(() => window.__HAI_SESSION__ ?? null, undefined, mirrorAssetUrl(host)),
+        ]),
+      ) as Record<HostId, ModelAssets>,
     [],
   );
-  const rhinoState = useSyncExternalStore(mirror.subscribe, mirror.getStatus);
+  const rhinoState = useSyncExternalStore(mirror.byHost.rhino.subscribe, mirror.byHost.rhino.getStatus);
+  const hostsInUse = useSyncExternalStore(mirror.subscribe, () =>
+    HOST_IDS.filter((host) => {
+      const status = mirror.byHost[host].getStatus();
+      return status.connected && status.switchedOn;
+    }).join(","),
+  );
   // Open data (Settings > Open data): the source choices, the project's site and the requests made.
   const openData = useMemo(
     () => new OpenDataStore((message: Message) => connection.current?.send(message) ?? false),
@@ -263,12 +276,6 @@ export function App() {
     () => (showCameras && agentTeam ? cameraMarkers(agentTeam.cameras, agentTeam.members) : []),
     [showCameras, agentTeam],
   );
-  // How long a change in Rhino takes to be drawn here, refreshed twice a second.
-  const [rhinoMs, setRhinoMs] = useState<number | null>(null);
-  useEffect(() => {
-    const id = setInterval(() => setRhinoMs(mirror.latencyP90()), 500);
-    return () => clearInterval(id);
-  }, [mirror]);
   // Saving the project as a Rhino file: the models it uses are fetched, the file is written in a worker, and offered.
   const exporter = useMemo(
     () =>
@@ -807,7 +814,7 @@ export function App() {
     setListenForNames(on);
     saveSetting({ listenForNames: on });
   };
-  const changeModelling = (mode: ModellingMode) => saveSetting({ modelling: mode });
+  const switchHost = (host: HostId, on: boolean) => saveSetting({ hosts: { [host]: on } });
   /** Brings a .3dm the agent wrote into the viewer: fetched from the bridge, then imported as any file is. */
   const importWritten = (path: string) => {
     void importer.importFile({
@@ -823,7 +830,11 @@ export function App() {
     });
   };
   const openWrittenInRhino = (path: string) => {
-    connection.current?.send({ type: "rhino.open", id: crypto.randomUUID(), payload: { path } });
+    connection.current?.send({
+      type: "host.open",
+      id: crypto.randomUUID(),
+      payload: { host: "rhino", path },
+    });
   };
   const changeRailStrip = (layout: StripLayout) => {
     setRailStrip(layout);
@@ -877,15 +888,20 @@ export function App() {
       render: () => <FeatureSettings flags={features} />,
     },
     {
-      id: "modelling",
-      title: "Modelling",
+      id: "hosts",
+      title: "Hosts",
       icon: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5",
       tint: "var(--tint-blue)",
-      detail: rhinoState.inUse === "rhino" ? "Rhino" : "Python only",
+      detail: hostsInUse
+        ? hostsInUse
+            .split(",")
+            .map((host) => HOST_INFO[host as HostId].label)
+            .join(", ")
+        : "None connected",
       render: () => (
-        <ModellingSettings
-          mirror={mirror}
-          onChange={changeModelling}
+        <HostsSettings
+          mirrors={mirror}
+          onSwitch={switchHost}
           showOwners={showOwners}
           onShowOwners={changeShowOwners}
           showCameras={showCameras}
@@ -1000,47 +1016,30 @@ export function App() {
           )}
         </div>
         <div className="pills">
-          <output
-            className="status camera"
-            data-testid="camera-indicator"
-            data-state={cameraOn ? "on" : "off"}
-            aria-live="polite"
-          >
-            <span className="dot" aria-hidden="true" />
-            <span>{cameraOn ? "Camera on" : "Camera off"}</span>
-          </output>
-          {featureState.voice && (
-            <output
-              className="status camera"
-              data-testid="mic-indicator"
-              data-state={voiceReady ? micState : voiceStatus.kind}
-              aria-live="polite"
-            >
-              <span className="dot" aria-hidden="true" />
-              <span>{voicePillText(voiceStatus) ?? MIC_LABEL[micState]}</span>
-            </output>
-          )}
-          {(() => {
-            const pill = rhinoPill(rhinoState);
-            return pill ? (
-              <output
-                className="status"
-                data-testid="rhino-status"
-                data-state={RHINO_PILL_STATE[pill.tone]}
-                data-rhino={pill.tone}
-                aria-live="polite"
-              >
-                <span className="dot" aria-hidden="true" />
-                <span>{pill.text}</span>
-              </output>
-            ) : null;
-          })()}
-          {rhinoState.connected && rhinoMs !== null && (
-            <output className="status" data-testid="rhino-latency" aria-live="off">
-              <span className="dot" aria-hidden="true" />
-              <span>Rhino to HAI {Math.round(rhinoMs)} ms</span>
-            </output>
-          )}
+          <IconPill
+            testId="camera-indicator"
+            className="camera"
+            state={cameraOn ? "on" : "off"}
+            glyph={<PillGlyph icon={cameraOn ? "camera" : "cameraOff"} />}
+            text={cameraOn ? "Camera on" : "Camera off"}
+          />
+          {featureState.voice &&
+            (() => {
+              // The plain states are the icon alone; loading, a failure or listening for names keep their words.
+              const notice = voicePillText(voiceStatus);
+              return (
+                <IconPill
+                  testId="mic-indicator"
+                  className="camera"
+                  state={voiceReady ? micState : voiceStatus.kind}
+                  glyph={<PillGlyph icon={micState === "off" ? "micOff" : "mic"} />}
+                  text={notice ?? MIC_LABEL[micState]}
+                  showText={notice !== null || micState === "names"}
+                />
+              );
+            })()}
+          {/* Without the bridge the page cannot know what the hosts are doing: their chips go until it is back. */}
+          {bridge.status === "connected" && <HostChips mirrors={mirror} />}
           {update?.pill && (
             <button
               type="button"
@@ -1058,22 +1057,33 @@ export function App() {
               <span>{update.pill}</span>
             </button>
           )}
-          <output
-            className="status"
-            data-testid="bridge-status"
-            data-state={bridge.status}
-            aria-live="polite"
-          >
-            <span className="dot" aria-hidden="true" />
-            <span>{LOCAL_MODE && bridge.status === "connected" ? "Running here" : label.text}</span>
-            {bridge.status === "connected" && (
-              <span className="meta">
-                {LOCAL_MODE
-                  ? "nothing is saved"
-                  : `v${bridge.bridgeVersion} / ${bridge.clients} ${bridge.clients === 1 ? "client" : "clients"}`}
-              </span>
-            )}
-          </output>
+          {(() => {
+            // Connected is the icon alone, with the version and the pages in its tooltip; anything else keeps its words.
+            const connected = bridge.status === "connected";
+            const detail = !connected
+              ? null
+              : LOCAL_MODE
+                ? "nothing is saved"
+                : `v${bridge.bridgeVersion} / ${bridge.clients} ${bridge.clients === 1 ? "client" : "clients"}`;
+            const text = `${LOCAL_MODE && connected ? "Running here" : label.text}${detail ? ` ${detail}` : ""}`;
+            return (
+              <IconPill
+                testId="bridge-status"
+                state={bridge.status}
+                glyph={<PillGlyph icon="bridge" />}
+                text={text}
+                title={label.hint ? `${text}. ${label.hint}` : text}
+                showText={!connected || LOCAL_MODE}
+                meta={
+                  connected && !LOCAL_MODE && bridge.clients > 1 ? (
+                    <span className="meta" data-testid="bridge-pages">
+                      {bridge.clients} pages
+                    </span>
+                  ) : null
+                }
+              />
+            );
+          })()}
           <button
             type="button"
             className="settings-button"
@@ -1103,7 +1113,7 @@ export function App() {
             speaker={speaker}
             speakReplies={speakReplies}
             onSpeakReplies={changeSpeakReplies}
-            rhinoConnected={rhinoState.connected && rhinoState.mode !== "python"}
+            rhinoConnected={rhinoState.connected && rhinoState.switchedOn}
             onImportFile={importWritten}
             onOpenInRhino={openWrittenInRhino}
           />

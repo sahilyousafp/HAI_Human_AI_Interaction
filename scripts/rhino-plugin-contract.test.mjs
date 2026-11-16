@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { parseMessage } from "../packages/protocol/src/index.ts";
 import { decodeMeshAsset } from "../packages/scene/src/index.ts";
 
-// The Rhino plugin (plugins/rhino) is written in C#. These files are the contract between it and the bridge: the C#
+// The Rhino connector (plugins/rhino) is written in C#. These files are the contract between it and the bridge: the C#
 // tests write the messages the plugin sends and the mesh asset it makes, and compare them with the files here (set
 // HAI_UPDATE_FIXTURES=1 to write them again); this test makes the TypeScript side read the same files with the real
 // schemas and the real reader. A change to either language that breaks the other fails one of the two.
@@ -17,16 +17,23 @@ const named = (prefix) =>
     .filter((f) => f.startsWith(prefix) && f.endsWith(".json"))
     .sort();
 
+const read = (file) => parseMessage(readFileSync(join(fixtures, file), "utf8"));
+
 describe("what the plugin sends", () => {
   const files = named("message-");
   it("has every kind of message the plugin sends", () => {
     expect(files).toEqual([
-      "message-hello-no-python.json",
+      "message-api-result.json",
+      "message-capture-failed.json",
+      "message-captured.json",
+      "message-described.json",
+      "message-hello-run-unavailable.json",
       "message-hello.json",
+      "message-image-placed.json",
       "message-objects.json",
-      "message-python-error.json",
-      "message-python-result-changes.json",
-      "message-python-result.json",
+      "message-run-error.json",
+      "message-run-result-changes.json",
+      "message-run-result.json",
       "message-selection.json",
       "message-status.json",
     ]);
@@ -34,26 +41,43 @@ describe("what the plugin sends", () => {
 
   for (const file of files) {
     it(`${file} is accepted by the bridge's schemas`, () => {
-      const parsed = parseMessage(readFileSync(join(fixtures, file), "utf8"));
+      const parsed = read(file);
       expect(parsed.ok, parsed.ok ? "" : JSON.stringify(parsed.error)).toBe(true);
     });
   }
 
-  it("a hello says it is Rhino, and what Python can do", () => {
-    const ok = parseMessage(readFileSync(join(fixtures, "message-hello.json"), "utf8"));
-    expect(ok.ok && ok.message.type === "hello" && ok.message.payload.client).toBe("rhino");
-    const none = parseMessage(readFileSync(join(fixtures, "message-hello-no-python.json"), "utf8"));
-    expect(none.ok && none.message.type === "hello" && none.message.payload).toMatchObject({
+  it("every message but hello names Rhino as its host", () => {
+    for (const file of files.filter((f) => !f.startsWith("message-hello"))) {
+      const parsed = read(file);
+      expect(parsed.ok && parsed.message.payload.host, file).toBe("rhino");
+    }
+  });
+
+  it("a hello says it is Rhino, its protocol, and what it can do", () => {
+    const ok = read("message-hello.json");
+    expect(ok.ok && ok.message.type === "hello" && ok.message.payload).toMatchObject({
       client: "rhino",
-      python: { state: "unavailable" },
+      protocolVersion: 2,
+      app: { name: "Rhino 8" },
+      capabilities: {
+        languages: ["python"],
+        capture: true,
+        placeImage: true,
+        apiLookup: true,
+        describe: true,
+      },
+    });
+    const none = read("message-hello-run-unavailable.json");
+    expect(none.ok && none.message.type === "hello" && none.message.payload).toMatchObject({
+      run: { state: "unavailable" },
       document: null,
     });
   });
 
   it("a run's result carries what it added, changed and deleted, with their tags", () => {
-    const parsed = parseMessage(readFileSync(join(fixtures, "message-python-result-changes.json"), "utf8"));
-    expect(parsed.ok && parsed.message.type === "rhino.python.result").toBe(true);
-    if (!parsed.ok || parsed.message.type !== "rhino.python.result") return;
+    const parsed = read("message-run-result-changes.json");
+    expect(parsed.ok && parsed.message.type === "host.result").toBe(true);
+    if (!parsed.ok || parsed.message.type !== "host.result") return;
     const { changes } = parsed.message.payload;
     expect(changes?.added[0]).toMatchObject({
       id: "a-1",
@@ -64,9 +88,9 @@ describe("what the plugin sends", () => {
   });
 
   it("a batch names an object with no colour and no mesh the way the viewer expects", () => {
-    const parsed = parseMessage(readFileSync(join(fixtures, "message-objects.json"), "utf8"));
-    expect(parsed.ok && parsed.message.type === "rhino.objects").toBe(true);
-    if (!parsed.ok || parsed.message.type !== "rhino.objects") return;
+    const parsed = read("message-objects.json");
+    expect(parsed.ok && parsed.message.type === "host.objects").toBe(true);
+    if (!parsed.ok || parsed.message.type !== "host.objects") return;
     const [canopy, bare] = parsed.message.payload.changed;
     expect(canopy).toMatchObject({ layer: "Roof::Canopy", color: "#3c6ec8", triangles: 1152 });
     expect(canopy?.tags).toEqual({ "hai.owner": "architect" });
@@ -74,15 +98,35 @@ describe("what the plugin sends", () => {
     expect(parsed.message.payload.sync).toEqual({ done: 2, total: 40 });
     expect(parsed.message.payload.reset).toBe(true);
   });
+
+  it("a description carries quantities, a material and the object's own user strings", () => {
+    const parsed = read("message-described.json");
+    expect(parsed.ok && parsed.message.type === "host.described").toBe(true);
+    if (!parsed.ok || parsed.message.type !== "host.described") return;
+    const [canopy, mesh] = parsed.message.payload.components;
+    expect(canopy).toMatchObject({
+      type: "Closed Brep",
+      material: "Timber",
+      quantities: { volumeMm3: 3.24e10 },
+      properties: { fireRating: "60" },
+    });
+    expect(mesh).toMatchObject({ quantitiesSkipped: true, material: null, bounds: null });
+  });
 });
 
 describe("what the bridge sends the plugin", () => {
   const files = named("bridge-");
   it("has the requests the plugin answers", () => {
     expect(files).toEqual([
+      "bridge-api.json",
+      "bridge-capture-active.json",
+      "bridge-capture.json",
+      "bridge-describe.json",
+      "bridge-image-place.json",
       "bridge-open.json",
-      "bridge-python-run-claimed.json",
-      "bridge-python-run.json",
+      "bridge-refused.json",
+      "bridge-run-claimed.json",
+      "bridge-run.json",
       "bridge-select-clear.json",
       "bridge-select.json",
       "bridge-undo.json",
@@ -91,18 +135,20 @@ describe("what the bridge sends the plugin", () => {
 
   for (const file of files) {
     it(`${file} is a message the bridge's schemas produce`, () => {
-      const parsed = parseMessage(readFileSync(join(fixtures, file), "utf8"));
+      const parsed = read(file);
       expect(parsed.ok, parsed.ok ? "" : JSON.stringify(parsed.error)).toBe(true);
     });
   }
 });
 
 describe("a run request that names its agent and claim", () => {
-  it("is read with the agent, the title, the part and the claim", () => {
-    const parsed = parseMessage(readFileSync(join(fixtures, "bridge-python-run-claimed.json"), "utf8"));
-    expect(parsed.ok && parsed.message.type === "rhino.python.run").toBe(true);
-    if (!parsed.ok || parsed.message.type !== "rhino.python.run") return;
+  it("is read with the language, the agent, the title, the part and the claim", () => {
+    const parsed = read("bridge-run-claimed.json");
+    expect(parsed.ok && parsed.message.type === "host.run").toBe(true);
+    if (!parsed.ok || parsed.message.type !== "host.run") return;
     expect(parsed.message.payload).toMatchObject({
+      host: "rhino",
+      language: "python",
       agent: "architect",
       title: "Add the dome",
       part: "dome",

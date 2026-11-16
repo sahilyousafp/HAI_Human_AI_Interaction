@@ -230,7 +230,7 @@ test.describe("seeing what agents look at", () => {
       const top = async () =>
         images(await callTool(bridge, "product", "camera_capture", { preset: "top", size: 512 }))[0]?.data;
       const withMarker = await top();
-      await openSettings(page, "modelling");
+      await openSettings(page, "hosts");
       await page.getByTestId("show-cameras").click();
       await expect.poll(markers).toEqual([]);
       await closeSettings(page);

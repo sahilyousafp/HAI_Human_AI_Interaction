@@ -30,8 +30,14 @@ export type AssetResult = { ok: true } | { ok: false; status: 400 | 409 | 413; e
  * into place only once the whole file has arrived within the size limit and its header checks out.
  */
 export class AssetStore {
-  /** `projectDir` is the open project folder, or null when no project is open (then nothing can be stored). */
-  constructor(private readonly projectDir: () => string | null) {}
+  /**
+   * `projectDir` is the open project folder, or null when no project is open (then nothing can be stored). `check`
+   * says whether a stored file is what this store keeps: a mesh asset unless another check is given.
+   */
+  constructor(
+    private readonly projectDir: () => string | null,
+    private readonly check: FileCheck = checkAsset,
+  ) {}
 
   private file(id: string): string | null {
     const dir = this.projectDir();
@@ -73,7 +79,7 @@ export class AssetStore {
         },
         out,
       );
-      const checked = await checkAsset(temporary, received);
+      const checked = await this.check(temporary, received);
       if (!checked.ok) {
         await rm(temporary, { force: true });
         return { ok: false, status: 400, error: checked.error };
@@ -139,6 +145,27 @@ export class AssetStore {
 }
 
 class TooLarge extends Error {}
+
+/** Whether a file just stored is what its store keeps, and why not. */
+export type FileCheck = (file: string, size: number) => Promise<{ ok: true } | { ok: false; error: string }>;
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/** A capture is a PNG: its eight-byte signature, and at least a header after it. */
+export async function checkPng(
+  file: string,
+  size: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (size < 33) return { ok: false, error: "That is not a PNG image." };
+  const handle = await open(file, "r");
+  try {
+    const start = Buffer.alloc(8);
+    await handle.read(start, 0, 8, 0);
+    return start.equals(PNG_SIGNATURE) ? { ok: true } : { ok: false, error: "That is not a PNG image." };
+  } finally {
+    await handle.close();
+  }
+}
 
 /** Checks the header of a stored file against its size, reading only the header. */
 async function checkAsset(file: string, size: number): Promise<{ ok: true } | { ok: false; error: string }> {

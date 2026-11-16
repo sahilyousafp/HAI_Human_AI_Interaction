@@ -9,12 +9,12 @@ import { type MirroredBox, simulationGeometry } from "../open-data/simulation-ge
 import { fetchSurfaceTemperature, MAX_SURFACE_RADIUS_M } from "../open-data/surface-temperature.ts";
 import { failure, openDataFailure, text } from "./tool-results.ts";
 
-/** What `simulation_geometry` needs: the model, the site, the city context and Rhino's mirrored boxes. */
+/** What `simulation_geometry` needs: the model, the site, the city context and the hosts' mirrored boxes. */
 export interface SimulationTools {
   doc(): SceneDocument;
   site(): Site | null;
   context(): ReadonlyArray<ContextItem>;
-  rhino(): ReadonlyArray<MirroredBox>;
+  hosts(): ReadonlyArray<MirroredBox>;
 }
 
 /** What `surface_temperature` needs: the way out to open data, the site and the layer the overlay goes into. */
@@ -45,7 +45,7 @@ export function registerSimulationGeometry(register: McpServer["registerTool"], 
         simulationGeometry({
           doc: deps.doc(),
           site: deps.site(),
-          rhino: deps.rhino(),
+          hosts: deps.hosts(),
           ...(include_context ? { context: deps.context() } : {}),
         }),
       ),

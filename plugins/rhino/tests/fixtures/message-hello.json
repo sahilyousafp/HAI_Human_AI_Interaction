@@ -3,12 +3,24 @@
   "id": "message-1",
   "payload": {
     "client": "rhino",
-    "protocolVersion": 1,
-    "rhinoVersion": "8.12.24010.10",
-    "pluginVersion": "0.1.0",
-    "python": {
+    "protocolVersion": 2,
+    "app": {
+      "name": "Rhino 8",
+      "version": "8.36.25180.15001"
+    },
+    "connectorVersion": "0.2.0",
+    "run": {
       "state": "ready"
     },
-    "document": "tower.3dm"
+    "document": "tower.3dm",
+    "capabilities": {
+      "languages": [
+        "python"
+      ],
+      "capture": true,
+      "placeImage": true,
+      "apiLookup": true,
+      "describe": true
+    }
   }
 }

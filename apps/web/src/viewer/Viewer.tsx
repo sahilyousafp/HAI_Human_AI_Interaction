@@ -7,6 +7,8 @@ import {
   type Element,
   type GestureEvent,
   type Hand,
+  HOST_IDS,
+  type HostId,
   type Point2,
   type Point3Mm,
   type Ring,
@@ -50,6 +52,9 @@ import { contextExtent } from "../context/context-geometry.ts";
 import { ExportReport, SaveAs3dmButton } from "../export/ExportControls.tsx";
 import type { ProjectExporter } from "../export/exporter.ts";
 import { isSoftwareRenderer } from "../gpu.ts";
+import type { HostMirrors } from "../hosts/host-mirror.ts";
+import { MirrorLayer } from "../hosts/MirrorLayer.tsx";
+import { useMirrorVersion } from "../hosts/use-mirror-version.ts";
 import { ImportButton, ImportDropZone, ImportReport } from "../import/ImportControls.tsx";
 import type { ModelImporter } from "../import/importer.ts";
 import type { ModelAssets } from "../import/model-assets.ts";
@@ -66,9 +71,6 @@ import {
 import { LOCAL_MODE } from "../local/local-bridge.ts";
 import { GeneratedPanel } from "../panel/GeneratedPanel.tsx";
 import type { PanelClient } from "../panel/panel-client.ts";
-import { MirrorLayer } from "../rhino/MirrorLayer.tsx";
-import type { RhinoMirror } from "../rhino/rhino-mirror.ts";
-import { useMirrorVersion } from "../rhino/use-mirror-version.ts";
 import type { SceneClient, SceneState } from "../scene/scene-client.ts";
 import type { DrawingAidsStore } from "../settings/drawing-aids.ts";
 import type { FeatureFlags } from "../settings/feature-flags.ts";
@@ -963,10 +965,10 @@ export function Viewer({
   modelAssets: ModelAssets;
   /** The generated panel the agent offered, and the preview its controls lay over the scene. */
   panels: PanelClient;
-  /** Rhino's objects, drawn read-only beside the scene while Rhino is connected. */
-  mirror: RhinoMirror;
-  /** The meshes of Rhino's objects, fetched from the bridge as they are first needed. */
-  mirrorAssets: ModelAssets;
+  /** Every host's objects, drawn read-only beside the scene while the host is connected and switched on. */
+  mirror: HostMirrors;
+  /** The meshes of each host's objects, fetched from the bridge as they are first needed. */
+  mirrorAssets: Record<HostId, ModelAssets>;
   /** Elements captured while the user speaks, numbered in this order. */
   markers?: string[];
   /** Voice input: what a held pinch is listening to, shown beside the hand, and the points it rested on. */
@@ -1006,8 +1008,9 @@ export function Viewer({
   };
   const modelVersion = useSyncExternalStore(modelAssets.subscribe, modelAssets.getVersion);
   // The count of documents that have arrived whole, to frame each once; the objects themselves are the layer's own.
-  const rhinoSynced = useSyncExternalStore(mirror.subscribe, () => mirror.getSnapshot().synced);
-  const mirrorVersion = useMirrorVersion(mirror, mirrorAssets);
+  const hostsSynced = useSyncExternalStore(mirror.subscribe, () => mirror.synced);
+  const mirrorAssetList = useMemo(() => HOST_IDS.map((host) => mirrorAssets[host]), [mirrorAssets]);
+  const mirrorVersion = useMirrorVersion(mirror, mirrorAssetList);
   // The cut is applied again when elements change or a model's triangles arrive.
   const clipVersion = useMemo(
     () => ({ doc: shownDoc, modelVersion, mirrorVersion }),
@@ -1225,15 +1228,15 @@ export function Viewer({
       undo: () => void client.undo(),
       redo: () => void client.redo(),
       select: (ids) => {
-        // A pick on a Rhino object selects it in Rhino (and what Rhino reports back is highlighted here); the HAI
-        // selection is cleared so the two never show different things at once.
+        // A pick on a host's object selects it in that host (and what the host reports back is highlighted here); the
+        // HAI selection and the other hosts' are cleared so they never show different things at once.
         const picked = ids.length > 0 && ids.every((id) => mirror.has(id));
         if (picked) {
           if (client.getSnapshot().selection.length > 0) client.select([]);
           mirror.select(ids);
         } else {
           client.select(ids);
-          if (mirror.getSnapshot().selection.length > 0) mirror.select([]);
+          if (mirror.selection.length > 0) mirror.clear();
         }
       },
       // Under a HUD panel the model is hidden from the hand, as it is from the mouse.
@@ -1339,11 +1342,11 @@ export function Viewer({
     mirror,
   ]);
 
-  // When a whole Rhino document has arrived, frame it once (as a project is framed when it opens).
-  const syncedSeen = useRef(rhinoSynced);
+  // When a whole document has arrived from a host, frame it once (as a project is framed when it opens).
+  const syncedSeen = useRef(hostsSynced);
   useEffect(() => {
-    if (rhinoSynced === syncedSeen.current) return;
-    syncedSeen.current = rhinoSynced;
+    if (hostsSynced === syncedSeen.current) return;
+    syncedSeen.current = hostsSynced;
     const box = mirror.framingBounds();
     if (!box) return;
     nav.current = frameBox(
@@ -1351,7 +1354,7 @@ export function Viewer({
       [box.max[0] * MM, box.max[1] * MM, box.max[2] * MM],
     );
     invalidateRef.current();
-  }, [rhinoSynced, mirror]);
+  }, [hostsSynced, mirror]);
 
   // The agent asks for a view: the camera animates there, and gives way at once to the user's own navigation.
   useEffect(
@@ -1362,7 +1365,7 @@ export function Viewer({
         const doc = client.getSnapshot().doc;
         const boxOf = (ids: string[]) => {
           const boxes = ids.flatMap((id) => {
-            const mirrored = mirror.getSnapshot().objects.find((o) => o.id === id);
+            const mirrored = mirror.object(id);
             if (mirrored) return [mirrored.bounds];
             const element = doc?.elements[id];
             return element && doc ? [elementBounds(element, doc.levels)] : [];
@@ -1911,12 +1914,15 @@ export function Viewer({
           visible={showContext}
         />
         <OwnerDisplayContext.Provider value={owners ?? NO_OWNERS}>
-          <MirrorLayer
-            mirror={mirror}
-            assets={mirrorAssets}
-            colors={{ element: colors.element, hover: colors.hover, selected: colors.selected }}
-            hoverId={hoverId}
-          />
+          {HOST_IDS.map((host) => (
+            <MirrorLayer
+              key={host}
+              mirror={mirror.byHost[host]}
+              assets={mirrorAssets[host]}
+              colors={{ element: colors.element, hover: colors.hover, selected: colors.selected }}
+              hoverId={hoverId}
+            />
+          ))}
           <ModelAssetsContext.Provider value={modelAssets}>
             {shownDoc &&
               Object.values(shownDoc.elements)

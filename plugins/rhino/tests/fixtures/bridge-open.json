@@ -1,7 +1,8 @@
 {
-  "type": "rhino.open",
+  "type": "host.open",
   "id": "bridge-4",
   "payload": {
+    "host": "rhino",
     "path": "C:\\Users\\sahil\\project\\box.3dm"
   }
 }

@@ -29,6 +29,9 @@ export const SYSTEM_PROMPT = `You are working in HAI, an architect's design envi
   - "[sketches]": paths and outlines S1, S2 they drew for you, points in millimetres ("a wall along this", "a canopy
     over this"). They are not model elements; build from them.
   - "[markers]": the project's lettered markers A, B ("the entrance at marker B").
+  - "[components]": what is selected in a host (Rhino, Blender, Revit), one line each as the host describes it: its
+    host and id, type, layer, volume, area or length, material and its own properties (user strings, parameters).
+    "This" and "these" mean them: change them with host_run in that host, by those ids.
   - "group" in "[context]": what they selected or pointed at is one group, with its id, how many elements and its
     middle. It is one object: turn, move, scale or copy it with transform_elements on any of its ids, which always takes
     the whole group about its middle. Never move or turn its members one by one, or they scatter. get_elements with
@@ -39,7 +42,7 @@ export const SYSTEM_PROMPT = `You are working in HAI, an architect's design envi
   For curves, polylines, NURBS surfaces and smooth or organic forms (domes, vaults, canopies, minarets, anything
   round), never say it cannot be done and never fake it with many flat sides. If you have python_run, write the
   geometry in Python with rhino3dm, save it with hai_3dm as a .3dm in the project, and the user is offered Import
-  into viewer; if Rhino is connected and you have rhino_run_python, model it there instead. Read the tool's
+  into viewer; if a host (Rhino, Blender, Revit) is in use and you have host_run, model it there instead. Read the tool's
   description first: it lists exactly what can and cannot be built. Say what you made and that the file is offered.
 - To copy an element along a curve (a line element or a sketch) at a spacing or a count, with a width or size that
   changes along it, use geometry_array_along_curve. To loft through sections, sweep a profile along a rail, combine
@@ -135,7 +138,7 @@ export function writeAgentConfig(
 
 /** What the lead is told about the specialists that can change the model, whose names fill the first words. */
 export function builderCapabilities(names: string[]): string {
-  return `${names.join(", ")} can do more than massings, walls, slabs and columns: they can model curves, polylines, NURBS surfaces and smooth or organic forms (domes, vaults, arches, canopies, minarets) by writing Python with rhino3dm (python_run), and when Rhino is connected they can model in Rhino. They save a .3dm and the user is offered Import into viewer. So never tell the user these things cannot be done, and never offer only a faceted look-alike: delegate it, and say in the instruction what to make and that python_run is the way.`;
+  return `${names.join(", ")} can do more than massings, walls, slabs and columns: they can model curves, polylines, NURBS surfaces and smooth or organic forms (domes, vaults, arches, canopies, minarets) in a connected host (Rhino, Blender, Revit) with host_run, or without one by writing Python with rhino3dm (python_run), which saves a .3dm the user is offered to import. So never tell the user these things cannot be done, and never offer only a faceted look-alike: delegate it, and say in the instruction what to make and that python_run is the way.`;
 }
 
 /** How the lead splits a request that spans separate parts of the model. */

@@ -1,5 +1,7 @@
 {
-  "type": "rhino.undo",
+  "type": "host.undo",
   "id": "bridge-3",
-  "payload": {}
+  "payload": {
+    "host": "rhino"
+  }
 }

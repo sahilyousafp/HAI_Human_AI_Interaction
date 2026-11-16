@@ -72,6 +72,27 @@ export interface TurnMeta {
 
 const mm = (point: readonly number[]) => `${point.map((v) => Math.round(v)).join(", ")} mm`;
 
+/** The longest `[components]` block a request carries; the agent can ask host_describe for the rest. */
+export const COMPONENTS_MAX_CHARS = 20_000;
+
+/** A number with at most three significant decimals, for areas and volumes. */
+const tidy = (value: number) => Number(value.toPrecision(4)).toString();
+
+/** One selected component as a line of the `[components]` block. */
+function componentLine(c: NonNullable<RequestContext["components"]>[number]): string {
+  const parts = [`${c.host} ${c.id} "${c.name}"`, c.type, `layer ${c.layer}`];
+  const { areaMm2, volumeMm3, lengthMm } = c.quantities;
+  if (volumeMm3 !== undefined) parts.push(`volume ${tidy(volumeMm3 / 1e9)} m3`);
+  if (areaMm2 !== undefined) parts.push(`area ${tidy(areaMm2 / 1e6)} m2`);
+  if (lengthMm !== undefined) parts.push(`length ${Math.round(lengthMm)} mm`);
+  if (c.quantitiesSkipped) parts.push("quantities not worked out");
+  if (c.bounds) parts.push(`box ${mm(c.bounds.min)} to ${mm(c.bounds.max)}`);
+  if (c.material) parts.push(`material ${c.material}`);
+  const props = Object.entries(c.properties);
+  if (props.length > 0) parts.push(`properties: ${props.map(([k, v]) => `${k}=${String(v)}`).join(", ")}`);
+  return parts.join("; ");
+}
+
 /**
  * The text the agent receives for a request that came with context: a compact block naming what the user pointed at
  * (a spoken request's references, a held pinch's target and the points P1, P2 the hand rested on), the sketches S1,
@@ -105,6 +126,20 @@ export function withContext(text: string, context: RequestContext | undefined): 
   }
   if (context.markers?.length)
     lines.push(`[markers] ${context.markers.map((m) => `${m.letter} ${mm(m.point)}`).join("; ")}`);
+  if (context.components?.length) {
+    const block: string[] = [];
+    let size = 0;
+    for (const component of context.components) {
+      const line = `- ${componentLine(component)}`;
+      if (size + line.length > COMPONENTS_MAX_CHARS) {
+        block.push(`- and ${context.components.length - block.length} more: ask host_describe for them`);
+        break;
+      }
+      block.push(line);
+      size += line.length + 1;
+    }
+    lines.push(`[components] what is selected in the hosts, as they describe it:\n${block.join("\n")}`);
+  }
   return `${lines.join("\n")}\n${text}`;
 }
 

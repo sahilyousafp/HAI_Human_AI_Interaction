@@ -21,6 +21,10 @@ The research behind this change is in `docs/research/host-connectors.md`. It fou
 - **Zones.** While a host models, its zone in HAI's view updates live and carries the host's icon and the agent's state, the way approval badges and owner boxes show today.
 - **Speckle is the bus between hosts.** HAI's plugins publish and load through the Speckle SDKs, so a hand-off needs no clicks in a connector. Speckle is never the view.
 - **HAI's own scene becomes a sketch and review layer.** Lines, areas, markers, named views and imported references stay. Agents lose `create_elements`, `update_elements`, `transform_elements` and `delete_elements`, and the creation tools (wall, slab, column, copy, massing, line as geometry) leave the rings.
+- **Ask about a selection, as with a selected area of an artifact.**
+  - Selecting components in HAI (a tap, the lasso or a region) opens a card that lists what each one is: its type, layer, quantities, material and parameters, as its host describes it.
+  - The card has a field to ask for a change (typed or spoken). The request goes with those components and a close-up picture of them, and the agent's task is limited to them. The bridge already reports anything a run changes outside its claim.
+  - When the run ends, what changed is highlighted on the components.
 - **Other plugins and MCP servers add capabilities.** The user can connect more modelling power beside HAI's own connectors:
   - MCP servers, such as RhinoAI's Grasshopper tools, blender-mcp's asset and generation tools, Autodesk's Revit MCP read tools and Ladybug Tools MCP.
   - The host's own plugins, such as Grasshopper add-ons, Blender add-ons and Revit add-ins.

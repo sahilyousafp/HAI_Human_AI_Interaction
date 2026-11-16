@@ -35,7 +35,7 @@ namespace HAI.Rhino.Mirror
             public bool Reset;
             public SyncProgress? Sync;
             public int Next;
-            public readonly List<RhinoObjectInfo> Described = new List<RhinoObjectInfo>();
+            public readonly List<HostObjectInfo> Described = new List<HostObjectInfo>();
             public readonly List<KeyValuePair<Guid, byte[]>> Uploads = new List<KeyValuePair<Guid, byte[]>>();
             public int Generation;
         }

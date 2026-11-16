@@ -39,7 +39,7 @@ function eyes(changed: () => void = () => {}) {
   } as SceneDocument;
   return new AgentEyes({
     doc: () => doc,
-    rhinoBounds: () => [{ id: "r1", bounds: { min: [20_000, 0, 0], max: [21_000, 1000, 1000] } }],
+    hostBounds: () => [{ id: "r1", bounds: { min: [20_000, 0, 0], max: [21_000, 1000, 1000] } }],
     shoot: async () => ({ ok: false, error: "no viewer" }),
     changed,
   });
@@ -123,7 +123,7 @@ describe("agent cameras", () => {
   it("reports a viewer that did not take every picture", async () => {
     const e = new AgentEyes({
       doc: () => ({ version: 1, units: "mm", up: "Z", name: "t", levels: [], elements: {} }) as SceneDocument,
-      rhinoBounds: () => [],
+      hostBounds: () => [],
       shoot: async () => ({ ok: true, shots: [] }),
       changed: () => {},
     });

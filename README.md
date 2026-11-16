@@ -52,7 +52,7 @@ pnpm install
 pnpm dev
 ```
 
-Open http://127.0.0.1:5173. The header shows **Connected** when the web app has reached the local bridge.
+Open http://127.0.0.1:5173. The header's link icon shows a green dot when the web app has reached the local bridge (hover for **Connected**); while it has not, the pill says why in words.
 
 To run the desktop app instead (one window, the bridge started for you), use `pnpm dev:desktop`. See [docs/desktop.md](docs/desktop.md).
 

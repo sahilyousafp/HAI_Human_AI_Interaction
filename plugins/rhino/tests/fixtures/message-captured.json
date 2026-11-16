@@ -1,0 +1,11 @@
+{
+  "type": "host.captured",
+  "id": "message-1",
+  "payload": {
+    "host": "rhino",
+    "id": "capture-1",
+    "ok": true,
+    "asset": "2f8fad5b-d9cb-469f-a165-70867728950e",
+    "durationMs": 640.0
+  }
+}

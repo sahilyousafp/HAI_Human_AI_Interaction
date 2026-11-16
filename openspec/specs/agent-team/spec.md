@@ -115,3 +115,21 @@ Climate SHALL be able to set the viewer's sun for a date, a local time and a loc
 - **GIVEN** a sun study is shown
 - **WHEN** the user presses Escape
 - **THEN** the Sun study badge disappears and the normal light returns
+
+### Requirement: Python tools go to the agents that should have them
+The agents that change the model (Architect, Product) SHALL be able to use all three Rhino and Python tools. Climate SHALL be able to use the managed-environment tool and the read tool, because analysis only writes files. Reviewer SHALL be able to use the read tool only. The bridge SHALL offer an agent only the tools its definition lists, as for the other tools, and the Rhino run tool SHALL NOT be offered to an agent not marked as changing the model.
+
+#### Scenario: Roles get their tools
+- **WHEN** each default agent's session lists its tools
+- **THEN** Architect and Product have the Rhino run tool, the Python workbench tool and the Rhino read tool, Climate has the workbench tool and the read tool, and Reviewer has only the read tool
+
+#### Scenario: Reviewer cannot run Python
+- **WHEN** Reviewer's session calls the Rhino run tool or the workbench tool
+- **THEN** the bridge refuses the call because the tool is not in its definition
+
+### Requirement: Every agent can set the view
+The tool that changes the viewer's camera SHALL be offered to every agent, including Reviewer, because it does not change the scene.
+
+#### Scenario: Reviewer can look around
+- **WHEN** Reviewer's session lists its tools
+- **THEN** it includes `set_view`

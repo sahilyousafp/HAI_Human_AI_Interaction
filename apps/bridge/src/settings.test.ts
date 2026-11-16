@@ -5,7 +5,7 @@ import type { Message } from "@hai/protocol";
 import { parseMessage } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { readLastProject, writeLastProject } from "./project.ts";
-import { SettingsHub } from "./settings.ts";
+import { migrateHostSettings, SettingsHub, updateSettingsFile } from "./settings.ts";
 
 const LAYOUT = ["section", "select", "measure", null, "move", "massing", "delete", "undo"];
 const tempRoot = () => mkdtempSync(join(tmpdir(), "hai-settings-"));
@@ -17,16 +17,42 @@ const setSettings = (payload: unknown): Message => {
 };
 const set = (palette: unknown) => setSettings({ palette });
 
-describe("SettingsHub modelling mode", () => {
-  it("starts on auto, keeps the choice in the file, and ignores a value it does not know", () => {
+describe("SettingsHub hosts", () => {
+  it("starts with every host on, keeps each switch in the file, and merges one switch into the others", () => {
     const file = settingsFile(tempRoot());
     const hub = new SettingsHub(file, () => {});
-    expect(hub.modelling).toBe("auto");
-    hub.handle(setSettings({ modelling: "python" }));
-    expect(hub.modelling).toBe("python");
-    expect(new SettingsHub(file, () => {}).modelling).toBe("python");
-    writeFileSync(file, JSON.stringify({ modelling: "sometimes" }));
-    expect(new SettingsHub(file, () => {}).modelling).toBe("auto");
+    expect([hub.hostOn("rhino"), hub.hostOn("blender"), hub.hostOn("revit")]).toEqual([true, true, true]);
+    hub.handle(setSettings({ hosts: { rhino: false } }));
+    expect(hub.hostOn("rhino")).toBe(false);
+    expect(hub.hostOn("blender")).toBe(true);
+    const reopened = new SettingsHub(file, () => {});
+    expect([reopened.hostOn("rhino"), reopened.hostOn("blender")]).toEqual([false, true]);
+  });
+
+  it("switch a host off: an old Python only choice opens with Rhino off, and the old key is gone", () => {
+    const file = settingsFile(tempRoot());
+    updateSettingsFile(file, { modelling: "python", showHands: true });
+    const hub = new SettingsHub(file, () => {});
+    expect([hub.hostOn("rhino"), hub.hostOn("blender"), hub.hostOn("revit")]).toEqual([false, true, true]);
+    const written = JSON.parse(readFileSync(file, "utf8"));
+    expect(written.modelling).toBeUndefined();
+    expect(written.hosts).toEqual({ rhino: false, blender: true, revit: true });
+    expect(written.showHands).toBe(true);
+  });
+
+  it("any other old choice opens with every host on", () => {
+    for (const modelling of ["auto", "rhino", "sometimes"]) {
+      expect(migrateHostSettings({ modelling })).toEqual({
+        hosts: { rhino: true, blender: true, revit: true },
+      });
+    }
+    expect(migrateHostSettings({ showHands: true })).toEqual({ showHands: true });
+  });
+
+  it("ignores a host switch it cannot read in the file", () => {
+    const file = settingsFile(tempRoot());
+    updateSettingsFile(file, { hosts: { rhino: "yes" } });
+    expect(new SettingsHub(file, () => {}).hostOn("rhino")).toBe(true);
   });
 });
 
@@ -149,7 +175,7 @@ describe("SettingsHub", () => {
           openDataSources: {},
           openDataAcknowledged: [],
           portalHosts: [],
-          modelling: "auto",
+          hosts: { rhino: true, blender: true, revit: true },
         },
       }),
     ]);
@@ -233,7 +259,7 @@ describe("SettingsHub", () => {
           openDataSources: {},
           openDataAcknowledged: [],
           portalHosts: [],
-          modelling: "auto",
+          hosts: { rhino: true, blender: true, revit: true },
         },
       }),
     ]);

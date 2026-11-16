@@ -1,0 +1,10 @@
+{
+  "type": "host.capture",
+  "id": "bridge-6",
+  "payload": {
+    "host": "rhino",
+    "id": "capture-2",
+    "width": 640,
+    "height": 480
+  }
+}

@@ -372,7 +372,8 @@ describe("claims", () => {
 
   it("a script that went outside its claim is kept until the user undoes it or keeps it", () => {
     const { client, receive, sent } = setup();
-    receive("rhino.run.report", {
+    receive("host.run.report", {
+      host: "rhino",
       agent: "architect",
       title: "Oops",
       strays: [{ id: "w-1", name: "Wall", what: "changed" }],
@@ -380,8 +381,8 @@ describe("claims", () => {
     });
     const [report] = client.getSnapshot().runReports;
     expect(report).toMatchObject({ agent: "architect", title: "Oops" });
-    client.undoRhinoRun(report?.id as string);
-    expect(sent.at(-1)?.type).toBe("rhino.undo");
+    client.undoHostRun(report?.id as string);
+    expect(sent.at(-1)).toMatchObject({ type: "host.undo", payload: { host: "rhino" } });
     expect(client.getSnapshot().runReports).toEqual([]);
   });
 });

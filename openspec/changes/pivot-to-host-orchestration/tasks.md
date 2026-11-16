@@ -20,4 +20,4 @@
 
 ## 4. Next
 
-- [ ] 4.1 Specify `add-host-adapters` (proposal, design, specs, tasks) and start it
+- [x] 4.1 Specify `add-host-adapters` (proposal, design, specs, tasks) and start it

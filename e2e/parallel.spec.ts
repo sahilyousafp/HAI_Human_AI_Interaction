@@ -7,7 +7,7 @@ import { defaultRoster } from "../apps/bridge/src/agent/roster.ts";
 import type { Team } from "../apps/bridge/src/agent/team.ts";
 import type { Bridge } from "../apps/bridge/src/server.ts";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
-import { connectFakeRhino, rhinoBatch, rhinoObject } from "../apps/bridge/test/rhino-client.ts";
+import { connectFakeHost, hostBatch, hostObject } from "../apps/bridge/test/host-client.ts";
 import { allow, drawsInSoftware } from "./budget.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
@@ -140,7 +140,7 @@ test.describe("who holds what", () => {
     await seed(page);
     await team().request("delegate architect(-5000,-9000,12000,2000): work 60000");
     await expect.poll(() => wear(page, "dome-1").then((w) => w?.outline)).toBe(colorOf("architect"));
-    await openSettings(page, "modelling");
+    await openSettings(page, "hosts");
     await page.getByTestId("show-owners").click();
     await expect.poll(() => wear(page, "dome-1").then((w) => w?.outline)).toBeNull();
     expect(await page.evaluate(() => window.__HAI_VIEWER__?.claimBoxes?.().length)).toBe(0);
@@ -148,7 +148,7 @@ test.describe("who holds what", () => {
   });
 });
 
-test.describe("switched off, and Rhino", () => {
+test.describe("switched off, and a host", () => {
   test("Parallel modelling off: no owner tint, no boxes, no highlight", async ({ page }) => {
     await start(page);
     await seed(page);
@@ -161,22 +161,19 @@ test.describe("switched off, and Rhino", () => {
     expect(await page.evaluate(() => window.__HAI_VIEWER__?.claimBoxes?.().length)).toBe(0);
   });
 
-  test("Rhino objects that carry hai.owner wear their owner's colour too", async ({ page }) => {
+  test("host objects that carry hai.owner wear their owner's colour too", async ({ page }) => {
     await start(page);
-    const rhino = await connectFakeRhino(
-      { port: (bridge as Bridge & { port: number }).port } as AddressInfo,
-      {
-        token: (bridge as Bridge & { token: string }).token,
-      },
-    );
+    const rhino = await connectFakeHost({ port: (bridge as Bridge & { port: number }).port } as AddressInfo, {
+      token: (bridge as Bridge & { token: string }).token,
+    });
     const asset = await rhino.uploadMesh(1000, [0, 0, 0]);
     rhino.send(
-      "rhino.objects",
-      rhinoBatch({
+      "host.objects",
+      hostBatch({
         reset: true,
         changed: [
-          rhinoObject("r-owned", asset, { tags: { "hai.owner": "product" } }),
-          rhinoObject("r-free", asset, { tags: {} }),
+          hostObject("r-owned", asset, { tags: { "hai.owner": "product" } }),
+          hostObject("r-free", asset, { tags: {} }),
         ],
       }),
     );

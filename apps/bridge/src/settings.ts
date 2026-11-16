@@ -8,9 +8,10 @@ import {
   FeatureChoices,
   type FeatureId,
   GestureBindingsSchema,
+  HostChoices,
+  type HostId,
   type Message,
   type MessageOf,
-  ModellingMode,
   migrateRingSettings,
   OPEN_DATA_SOURCE_IDS,
   OPEN_DATA_SOURCES,
@@ -57,6 +58,17 @@ export function readSettingsFile(file: string): Record<string, unknown> {
   }
 }
 
+/**
+ * Settings > Modelling (Automatic, Rhino, Python only) became one switch per host: a workspace that chose Python only
+ * starts with Rhino switched off, and any other choice with every host on. The old key is dropped.
+ */
+export function migrateHostSettings(stored: Record<string, unknown>): Record<string, unknown> {
+  if (!("modelling" in stored)) return stored;
+  const { modelling, ...rest } = stored;
+  if (rest.hosts !== undefined) return rest;
+  return { ...rest, hosts: { rhino: modelling !== "python", blender: true, revit: true } };
+}
+
 /** Merges `patch` into the settings file, keeping keys other parts of the bridge wrote (like lastProject). */
 export function updateSettingsFile(file: string, patch: Record<string, unknown>): void {
   mkdirSync(dirname(file), { recursive: true });
@@ -88,7 +100,7 @@ export class SettingsHub {
     const railStrip = StripLayout.safeParse(stored.railStrip);
     const features = FeatureChoices.safeParse(stored.features);
     const drawingAids = DrawingAidChoices.safeParse(stored.drawingAids);
-    const modelling = ModellingMode.safeParse(stored.modelling);
+    const hosts = HostChoices.safeParse(stored.hosts ?? {});
     this.settings = {
       palette: palette.success ? palette.data : null,
       createPalette: createPalette.success ? createPalette.data : null,
@@ -102,7 +114,7 @@ export class SettingsHub {
       features: features.success ? features.data : null,
       drawingAids: drawingAids.success ? drawingAids.data : null,
       showHands: stored.showHands === true,
-      modelling: modelling.success ? modelling.data : "auto",
+      hosts: hosts.success ? hosts.data : { rhino: true, blender: true, revit: true },
       showOwners: stored.showOwners !== false,
       showCameras: stored.showCameras !== false,
       maxSessions: parseSessions(stored.maxSessions),
@@ -119,8 +131,11 @@ export class SettingsHub {
    */
   private static migrated(file: string): Record<string, unknown> {
     const stored = readSettingsFile(file);
-    const migrated = migrateRingSettings(stored);
-    if (JSON.stringify(migrated) !== JSON.stringify(stored)) updateSettingsFile(file, migrated);
+    const migrated = migrateHostSettings(migrateRingSettings(stored));
+    if (JSON.stringify(migrated) !== JSON.stringify(stored)) {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, `${JSON.stringify(migrated, null, 2)}\n`);
+    }
     return migrated;
   }
 
@@ -149,14 +164,14 @@ export class SettingsHub {
     send(this.snapshot());
   }
 
-  /** How the user chose the agent to model (Settings > Modelling). */
   /** How many agent sessions (Mochi, specialists, workers) may run at once. */
   get maxSessions(): number {
     return this.settings.maxSessions;
   }
 
-  get modelling(): ModellingMode {
-    return this.settings.modelling;
+  /** Whether the user lets the agent use this host (Settings > Hosts). */
+  hostOn(host: HostId): boolean {
+    return this.settings.hosts[host];
   }
 
   /** Whether a feature is on (every feature is until the user switches it off). */
@@ -180,7 +195,7 @@ export class SettingsHub {
       features,
       drawingAids,
       showHands,
-      modelling,
+      hosts,
       showOwners,
       showCameras,
       maxSessions,
@@ -204,7 +219,8 @@ export class SettingsHub {
       // Drawing aids merge the same way.
       ...(drawingAids ? { drawingAids: { ...this.settings.drawingAids, ...drawingAids } } : {}),
       ...(showHands !== undefined ? { showHands } : {}),
-      ...(modelling ? { modelling } : {}),
+      // Host switches merge, so switching one host never resets the others.
+      ...(hosts ? { hosts: { ...this.settings.hosts, ...hosts } } : {}),
       ...(showOwners !== undefined ? { showOwners } : {}),
       ...(showCameras !== undefined ? { showCameras } : {}),
       ...(maxSessions !== undefined ? { maxSessions } : {}),

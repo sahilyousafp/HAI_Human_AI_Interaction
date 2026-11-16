@@ -270,6 +270,75 @@ describe.each([{ agent: undefined }, { agent: "architect" }])(
       expect(line).toContain("; group: group-1 (2 elements, middle 100, 200, 0 mm)");
     });
 
+    it("a request knows what 'this' is: the selected host components are listed with their quantities and properties", () => {
+      const line = withContext("make these 200 mm thinner", {
+        references: [],
+        selection: [],
+        groundPoint: null,
+        components: [
+          {
+            host: "rhino",
+            id: "a1",
+            name: "Canopy",
+            type: "Closed Brep",
+            layer: "Roof",
+            bounds: { min: [0, 0, 3000], max: [6000, 6000, 3900] },
+            quantities: { areaMm2: 7.2e7, volumeMm3: 3.24e10 },
+            quantitiesSkipped: false,
+            material: "Timber",
+            properties: { "hai.part": "canopy", fireRating: 60 },
+          },
+          {
+            host: "rhino",
+            id: "a2",
+            name: "",
+            type: "Mesh",
+            layer: "Roof",
+            bounds: null,
+            quantities: {},
+            quantitiesSkipped: true,
+            material: null,
+            properties: {},
+          },
+        ],
+      });
+      expect(line).toBe(
+        [
+          "[context] references: none; selection: none; ground point: none",
+          "[components] what is selected in the hosts, as they describe it:",
+          '- rhino a1 "Canopy"; Closed Brep; layer Roof; volume 32.4 m3; area 72 m2; box 0, 0, 3000 mm to 6000, 6000, 3900 mm; material Timber; properties: hai.part=canopy, fireRating=60',
+          '- rhino a2 ""; Mesh; layer Roof; quantities not worked out',
+          "make these 200 mm thinner",
+        ].join("\n"),
+      );
+    });
+
+    it("a very large selection is cut, and the agent is told how to read the rest", () => {
+      const many = Array.from({ length: 50 }, (_, i) => ({
+        host: "revit" as const,
+        id: `e${i}`,
+        name: `Wall ${i}`,
+        type: "Basic Wall: Generic - 200mm",
+        layer: "Walls",
+        bounds: null,
+        quantities: {},
+        quantitiesSkipped: false,
+        material: null,
+        properties: Object.fromEntries(
+          Array.from({ length: 40 }, (_, j) => [`Parameter ${j}`, "x".repeat(20)]),
+        ),
+      }));
+      const line = withContext("check these", {
+        references: [],
+        selection: [],
+        groundPoint: null,
+        components: many,
+      });
+      const block = line.slice(line.indexOf("[components]"));
+      expect(block.length).toBeLessThan(21_000);
+      expect(block).toMatch(/- and \d+ more: ask host_describe for them/);
+    });
+
     it('Held target and points: the agent\'s block names the held column as "this" and the rested point as P1', async () => {
       const { hub, received } = setup(OK, agent);
       await hub.ready;

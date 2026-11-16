@@ -9,31 +9,45 @@ namespace HAI.Rhino.Core.Tests
     {
         private const string Id = "message-1";
 
+        private static Hello AHello(RunStatus run, string? document) =>
+            new Hello
+            {
+                App = new AppInfo { Name = "Rhino 8", Version = "8.36.25180.15001" },
+                ConnectorVersion = "0.2.0",
+                Run = run,
+                Document = document,
+            };
+
         [Fact]
-        public void HelloAsRhinoWithPythonReady()
+        public void HelloAsRhinoWithEverythingItCanDo()
         {
-            var json = Codec.Write(
-                Wire.Hello,
-                new Hello { RhinoVersion = "8.12.24010.10", PluginVersion = "0.1.0", Document = "tower.3dm" },
-                Id);
+            var json = Codec.Write(Wire.Hello, AHello(RunStatus.Ready(), "tower.3dm"), Id);
             Golden.Json("message-hello.json", json);
+            var payload = JObject.Parse(json)["payload"]!;
+            Assert.Equal("rhino", (string?)payload["client"]);
+            Assert.Equal(2, (int)payload["protocolVersion"]!);
+            Assert.Equal("python", (string?)payload["capabilities"]!["languages"]![0]);
         }
 
         [Fact]
-        public void HelloWithPythonUnavailableAndAnUnsavedDocument()
+        public void HelloWithRunUnavailableAndAnUnsavedDocument()
         {
-            var json = Codec.Write(
-                Wire.Hello,
-                new Hello
-                {
-                    RhinoVersion = "8.12.24010.10",
-                    PluginVersion = "0.1.0",
-                    Python = PythonStatus.Unavailable("Rhino has no Python 3 runtime yet"),
-                    Document = null,
-                },
-                Id);
-            Golden.Json("message-hello-no-python.json", json);
+            var json = Codec.Write(Wire.Hello, AHello(RunStatus.Unavailable("Rhino has no Python 3 runtime yet"), null), Id);
+            Golden.Json("message-hello-run-unavailable.json", json);
             Assert.Equal(JTokenType.Null, JObject.Parse(json)["payload"]!["document"]!.Type);
+        }
+
+        [Fact]
+        public void EveryMessageTheConnectorSendsNamesItsHost()
+        {
+            foreach (var payload in new object[]
+                     {
+                         new StatusChanged(), new ObjectBatch(), new SelectionChanged(), new RunResult(), new Captured(),
+                         new ImagePlaced(), new ApiResult(), new Described(),
+                     })
+            {
+                Assert.Equal("rhino", (string?)JObject.Parse(Codec.Write("x", payload, Id))["payload"]!["host"]);
+            }
         }
 
         [Fact]
@@ -47,7 +61,7 @@ namespace HAI.Rhino.Core.Tests
                 NotDrawn = new NotDrawn { Curves = 12, Annotations = 1, Heavy = 1, Simplified = 40 },
                 Changed =
                 {
-                    new RhinoObjectInfo
+                    new HostObjectInfo
                     {
                         Id = "7f1c0b0e-3f0a-4a53-9d0e-5d3f1c9a1b11",
                         Name = "Canopy",
@@ -59,7 +73,7 @@ namespace HAI.Rhino.Core.Tests
                         Triangles = 1152,
                         Tags = new Dictionary<string, string> { ["hai.owner"] = "architect" },
                     },
-                    new RhinoObjectInfo
+                    new HostObjectInfo
                     {
                         Id = "a2d4c6e8-0000-4000-8000-000000000002",
                         Name = "",
@@ -70,7 +84,7 @@ namespace HAI.Rhino.Core.Tests
                         Asset = null,
                         Triangles = 0,
                     },
-                    new RhinoObjectInfo
+                    new HostObjectInfo
                     {
                         Id = "b3e5d7f9-0000-4000-8000-000000000003",
                         Name = "Tree",
@@ -116,63 +130,25 @@ namespace HAI.Rhino.Core.Tests
                 "message-status.json",
                 Codec.Write(
                     Wire.Status,
-                    new StatusChanged { Python = PythonStatus.Unavailable("no engine"), Document = "tower.3dm" },
+                    new StatusChanged { Run = RunStatus.Unavailable("no engine"), Document = "tower.3dm" },
                     Id));
         }
 
         [Fact]
-        public void PythonResultsLeaveOutWhatTheScriptDidNotSet()
+        public void RunResultsLeaveOutWhatTheScriptDidNotSet()
         {
             var ok = Codec.Write(
-                Wire.PythonResult,
-                new PythonResult { Id = "run-1", Ok = true, Stdout = "42\n", Result = "{\"a\": 1}", DurationMs = 12.5 },
+                Wire.RunResult,
+                new RunResult { Id = "run-1", Ok = true, Stdout = "42\n", Result = "{\"a\": 1}", DurationMs = 12.5 },
                 Id);
-            Golden.Json("message-python-result.json", ok);
+            Golden.Json("message-run-result.json", ok);
             var failed = Codec.Write(
-                Wire.PythonResult,
-                new PythonResult { Id = "run-2", Ok = false, Stdout = "", Error = "NameError: name x is not defined", DurationMs = 3 },
+                Wire.RunResult,
+                new RunResult { Id = "run-2", Ok = false, Stdout = "", Error = "NameError: name x is not defined", DurationMs = 3 },
                 Id);
-            Golden.Json("message-python-error.json", failed);
-            var okPayload = (JObject)JObject.Parse(ok)["payload"]!;
-            Assert.False(okPayload.ContainsKey("error"));
-            var failedPayload = (JObject)JObject.Parse(failed)["payload"]!;
-            Assert.False(failedPayload.ContainsKey("result"));
-        }
-
-        [Fact]
-        public void ReadsARunRequestFromTheBridge()
-        {
-            var incoming = Codec.Read(Golden.Read("bridge-python-run.json"));
-            Assert.NotNull(incoming);
-            Assert.Equal(Wire.PythonRun, incoming!.Type);
-            var run = incoming.As<PythonRunRequest>();
-            Assert.Equal("run-1", run!.Id);
-            Assert.Equal("# r: ladybug-core\nimport Rhino\nprint(1)\nresult = 42\n", run.Code);
-            Assert.Equal(60000, run.TimeoutMs);
-        }
-
-        [Fact]
-        public void ReadsARunRequestThatNamesTheAgentItsPartAndItsClaim()
-        {
-            var incoming = Codec.Read(Golden.Read("bridge-python-run-claimed.json"));
-            Assert.NotNull(incoming);
-            var run = incoming!.As<PythonRunRequest>()!;
-            Assert.Equal("architect", run.Agent);
-            Assert.Equal("Add the dome", run.Title);
-            Assert.Equal("dome", run.Part);
-            Assert.Equal("dome", (string?)run.Claim!["part"]);
-            // A request that says nothing of this reads as before.
-            var plain = Codec.Read(Golden.Read("bridge-python-run.json"))!.As<PythonRunRequest>()!;
-            Assert.Null(plain.Agent);
-            Assert.Null(plain.Claim);
-        }
-
-        [Fact]
-        public void ReadsAnUndoRequest()
-        {
-            var incoming = Codec.Read(Golden.Read("bridge-undo.json"));
-            Assert.NotNull(incoming);
-            Assert.Equal(Wire.Undo, incoming!.Type);
+            Golden.Json("message-run-error.json", failed);
+            Assert.False(((JObject)JObject.Parse(ok)["payload"]!).ContainsKey("error"));
+            Assert.False(((JObject)JObject.Parse(failed)["payload"]!).ContainsKey("result"));
         }
 
         [Fact]
@@ -185,13 +161,116 @@ namespace HAI.Rhino.Core.Tests
                 Deleted = { new ObjectChange { Id = "d-1", Name = "Old wall" } },
             };
             var json = Codec.Write(
-                Wire.PythonResult,
-                new PythonResult { Id = "run-3", Ok = true, Stdout = "", DurationMs = 7, Changes = changes },
+                Wire.RunResult,
+                new RunResult { Id = "run-3", Ok = true, Stdout = "", DurationMs = 7, Changes = changes },
                 Id);
-            Golden.Json("message-python-result-changes.json", json);
-            // A result with no comparison leaves the field out.
-            var plain = JObject.Parse(Codec.Write(Wire.PythonResult, new PythonResult { Id = "run-4", Ok = true, DurationMs = 1 }, Id));
+            Golden.Json("message-run-result-changes.json", json);
+            var plain = JObject.Parse(Codec.Write(Wire.RunResult, new RunResult { Id = "run-4", Ok = true, DurationMs = 1 }, Id));
             Assert.False(((JObject)plain["payload"]!).ContainsKey("changes"));
+        }
+
+        [Fact]
+        public void CapturesAnswerWithTheAssetOrWhyNot()
+        {
+            Golden.Json(
+                "message-captured.json",
+                Codec.Write(
+                    Wire.Captured,
+                    new Captured { Id = "capture-1", Ok = true, Asset = "2f8fad5b-d9cb-469f-a165-70867728950e", DurationMs = 640 },
+                    Id));
+            var failed = Codec.Write(Wire.Captured, new Captured { Id = "capture-2", Ok = false, Error = "No active view.", DurationMs = 2 }, Id);
+            Golden.Json("message-capture-failed.json", failed);
+            Assert.False(((JObject)JObject.Parse(failed)["payload"]!).ContainsKey("asset"));
+        }
+
+        [Fact]
+        public void APlacedImageAnApiAnswerAndADescription()
+        {
+            Golden.Json(
+                "message-image-placed.json",
+                Codec.Write(Wire.ImagePlaced, new ImagePlaced { Id = "image-1", Ok = true, ObjectId = "c4e6a8b0-0000-4000-8000-000000000004" }, Id));
+            Golden.Json(
+                "message-api-result.json",
+                Codec.Write(
+                    Wire.ApiResult,
+                    new ApiResult
+                    {
+                        Id = "api-1",
+                        Entries =
+                        {
+                            new ApiEntry
+                            {
+                                Name = "Rhino.Geometry.Brep.CreateFromLoft",
+                                Kind = "method",
+                                Signature = "static Brep[] CreateFromLoft(IEnumerable<Curve> curves, Point3d start, Point3d end, LoftType loftType, bool closed)",
+                                Summary = "Constructs one or more Breps by lofting through a set of curves.",
+                            },
+                        },
+                    },
+                    Id));
+            Golden.Json(
+                "message-described.json",
+                Codec.Write(
+                    Wire.Described,
+                    new Described
+                    {
+                        Id = "describe-1",
+                        Components =
+                        {
+                            new Component
+                            {
+                                Id = "7f1c0b0e-3f0a-4a53-9d0e-5d3f1c9a1b11",
+                                Name = "Canopy",
+                                Type = "Closed Brep",
+                                Layer = "Roof::Canopy",
+                                Bounds = new Bounds { Min = new[] { 0.0, 0.0, 3000.0 }, Max = new[] { 6000.0, 6000.0, 3900.0 } },
+                                Quantities = new Quantities { AreaMm2 = 7.92e7, VolumeMm3 = 3.24e10 },
+                                Material = "Timber",
+                                Properties = { ["hai.part"] = "canopy", ["fireRating"] = "60" },
+                            },
+                            new Component
+                            {
+                                Id = "a2d4c6e8-0000-4000-8000-000000000002",
+                                Name = "",
+                                Type = "Open Mesh",
+                                Layer = "Default",
+                                QuantitiesSkipped = true,
+                            },
+                        },
+                    },
+                    Id));
+        }
+
+        [Fact]
+        public void ReadsARunRequestFromTheBridge()
+        {
+            var incoming = Codec.Read(Golden.Read("bridge-run.json"));
+            Assert.NotNull(incoming);
+            Assert.Equal(Wire.Run, incoming!.Type);
+            var run = incoming.As<RunRequest>();
+            Assert.Equal("run-1", run!.Id);
+            Assert.Equal("python", run.Language);
+            Assert.Equal("# r: ladybug-core\nimport Rhino\nprint(1)\nresult = 42\n", run.Code);
+            Assert.Equal(60000, run.TimeoutMs);
+        }
+
+        [Fact]
+        public void ReadsARunRequestThatNamesTheAgentItsPartAndItsClaim()
+        {
+            var run = Codec.Read(Golden.Read("bridge-run-claimed.json"))!.As<RunRequest>()!;
+            Assert.Equal("architect", run.Agent);
+            Assert.Equal("Add the dome", run.Title);
+            Assert.Equal("dome", run.Part);
+            Assert.Equal("dome", (string?)run.Claim!["part"]);
+            var plain = Codec.Read(Golden.Read("bridge-run.json"))!.As<RunRequest>()!;
+            Assert.Null(plain.Agent);
+            Assert.Null(plain.Claim);
+        }
+
+        [Fact]
+        public void ReadsAnUndoRequest()
+        {
+            Assert.Equal(Wire.Undo, Codec.Read(Golden.Read("bridge-undo.json"))!.Type);
         }
 
         [Fact]
@@ -201,17 +280,39 @@ namespace HAI.Rhino.Core.Tests
             Assert.Equal(
                 new List<string> { "7f1c0b0e-3f0a-4a53-9d0e-5d3f1c9a1b11", "a2d4c6e8-0000-4000-8000-000000000002" },
                 select.As<SelectRequest>()!.Ids);
-            var clear = Codec.Read(Golden.Read("bridge-select-clear.json"))!;
-            Assert.Empty(clear.As<SelectRequest>()!.Ids);
-            var open = Codec.Read(Golden.Read("bridge-open.json"))!;
-            Assert.Equal("C:\\Users\\sahil\\project\\box.3dm", open.As<OpenRequest>()!.Path);
+            Assert.Empty(Codec.Read(Golden.Read("bridge-select-clear.json"))!.As<SelectRequest>()!.Ids);
+            Assert.Equal("C:\\Users\\sahil\\project\\box.3dm", Codec.Read(Golden.Read("bridge-open.json"))!.As<OpenRequest>()!.Path);
+        }
+
+        [Fact]
+        public void ReadsCaptureRequestsForANamedViewAndForTheActiveOne()
+        {
+            var top = Codec.Read(Golden.Read("bridge-capture.json"))!;
+            Assert.Equal(Wire.Capture, top.Type);
+            var request = top.As<CaptureRequest>()!;
+            Assert.Equal(("capture-1", "top", 1280, 720), (request.Id, request.View, request.Width, request.Height));
+            Assert.Null(Codec.Read(Golden.Read("bridge-capture-active.json"))!.As<CaptureRequest>()!.View);
+        }
+
+        [Fact]
+        public void ReadsAnImageToPlaceTheApiQueryAndWhatToDescribe()
+        {
+            var place = Codec.Read(Golden.Read("bridge-image-place.json"))!.As<ImagePlaceRequest>()!;
+            Assert.Equal(40000, place.WidthMm);
+            Assert.Null(place.HeightMm);
+            Assert.Equal(new double[] { 0, -1, 0 }, place.Normal);
+            Assert.Equal("Brep.CreateFromLoft", Codec.Read(Golden.Read("bridge-api.json"))!.As<ApiRequest>()!.Query);
+            Assert.Single(Codec.Read(Golden.Read("bridge-describe.json"))!.As<DescribeRequest>()!.Ids);
+            var refused = Codec.Read(Golden.Read("bridge-refused.json"))!;
+            Assert.Equal(Wire.Refused, refused.Type);
+            Assert.Contains("install the new one", refused.As<Refused>()!.Reason);
         }
 
         [Theory]
         [InlineData("not json")]
         [InlineData("[]")]
         [InlineData("{\"id\":\"x\",\"payload\":{}}")]
-        [InlineData("{\"type\":\"rhino.select\",\"payload\":{}}")]
+        [InlineData("{\"type\":\"host.select\",\"payload\":{}}")]
         [InlineData("{\"type\":1,\"id\":\"x\"}")]
         public void RefusesWhatIsNotAnEnvelope(string text)
         {
@@ -221,14 +322,14 @@ namespace HAI.Rhino.Core.Tests
         [Fact]
         public void APayloadOfTheWrongShapeIsNull()
         {
-            var incoming = Codec.Read("{\"type\":\"rhino.select\",\"id\":\"s\",\"payload\":{\"ids\":\"nope\"}}")!;
+            var incoming = Codec.Read("{\"type\":\"host.select\",\"id\":\"s\",\"payload\":{\"ids\":\"nope\"}}")!;
             Assert.Null(incoming.As<SelectRequest>());
         }
 
         [Fact]
         public void LongTextIsClippedToWhatTheBridgeAccepts()
         {
-            var status = PythonStatus.Unavailable(new string('x', 900));
+            var status = RunStatus.Unavailable(new string('x', 900));
             Assert.Equal(500, status.Reason!.Length);
             Assert.EndsWith("\u2026", status.Reason);
         }
@@ -236,10 +337,11 @@ namespace HAI.Rhino.Core.Tests
         [Fact]
         public void TheProtocolConstantsMatchTheBridge()
         {
-            Assert.Equal(1, Wire.ProtocolVersion);
+            Assert.Equal(2, Wire.ProtocolVersion);
             Assert.Equal("/ws", Wire.Path);
             Assert.Equal("hai.v1", Wire.Subprotocol);
             Assert.Equal("hai.token.", Wire.TokenSubprotocolPrefix);
+            Assert.Equal("rhino", Wire.HostId);
         }
     }
 }
