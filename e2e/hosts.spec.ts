@@ -380,6 +380,19 @@ test.describe("more than one host", () => {
     expect(rhino.received.some((m) => m.type === "host.select" && m.payload.ids.length > 0)).toBe(false);
   });
 
+  test("with the bridge gone, no host chip claims to be connected", async ({ page }) => {
+    await start(page);
+    const rhino = await connect();
+    await expect(chip(page)).toHaveText("Rhino connected");
+    await bridge?.stop();
+    bridge = null;
+    await expect(page.getByTestId("bridge-status")).toHaveAttribute("data-state", "offline");
+    await expect(page.locator("[data-testid=host-status]")).toHaveCount(0);
+    // The bridge's own pill keeps its words while it is down, so the trouble is not hidden behind an icon.
+    await expect(page.getByTestId("bridge-status-text")).toBeVisible();
+    rhino.ws.close();
+  });
+
   test("a host disconnects: its layer and chip go, and the other host's stay", async ({ page }) => {
     await start(page);
     const rhino = await connect();

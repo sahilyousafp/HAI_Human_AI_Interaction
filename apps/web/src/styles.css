@@ -212,6 +212,36 @@ button {
 .status[data-state="refused"] .dot {
   background: var(--risk);
 }
+/* A compact pill (hosts, camera, mic, bridge): its icon, with its status as a dot in the icon's corner. */
+.status.icon-pill {
+  position: relative;
+  gap: 6px;
+  padding: 5px 10px 5px 8px;
+}
+.icon-pill-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--ink);
+}
+.icon-pill-icon .dot {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 7px;
+  height: 7px;
+  /* A ring in the panel colour (close to the frosted bar in both themes) cuts the dot out of the icon's lines. */
+  outline: 2px solid var(--panel);
+}
+/* The glow ring other pills give their dot would smudge a dot this small: none, whatever the state. */
+.status.icon-pill .icon-pill-icon .dot {
+  box-shadow: none;
+}
+.status.icon-pill .meta {
+  font-variant-numeric: tabular-nums;
+}
 /* Camera on uses the recording convention: a red dot, impossible to miss. */
 .status.camera[data-state="on"] {
   background: color-mix(in srgb, var(--risk) 14%, var(--fill));

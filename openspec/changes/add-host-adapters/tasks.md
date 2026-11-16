@@ -29,7 +29,7 @@
 ## 4. The viewer and the HUD
 
 - [x] 4.1 Move `apps/web/src/rhino/` to `apps/web/src/hosts/`: the mirror store keyed by host, one `MirrorLayer` per host in use, and picks as `{ host, id }` that clear the other hosts. Verify the mirror unit tests and "two hosts at once" and "a host disconnects" in `e2e/hosts.spec.ts` (moved from `e2e/rhino.spec.ts`).
-- [ ] 4.2 Add the host chips to the HUD (glyph, name, connected, p90, not-drawn counts, run status and how to fix it). Show the glyph options to the owner in an Artifact first. Verify "latency readout", "curves are counted" and "run unavailable" in e2e. Check screenshots at 1280, 1024 and 900 px and run `e2e/hud-layout.spec.ts`.
+- [x] 4.2 Add the host chips to the HUD (glyph, name, connected, p90, not-drawn counts, run status and how to fix it). Show the glyph options to the owner in an Artifact first. Verify "latency readout", "curves are counted" and "run unavailable" in e2e. Check screenshots at 1280, 1024 and 900 px and run `e2e/hud-layout.spec.ts`.
 - [x] 4.3 Replace Settings > Modelling with Settings > Hosts (a switch, status and how to connect, per host; the owner and camera switches). Verify "switch a host off" in e2e and update the settings screenshots.
 - [x] 4.4 Move the remaining readers of the Rhino state (`agent-client.ts`, `import/`, `export/`, `Viewer.tsx`, `App.tsx`). Verify the unit tests and `e2e/import.spec.ts`, `e2e/project-files.spec.ts`, `e2e/parallel.spec.ts` and `e2e/visual/rhino.visual.spec.ts` (renamed to `hosts.visual.spec.ts`; baselines renamed, not regenerated, unless the pictures differ and the difference is looked at).
 

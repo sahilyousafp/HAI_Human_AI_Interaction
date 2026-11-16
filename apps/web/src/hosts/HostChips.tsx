@@ -1,12 +1,18 @@
 import { HOST_IDS, HOST_INFO } from "@hai/protocol";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { IconPill } from "../ui/IconPill.tsx";
+import { HostGlyph } from "./HostGlyph.tsx";
 import type { HostMirror, HostMirrors } from "./host-mirror.ts";
 import { hostChip } from "./host-view.ts";
 
-/** A chip reuses the connection pill's look: green when connected, pulsing while syncing, amber when it cannot run. */
+/** A chip reuses the connection pill's states: green when connected, pulsing while syncing, amber when it cannot run. */
 const CHIP_STATE = { on: "connected", busy: "connecting", off: "offline" } as const;
 
-/** One host's chip in the top bar, and how long a change there takes to be drawn here. */
+/**
+ * One host's chip in the top bar, compact: the host's icon with its status as a dot in the corner, and beside it how
+ * long a change there takes to be drawn here (or how far a sync has got). The words ("Rhino connected") are the
+ * chip's tooltip and what a screen reader says, so several hosts fit one row of the top bar.
+ */
 function HostChip({ mirror }: { mirror: HostMirror }) {
   const state = useSyncExternalStore(mirror.subscribe, mirror.getStatus);
   const [ms, setMs] = useState<number | null>(null);
@@ -16,30 +22,42 @@ function HostChip({ mirror }: { mirror: HostMirror }) {
   }, [mirror]);
   const chip = hostChip(mirror.host, state);
   if (!chip) return null;
-  // One pill per host, its latency beside its name as the bridge pill carries its version, so a second host does not
-  // crowd the top bar onto two rows.
+  const { label } = HOST_INFO[mirror.host];
+  const latency = ms !== null && chip.tone === "on" ? `${Math.round(ms)} ms` : null;
+  const progress = chip.tone === "busy" && state.sync ? `${state.sync.done}/${state.sync.total}` : null;
+  const title = latency
+    ? `${chip.text}: a change there shows here in ${latency} (90th percentile)`
+    : chip.tone === "off" && state.run?.state === "unavailable"
+      ? `${chip.text}: ${state.run.reason}`
+      : chip.text;
   return (
-    <output
-      className="status"
-      data-testid="host-status"
-      data-host={mirror.host}
-      data-state={CHIP_STATE[chip.tone]}
-      data-tone={chip.tone}
-      aria-live="polite"
-    >
-      <span className="dot" aria-hidden="true" />
-      <span data-testid="host-status-text">{chip.text}</span>
-      {ms !== null && chip.tone === "on" && (
-        <span
-          className="meta"
-          data-testid="host-latency"
-          data-host={mirror.host}
-          title={`How long a change in ${HOST_INFO[mirror.host].label} takes to show here (90th percentile)`}
-        >
-          {Math.round(ms)} ms
-        </span>
-      )}
-    </output>
+    <IconPill
+      testId="host-status"
+      state={CHIP_STATE[chip.tone]}
+      glyph={<HostGlyph host={mirror.host} />}
+      text={chip.text}
+      title={title}
+      extra={{ "data-host": mirror.host, "data-tone": chip.tone }}
+      meta={
+        <>
+          {latency && (
+            <span
+              className="meta"
+              data-testid="host-latency"
+              data-host={mirror.host}
+              aria-label={`${label} to HAI ${latency}`}
+            >
+              {latency}
+            </span>
+          )}
+          {progress && (
+            <span className="meta" data-testid="host-progress" aria-hidden="true">
+              {progress}
+            </span>
+          )}
+        </>
+      }
+    />
   );
 }
 

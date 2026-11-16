@@ -68,6 +68,7 @@ import type { HoldReport, RouterTalk } from "./tools/input-router.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { PaletteSettings, ToolIcon } from "./tools/ToolOverlays.tsx";
 import { ListGroup, ListRow, Switch } from "./ui/controls.tsx";
+import { IconPill, PillGlyph } from "./ui/IconPill.tsx";
 import type { ApprovalBadge } from "./viewer/ApprovalBadges.tsx";
 import { cameraMarkers } from "./viewer/camera-markers.tsx";
 import { LatencyTracker } from "./viewer/latency.ts";
@@ -1015,27 +1016,30 @@ export function App() {
           )}
         </div>
         <div className="pills">
-          <output
-            className="status camera"
-            data-testid="camera-indicator"
-            data-state={cameraOn ? "on" : "off"}
-            aria-live="polite"
-          >
-            <span className="dot" aria-hidden="true" />
-            <span>{cameraOn ? "Camera on" : "Camera off"}</span>
-          </output>
-          {featureState.voice && (
-            <output
-              className="status camera"
-              data-testid="mic-indicator"
-              data-state={voiceReady ? micState : voiceStatus.kind}
-              aria-live="polite"
-            >
-              <span className="dot" aria-hidden="true" />
-              <span>{voicePillText(voiceStatus) ?? MIC_LABEL[micState]}</span>
-            </output>
-          )}
-          <HostChips mirrors={mirror} />
+          <IconPill
+            testId="camera-indicator"
+            className="camera"
+            state={cameraOn ? "on" : "off"}
+            glyph={<PillGlyph icon={cameraOn ? "camera" : "cameraOff"} />}
+            text={cameraOn ? "Camera on" : "Camera off"}
+          />
+          {featureState.voice &&
+            (() => {
+              // The plain states are the icon alone; loading, a failure or listening for names keep their words.
+              const notice = voicePillText(voiceStatus);
+              return (
+                <IconPill
+                  testId="mic-indicator"
+                  className="camera"
+                  state={voiceReady ? micState : voiceStatus.kind}
+                  glyph={<PillGlyph icon={micState === "off" ? "micOff" : "mic"} />}
+                  text={notice ?? MIC_LABEL[micState]}
+                  showText={notice !== null || micState === "names"}
+                />
+              );
+            })()}
+          {/* Without the bridge the page cannot know what the hosts are doing: their chips go until it is back. */}
+          {bridge.status === "connected" && <HostChips mirrors={mirror} />}
           {update?.pill && (
             <button
               type="button"
@@ -1053,22 +1057,33 @@ export function App() {
               <span>{update.pill}</span>
             </button>
           )}
-          <output
-            className="status"
-            data-testid="bridge-status"
-            data-state={bridge.status}
-            aria-live="polite"
-          >
-            <span className="dot" aria-hidden="true" />
-            <span>{LOCAL_MODE && bridge.status === "connected" ? "Running here" : label.text}</span>
-            {bridge.status === "connected" && (
-              <span className="meta">
-                {LOCAL_MODE
-                  ? "nothing is saved"
-                  : `v${bridge.bridgeVersion} / ${bridge.clients} ${bridge.clients === 1 ? "client" : "clients"}`}
-              </span>
-            )}
-          </output>
+          {(() => {
+            // Connected is the icon alone, with the version and the pages in its tooltip; anything else keeps its words.
+            const connected = bridge.status === "connected";
+            const detail = !connected
+              ? null
+              : LOCAL_MODE
+                ? "nothing is saved"
+                : `v${bridge.bridgeVersion} / ${bridge.clients} ${bridge.clients === 1 ? "client" : "clients"}`;
+            const text = `${LOCAL_MODE && connected ? "Running here" : label.text}${detail ? ` ${detail}` : ""}`;
+            return (
+              <IconPill
+                testId="bridge-status"
+                state={bridge.status}
+                glyph={<PillGlyph icon="bridge" />}
+                text={text}
+                title={label.hint ? `${text}. ${label.hint}` : text}
+                showText={!connected || LOCAL_MODE}
+                meta={
+                  connected && !LOCAL_MODE && bridge.clients > 1 ? (
+                    <span className="meta" data-testid="bridge-pages">
+                      {bridge.clients} pages
+                    </span>
+                  ) : null
+                }
+              />
+            );
+          })()}
           <button
             type="button"
             className="settings-button"

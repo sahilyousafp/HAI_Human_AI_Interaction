@@ -6,7 +6,7 @@ Speaking is the main way to ask the agent. Say what you want while you point at 
 
 - **Hold a pinch on what you mean** (hold to talk): the microphone listens while you hold, about what was under your hand, and what you said is sent the moment you let go, with no countdown. See [gestures.md](gestures.md#hold-to-talk).
 - **Press the microphone button** in the agent panel, or **hold the `` ` `` key** (the key left of 1; releasing it ends what you are saying). **Ask agent** (its A key) starts listening too.
-- Speak. The microphone indicator in the header shows **Mic on** while the microphone is live, and the bar above the input shows a level meter while you speak.
+- Speak. The microphone icon in the header shows a green dot while the microphone is live (hover for **Mic on**), and the bar above the input shows a level meter while you speak.
 - Start with a name to choose who does it: "Architect, add a stair core here". The name is taken out and Mochi hands the request to Architect ([agents.md](agents.md)).
 - Stop talking: after a short silence the request ends, the microphone stops, and the transcript appears.
 - If nobody speaks for 8 seconds the microphone stops and the bar says why: **the microphone is picking up nothing** (it may be muted, or Windows may be using another one: check the input device in the sound settings) or **I heard sound but no speech** (speak a little louder or closer).

@@ -39,7 +39,7 @@ Names are matched forgivingly, because speech recognition mishears them. The fir
 **Listen for names** in the Voice settings keeps the microphone open, so you can start a request just by saying a name: "Mochi, what is everyone doing?"
 
 - It is **off** until you turn it on.
-- While it is on, the header shows **Listening for names** in a dashed amber pill, distinct from **Mic on** and **Mic off**.
+- While it is on, the header shows **Listening for names** in a dashed amber pill, with its words showing, distinct from the microphone icon alone (on or off).
 - Everything you say is turned into text on this laptop, as for any voice request. A transcript that does not start with a team name is dropped at once, in memory: it is never shown, sent or kept.
 - A transcript that does start with a name goes to the usual review: it waits 1.5 s with a countdown, a nod or **Enter** sends it, a shake or **Escape** discards it.
 - While Mochi is speaking, what the microphone hears is ignored, so Mochi's own words never become a request.
