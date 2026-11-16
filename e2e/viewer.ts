@@ -2,10 +2,11 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page } from "@playwright/test";
+import { DEFAULT_PORT } from "../apps/bridge/src/config.ts";
 import type { PythonEnv } from "../apps/bridge/src/python/python-env.ts";
 import { type Bridge, type BridgeOptions, createBridge } from "../apps/bridge/src/server.ts";
 import type { AgentProvider } from "../packages/agent-core/src/index.ts";
-import { E2E_ORIGINS } from "./stack.ts";
+import { E2E_BRIDGE_PORT, E2E_ORIGINS, E2E_WEB_PORT } from "./stack.ts";
 
 export type Camera = {
   target: [number, number, number];
@@ -18,9 +19,14 @@ let nextPort = 4900;
 
 /** Ports Chromium refuses to connect to (ERR_UNSAFE_PORT): a bridge on one never reaches the page. */
 const UNSAFE_PORTS = new Set([5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080]);
+/**
+ * Ports already taken by the servers the tests run against, and by the app a developer may have open: a full run
+ * starts a few hundred bridges, so the count passes them (at 5183 it met the test web server, EADDRINUSE).
+ */
+const TAKEN_PORTS = new Set([E2E_WEB_PORT, E2E_BRIDGE_PORT, DEFAULT_PORT, 5173]);
 
 function freshPort(): number {
-  while (UNSAFE_PORTS.has(nextPort)) nextPort++;
+  while (UNSAFE_PORTS.has(nextPort) || TAKEN_PORTS.has(nextPort)) nextPort++;
   return nextPort++;
 }
 
