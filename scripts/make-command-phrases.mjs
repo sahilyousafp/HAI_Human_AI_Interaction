@@ -202,7 +202,8 @@ for (let i = 0; i < 12; i++) {
   );
 }
 
-// Copy and array.
+// Copy, array and scale made geometry and are gone: said as they were, each is heard as that removed command (the
+// reply says to ask the agent), so every way of saying one still reads as its plain wording.
 for (const verb of COPY_VERBS) {
   add("copy", wrap(verb), "copy");
   for (let i = 0; i < 5; i++) {
@@ -216,7 +217,7 @@ for (const [c, cPlain] of COUNTS.filter(([, p]) => p.includes("times"))) {
     const [d, dPlain] = pick(DISTANCES);
     const [say, plain] = pick(DIRECTIONS);
     add("copy", wrap(`${pick(COPY_VERBS)} ${c} ${d} ${say}`), `copy ${cPlain} ${dPlain} ${plain}`);
-    add("copy", wrap(`array ${c} ${d} ${say}`), `copy ${cPlain} ${dPlain} ${plain}`);
+    add("array", wrap(`array ${c} ${d} ${say}`), `array ${cPlain} ${dPlain} ${plain}`);
   }
   add("array", wrap(`array ${c}`), `array ${cPlain}`);
   add("array", wrap(`array this ${c}`), `array ${cPlain}`);
@@ -376,19 +377,15 @@ const corrections = [
   ["make it 1500 millimetres", { kind: "length", mm: 1500 }],
   ["make it a metre", { kind: "length", mm: 1000 }],
   ["make it 3 feet", { kind: "length", mm: 914.4 }],
-  ["make it 6 times", { kind: "count", count: 6 }],
-  ["change it to six times", { kind: "count", count: 6 }],
-  ["make it 6 copies", { kind: "count", count: 6 }],
-  ["no, 3 times", { kind: "count", count: 3 }],
-  ["actually ten times", { kind: "count", count: 10 }],
-  ["make the count 8 times", { kind: "count", count: 8 }],
   ["make it 45 degrees", { kind: "angle", deg: 45 }],
   ["change it to forty five degrees", { kind: "angle", deg: 45 }],
   ["no, 30 degrees", { kind: "angle", deg: 30 }],
   ["make the angle 60 degrees", { kind: "angle", deg: 60 }],
   ["actually 90 degrees", { kind: "angle", deg: 90 }],
-  ["make it 50 percent", { kind: "factor", factor: 0.5 }],
-  ["change it to 75 percent", { kind: "factor", factor: 0.75 }],
+  ["make it 20 degrees", { kind: "angle", deg: 20 }],
+  ["change the angle to fifteen degrees", { kind: "angle", deg: 15 }],
+  ["no, two metres", { kind: "length", mm: 2000 }],
+  ["actually 3.5 m", { kind: "length", mm: 3500 }],
   ["make it 4", { kind: "number", value: 4 }],
   ["change it to 4", { kind: "number", value: 4 }],
   ["make it four", { kind: "number", value: 4 }],
@@ -398,8 +395,12 @@ const corrections = [
 ];
 for (const [text, expect] of corrections)
   entries.push({ group: "correction", kind: "correction", text, expect });
-// Said like a correction but not one: they name something, or are a new request.
+// Said like a correction but not one: they name something, or are a new request, or put right a count or a factor,
+// which only the removed copy, array and scale had.
 for (const text of [
+  "make it 6 times",
+  "no, 3 times",
+  "make it 50 percent",
   "make this 300 thick",
   "make this wall three hundred thick",
   "make it taller",

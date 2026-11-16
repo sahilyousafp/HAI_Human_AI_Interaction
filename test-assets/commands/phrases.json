@@ -3,7 +3,7 @@
  "counts": {
   "offline": 542,
   "agent": 50,
-  "corrections": 48
+  "corrections": 47
  },
  "entries": [
   {
@@ -1225,10 +1225,10 @@
    "plain": "copy 4 times 2000 mm down"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "okay array 4 times two thousand downwards, thanks",
-   "plain": "copy 4 times 2000 mm down"
+   "plain": "array 4 times 2000 mm down"
   },
   {
    "group": "copy",
@@ -1237,10 +1237,10 @@
    "plain": "copy 4 times 30 cm east"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "um array 4 times thirty centimeters east for me",
-   "plain": "copy 4 times 30 cm east"
+   "plain": "array 4 times 30 cm east"
   },
   {
    "group": "copy",
@@ -1249,10 +1249,10 @@
    "plain": "copy 4 times 3 m south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "I'd like to array 4 times three metres south",
-   "plain": "copy 4 times 3 m south"
+   "plain": "array 4 times 3 m south"
   },
   {
    "group": "copy",
@@ -1261,10 +1261,10 @@
    "plain": "copy 4 times 3 m x"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "let's array 4 times three metres in the x direction",
-   "plain": "copy 4 times 3 m x"
+   "plain": "array 4 times 3 m x"
   },
   {
    "group": "array",
@@ -1292,10 +1292,10 @@
    "plain": "copy 4 times 1 m south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "now array four times a metre backward now",
-   "plain": "copy 4 times 1 m south"
+   "plain": "array 4 times 1 m south"
   },
   {
    "group": "copy",
@@ -1304,10 +1304,10 @@
    "plain": "copy 4 times 20 cm south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "array four times twenty centimetres to the south now",
-   "plain": "copy 4 times 20 cm south"
+   "plain": "array 4 times 20 cm south"
   },
   {
    "group": "copy",
@@ -1316,10 +1316,10 @@
    "plain": "copy 4 times 3 m east"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "I'd like to array four times three metres to the right for me",
-   "plain": "copy 4 times 3 m east"
+   "plain": "array 4 times 3 m east"
   },
   {
    "group": "copy",
@@ -1328,10 +1328,10 @@
    "plain": "copy 4 times 30 cm down"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "could you array four times thirty centimeters down",
-   "plain": "copy 4 times 30 cm down"
+   "plain": "array 4 times 30 cm down"
   },
   {
    "group": "array",
@@ -1359,10 +1359,10 @@
    "plain": "copy 5 times 3 m up"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "now array 5 times 3 meters on the z axis upwards for me",
-   "plain": "copy 5 times 3 m up"
+   "plain": "array 5 times 3 m up"
   },
   {
    "group": "copy",
@@ -1371,10 +1371,10 @@
    "plain": "copy 5 times 6 inches x"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "so array 5 times 6 inches along the x axis",
-   "plain": "copy 5 times 6 inches x"
+   "plain": "array 5 times 6 inches x"
   },
   {
    "group": "copy",
@@ -1383,10 +1383,10 @@
    "plain": "copy 5 times 5 m south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "so array 5 times 5 meters back for me",
-   "plain": "copy 5 times 5 m south"
+   "plain": "array 5 times 5 m south"
   },
   {
    "group": "copy",
@@ -1395,10 +1395,10 @@
    "plain": "copy 5 times 0.5 m x"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "could you array 5 times half a metre in the x direction",
-   "plain": "copy 5 times 0.5 m x"
+   "plain": "array 5 times 0.5 m x"
   },
   {
    "group": "array",
@@ -1426,10 +1426,10 @@
    "plain": "copy 5 times 2.5 m south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "I want to array five times two and a half metres south, thanks",
-   "plain": "copy 5 times 2.5 m south"
+   "plain": "array 5 times 2.5 m south"
   },
   {
    "group": "copy",
@@ -1438,10 +1438,10 @@
    "plain": "copy 5 times 20 cm south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "array five times twenty centimetres south please",
-   "plain": "copy 5 times 20 cm south"
+   "plain": "array 5 times 20 cm south"
   },
   {
    "group": "copy",
@@ -1450,10 +1450,10 @@
    "plain": "copy 5 times 50 cm south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "so array five times fifty centimetres along the y axis backwards, thanks",
-   "plain": "copy 5 times 50 cm south"
+   "plain": "array 5 times 50 cm south"
   },
   {
    "group": "copy",
@@ -1462,10 +1462,10 @@
    "plain": "copy 5 times 2.5 m east"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "can you please array five times two and a half metres towards the east please",
-   "plain": "copy 5 times 2.5 m east"
+   "plain": "array 5 times 2.5 m east"
   },
   {
    "group": "array",
@@ -1493,10 +1493,10 @@
    "plain": "copy 6 times 6 inches west"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "array 6 times 6 inches west, thanks",
-   "plain": "copy 6 times 6 inches west"
+   "plain": "array 6 times 6 inches west"
   },
   {
    "group": "copy",
@@ -1505,10 +1505,10 @@
    "plain": "copy 6 times 50 cm east"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "array 6 times fifty centimetres along the x axis to the right now",
-   "plain": "copy 6 times 50 cm east"
+   "plain": "array 6 times 50 cm east"
   },
   {
    "group": "copy",
@@ -1517,10 +1517,10 @@
    "plain": "copy 6 times 10 m x"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "um array 6 times ten metres along x",
-   "plain": "copy 6 times 10 m x"
+   "plain": "array 6 times 10 m x"
   },
   {
    "group": "copy",
@@ -1529,10 +1529,10 @@
    "plain": "copy 6 times 0.5 m west"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "go ahead and array 6 times half a metre left, thanks",
-   "plain": "copy 6 times 0.5 m west"
+   "plain": "array 6 times 0.5 m west"
   },
   {
    "group": "array",
@@ -1560,10 +1560,10 @@
    "plain": "copy 10 times 1 m south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "let's array ten times a metre backwards thank you",
-   "plain": "copy 10 times 1 m south"
+   "plain": "array 10 times 1 m south"
   },
   {
    "group": "copy",
@@ -1572,10 +1572,10 @@
    "plain": "copy 10 times 3 m south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "array ten times 3 meters back now",
-   "plain": "copy 10 times 3 m south"
+   "plain": "array 10 times 3 m south"
   },
   {
    "group": "copy",
@@ -1584,10 +1584,10 @@
    "plain": "copy 10 times 2 feet south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "go ahead and array ten times two feet along the y axis backwards, thanks",
-   "plain": "copy 10 times 2 feet south"
+   "plain": "array 10 times 2 feet south"
   },
   {
    "group": "copy",
@@ -1596,10 +1596,10 @@
    "plain": "copy 10 times 12500 mm south"
   },
   {
-   "group": "copy",
+   "group": "array",
    "kind": "offline",
    "text": "could you array ten times twelve thousand five hundred millimetres backward",
-   "plain": "copy 10 times 12500 mm south"
+   "plain": "array 10 times 12500 mm south"
   },
   {
    "group": "array",
@@ -3448,60 +3448,6 @@
   {
    "group": "correction",
    "kind": "correction",
-   "text": "make it 6 times",
-   "expect": {
-    "kind": "count",
-    "count": 6
-   }
-  },
-  {
-   "group": "correction",
-   "kind": "correction",
-   "text": "change it to six times",
-   "expect": {
-    "kind": "count",
-    "count": 6
-   }
-  },
-  {
-   "group": "correction",
-   "kind": "correction",
-   "text": "make it 6 copies",
-   "expect": {
-    "kind": "count",
-    "count": 6
-   }
-  },
-  {
-   "group": "correction",
-   "kind": "correction",
-   "text": "no, 3 times",
-   "expect": {
-    "kind": "count",
-    "count": 3
-   }
-  },
-  {
-   "group": "correction",
-   "kind": "correction",
-   "text": "actually ten times",
-   "expect": {
-    "kind": "count",
-    "count": 10
-   }
-  },
-  {
-   "group": "correction",
-   "kind": "correction",
-   "text": "make the count 8 times",
-   "expect": {
-    "kind": "count",
-    "count": 8
-   }
-  },
-  {
-   "group": "correction",
-   "kind": "correction",
    "text": "make it 45 degrees",
    "expect": {
     "kind": "angle",
@@ -3547,19 +3493,37 @@
   {
    "group": "correction",
    "kind": "correction",
-   "text": "make it 50 percent",
+   "text": "make it 20 degrees",
    "expect": {
-    "kind": "factor",
-    "factor": 0.5
+    "kind": "angle",
+    "deg": 20
    }
   },
   {
    "group": "correction",
    "kind": "correction",
-   "text": "change it to 75 percent",
+   "text": "change the angle to fifteen degrees",
    "expect": {
-    "kind": "factor",
-    "factor": 0.75
+    "kind": "angle",
+    "deg": 15
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "no, two metres",
+   "expect": {
+    "kind": "length",
+    "mm": 2000
+   }
+  },
+  {
+   "group": "correction",
+   "kind": "correction",
+   "text": "actually 3.5 m",
+   "expect": {
+    "kind": "length",
+    "mm": 3500
    }
   },
   {
@@ -3615,6 +3579,21 @@
     "kind": "number",
     "value": 3
    }
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "make it 6 times"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "no, 3 times"
+  },
+  {
+   "group": "correction",
+   "kind": "not-correction",
+   "text": "make it 50 percent"
   },
   {
    "group": "correction",

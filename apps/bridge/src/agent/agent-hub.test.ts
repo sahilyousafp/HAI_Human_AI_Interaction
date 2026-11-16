@@ -313,6 +313,20 @@ describe.each([{ agent: undefined }, { agent: "architect" }])(
       );
     });
 
+    it("ask about this: a limited request tells the agent to change only those objects, and how to look at them", () => {
+      const line = withContext("make these 200 mm thinner", {
+        references: [],
+        selection: [],
+        groundPoint: null,
+        limitTo: { host: "rhino", ids: ["a1", "a2"] },
+      });
+      expect(line).toContain(
+        "[limit] the user asked about these objects in rhino only: a1, a2. Change only them;",
+      );
+      expect(line).toContain("camera_set framing these ids");
+      expect(line.endsWith("make these 200 mm thinner")).toBe(true);
+    });
+
     it("a very large selection is cut, and the agent is told how to read the rest", () => {
       const many = Array.from({ length: 50 }, (_, i) => ({
         host: "revit" as const,

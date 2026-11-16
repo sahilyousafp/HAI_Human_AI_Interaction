@@ -303,3 +303,51 @@ describe("ViewRequest", () => {
     expect(ViewRequest.safeParse(request).success).toBe(false);
   });
 });
+
+describe("edits made in HAI on a host's objects", () => {
+  const move = [1, 0, 0, 2000, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+  it.each([
+    [
+      "host.edit",
+      { host: "rhino", id: "e1", label: "Move", op: { op: "transform", ids: ["a1"], matrix: move } },
+    ],
+    [
+      "host.edit",
+      { host: "rhino", id: "e2", label: "Delete 2 objects", op: { op: "delete", ids: ["a1", "a2"] } },
+    ],
+    ["host.edited", { host: "rhino", id: "e1", ok: true }],
+    ["host.edited", { host: "rhino", id: "e1", ok: false, error: "No such object" }],
+    ["host.redo", { host: "rhino" }],
+  ])("accepts %s", (type, payload) => {
+    expect(parseMessage(frame(type, payload)).ok).toBe(true);
+  });
+
+  it.each([
+    ["a transform with a short matrix", { op: "transform", ids: ["a1"], matrix: move.slice(1) }],
+    ["a transform of nothing", { op: "transform", ids: [], matrix: move }],
+    [
+      "a matrix with a number that is not finite",
+      { op: "transform", ids: ["a1"], matrix: [...move.slice(1), Number.NaN] },
+    ],
+    ["an edit that is not a transform or a delete", { op: "scale", ids: ["a1"], by: 2 }],
+  ])("rejects %s", (_name, op) => {
+    expect(parseMessage(frame("host.edit", { host: "rhino", id: "e", label: "x", op })).ok).toBe(false);
+  });
+
+  it("a hello without the edit capability still connects, as a host that cannot edit", () => {
+    const parsed = parseMessage(frame("hello", rhinoHello));
+    expect(parsed.ok && parsed.message.type === "hello" && "capabilities" in parsed.message.payload).toBe(
+      true,
+    );
+    if (parsed.ok && parsed.message.type === "hello" && "capabilities" in parsed.message.payload)
+      expect(parsed.message.payload.capabilities.edit).toBe(false);
+  });
+
+  it("a request can be limited to the objects selected in one host", () => {
+    const context = { references: [], selection: [], groundPoint: null };
+    expect(RequestContext.safeParse({ ...context, limitTo: { host: "rhino", ids: ["a1"] } }).success).toBe(
+      true,
+    );
+    expect(RequestContext.safeParse({ ...context, limitTo: { host: "rhino", ids: [] } }).success).toBe(false);
+  });
+});

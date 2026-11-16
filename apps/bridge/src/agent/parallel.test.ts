@@ -232,155 +232,6 @@ describe("claims enforced where the model changes", () => {
     return { ...harness, architect: await mcp("architect"), product: await mcp("product") };
   }
 
-  it("a named agent can group and copy what it holds, but not write the tag, nor group what it does not hold", async () => {
-    const { architect, scene } = await twoWorking();
-    const made = await architect.callTool({
-      name: "create_elements",
-      arguments: {
-        elements: [column("rib-1", 40_000), column("rib-2", 42_000)].map(({ tags: _tags, ...e }) => e),
-      },
-    });
-    expect(made.isError).toBeFalsy();
-    const grouped = await architect.callTool({
-      name: "group_elements",
-      arguments: { ids: ["rib-1", "rib-2"] },
-    });
-    expect(grouped.isError).toBeFalsy();
-    const group = scene.scene.doc.elements["rib-1"]?.tags?.["hai.group"];
-    expect(group).toMatch(/^group-/);
-    expect(scene.scene.doc.elements["rib-2"]?.tags?.["hai.group"]).toBe(group);
-    // Grouping leaves the owner on them.
-    expect(scene.scene.doc.elements["rib-1"]?.tags?.["hai.owner"]).toBe("architect");
-
-    const copied = await architect.callTool({
-      name: "transform_elements",
-      arguments: { ids: ["rib-1"], steps: [{ kind: "translate", by: [0, 5000] }], copies: 1 },
-    });
-    expect(copied.isError).toBeFalsy();
-    const copies = Object.values(scene.scene.doc.elements).filter(
-      (e) => e.tags?.["hai.group"] && e.tags["hai.group"] !== group,
-    );
-    expect(copies).toHaveLength(2);
-
-    const written = await architect.callTool({
-      name: "set_tags",
-      arguments: { ids: ["rib-1"], tags: { "hai.group": "mine" } },
-    });
-    expect(written.isError).toBe(true);
-    const patched = await architect.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "rib-1", patch: { tags: { "hai.group": "mine" } } }] },
-    });
-    expect(patched.isError).toBe(true);
-    const created = await architect.callTool({
-      name: "create_elements",
-      arguments: { elements: [{ ...column("rib-3", 44_000), tags: { "hai.group": "mine" } }] },
-    });
-    expect(created.isError).toBe(true);
-    expect(scene.scene.doc.elements["rib-1"]?.tags?.["hai.group"]).toBe(group);
-
-    // Product holds the hall: its wall cannot be drawn into Architect's group.
-    const across = await architect.callTool({
-      name: "group_elements",
-      arguments: { ids: ["rib-1", "hall-1"] },
-    });
-    expect(across.isError).toBe(true);
-    expect(scene.scene.doc.elements["hall-1"]?.tags?.["hai.group"]).toBeUndefined();
-  });
-
-  it("touching another agent's wall is refused and names the holder, the task and the scope", async () => {
-    const { architect, scene } = await twoWorking();
-    const before = structuredClone(scene.scene.doc.elements["hall-1"]);
-    const result = await architect.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "hall-1", patch: { name: "Mine now" } }] },
-    });
-    expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain(`"hall-1" is claimed by product's task`);
-    expect(textOf(result)).toContain('the part "hall"');
-    expect(scene.scene.doc.elements["hall-1"]).toEqual(before);
-  });
-
-  it("one bad element in a batch refuses the whole batch", async () => {
-    const { architect, scene } = await twoWorking();
-    const result = await architect.callTool({
-      name: "update_elements",
-      arguments: {
-        updates: [
-          { id: "dome-1", patch: { name: "Fine" } },
-          { id: "hall-1", patch: { name: "Not fine" } },
-        ],
-      },
-    });
-    expect(result.isError).toBe(true);
-    expect(scene.scene.doc.elements["dome-1"]?.name).toBe("dome-1");
-  });
-
-  it("an agent may change and create inside its claim, and what it creates is stamped with its name and part", async () => {
-    const { architect, scene } = await twoWorking();
-    const updated = await architect.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "dome-1", patch: { name: "Dome column" } }] },
-    });
-    expect(updated.isError).toBeFalsy();
-    const created = json(
-      await architect.callTool({
-        name: "create_elements",
-        arguments: {
-          elements: [
-            { type: "column", name: "A", position: [0, 0], section: [400, 400], height: 3000 },
-            { type: "column", name: "B", position: [1000, 0], section: [400, 400], height: 3000 },
-          ],
-        },
-      }),
-    ) as { created: string[] };
-    expect(created.created).toHaveLength(2);
-    for (const id of created.created) {
-      expect(scene.scene.doc.elements[id]?.tags).toEqual({ "hai.owner": "architect", "hai.part": "dome" });
-    }
-    // Changing an element of its own part that someone else owned makes it the agent's.
-    expect(scene.scene.doc.elements["dome-1"]?.tags).toEqual({
-      "hai.part": "dome",
-      "hai.owner": "architect",
-    });
-  });
-
-  it("a create outside the scope is refused", async () => {
-    const { team, scene, mcp } = await start();
-    await team.request("hello");
-    await team.request("delegate architect(-1000,-1000,1000,1000): work 30000");
-    await vi.waitFor(() => expect(taskOf(team, "architect").status).toBe("running"));
-    const architect = await mcp("architect");
-    const outside = await architect.callTool({
-      name: "create_elements",
-      arguments: {
-        elements: [
-          {
-            id: "far",
-            type: "column",
-            name: "Far",
-            position: [9000, 9000],
-            section: [400, 400],
-            height: 3000,
-          },
-        ],
-      },
-    });
-    expect(outside.isError).toBe(true);
-    expect(textOf(outside)).toContain("outside your claim (the region x -1000 to 1000");
-    expect(scene.scene.doc.elements.far).toBeUndefined();
-    const inside = await architect.callTool({
-      name: "create_elements",
-      arguments: {
-        elements: [
-          { id: "near", type: "column", name: "Near", position: [0, 0], section: [400, 400], height: 3000 },
-        ],
-      },
-    });
-    expect(inside.isError).toBeFalsy();
-    expect(scene.scene.doc.elements.near?.tags?.["hai.owner"]).toBe("architect");
-  });
-
   it("a late call after the task ended is refused", async () => {
     const { team, mcp, scene } = await start();
     await team.request("delegate architect[dome]: work 100");
@@ -388,94 +239,11 @@ describe("claims enforced where the model changes", () => {
     scene.scene.apply("seed", [{ op: "create", element: column("dome-1", 0, { "hai.part": "dome" }) }]);
     const architect = await mcp("architect");
     const late = await architect.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "dome-1", patch: { name: "Late" } }] },
+      name: "request_claim",
+      arguments: { scope: { ids: ["dome-1"] } },
     });
     expect(late.isError).toBe(true);
-    expect(textOf(late)).toContain("no running task");
-    expect(scene.scene.doc.elements["dome-1"]?.name).toBe("dome-1");
-  });
-
-  it("the system's tag names cannot be written by an agent", async () => {
-    const { architect, scene } = await twoWorking();
-    const steal = await architect.callTool({
-      name: "set_tags",
-      arguments: { ids: ["dome-1"], tags: { "hai.owner": "product" } },
-    });
-    expect(steal.isError).toBe(true);
-    expect(textOf(steal)).toContain('tag names starting with "hai."');
-    const viaUpdate = await architect.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "dome-1", patch: { tags: { "hai.part": "hall" } } }] },
-    });
-    expect(viaUpdate.isError).toBe(true);
-    const viaCreate = await architect.callTool({
-      name: "create_elements",
-      arguments: {
-        elements: [
-          {
-            type: "column",
-            name: "x",
-            position: [0, 0],
-            section: [400, 400],
-            height: 3000,
-            tags: { "hai.owner": "product" },
-          },
-        ],
-      },
-    });
-    expect(viaCreate.isError).toBe(true);
-    expect(scene.scene.doc.elements["dome-1"]?.tags).toEqual({ "hai.part": "dome" });
-  });
-
-  it("an agent sets its own tags, and they are undoable like any change", async () => {
-    const { architect, scene } = await twoWorking();
-    const tagged = await architect.callTool({
-      name: "set_tags",
-      arguments: { ids: ["dome-1"], tags: { style: "gothic" } },
-    });
-    expect(tagged.isError).toBeFalsy();
-    expect(scene.scene.doc.elements["dome-1"]?.tags).toMatchObject({ style: "gothic", "hai.part": "dome" });
-    const removed = await architect.callTool({
-      name: "set_tags",
-      arguments: { ids: ["dome-1"], tags: { style: null } },
-    });
-    expect(removed.isError).toBeFalsy();
-    expect(scene.scene.doc.elements["dome-1"]?.tags?.style).toBeUndefined();
-  });
-
-  it("two agents picking the same id: the refusal names the owner; no id given means one is made", async () => {
-    const { architect, product } = await twoWorking();
-    const first = await architect.callTool({
-      name: "create_elements",
-      arguments: {
-        elements: [
-          { id: "dome-9", type: "column", name: "x", position: [0, 0], section: [400, 400], height: 3000 },
-        ],
-      },
-    });
-    expect(first.isError).toBeFalsy();
-    const clash = await product.callTool({
-      name: "create_elements",
-      arguments: {
-        elements: [
-          { id: "dome-9", type: "column", name: "y", position: [0, 0], section: [400, 400], height: 3000 },
-        ],
-      },
-    });
-    expect(clash.isError).toBe(true);
-    expect(textOf(clash)).toContain('Element "dome-9" already exists and belongs to architect');
-    const made = json(
-      await product.callTool({
-        name: "create_elements",
-        arguments: {
-          elements: [
-            { type: "wall", name: "w", start: [20_000, 0], end: [22_000, 0], height: 3000, thickness: 200 },
-          ],
-        },
-      }),
-    ) as { created: string[] };
-    expect(made.created[0]).toMatch(/^wall-[0-9a-f]{8}$/);
+    expect(team.claims.forAgent("architect")).toBeUndefined();
   });
 
   it("the user overrides: the change is made, and the owning agent hears of it once at its next read", async () => {
@@ -517,11 +285,6 @@ describe("claims enforced where the model changes", () => {
     expect(asked.isError).toBeFalsy();
     expect(team.claims.forAgent("architect")?.scope).toEqual({ part: "dome", ids: ["col-9"] });
     expect(taskOf(team, "architect").scope).toEqual({ part: "dome", ids: ["col-9"] });
-    const touched = await architect.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: "col-9", patch: { name: "Mine" } }] },
-    });
-    expect(touched.isError).toBeFalsy();
 
     // Product holds hall-1, so Architect's request is refused and names Product's task.
     const refused = await architect.callTool({
@@ -541,30 +304,23 @@ describe("claims enforced where the model changes", () => {
 });
 
 describe("three scoped tasks at once", () => {
-  it("overlap in time, each is its own undo step, and one refused touch names its holder", async () => {
-    const { team, viewer, scene } = await start();
+  it("overlap in time, each in its own scope", async () => {
+    const { team } = await start();
     await team.request("hello");
     await team.request(
-      "delegate architect[dome]: columns 3 every 250 | product[hall]: columns 3 every 350 | climate[yard]: work 1300",
+      "delegate architect[dome]: work 800 | product[hall]: work 900 | climate[yard]: work 1300",
     );
     await team.settled();
-    const [architect, product] = ["architect", "product"].map((a) => taskOf(team, a));
+    const [architect, product, climate] = ["architect", "product", "climate"].map((a) => taskOf(team, a));
     // Their working times overlap: each started before the other finished.
     expect(architect?.startedAt ?? 0).toBeLessThan(product?.finishedAt ?? 0);
     expect(product?.startedAt ?? 0).toBeLessThan(architect?.finishedAt ?? 0);
-    const owned = (agent: string) =>
-      Object.values(scene.scene.doc.elements).filter((e) => e.tags?.["hai.owner"] === agent);
-    expect(owned("architect")).toHaveLength(3);
-    expect(owned("product")).toHaveLength(3);
-
-    // One undo reverts the task that ended last, as one step, and leaves the other's elements.
-    const last = (architect?.finishedAt ?? 0) > (product?.finishedAt ?? 0) ? "architect" : "product";
-    const other = last === "architect" ? "product" : "architect";
-    viewer.send("scene.undo", {});
-    const undo = await viewer.waitFor("scene.patch", (m) => m.payload.kind === "undo");
-    expect(undo.payload.label).toMatch(new RegExp(`^${last[0]?.toUpperCase()}${last.slice(1)}: columns`));
-    expect(owned(last)).toHaveLength(0);
-    expect(owned(other)).toHaveLength(3);
+    expect(climate?.startedAt ?? 0).toBeLessThan(architect?.finishedAt ?? 0);
+    expect([architect?.scope, product?.scope, climate?.scope]).toEqual([
+      { part: "dome" },
+      { part: "hall" },
+      { part: "yard" },
+    ]);
   });
 });
 
@@ -699,5 +455,42 @@ describe("a request about what is selected in a host", () => {
         properties: { "hai.part": "canopy" },
       }),
     ]);
+  });
+});
+
+describe("a request limited to a selection", () => {
+  const limited = (ids: string[]) => ({
+    references: [],
+    selection: [],
+    groundPoint: null,
+    limitTo: { host: "rhino" as const, ids },
+  });
+
+  it("the scope follows the limit: a task handed out with no scope takes the selected ids", async () => {
+    const { team } = await start();
+    await team.request("hello");
+    await team.request("delegate architect: work 30000", limited(["a1", "a2"]));
+    await vi.waitFor(() => expect(taskOf(team, "architect").status).toBe("running"));
+    expect(taskOf(team, "architect").scope).toEqual({ ids: ["a1", "a2"] });
+  });
+
+  it("a request without a limit hands out tasks as before", async () => {
+    const { team } = await start();
+    await team.request("hello");
+    await team.request("delegate architect: work 30000");
+    await vi.waitFor(() => expect(taskOf(team, "architect").status).toBe("running"));
+    expect(taskOf(team, "architect").scope).toBeUndefined();
+  });
+});
+
+describe("limitedScope", () => {
+  it("narrows a given scope's ids to the limit, and keeps a part the lead named", async () => {
+    const { limitedScope } = await import("./team.ts");
+    expect(limitedScope(undefined, undefined)).toBeUndefined();
+    expect(limitedScope({ part: "dome" }, undefined)).toEqual({ part: "dome" });
+    expect(limitedScope(undefined, { ids: ["a1"] })).toEqual({ ids: ["a1"] });
+    expect(limitedScope({ ids: ["a1", "b9"] }, { ids: ["a1", "a2"] })).toEqual({ ids: ["a1"] });
+    expect(limitedScope({ ids: ["b9"] }, { ids: ["a1"] })).toEqual({ ids: ["a1"] });
+    expect(limitedScope({ part: "dome" }, { ids: ["a1"] })).toEqual({ part: "dome", ids: ["a1"] });
   });
 });

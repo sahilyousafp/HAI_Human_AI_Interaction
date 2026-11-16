@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { actionFor, resolveBindings } from "./bindings.ts";
 import { Settings } from "./messages.ts";
-import { DEFAULT_ACTION_LAYOUT, DEFAULT_REFERENCE_LAYOUT, migrateRingSettings, ringFor } from "./rings.ts";
+import {
+  DEFAULT_ACTION_LAYOUT,
+  DEFAULT_REFERENCE_LAYOUT,
+  migrateRingSettings,
+  REMOVED_TOOLS,
+  ringFor,
+} from "./rings.ts";
 
 const OLD_TOOLS = ["select", "ask-agent", "measure", "section", "move", "massing", "delete", "undo"];
 const OLD_CREATE = ["wall", "slab", "column", "massing", "copy", "redo", "undo", "delete"];
@@ -60,12 +66,22 @@ describe("settings saved before hold to talk", () => {
       "line",
       "wall",
     ];
-    expect(migrateRingSettings({ createPalette: own }).createPalette).toEqual(own);
-    expect(DEFAULT_REFERENCE_LAYOUT[7]).toBe("lasso");
+    // A layout of the user's own is kept, but the tools that built geometry leave empty slots.
+    expect(migrateRingSettings({ createPalette: own }).createPalette).toEqual([
+      "sketch-line",
+      "sketch-area",
+      "place-marker",
+      "measure",
+      null,
+      "section",
+      null,
+      null,
+    ]);
+    expect(DEFAULT_REFERENCE_LAYOUT).toContain("lasso");
   });
 
   it("Custom layout is kept", () => {
-    const custom = ["section", ...OLD_CREATE.slice(1)];
+    const custom = ["section", "redo", "undo", "delete", "measure", null, "select", "move"];
     expect(migrateRingSettings({ createPalette: custom }).createPalette).toEqual(custom);
   });
 
@@ -125,5 +141,63 @@ describe("settings saved before hold to talk", () => {
       speech: "cloud",
       lastProject: "x",
     });
+  });
+});
+
+describe("the edit ring and the reference ring", () => {
+  it("the default rings: the edit ring edits and the reference ring points out, and neither builds", () => {
+    expect(DEFAULT_ACTION_LAYOUT).toEqual([
+      "select",
+      "move",
+      "rotate",
+      "delete",
+      "undo",
+      "redo",
+      "measure",
+      "section",
+    ]);
+    expect(DEFAULT_REFERENCE_LAYOUT.filter((id) => id !== null)).toEqual([
+      "sketch-line",
+      "sketch-area",
+      "place-marker",
+      "lasso",
+      "ask-agent",
+    ]);
+    for (const id of [...DEFAULT_ACTION_LAYOUT, ...DEFAULT_REFERENCE_LAYOUT])
+      expect(id === null || !REMOVED_TOOLS.has(id), String(id)).toBe(true);
+  });
+
+  it("a saved layout with a removed tool: that slot is emptied and the other tools stay where they were", () => {
+    const saved = ["select", "move", "delete", "undo", "measure", "wall", "section", "redo"];
+    expect(migrateRingSettings({ palette: saved }).palette).toEqual([
+      "select",
+      "move",
+      "delete",
+      "undo",
+      "measure",
+      null,
+      "section",
+      "redo",
+    ]);
+  });
+
+  it("the defaults from before the edit ring take the new ones, and running it twice changes nothing more", () => {
+    const before = {
+      palette: ["select", "move", "copy", "delete", "undo", "column", "wall", "slab"],
+      createPalette: [
+        "sketch-line",
+        "sketch-area",
+        "place-marker",
+        "measure",
+        "massing",
+        "section",
+        "line",
+        "lasso",
+      ],
+    };
+    const once = migrateRingSettings(before);
+    expect(once.palette).toBeNull();
+    expect(once.createPalette).toBeNull();
+    expect(migrateRingSettings(once)).toEqual(once);
   });
 });

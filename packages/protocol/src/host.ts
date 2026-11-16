@@ -42,6 +42,8 @@ export const HostCapabilities = z.strictObject({
   placeImage: z.boolean(),
   apiLookup: z.boolean(),
   describe: z.boolean(),
+  /** Applies the user's moves, rotations and deletes made in HAI (`host.edit`). False for a connector without it. */
+  edit: z.boolean().default(false),
 });
 export type HostCapabilities = z.infer<typeof HostCapabilities>;
 
@@ -214,6 +216,23 @@ export const HostRunResult = z.strictObject({
   changes: HostRunChanges.optional(),
 });
 export type HostRunResult = z.infer<typeof HostRunResult>;
+
+/** The most objects one edit names. */
+export const HOST_EDIT_MAX_IDS = 2000;
+
+/**
+ * An edit the user made in HAI on a host's objects: a transform (a 4 x 4 matrix, row by row, millimetres, Z up, as a
+ * block placement is) or a delete, by ids. The host applies it as one undo record; it is never code.
+ */
+export const HostEditOp = z.discriminatedUnion("op", [
+  z.strictObject({
+    op: z.literal("transform"),
+    ids: z.array(ElementId).min(1).max(HOST_EDIT_MAX_IDS),
+    matrix: z.array(z.number().finite()).length(16),
+  }),
+  z.strictObject({ op: z.literal("delete"), ids: z.array(ElementId).min(1).max(HOST_EDIT_MAX_IDS) }),
+]);
+export type HostEditOp = z.infer<typeof HostEditOp>;
 
 /** The longest script the bridge sends a host to run. */
 export const HOST_MAX_CODE = 200_000;

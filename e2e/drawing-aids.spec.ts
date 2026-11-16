@@ -1,9 +1,10 @@
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
+import { references } from "./hands.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
-// Drawing aids: switches in the settings that put the create tools' points exactly where they belong.
+// Drawing aids: switches in the settings that put a sketch's points (and a move) exactly where they belong.
 let bridge: (Bridge & { port: number }) | null = null;
 test.afterEach(async () => {
   await bridge?.stop();
@@ -76,10 +77,10 @@ type Wall = { type: "wall"; start: Point; end: Point; level?: string; base?: num
 /** The height of a wall of the sample project, millimetres: its own base, else its level's elevation. */
 const baseOf = (wall: Wall): number =>
   wall.base ?? bridge?.scene.scene.doc.levels.find((l) => l.id === wall.level)?.elevation ?? 0;
-const lastWall = (): Wall | undefined => {
-  const walls = Object.values(bridge?.scene.scene.doc.elements ?? {}).filter((e) => e.type === "wall");
-  return walls.at(-1) as Wall | undefined;
-};
+type Point3 = [number, number, number];
+/** The points of the sketch drawn last, as the page keeps them (sketches are not part of the model). */
+const lastSketch = async (page: Page): Promise<Point3[] | null> =>
+  ((await references(page)).sketches.at(-1)?.points as Point3[] | undefined) ?? null;
 
 /** A wall of the sample project whose end is on screen with room around it, and that end. */
 async function visibleWallEnd(page: Page): Promise<{ wall: Wall; end: Point; at: Point }> {
@@ -114,11 +115,11 @@ test("the Drawing aids page has a switch for each aid, only Grid is on, and the 
   await expect(page.getByTestId("aids-status")).toContainText("Aids: Grid, Endpoint");
 });
 
-test("Endpoint: a wall starts exactly on the end of another wall", async ({ page }) => {
+test("Endpoint: a sketch starts exactly on the end of a wall", async ({ page }) => {
   await start(page);
   await turnOn(page, "endpoint");
-  const { end, at } = await visibleWallEnd(page);
-  // The new wall runs 6 m from that end, whichever way is clear on screen.
+  const { wall, end, at } = await visibleWallEnd(page);
+  // The sketch runs 6 m from that end, whichever way is clear on screen.
   let to: Point | null = null;
   for (const [dx, dy] of [
     [6000, 0],
@@ -129,56 +130,83 @@ test("Endpoint: a wall starts exactly on the end of another wall", async ({ page
     to ??= await screenOf(page, [end[0] + dx, end[1] + dy]);
   }
   if (!to) throw new Error("no clear ground 6 m from the wall end");
-  await page.keyboard.press("w");
-  // Hovering shows what a start point would snap to; the label goes with the drag, which looks for the end.
-  await page.mouse.move(at[0] + 9, at[1] + 6);
-  await expect(page.getByTestId("snap-label")).toHaveText("Endpoint");
+  await page.keyboard.press("l");
+  // A few pixels off the end: the start snaps onto it.
   await drag(page, [at[0] + 9, at[1] + 6], to);
   await page.mouse.up();
-  await expect.poll(() => lastWall()?.start).toEqual(end);
+  await expect.poll(async () => (await lastSketch(page))?.[0]).toEqual([...end, baseOf(wall)]);
 });
 
-test("Midpoint: a wall starts exactly at the middle of another", async ({ page }) => {
+test("Midpoint: a sketch starts exactly at the middle of a wall", async ({ page }) => {
   await start(page);
   await turnOn(page, "midpoint");
   const walls = Object.values(bridge?.scene.scene.doc.elements ?? {}).filter(
     (e) => e.type === "wall",
   ) as Wall[];
-  let found: { mid: Point; at: Point } | null = null;
+  let found: { mid: Point; at: Point; z: number } | null = null;
   for (const w of walls) {
     const mid: Point = [(w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2];
     const at = await screenOf(page, mid, baseOf(w));
     if (at) {
-      found = { mid, at };
+      found = { mid, at, z: baseOf(w) };
       break;
     }
   }
   if (!found) throw new Error("no wall middle is clear on screen");
   const far = await groundSpan(page, 6000, 0);
   const to = await screenOf(page, far.end);
-  await page.keyboard.press("w");
-  await page.mouse.move(found.at[0] + 8, found.at[1] + 5);
-  await expect(page.getByTestId("snap-label")).toHaveText("Midpoint");
+  await page.keyboard.press("l");
   await drag(page, [found.at[0] + 8, found.at[1] + 5], to ?? found.at);
   await page.mouse.up();
-  await expect.poll(() => lastWall()?.start).toEqual(found.mid);
+  const { mid, z } = found;
+  await expect.poll(async () => (await lastSketch(page))?.[0]).toEqual([...mid, z]);
 });
 
-test("Ortho: a wall drawn nearly along X ends on the axis, and the notice has length and angle", async ({
-  page,
-}) => {
+test("Ortho: a sketch drawn nearly along X ends on the axis", async ({ page }) => {
   await start(page);
   await turnOn(page, "ortho");
   const span = await groundSpan(page, 5000, 300);
   const [from, to] = [await screenOf(page, span.start), await screenOf(page, span.end)];
   if (!from || !to) throw new Error("the span is off screen");
-  await page.keyboard.press("w");
+  await page.keyboard.press("l");
   await drag(page, from, to);
-  await expect(page.getByTestId("tool-notice")).toContainText(/Wall \d+ mm at \d+(\.\d)? deg.*Ortho/);
   await page.mouse.up();
   await expect
-    .poll(() => lastWall() !== undefined && (lastWall() as Wall).end[1] === (lastWall() as Wall).start[1])
+    .poll(async () => {
+      const points = await lastSketch(page);
+      return points !== null && points.at(-1)?.[1] === points[0]?.[1];
+    })
     .toBe(true);
+});
+
+test("Ortho's angle step is set in Settings: at 90 degrees a drag at 30 degrees ends on the axis, and the step is kept", async ({
+  page,
+}) => {
+  await start(page);
+  await turnOn(page, "ortho");
+  await openSettings(page, "drawing-aids");
+  await expect(page.getByTestId("ortho-step-45")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("ortho-step-90").click();
+  await expect(page.getByTestId("ortho-step-90")).toHaveAttribute("aria-pressed", "true");
+  await closeSettings(page);
+  // At 45 degrees this drag (about 30 degrees) would end on the diagonal; at 90 it ends on X.
+  const span = await groundSpan(page, 5000, 2900);
+  const [from, to] = [await screenOf(page, span.start), await screenOf(page, span.end)];
+  if (!from || !to) throw new Error("the span is off screen");
+  await page.keyboard.press("l");
+  await drag(page, from, to);
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      const points = await lastSketch(page);
+      return points !== null && points.at(-1)?.[1] === points[0]?.[1];
+    })
+    .toBe(true);
+  // The step is remembered in this browser.
+  await page.reload();
+  await openViewer(page);
+  await openSettings(page, "drawing-aids");
+  await expect(page.getByTestId("ortho-step-90")).toHaveAttribute("aria-pressed", "true");
 });
 
 test("Ortho off: the same drag keeps its angle", async ({ page }) => {
@@ -186,10 +214,10 @@ test("Ortho off: the same drag keeps its angle", async ({ page }) => {
   const span = await groundSpan(page, 5000, 600);
   const [from, to] = [await screenOf(page, span.start), await screenOf(page, span.end)];
   if (!from || !to) throw new Error("the span is off screen");
-  await page.keyboard.press("w");
+  await page.keyboard.press("l");
   await drag(page, from, to);
   await page.mouse.up();
-  await expect.poll(() => lastWall() !== undefined).toBe(true);
-  const wall = lastWall() as Wall;
-  expect(wall.end[1]).not.toBe(wall.start[1]);
+  await expect.poll(() => lastSketch(page)).not.toBeNull();
+  const points = (await lastSketch(page)) as Point3[];
+  expect(points.at(-1)?.[1]).not.toBe(points[0]?.[1]);
 });

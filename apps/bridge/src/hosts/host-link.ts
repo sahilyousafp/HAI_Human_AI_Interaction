@@ -259,9 +259,45 @@ export class HostLink {
         }
         return true;
       }
+      case "host.edited":
+        // The user's own edit, answered: the pages show the result (the mirror follows by itself) or the reason.
+        if (message.payload.host !== this.id) return false;
+        this.broadcast(message);
+        return true;
       default:
         return false;
     }
+  }
+
+  /**
+   * The user's own edit of this host's objects, made in HAI: passed to the connector, which applies it as one undo
+   * record and answers `host.edited`. A host that is gone or cannot edit is answered here, so the page drops its
+   * preview and says why.
+   */
+  edit(message: MessageOf<"host.edit">): void {
+    const { id } = message.payload;
+    const refuse = (error: string) =>
+      this.broadcast({
+        type: "host.edited",
+        id: randomUUID(),
+        payload: { host: this.id, id, ok: false, error },
+      });
+    if (!this.connection || !this.inUse) {
+      refuse(`${this.adapter.label} is not connected.`);
+      return;
+    }
+    if (!this.capabilities?.edit) {
+      refuse(`${this.adapter.label} does not take edits from HAI. Update its connector.`);
+      return;
+    }
+    this.connection.send({ type: "host.edit", id: randomUUID(), payload: message.payload });
+  }
+
+  /** Asks the host to redo the step the user undid. */
+  redo(): boolean {
+    if (!this.connection) return false;
+    this.connection.send({ type: "host.redo", id: randomUUID(), payload: { host: this.id } });
+    return true;
   }
 
   /** Selects these objects in the host (a pick in the viewer); empty clears. */

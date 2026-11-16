@@ -2,7 +2,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
-import { type Duplex, Readable } from "node:stream";
+import type { Duplex } from "node:stream";
 import type { AgentProvider } from "@hai/agent-core";
 import {
   type BridgeStatusMessage,
@@ -11,7 +11,6 @@ import {
   type HostId,
   type Message,
   type MessageOf,
-  OPEN_DATA_SOURCES,
   olderHostHello,
   PROTOCOL_VERSION,
   parseMessage,
@@ -22,7 +21,7 @@ import {
 } from "@hai/protocol";
 import { type WebSocket, WebSocketServer } from "ws";
 import { AgentEyes } from "./agent/agent-eyes.ts";
-import { ApprovalBroker, KERNEL_TOOLS } from "./agent/approvals.ts";
+import { ApprovalBroker } from "./agent/approvals.ts";
 import { ClaimTable } from "./agent/claims.ts";
 import { ExtensionHub } from "./agent/extensions.ts";
 import { PanelBroker } from "./agent/panels.ts";
@@ -43,7 +42,6 @@ import {
 } from "./asset-routes.ts";
 import { AssetStore, checkPng } from "./assets.ts";
 import { assertLoopback } from "./config.ts";
-import { GeometryKernel, KERNEL_PACKAGES } from "./geometry/kernel.ts";
 import { HOST_ADAPTERS } from "./hosts/adapters.ts";
 import type { HostConnection } from "./hosts/host-link.ts";
 import { HostRegistry } from "./hosts/registry.ts";
@@ -313,10 +311,6 @@ export function createBridge(options: BridgeOptions): Bridge {
       return { ok: true, release: () => (claim ? undefined : claims.release(owner.taskId)) };
     },
   });
-  const geometryKernel = new GeometryKernel(
-    { run: (input, signal) => python.run({ ...input, signal }) },
-    () => scene.projectDir,
-  );
   const approvals = new ApprovalBroker(
     {
       projectDir: () => scene.projectDir,
@@ -326,13 +320,11 @@ export function createBridge(options: BridgeOptions): Bridge {
       pythonInstalls: (tool, input) =>
         tool.endsWith("__host_run")
           ? hostPackages(input)
-          : KERNEL_TOOLS.includes(tool)
-            ? pythonEnv.wouldInstall(KERNEL_PACKAGES)
-            : pythonEnv.wouldInstall(
-                Array.isArray(input.packages)
-                  ? input.packages.filter((p): p is string => typeof p === "string")
-                  : [],
-              ),
+          : pythonEnv.wouldInstall(
+              Array.isArray(input.packages)
+                ? input.packages.filter((p): p is string => typeof p === "string")
+                : [],
+            ),
     },
     (message) => {
       broadcast(message);
@@ -572,14 +564,6 @@ export function createBridge(options: BridgeOptions): Bridge {
           captureView: (sun) => view.capture(sun),
           eyes,
           setView: (request) => view.setView(request),
-          geometry: {
-            kernel: geometryKernel,
-            storeAsset: async (id, bytes) => {
-              const stored = await scene.assets.write(id, Readable.from(Buffer.from(bytes)));
-              return stored.ok ? { ok: true as const } : { ok: false as const, error: stored.error };
-            },
-            removeAsset: (id) => scene.assets.remove(id),
-          },
           python: {
             run: async (input, signal) => {
               const out = await python.run({
@@ -634,9 +618,6 @@ export function createBridge(options: BridgeOptions): Bridge {
             summary: () => context.summary(),
             nearest: (near, o) => context.nearest(near, o),
             byId: (id) => context.byId(id),
-            sourceName: (sourceId) =>
-              OPEN_DATA_SOURCES.find((s) => s.id === sourceId)?.attribution ?? sourceId,
-            taken: () => new Set(Object.keys(scene.scene.doc.elements)),
             clear: () => {
               const { counts } = context.summary();
               context.clear();

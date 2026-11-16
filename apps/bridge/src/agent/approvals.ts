@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ApprovalOutcome, ApprovalRequest, Message } from "@hai/protocol";
-import { KERNEL_TOOL_NAMES } from "../geometry/kernel.ts";
 import type { Logger } from "../log.ts";
 import { packageName } from "../python/python-env.ts";
 import { HAI_SERVER } from "./agent-config.ts";
@@ -23,12 +22,6 @@ export function allowKey(tool: string, input: Record<string, unknown>): string {
 
 /** The tool an "always allow" entry is for, without its host. */
 const baseTool = (key: string): string => (key.startsWith(`${HOST_RUN}:`) ? HOST_RUN : key);
-
-/**
- * The geometry tools that need OpenCascade, a large package: they ask once, listing what would be installed, and run
- * without asking once it is there.
- */
-export const KERNEL_TOOLS: readonly string[] = KERNEL_TOOL_NAMES.map((name) => `mcp__${HAI_SERVER}__${name}`);
 
 type Send = (message: Message) => void;
 
@@ -74,12 +67,6 @@ function summarizeCode(input: Record<string, unknown>): string {
   const title = typeof input.title === "string" && input.title ? input.title : "Script";
   const host = typeof input.host === "string" ? input.host : null;
   return host ? `${title} (in ${host.charAt(0).toUpperCase()}${host.slice(1)})` : title;
-}
-
-/** The card for a geometry tool that must first install OpenCascade: what it is for (the card lists the packages). */
-function summarizeKernel(tool: string): string {
-  const name = tool.replace(/^mcp__.+?__geometry_/, "");
-  return `Install the OpenCascade geometry kernel, to ${name === "boolean" ? "combine solids" : name} with it`;
 }
 
 /** The project's "always allow" list, kept in the project's git-ignored `.hai` folder. */
@@ -170,7 +157,6 @@ export class ApprovalBroker {
       return this.alwaysAllowed.includes(key) && installs.every((spec) => approved.has(packageName(spec)));
     }
     if (ASK_EVERY_TIME.includes(tool)) return false;
-    if (KERNEL_TOOLS.includes(tool)) return installs.length === 0;
     return tool.startsWith(`mcp__${HAI_SERVER}__`) || this.alwaysAllowed.includes(tool);
   }
 
@@ -187,7 +173,7 @@ export class ApprovalBroker {
     agent?: string | null,
   ): Promise<PermissionDecision> {
     const isCode = (CODE_TOOLS as readonly string[]).includes(tool);
-    const installing = isCode || KERNEL_TOOLS.includes(tool);
+    const installing = isCode;
     const installs = installing ? (this.options.pythonInstalls?.(tool, input) ?? []) : [];
     const key = allowKey(tool, input);
     if (this.isPreApproved(key, installs)) return Promise.resolve({ behavior: "allow", updatedInput: input });
@@ -196,11 +182,7 @@ export class ApprovalBroker {
       id: randomUUID(),
       tool,
       source: toolSource(tool),
-      summary: isCode
-        ? summarizeCode(input)
-        : KERNEL_TOOLS.includes(tool)
-          ? summarizeKernel(tool)
-          : summarizeInput(tool, input),
+      summary: isCode ? summarizeCode(input) : summarizeInput(tool, input),
       input,
       ...(installing ? { installs } : {}),
       ...(ASK_EVERY_TIME.includes(tool) ? { once: true } : {}),

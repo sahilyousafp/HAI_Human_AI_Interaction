@@ -73,15 +73,15 @@ test("a fist dragged 10% to the right moves the view 0.12 view heights to the ri
   expect(after.elevation).toBe(before.elevation);
 });
 
-test("it pans with the Wall tool active, and starts no wall", async ({ page }) => {
+test("it pans with the Move tool active, and moves nothing", async ({ page }) => {
   await start(page);
-  await page.keyboard.press("w");
-  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "wall");
+  await page.keyboard.press("m");
+  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "move");
   const elements = await page.evaluate(() => window.__HAI_VIEWER__?.meshCount());
   const before = await camera(page);
   await fistDrag(page, "Right", { dx: 0.01, steps: 10, rest: 400 });
   expect((await camera(page)).target).not.toEqual(before.target);
-  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "wall");
+  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "move");
   expect(await page.evaluate(() => window.__HAI_VIEWER__?.meshCount())).toBe(elements);
 });
 

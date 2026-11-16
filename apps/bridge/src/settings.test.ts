@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { readLastProject, writeLastProject } from "./project.ts";
 import { migrateHostSettings, SettingsHub, updateSettingsFile } from "./settings.ts";
 
-const LAYOUT = ["section", "select", "measure", null, "move", "massing", "delete", "undo"];
+const LAYOUT = ["section", "select", "measure", null, "move", "rotate", "delete", "undo"];
 const tempRoot = () => mkdtempSync(join(tmpdir(), "hai-settings-"));
 const settingsFile = (root: string) => join(root, ".hai", "settings.json");
 const setSettings = (payload: unknown): Message => {
@@ -203,12 +203,12 @@ describe("SettingsHub", () => {
   it("feature switches merge and persist, and Show my hands is remembered", () => {
     const file = settingsFile(tempRoot());
     const hub = new SettingsHub(file, () => {});
-    hub.handle(setSettings({ features: { createTools: false } }));
+    hub.handle(setSettings({ features: { handScrolling: false } }));
     hub.handle(setSettings({ features: { voice: false }, showHands: true }));
     const sent: Message[] = [];
     new SettingsHub(file, () => {}).greet((m) => sent.push(m));
     expect(sent[0]).toMatchObject({
-      payload: { features: { createTools: false, voice: false }, showHands: true },
+      payload: { features: { handScrolling: false, voice: false }, showHands: true },
     });
   });
 

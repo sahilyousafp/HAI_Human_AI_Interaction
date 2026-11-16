@@ -125,11 +125,11 @@ async function architectDoes(page: Page, request: string) {
   return page.getByTestId("task-transcript").getByTestId("agent-turn").last();
 }
 
-test("Several finished calls fold to one line: three columns read 3 steps, done, and open to three chips", async ({
+test("Several finished calls fold to one line: three reads are 3 steps, done, and open to three chips", async ({
   page,
 }) => {
   await start(page);
-  const turn = await architectDoes(page, "columns 3");
+  const turn = await architectDoes(page, "looks 3");
   await expect(turn).toHaveAttribute("data-ended", "done");
   const steps = turn.getByTestId("agent-steps");
   await expect(steps).toHaveAttribute("data-outcome", "done");
@@ -143,7 +143,7 @@ test("Several finished calls fold to one line: three columns read 3 steps, done,
 
 test("a running group stays open while its turn runs, and folds when it is done", async ({ page }) => {
   await start(page);
-  const turn = await architectDoes(page, "columns 3 every 1500");
+  const turn = await architectDoes(page, "looks 3 every 1500");
   const steps = turn.getByTestId("agent-steps");
   await expect(steps.locator(".agent-steps-head")).toContainText(/steps (so far|, 1 running)/);
   await expect(steps).toHaveAttribute("open", "");
@@ -154,8 +154,8 @@ test("a running group stays open while its turn runs, and folds when it is done"
 
 test("failed calls keep their line open and say so; a single call is a plain chip", async ({ page }) => {
   await start(page);
-  // Mochi itself cannot create elements, so each of its three calls fails.
-  await ask(page, "columns 3");
+  // A tool the app does not have: each of the three calls fails.
+  await ask(page, "fails 3");
   await expect(lastTurn(page)).toHaveAttribute("data-ended", "done");
   const steps = lastTurn(page).getByTestId("agent-steps");
   await expect(steps).toHaveAttribute("data-outcome", "failed");

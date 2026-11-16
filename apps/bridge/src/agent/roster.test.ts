@@ -104,7 +104,7 @@ describe("the team", () => {
   it("every agent's base instructions explain the scope, the brief and the claim tools", () => {
     expect(SYSTEM_PROMPT).toContain("[scope]");
     expect(SYSTEM_PROMPT).toContain("[brief]");
-    for (const tool of ["get_claims", "request_claim", "release_claim", "set_tags"])
+    for (const tool of ["get_claims", "request_claim", "release_claim"])
       expect(SYSTEM_PROMPT).toContain(tool);
   });
 
@@ -135,15 +135,10 @@ describe("the team", () => {
       ensureDefaultAgents(dir);
       writeFileSync(join(agentsDir(dir), "architect.md"), file("architect", OLD_TOOLS));
       const tools = names(dir, "architect");
-      for (const wanted of [
-        "python_run",
-        "host_run",
-        "offer_panel",
-        "open_panel",
-        "set_view",
-        "create_elements",
-      ])
+      for (const wanted of ["python_run", "host_run", "offer_panel", "open_panel", "set_view"])
         expect(tools).toContain(`mcp__hai__${wanted}`);
+      // The scene write tools it listed are gone: the model is changed in the hosts.
+      expect(tools).not.toContain("mcp__hai__create_elements");
     });
 
     it("the prompt, model and description stay as the file has them", () => {
@@ -236,12 +231,14 @@ describe("the team", () => {
       "open_panel",
       "release_claim",
       "request_claim",
+      "set_selection",
       "set_view",
       "update_panel",
     ]);
-    expect(tools("architect").has("create_elements")).toBe(true);
+    expect(tools("architect").has("host_run")).toBe(true);
+    expect(tools("architect").has("create_elements")).toBe(false);
     expect(tools("mochi").has("delegate")).toBe(true);
-    expect(tools("mochi").has("create_elements")).toBe(false);
+    expect(tools("mochi").has("host_run")).toBe(false);
     expect(tools("climate").has("sun_study")).toBe(true);
   });
 
@@ -289,16 +286,9 @@ describe("the team", () => {
       "camera_set",
       "climate_normals",
       "close_panel",
-      "context_adopt",
       "context_clear",
       "context_get",
       "context_list",
-      "create_elements",
-      "geometry_array_along_curve",
-      "geometry_boolean",
-      "geometry_loft",
-      "geometry_offset",
-      "geometry_sweep",
       "get_claims",
       "get_elements",
       "host_api",
@@ -314,7 +304,6 @@ describe("the team", () => {
       "python_run",
       "release_claim",
       "request_claim",
-      "set_tags",
       "set_view",
       "site_set",
       "spawn_worker",
@@ -528,7 +517,7 @@ describe("Urban", () => {
       "offer_panel",
     ])
       expect(tools.has(tool), tool).toBe(true);
-    for (const tool of ["create_elements", "update_elements", "context_adopt", "python_run", "spawn_worker"])
+    for (const tool of ["host_run", "host_place_image", "python_run", "spawn_worker"])
       expect(tools.has(tool), tool).toBe(false);
   });
 
@@ -615,8 +604,7 @@ describe("Climate with live data", () => {
       "sun_study",
     ])
       expect(tools.has(tool), tool).toBe(true);
-    for (const tool of ["create_elements", "context_adopt", "urban_buildings"])
-      expect(tools.has(tool), tool).toBe(false);
+    for (const tool of ["create_elements", "urban_buildings"]) expect(tools.has(tool), tool).toBe(false);
   });
 
   it("an existing project's Climate file, written before the weather tools, still gets them (the role grants them)", () => {
@@ -671,7 +659,7 @@ describe("Simulation", () => {
       "offer_panel",
     ])
       expect(tools.has(tool), tool).toBe(true);
-    for (const tool of ["create_elements", "context_adopt", "urban_buildings", "python_run", "spawn_worker"])
+    for (const tool of ["create_elements", "urban_buildings", "python_run", "spawn_worker"])
       expect(tools.has(tool), tool).toBe(false);
   });
 

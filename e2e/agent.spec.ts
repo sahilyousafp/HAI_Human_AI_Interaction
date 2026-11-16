@@ -199,15 +199,15 @@ test.describe("agent panel", () => {
   test("failed tool call: the chip shows failed and expanding it shows the error", async ({ page }) => {
     const bridge = await startWithFakeAgent(page);
     try {
-      await ask(page, "delegate architect: bad column");
+      await ask(page, "delegate architect: tool set_view {}");
       await handedOffTurn(page).getByTestId("handoff-chip").click();
       const chip = page.getByTestId("task-transcript").getByTestId("tool-chip");
       await expect(chip.getByTestId("tool-chip-agent")).toHaveText("Architect");
       await expect(chip).toHaveAttribute("data-outcome", "failed");
-      await expect(chip).toContainText("create_elements");
+      await expect(chip).toContainText("set_view");
       await expect(chip.getByTestId("tool-chip-result")).toBeHidden();
       await chip.locator("summary").click();
-      await expect(chip.getByTestId("tool-chip-result")).toContainText("height");
+      await expect(chip.getByTestId("tool-chip-result")).not.toBeEmpty();
     } finally {
       await bridge.stop();
     }
@@ -325,7 +325,7 @@ test.describe("the team", () => {
   }) => {
     const bridge = await startWithFakeAgent(page);
     try {
-      await ask(page, "delegate architect: columns 2");
+      await ask(page, "delegate architect: looks 2");
       const handOff = page.getByTestId("handoff-chip");
       await expect(handOff).toContainText("Architect");
       await expect(handOff).toHaveAttribute("data-status", "done", { timeout: 8000 });
@@ -335,7 +335,7 @@ test.describe("the team", () => {
       const chips = page.getByTestId("task-transcript").getByTestId("tool-chip");
       await expect(chips).toHaveCount(2);
       await expect(chips.first().getByTestId("tool-chip-agent")).toHaveText("Architect");
-      await expect(page.getByTestId("task-transcript")).toContainText("Added 2 columns.");
+      await expect(page.getByTestId("task-transcript")).toContainText("Looked 2 times.");
       await page.getByTestId("task-back").click();
       await expect(page.getByTestId("agent-transcript")).toBeVisible();
     } finally {

@@ -33,7 +33,7 @@ test("settings, Features page", async ({ page }) => {
   bridge = await startTestBridge(page);
   await openViewer(page);
   await openSettings(page, "features");
-  await page.getByTestId("feature-createTools").click(); // one switch off, to show both states
+  await page.getByTestId("feature-handScrolling").click(); // one switch off, to show both states
   await page.waitForTimeout(500); // the sheet and the switch settle
   await expect(page.getByTestId("settings-panel")).toHaveScreenshot("settings-features.png");
 });

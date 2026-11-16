@@ -12,11 +12,6 @@ export const FEATURES = [
     description: "A long pinch, Space or a held right button opens a ring of tools.",
   },
   {
-    id: "createTools",
-    label: "Create tools",
-    description: "Wall, Slab, Column and Copy, and the left hand's create ring.",
-  },
-  {
     id: "twoHandNavigation",
     label: "Two-hand navigation",
     description: "Pinch with both hands to zoom, pan and turn the view.",

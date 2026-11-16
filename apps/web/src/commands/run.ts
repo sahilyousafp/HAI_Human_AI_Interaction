@@ -1,7 +1,8 @@
-import type { LetterMarker, SceneDocument, SceneOp } from "@hai/protocol";
+import type { HostEditOp, HostId, LetterMarker, SceneDocument, SceneOp } from "@hai/protocol";
+import type { HostTargets } from "../tools/host-targets.ts";
 import type { Visibility } from "../viewer/visibility.ts";
 import { type Command, correctCommand, parseCommand, parseCorrection } from "./grammar.ts";
-import { planCommand } from "./plan.ts";
+import { planCommand, planHostCommand } from "./plan.ts";
 
 /** What a spoken command can reach: the model, the selection, the viewer's visibility and the notice line. */
 export interface CommandHost {
@@ -19,6 +20,10 @@ export interface CommandHost {
   /** Undoes the last change; false when the bridge could not take it. */
   undo(): boolean;
   visibility: Visibility;
+  /** The objects of one host these ids are (what is selected in Rhino), or null when they are not. */
+  hostTargets?(ids: string[]): HostTargets | null;
+  /** The user's edit of a host's objects: one undo step in that host. */
+  applyHost?(host: HostId, label: string, op: HostEditOp): void;
 }
 
 /** A transcript that was a command: what to show for it. Whether it worked or not, it never goes to the agent. */
@@ -54,14 +59,12 @@ export class CommandMemory {
   }
 }
 
-/** Whether a command changes the model in a way a correction can redo: it moves, copies, rotates or scales. */
+/** Whether a command changes the model in a way a correction can redo: it moves or rotates. */
 const redoable = (command: Command): boolean =>
-  command.clauses.some(
-    (c) => c.kind === "translate" || c.kind === "copy" || c.kind === "rotate" || c.kind === "scale",
-  );
+  command.clauses.some((c) => c.kind === "translate" || c.kind === "rotate");
 
 /**
- * "Make it 4 m", "change it to 4 times", "no, 45 degrees": puts right the number of the command just run. The change
+ * "Make it 4 m", "no, 45 degrees": puts right the number of the command just run. The change
  * is taken back and made again with the new number, as one more undo step, selecting what it makes. Null when the
  * transcript is not a correction, or there is nothing recent and untouched to correct (it is then an ordinary request).
  */
@@ -110,6 +113,12 @@ export function runCommand(
 ): CommandRun | null {
   const command = parseCommand(text);
   if (!command) return null;
+  // What a host has selected: the command goes to that host as one edit (a leading select names HAI's own elements).
+  const targets =
+    command.clauses[0]?.kind !== "select" && thisIds.length > 0
+      ? (host.hostTargets?.(thisIds) ?? null)
+      : null;
+  if (targets) return runOnHost(command, targets, host);
   const doc = host.doc();
   if (!doc) return { label: "The model is not loaded yet." };
   const plan = planCommand(command, doc, thisIds, host.markers());
@@ -153,6 +162,26 @@ export function runCommand(
     case "showAll":
       host.visibility.showAll();
       host.flash("Everything is shown.");
+      return { label: plan.label };
+  }
+}
+
+/** A command on a host's objects: sent to the host, or asked first for a delete. Never a correction to remember. */
+function runOnHost(command: Command, targets: HostTargets, host: CommandHost): CommandRun {
+  const plan = planHostCommand(command, targets, host.markers());
+  switch (plan.kind) {
+    case "error":
+      host.flash(plan.message);
+      return { label: plan.message };
+    case "hostEdit":
+      host.applyHost?.(plan.host, plan.label, plan.op);
+      host.flash(`${plan.label}.`);
+      return { label: plan.label };
+    case "hostDelete":
+      host.ask(`${plan.label}? Nod or press Enter to delete. Shake or press Escape to keep.`, (yes) => {
+        if (!yes) return host.flash("Kept.");
+        host.applyHost?.(plan.host, plan.label, { op: "delete", ids: plan.ids });
+      });
       return { label: plan.label };
   }
 }

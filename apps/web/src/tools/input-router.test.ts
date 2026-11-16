@@ -409,13 +409,6 @@ describe("feature switches", () => {
     router.handle(ev("pinch.hold"));
     expect(log).toEqual(["tool.dragStart", "nav:pinch.drag.start"]);
   });
-
-  it("without the create tools, both rings still open (their create tools are left out of them)", () => {
-    const { router, log } = setup(false, { off: ["createTools"] });
-    router.handle(ev("pinch.drag.start", "Left"));
-    router.handle(ev("pinch.hold", "Left"));
-    expect(log.at(-1)).toBe("palette.open:reference:Left");
-  });
 });
 
 describe("hold to talk", () => {

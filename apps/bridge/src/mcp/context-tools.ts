@@ -1,10 +1,9 @@
-import type { ContextBuilding, ContextItem, SceneOp } from "@hai/protocol";
+import type { ContextItem } from "@hai/protocol";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { adoptOp } from "../open-data/context-store.ts";
-import { failure, text } from "./tool-results.ts";
+import { text } from "./tool-results.ts";
 
-/** What the context tools need of the app: the layer, and a way to change the model like any other writer. */
+/** What the context tools need of the app: the layer. */
 export interface ContextTools {
   summary(): unknown;
   nearest(
@@ -12,19 +11,12 @@ export interface ContextTools {
     options: { kinds?: ReadonlyArray<ContextItem["kind"]>; radiusMm?: number; limit: number },
   ): { items: ContextItem[]; total: number; truncated: boolean };
   byId(id: string): ContextItem | undefined;
-  /** The credit text of a source id, for the tag on an adopted item. */
-  sourceName(sourceId: string): string;
-  /** The model's element ids, to keep an adopted id unique. */
-  taken(): ReadonlySet<string>;
   /** Empties the layer, tells every page, and returns how many items of each kind it held. */
   clear(): { building: number; tree: number; raster: number };
 }
 
 /** The most items one `context_get` returns. */
 export const CONTEXT_GET_MAX = 200;
-/** The most buildings one `context_adopt` takes into the model. */
-export const CONTEXT_ADOPT_MAX = 50;
-
 /** An item as an agent is told about it: positions in model millimetres, rasters without their picture. */
 function describe(item: ContextItem) {
   switch (item.kind) {
@@ -64,14 +56,10 @@ function describe(item: ContextItem) {
 }
 
 /**
- * Registers `context_list` and `context_get` (reading the layer), `context_adopt` (offered to writers only) and
+ * Registers `context_list` and `context_get` (reading the layer), and
  * `context_clear` (emptying it, for every agent).
  */
-export function registerContextTools(
-  register: McpServer["registerTool"],
-  deps: ContextTools,
-  apply: (ops: SceneOp[]) => { ok: true } | { ok: false; error: string },
-): void {
+export function registerContextTools(register: McpServer["registerTool"], deps: ContextTools): void {
   register(
     "context_list",
     {
@@ -120,40 +108,6 @@ export function registerContextTools(
           : {}),
         items: found.items.map(describe),
       });
-    },
-  );
-
-  register(
-    "context_adopt",
-    {
-      description: `Brings buildings of the context layer into the model as ordinary elements (each footprint extruded to its height, a slab, tagged with its source), inside your claim and as one undo step. Use it only for neighbours the design really needs as model elements: the layer already shows them and casts their shadows. Only buildings can be adopted, at most ${CONTEXT_ADOPT_MAX} at a time; the layer keeps its own copy.`,
-      inputSchema: z.object({
-        ids: z.array(z.string()).min(1).max(CONTEXT_ADOPT_MAX).describe("Building ids from context_get"),
-      }),
-    },
-    async ({ ids }) => {
-      const taken = new Set(deps.taken());
-      const ops: SceneOp[] = [];
-      const created: string[] = [];
-      for (const id of [...new Set(ids)]) {
-        const item = deps.byId(id);
-        if (!item)
-          return failure(
-            `There is no item "${id}" in the context layer. Nothing was adopted. List them with context_get.`,
-          );
-        if (item.kind !== "building")
-          return failure(
-            `"${id}" is a ${item.kind}; only buildings can be adopted into the model. Nothing was adopted.`,
-          );
-        const elementId = `ctx-${id.replace(/[^A-Za-z0-9_-]/g, "-")}`.slice(0, 64);
-        if (taken.has(elementId))
-          return failure(`"${id}" is already in the model as "${elementId}". Nothing was adopted.`);
-        taken.add(elementId);
-        ops.push(adoptOp(item as ContextBuilding, elementId, deps.sourceName(item.source)));
-        created.push(elementId);
-      }
-      const result = apply(ops);
-      return result.ok ? text({ adopted: created }) : failure(result.error);
     },
   );
 

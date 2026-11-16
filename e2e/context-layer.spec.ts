@@ -198,38 +198,6 @@ test("Clear context in Settings empties the layer for good, keeps the site, and 
   await expect(page.getByTestId("context-legend")).toHaveCount(0);
 });
 
-test("a writer adopts a neighbour into the model, a reader cannot, and a claim keeps it inside its region", async ({
-  page,
-}) => {
-  const b = await start(page, true);
-  const team = b.agent as Team;
-  b.context.replace(
-    "overpass",
-    "building",
-    [
-      building("way/1", 45_000, 5_000, 14_000, 20_000, 24_000),
-      building("way/2", 200_000, 0, 10_000, 10_000, 9_000),
-    ],
-    site,
-  );
-  await team.request(`delegate architect: tool context_adopt {"ids":["way/1"]}`);
-  await team.settled();
-  expect(b.scene.scene.doc.elements["ctx-way-1"]).toMatchObject({
-    type: "slab",
-    thickness: 24_000,
-    tags: { "context.id": "way/1", "hai.owner": "architect" },
-  });
-  // A reader is not offered the tool: the call never reaches the model.
-  await team.request(`delegate urban: tool context_adopt {"ids":["way/2"]}`);
-  await team.settled();
-  expect(b.scene.scene.doc.elements["ctx-way-2"]).toBeUndefined();
-  // Inside a claim for a region that does not hold the building: refused, nothing added.
-  await team.request(`delegate architect(0,0,1000,1000): tool context_adopt {"ids":["way/2"]}`);
-  await team.settled();
-  expect(b.scene.scene.doc.elements["ctx-way-2"]).toBeUndefined();
-  expect(team.board.at(-1)?.summary ?? "").toMatch(/claim|outside|Refused/i);
-});
-
 test("2000 buildings on screen: they arrive in a moment and the user's own frames keep coming while the view is turned", async ({
   page,
 }) => {

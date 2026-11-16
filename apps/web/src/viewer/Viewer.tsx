@@ -8,6 +8,7 @@ import {
   type GestureEvent,
   type Hand,
   HOST_IDS,
+  HOST_INFO,
   type HostId,
   type Point2,
   type Point3Mm,
@@ -52,6 +53,7 @@ import { contextExtent } from "../context/context-geometry.ts";
 import { ExportReport, SaveAs3dmButton } from "../export/ExportControls.tsx";
 import type { ProjectExporter } from "../export/exporter.ts";
 import { isSoftwareRenderer } from "../gpu.ts";
+import { ComponentCard } from "../hosts/ComponentCard.tsx";
 import type { HostMirrors } from "../hosts/host-mirror.ts";
 import { MirrorLayer } from "../hosts/MirrorLayer.tsx";
 import { useMirrorVersion } from "../hosts/use-mirror-version.ts";
@@ -75,8 +77,8 @@ import type { SceneClient, SceneState } from "../scene/scene-client.ts";
 import type { DrawingAidsStore } from "../settings/drawing-aids.ts";
 import type { FeatureFlags } from "../settings/feature-flags.ts";
 import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
-import { ConstraintsPanel } from "../tools/ConstraintsPanel.tsx";
 import type { PointerSource, ToolController } from "../tools/controller.ts";
+import type { EditHistory } from "../tools/history.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
 import { SelectionPanel } from "../tools/SelectionPanel.tsx";
 import {
@@ -929,6 +931,8 @@ export function Viewer({
   panels,
   mirror,
   mirrorAssets,
+  history,
+  onAskAbout,
   markers = [],
   voice,
   owners,
@@ -965,8 +969,12 @@ export function Viewer({
   modelAssets: ModelAssets;
   /** The generated panel the agent offered, and the preview its controls lay over the scene. */
   panels: PanelClient;
-  /** Every host's objects, drawn read-only beside the scene while the host is connected and switched on. */
+  /** Every host's objects, drawn beside the scene while the host is connected and switched on, and edited from here. */
   mirror: HostMirrors;
+  /** The user's edits in the order made, scene and hosts, for Undo and Redo. */
+  history: EditHistory;
+  /** Sends a request about a host's selected objects only (Ask about this on their card); false if it was not sent. */
+  onAskAbout?: (text: string, limit: { host: HostId; ids: string[] }) => boolean;
   /** The meshes of each host's objects, fetched from the bridge as they are first needed. */
   mirrorAssets: Record<HostId, ModelAssets>;
   /** Elements captured while the user speaks, numbered in this order. */
@@ -995,20 +1003,24 @@ export function Viewer({
   useSyncExternalStore(panels.subscribe, () => panels.getSnapshot().previewVersion);
   const shownDoc = panels.shownDoc(scene.doc);
   const toolState = useSyncExternalStore(tools.subscribe, tools.getSnapshot);
+  // Undo and Redo are on while the last edit, or the next redo, is a host's.
+  useSyncExternalStore(history.subscribe, () => `${history.hostUndo}|${history.hostRedo}`);
   const sun = useSyncExternalStore(view.onSun, () => view.sun);
   const featureState = useSyncExternalStore(features.subscribe, features.getSnapshot);
   const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
-  /** An aid as it applies now: Ortho in the status bar is the active tool's own lock when it has one (Line). */
+  /** An aid as it applies now to the active tool. */
   const aidOn = (id: DrawingAidId): boolean => {
     const tool = tools.registry.get(toolState.activeId);
-    // A tool in a mode that takes no aids (Line in Freeform) has none on, whatever the switches say.
+    // A tool in a mode that takes no aids has none on, whatever the switches say.
     const mode = tool?.modes?.options.find((option) => option.id === tool.modes?.current());
     if (mode && !mode.constrained) return false;
-    return aidState[id === "ortho" && tool?.orthoAid ? tool.orthoAid : id];
+    return aidState[id];
   };
   const modelVersion = useSyncExternalStore(modelAssets.subscribe, modelAssets.getVersion);
   // The count of documents that have arrived whole, to frame each once; the objects themselves are the layer's own.
   const hostsSynced = useSyncExternalStore(mirror.subscribe, () => mirror.synced);
+  // What is selected in a host, for the status bar (a selection is always one host's).
+  const hostSelection = useSyncExternalStore(mirror.subscribe, () => JSON.stringify(mirror.selection));
   const mirrorAssetList = useMemo(() => HOST_IDS.map((host) => mirrorAssets[host]), [mirrorAssets]);
   const mirrorVersion = useMirrorVersion(mirror, mirrorAssetList);
   // The cut is applied again when elements change or a model's triangles arrive.
@@ -1224,9 +1236,25 @@ export function Viewer({
       doc: () => client.getSnapshot().doc,
       hidden: () => visibility.getSnapshot(),
       selection: () => client.getSnapshot().selection,
-      apply: (label, ops) => void client.apply(label, ops),
-      undo: () => void client.undo(),
-      redo: () => void client.redo(),
+      apply: (label, ops) => {
+        if (client.apply(label, ops)) history.record({ kind: "scene" });
+      },
+      undo: () => void history.undo(),
+      redo: () => void history.redo(),
+      // A host's objects are edited by the same tools: drawn moved here first, then made in the host as one step.
+      hosts: {
+        target: (id) => {
+          const object = mirror.object(id);
+          return object ? { host: object.host, object } : null;
+        },
+        selection: () => mirror.selection,
+        preview: (host, ids, matrix) => mirror.byHost[host].preview(ids, matrix),
+        edit: async (host, label, op) => {
+          const outcome = await mirror.edit(host, label, op);
+          if (outcome.ok) history.record({ kind: "host", host });
+          return outcome;
+        },
+      },
       select: (ids) => {
         // A pick on a host's object selects it in that host (and what the host reports back is highlighted here); the
         // HAI selection and the other hosts' are cleared so they never show different things at once.
@@ -1340,6 +1368,7 @@ export function Viewer({
     panels,
     inFrame,
     mirror,
+    history,
   ]);
 
   // When a whole document has arrived from a host, frame it once (as a project is framed when it opens).
@@ -1813,6 +1842,13 @@ export function Viewer({
   else if (selected && scene.doc && soleGroup(scene.doc, scene.selection))
     selectionText = `Group of ${scene.selection.length}`;
   else if (selected) selectionText = `${scene.selection.length} selected`;
+  else {
+    const ids = JSON.parse(hostSelection) as string[];
+    const first = ids[0] ? mirror.object(ids[0]) : undefined;
+    if (first && ids.length === 1)
+      selectionText = `${first.name || first.type} (${HOST_INFO[first.host].label})`;
+    else if (first) selectionText = `${ids.length} selected in ${HOST_INFO[first.host].label}`;
+  }
   // Drafts standing in for elements (Rotate): drawn in their place until the change they show arrives.
   const standIns = overlay.drafts.filter((draft) => {
     const from = overlay.draftsOf[draft.id];
@@ -2093,7 +2129,6 @@ export function Viewer({
 
       <LassoOutline controller={tools} />
       <Palette controller={tools} />
-      {/* The viewport's right column: the drawing constraints while Line or Wall is active. */}
       <SelectionPanel
         controller={tools}
         client={client}
@@ -2102,11 +2137,18 @@ export function Viewer({
         wrapper={wrapper}
         canAsk={!LOCAL_MODE && featureState.agent}
       />
+      <ComponentCard
+        controller={tools}
+        mirrors={mirror}
+        project={projectPoint}
+        wrapper={wrapper}
+        canAsk={!LOCAL_MODE && featureState.agent && onAskAbout !== undefined}
+        onAsk={(text, limit) => onAskAbout?.(text, limit) ?? false}
+      />
       <div className="viewer-right">
         <ViewCube mode={viewMode} onView={showView} cubeRef={cubeRef} initial={nav.current} />
-        <ConstraintsPanel controller={tools} aids={aids} />
       </div>
-      <UndoStrip client={client} />
+      <UndoStrip client={client} history={history} />
       <GeneratedPanel client={panels} scene={client} />
 
       {/* The project bar and the HUD panels stack down the model's left side. */}
@@ -2121,7 +2163,7 @@ export function Viewer({
               type="button"
               className="secondary"
               onClick={() => tools.undo()}
-              disabled={!scene.canUndo && !tools.toolCanUndo}
+              disabled={!scene.canUndo && !tools.toolCanUndo && !history.hostUndo}
               title="Undo (Ctrl+Z)"
               data-hand-press
             >
@@ -2131,7 +2173,7 @@ export function Viewer({
               type="button"
               className="secondary"
               onClick={() => tools.redo()}
-              disabled={!scene.canRedo && !tools.toolCanRedo}
+              disabled={!scene.canRedo && !tools.toolCanRedo && !history.hostRedo}
               title="Redo (Ctrl+Shift+Z)"
               data-hand-press
             >
@@ -2220,7 +2262,7 @@ export function Viewer({
           <span data-testid="selection-status">{selectionText}</span>
           <span data-testid="aids-status">
             Aids:{" "}
-            {DRAWING_AIDS.filter((a) => a.id !== "lineOrtho" && aidOn(a.id))
+            {DRAWING_AIDS.filter((a) => aidOn(a.id))
               .map((a) => a.label)
               .join(", ") || "none"}
           </span>

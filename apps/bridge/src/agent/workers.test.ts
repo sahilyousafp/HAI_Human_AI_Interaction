@@ -7,6 +7,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WebSocket } from "ws";
 import { fakeProvider } from "../../test/fake-provider.ts";
+import { connectFakeHost } from "../../test/host-client.ts";
 import { connectClient } from "../../test/ws-client.ts";
 import { type Bridge, createBridge } from "../server.ts";
 import type { Team } from "./team.ts";
@@ -57,7 +58,7 @@ async function start() {
     clients.push(client);
     return client;
   };
-  return { team, viewer, scene: (bridge as Bridge).scene, mcp, stateDir, projectDir };
+  return { team, viewer, scene: (bridge as Bridge).scene, mcp, stateDir, projectDir, address };
 }
 
 const taskOf = (team: Team, agent: string): TeamTask => {
@@ -68,8 +69,6 @@ const taskOf = (team: Team, agent: string): TeamTask => {
 const workers = (team: Team) => team.board.filter((t) => t.kind === "worker");
 const textOf = (result: { content?: unknown }) =>
   (result.content as Array<{ text?: string }> | undefined)?.[0]?.text ?? "";
-const owned = (scene: Bridge["scene"], agent: string) =>
-  Object.values(scene.scene.doc.elements).filter((e) => e.tags?.["hai.owner"] === agent);
 const PAVILION = "delegate architect[pavilion]: ";
 /** What an agent said in its replies, as the pages saw it. */
 const said = (viewer: Awaited<ReturnType<typeof start>>["viewer"], agent: string) =>
@@ -82,10 +81,10 @@ const said = (viewer: Awaited<ReturnType<typeof start>>["viewer"], agent: string
     .join("");
 
 describe("a specialist starts workers", () => {
-  it("two workers run together under their own names, claims and undo steps, and the task ends after them", async () => {
-    const { team, scene, viewer, stateDir, projectDir } = await start();
+  it("two workers run together under their own names and claims, and the task ends after them", async () => {
+    const { team, viewer, stateDir, projectDir } = await start();
     await team.request(
-      `${PAVILION}spawn dome[pavilion/dome]: columns 3 every 150 ;; minarets[pavilion/minarets]: columns 3 every 250`,
+      `${PAVILION}spawn dome[pavilion/dome]: work 600 ;; minarets[pavilion/minarets]: work 900`,
     );
     await waitFor(() => expect(workers(team)).toHaveLength(2));
     const [dome, minarets] = workers(team) as [TeamTask, TeamTask];
@@ -129,20 +128,8 @@ describe("a specialist starts workers", () => {
     expect(heard).toContain('[worker report] Architect 3 "minarets" done.');
     expect(done.summary).toMatch(/^Heard: /);
 
-    // Every element carries its worker as its owner and its sub-part.
-    expect(owned(scene, "architect.2")).toHaveLength(3);
-    expect(owned(scene, "architect.3")).toHaveLength(3);
-    expect(owned(scene, "architect.2")[0]?.tags?.["hai.part"]).toBe("pavilion/dome");
+    // Every claim is given back.
     expect(team.claims.all).toHaveLength(0);
-
-    // Each worker is its own undo step, the one that ended last first.
-    viewer.send("scene.undo", {});
-    const first = await viewer.waitFor("scene.patch", (m) => m.payload.kind === "undo");
-    expect(first.payload.label).toBe("Architect 3: minarets");
-    expect(owned(scene, "architect.3")).toHaveLength(0);
-    expect(owned(scene, "architect.2")).toHaveLength(3);
-    viewer.send("scene.undo", {});
-    await waitFor(() => expect(owned(scene, "architect.2")).toHaveLength(0));
 
     // Each worker was its own process, started under its name with its own configuration.
     const starts = readdirSync(stateDir)
@@ -171,7 +158,9 @@ describe("a specialist starts workers", () => {
       .map((s) => s.pid);
     expect(pids).toHaveLength(2);
     await waitFor(() => expect(pids.map(alive)).toEqual([false, false]), { timeout: 4000 });
-    expect(readdirSync(join(projectDir, ".hai", "agent")).filter((d) => d.includes("."))).toEqual([]);
+    await waitFor(() =>
+      expect(readdirSync(join(projectDir, ".hai", "agent")).filter((d) => d.includes("."))).toEqual([]),
+    );
   });
 
   it("a worker's own tools cannot start workers, and a worker that tries is refused", async () => {
@@ -238,20 +227,37 @@ describe("a worker's scope is cut from its parent's claim", () => {
   });
 
   it("the parent cannot change the worker's part while it runs, and the part returns when the worker ends", async () => {
-    const { team, scene, mcp } = await start();
-    await team.request(`${PAVILION}spawn dome[pavilion/dome]: columns 2 every 500`);
+    const { team, mcp, address } = await start();
+    const rhino = await connectFakeHost(address, { token: TOKEN, track: sockets });
+    await team.request(`${PAVILION}spawn dome[pavilion/dome]: work 3000`);
     // A worker is a process: starting one takes longer when the machine is busy.
-    await waitFor(() => expect(owned(scene, "architect.2")).toHaveLength(1));
-    const element = owned(scene, "architect.2")[0];
+    await waitFor(() => expect(taskOf(team, "architect.2").status).toBe("running"));
     const parent = await mcp("architect");
-    const refused = await parent.callTool({
-      name: "update_elements",
-      arguments: { updates: [{ id: element?.id, patch: { name: "mine now" } }] },
+    const call = parent.callTool({
+      name: "host_run",
+      arguments: { host: "rhino", code: "result = 1", title: "Dome" },
     });
-    expect(refused.isError).toBe(true);
-    expect(textOf(refused)).toMatch(/architect\.2's task "dome"/);
-    expect(scene.scene.doc.elements[element?.id as string]?.name).not.toBe("mine now");
+    const asked = await rhino.waitFor("host.run");
+    const dome = {
+      id: "d-1",
+      name: "Dome shell",
+      tags: { "hai.part": "pavilion/dome" },
+      bounds: {
+        min: [0, 0, 0] as [number, number, number],
+        max: [1000, 1000, 1000] as [number, number, number],
+      },
+    };
+    rhino.send("host.result", {
+      id: asked.payload.id,
+      ok: true,
+      stdout: "",
+      durationMs: 5,
+      changes: { added: [], changed: [dome], deleted: [], truncated: false },
+    });
+    const out = JSON.parse(textOf(await call));
+    expect(out.outsideYourClaim).toMatch(/architect\.2's task "dome"/);
     await team.settled();
+    expect(team.claims.all).toHaveLength(0);
   });
 });
 

@@ -1,9 +1,10 @@
 import { Hand } from "./gestures.ts";
 
 /**
- * The two tool rings. The action ring (the dominant hand's) holds the tools that act on the model; the reference
- * ring (the other hand's) holds the tools that point things out for the agent. They are stored as `palette` and
- * `createPalette`, the names they had as the tools ring and the create ring.
+ * The two tool rings. The action ring (the dominant hand's) is the edit ring: it selects, moves, turns and deletes what
+ * is in the model, scene elements and host objects alike, and builds nothing (the host applications model). The
+ * reference ring (the other hand's) holds the tools that point things out for the agent. They are stored as `palette`
+ * and `createPalette`, the names they had as the tools ring and the create ring.
  */
 export type Ring = "action" | "reference";
 
@@ -15,14 +16,40 @@ export type DominantHand = Hand;
 export const DEFAULT_ACTION_LAYOUT: Array<string | null> = [
   "select",
   "move",
-  "copy",
+  "rotate",
   "delete",
   "undo",
-  "column",
-  "wall",
-  "slab",
+  "redo",
+  "measure",
+  "section",
 ];
 export const DEFAULT_REFERENCE_LAYOUT: Array<string | null> = [
+  "sketch-line",
+  "sketch-area",
+  "place-marker",
+  "lasso",
+  "ask-agent",
+  null,
+  null,
+  null,
+];
+
+/**
+ * Tools that built geometry in HAI's scene, removed when the host applications took over the modelling: a saved
+ * layout keeps its other tools where they were, and these slots become empty.
+ */
+export const REMOVED_TOOLS: ReadonlySet<string> = new Set([
+  "wall",
+  "slab",
+  "column",
+  "copy",
+  "massing",
+  "line",
+]);
+
+/** The defaults before the edit ring: a stored layout still equal to them takes the new defaults. */
+const BUILD_ACTION_LAYOUT = ["select", "move", "copy", "delete", "undo", "column", "wall", "slab"];
+const BUILD_REFERENCE_LAYOUT = [
   "sketch-line",
   "sketch-area",
   "place-marker",
@@ -95,16 +122,28 @@ function migrateHoldRoles(gestures: Record<string, unknown>): Record<string, unk
 }
 
 /**
- * Brings saved settings up to date. Settings from before hold to talk: a ring layout still equal to its old default
+ * Brings saved settings up to date. A tool that built geometry leaves an empty slot, and a layout still equal to the
+ * defaults before the edit ring takes the new ones. Settings from before hold to talk: a ring layout still equal to its old default
  * and the old default long pinch take the new defaults (null and no binding, so the app's defaults apply), and the
  * old ring binding values take the new names. Settings from before the long pinch went by role (`holdRoles` unset):
  * talk on both hands takes the role defaults. Everything else is kept as it is. Running it again changes nothing.
  */
 export function migrateRingSettings(stored: Record<string, unknown>): Record<string, unknown> {
   const out = { ...stored };
-  if (sameLayout(out.palette, OLD_TOOLS_LAYOUT)) out.palette = null;
-  if (sameLayout(out.createPalette, OLD_CREATE_LAYOUT)) out.createPalette = null;
-  if (sameLayout(out.createPalette, NO_LASSO_REFERENCE_LAYOUT)) out.createPalette = null;
+  if (sameLayout(out.palette, OLD_TOOLS_LAYOUT) || sameLayout(out.palette, BUILD_ACTION_LAYOUT))
+    out.palette = null;
+  if (
+    sameLayout(out.createPalette, OLD_CREATE_LAYOUT) ||
+    sameLayout(out.createPalette, NO_LASSO_REFERENCE_LAYOUT) ||
+    sameLayout(out.createPalette, BUILD_REFERENCE_LAYOUT)
+  )
+    out.createPalette = null;
+  // A layout of the user's own keeps its tools in place; a tool that built geometry leaves an empty slot.
+  for (const key of ["palette", "createPalette"] as const) {
+    const layout = out[key];
+    if (Array.isArray(layout) && layout.some((id) => typeof id === "string" && REMOVED_TOOLS.has(id)))
+      out[key] = layout.map((id) => (typeof id === "string" && REMOVED_TOOLS.has(id) ? null : id));
+  }
   if (out.gestures && typeof out.gestures === "object" && !Array.isArray(out.gestures)) {
     const gestures = migrateGestures(out.gestures as Record<string, unknown>);
     out.gestures = out.holdRoles === true ? gestures : migrateHoldRoles(gestures);

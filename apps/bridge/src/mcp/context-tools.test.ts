@@ -82,7 +82,6 @@ const textOf = (result: { content?: unknown }) =>
   (result.content as Array<{ text?: string }> | undefined)?.[0]?.text ?? "";
 const json = (result: { content?: unknown }) => JSON.parse(textOf(result));
 const READ = new Set(["get_elements", "context_list", "context_get"]);
-const WRITE = new Set([...READ, "create_elements", "update_elements", "context_adopt"]);
 const CLEAR = new Set([...READ, "context_clear"]);
 
 describe("context tools", () => {
@@ -113,59 +112,39 @@ describe("context tools", () => {
     expect(near.note).toBeUndefined();
   });
 
-  it("a reader is offered the reading tools and not context_adopt, and cannot adopt", async () => {
-    const agent = await mcp(await start(), { agent: "urban", tools: READ });
+  it("the layer stays context: no tool brings it into the model", async () => {
+    const agent = await mcp(await start(), { agent: "architect", tools: null });
     const listed = (await agent.listTools()).tools.map((t) => t.name);
-    expect(listed).toEqual(expect.arrayContaining(["context_list", "context_get"]));
+    expect(listed).toEqual(expect.arrayContaining(["context_list", "context_get", "context_clear"]));
     expect(listed).not.toContain("context_adopt");
-    await expect(agent.callTool({ name: "context_adopt", arguments: { ids: ["way/1"] } })).rejects.toThrow(
-      /not found/,
-    );
-    expect(Object.values(bridge?.scene.scene.doc.elements ?? {}).some((e) => e.id.startsWith("ctx-"))).toBe(
-      false,
-    );
-  });
-
-  it("a writer adopts a neighbour: an ordinary element, tagged with its source, in the model but not in the layer's way", async () => {
-    const agent = await mcp(await start(), { agent: "architect", tools: WRITE });
-    const adopted = json(await agent.callTool({ name: "context_adopt", arguments: { ids: ["way/1"] } }));
-    expect(adopted.adopted).toEqual(["ctx-way-1"]);
-    const element = bridge?.scene.scene.doc.elements["ctx-way-1"];
-    expect(element).toMatchObject({
-      type: "slab",
-      thickness: 12_000,
-      tags: { "context.id": "way/1", "context.source": expect.stringContaining("OpenStreetMap") },
-    });
-    // The layer keeps its own copy.
-    expect(bridge?.context.items.some((i) => i.id === "way/1")).toBe(true);
-    // It is one undo step.
-    expect(bridge?.scene.scene.canUndo).toBe(true);
-    bridge?.scene.scene.undo();
-    expect(bridge?.scene.scene.doc.elements["ctx-way-1"]).toBeUndefined();
-  });
-
-  it("refuses what cannot be adopted, with the reason, and changes nothing", async () => {
-    const agent = await mcp(await start(), { agent: "architect", tools: WRITE });
-    const before = Object.keys(bridge?.scene.scene.doc.elements ?? {}).length;
-    for (const [ids, reason] of [
-      [["nowhere"], /no item "nowhere"/],
-      [["node/9"], /only buildings/],
-      [["way/1", "node/9"], /only buildings/],
-    ] as const) {
-      const refused = await agent.callTool({ name: "context_adopt", arguments: { ids: [...ids] } });
-      expect(refused.isError).toBe(true);
-      expect(textOf(refused)).toMatch(reason);
-    }
-    await agent.callTool({ name: "context_adopt", arguments: { ids: ["way/2"] } });
-    const again = await agent.callTool({ name: "context_adopt", arguments: { ids: ["way/2"] } });
-    expect(textOf(again)).toMatch(/already in the model/);
-    expect(Object.keys(bridge?.scene.scene.doc.elements ?? {}).length).toBe(before + 1);
   });
 
   it("context_clear empties the layer for everyone, says how much went, and leaves the model and the site alone", async () => {
     const address = await start();
-    const writer = await mcp(address, { agent: "architect", tools: new Set([...WRITE, "context_clear"]) });
-    await writer.callTool({ name: "context_adopt", arguments: { ids: ["way/1"] } });
+    // An element in the model, which clearing the layer leaves alone.
+    bridge?.scene.handle(
+      {
+        type: "scene.apply",
+        id: "m1",
+        payload: {
+          label: "Block",
+          ops: [
+            {
+              op: "create",
+              element: {
+                id: "ctx-way-1",
+                type: "massing",
+                name: "Neighbour",
+                properties: {},
+                origin: [0, 0, 0],
+                size: [1000, 1000, 1000],
+              },
+            },
+          ],
+        },
+      },
+      () => {},
+    );
     const browser = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
     await browser.waitFor("context.snapshot");
     const urban = await mcp(address, { agent: "urban", tools: CLEAR });

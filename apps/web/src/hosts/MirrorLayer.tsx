@@ -15,14 +15,14 @@ export interface MirrorColors {
   selected: string;
 }
 
-/** A box for an object too heavy to mirror in full, or one whose mesh could not be had. */
+/** A box for an object too heavy to mirror in full, or one whose mesh could not be had, in millimetres as a mesh is. */
 function boxGeometry({ bounds }: HostObject): THREE.BufferGeometry {
-  const size = [0, 1, 2].map((k) => Math.max(1, (bounds.max[k] as number) - (bounds.min[k] as number)) * MM);
+  const size = [0, 1, 2].map((k) => Math.max(1, (bounds.max[k] as number) - (bounds.min[k] as number)));
   const geometry = new THREE.BoxGeometry(size[0], size[1], size[2]);
   geometry.translate(
-    ((bounds.min[0] + bounds.max[0]) / 2) * MM,
-    ((bounds.min[1] + bounds.max[1]) / 2) * MM,
-    ((bounds.min[2] + bounds.max[2]) / 2) * MM,
+    (bounds.min[0] + bounds.max[0]) / 2,
+    (bounds.min[1] + bounds.max[1]) / 2,
+    (bounds.min[2] + bounds.max[2]) / 2,
   );
   return geometry;
 }
@@ -52,12 +52,17 @@ function holdGeometry(part: MeshPart): () => void {
   };
 }
 
-/** From a mesh's millimetres to the viewer's metres, by way of where a block's placement puts it. */
-function placementMatrix(transform: number[] | undefined): THREE.Matrix4 {
+/** A 4 x 4 matrix sent row by row (a placement, an edit), as three.js holds it. `fromArray` reads column by column. */
+const rowMajor = (m: number[]) => new THREE.Matrix4().fromArray(m).transpose();
+
+/**
+ * From a mesh's millimetres to the viewer's metres, by way of where a block's placement puts it and, while the user
+ * moves or turns the object, where the edit takes it.
+ */
+function placementMatrix(transform: number[] | undefined, edit: number[] | null = null): THREE.Matrix4 {
   const toMetres = new THREE.Matrix4().makeScale(MM, MM, MM);
-  if (!transform) return toMetres;
-  // The placement is row by row and `fromArray` reads column by column.
-  return toMetres.multiply(new THREE.Matrix4().fromArray(transform).transpose());
+  if (edit) toMetres.multiply(rowMajor(edit));
+  return transform ? toMetres.multiply(rowMajor(transform)) : toMetres;
 }
 
 const MirrorMesh = memo(function MirrorMesh({
@@ -66,12 +71,18 @@ const MirrorMesh = memo(function MirrorMesh({
   colors,
   hovered,
   selected,
+  edit,
+  changed,
 }: {
   object: HostObject;
   assets: ModelAssets;
   colors: MirrorColors;
   hovered: boolean;
   selected: boolean;
+  /** The user's move or turn, drawn before the host has made it. */
+  edit: number[] | null;
+  /** The agent changed it for the user's last request about a selection: it glows until the next selection. */
+  changed: boolean;
 }) {
   const { asset } = object;
   useEffect(() => {
@@ -96,11 +107,13 @@ const MirrorMesh = memo(function MirrorMesh({
       for (const release of releases) release();
     };
   }, [meshed, parts]);
+  // A box is drawn where the object's bounds are, so a block's placement is already in it.
   const matrix = useMemo(
-    () => (meshed ? placementMatrix(object.transform) : new THREE.Matrix4()),
-    [meshed, object.transform],
+    () => placementMatrix(meshed ? object.transform : undefined, edit),
+    [meshed, object.transform, edit],
   );
-  const { owner, glow } = useOwnerDisplay(object.id, object.tags);
+  const { owner, glow: ownerGlow } = useOwnerDisplay(object.id, object.tags);
+  const glow = ownerGlow ?? (changed ? colors.selected : null);
   const base = object.color ?? colors.element;
   // What an agent's picture shows: the owner's tint, without the user's hover and selection.
   const clean = owner ? tint(base, owner, OWNER_TINT) : base;
@@ -236,8 +249,9 @@ const BlockBatch = memo(function BlockBatch({
 });
 
 /**
- * One host's objects, drawn read-only beside the HAI scene. They are not elements of the scene: a pick on one has the
- * object's id in its host, and the viewer sends it to that host to select. After each drawn frame the mirror is told
+ * One host's objects, drawn beside the HAI scene. They are not elements of the scene: a pick on one has the object's id
+ * in its host, and the viewer sends it to that host to select; the user's move, turn or delete is drawn here first,
+ * until the host's result arrives. After each drawn frame the mirror is told
  * which batches are now on screen, which is how the host to HAI latency is measured.
  */
 export function MirrorLayer({
@@ -253,6 +267,12 @@ export function MirrorLayer({
 }) {
   const state = useSyncExternalStore(mirror.subscribe, mirror.getSnapshot);
   const selected = useMemo(() => new Set(state.selection), [state.selection]);
+  // The user's edit before the host has made it: moved objects drawn where it takes them, deleted ones not drawn.
+  const { preview } = state;
+  const edited = useMemo(() => new Set(preview?.ids ?? []), [preview]);
+  const editMatrix = preview && "matrix" in preview ? preview.matrix : null;
+  const deleted = preview !== null && "deleted" in preview;
+  const changed = useMemo(() => new Set(state.changed), [state.changed]);
   // A block placed many times is drawn in one call rather than thousands. A placement that has to look different, for
   // being pointed at, selected or owned by an agent, is drawn on its own.
   const { singles, batches } = useMemo(() => {
@@ -260,8 +280,13 @@ export function MirrorLayer({
     const single: HostObject[] = [];
     const batched = new Map<string, HostObject[]>();
     for (const object of state.objects) {
+      if (deleted && edited.has(object.id)) continue;
       const quiet =
-        hoverId !== object.id && !selected.has(object.id) && Object.keys(object.tags).length === 0;
+        hoverId !== object.id &&
+        !selected.has(object.id) &&
+        !edited.has(object.id) &&
+        !changed.has(object.id) &&
+        Object.keys(object.tags).length === 0;
       if (!isRepeatedPlacement(object, counts) || !quiet) {
         single.push(object);
         continue;
@@ -278,7 +303,7 @@ export function MirrorLayer({
         capacity: counts.get(asset) ?? 0,
       })),
     };
-  }, [state.objects, hoverId, selected]);
+  }, [state.objects, hoverId, selected, edited, deleted, changed]);
   useFrame(() => {
     // After this frame has been drawn: a batch whose meshes are in is on screen.
     requestAnimationFrame(() =>
@@ -308,6 +333,8 @@ export function MirrorLayer({
           colors={colors}
           hovered={hoverId === object.id}
           selected={selected.has(object.id)}
+          edit={edited.has(object.id) ? editMatrix : null}
+          changed={changed.has(object.id)}
         />
       ))}
     </>

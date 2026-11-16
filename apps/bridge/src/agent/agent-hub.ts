@@ -140,6 +140,14 @@ export function withContext(text: string, context: RequestContext | undefined): 
     }
     lines.push(`[components] what is selected in the hosts, as they describe it:\n${block.join("\n")}`);
   }
+  if (context.limitTo) {
+    const { host, ids } = context.limitTo;
+    const named =
+      ids.length <= 20 ? ids.join(", ") : `${ids.slice(0, 20).join(", ")} and ${ids.length - 20} more`;
+    lines.push(
+      `[limit] the user asked about these objects in ${host} only: ${named}. Change only them; anything else needs the user's say. Hand any task for this request to a specialist without a wider scope. To see them, place a camera with camera_set framing these ids, then camera_capture.`,
+    );
+  }
   return `${lines.join("\n")}\n${text}`;
 }
 

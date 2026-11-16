@@ -27,6 +27,7 @@ export const ALL_CAPABILITIES: HostCapabilities = {
   placeImage: true,
   apiLookup: true,
   describe: true,
+  edit: true,
 };
 
 /** A one-pixel PNG, the smallest a fake host can upload as its capture. */

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
+import { references } from "./hands.ts";
 import { closeSettings, openSettings } from "./settings.ts";
 import { openViewer, startTestBridge } from "./viewer.ts";
 
@@ -20,10 +21,6 @@ type El = {
   id: string;
   type: string;
   name: string;
-  level?: string;
-  base?: number;
-  start?: number[];
-  end?: number[];
 };
 
 async function start(page: Page) {
@@ -70,7 +67,7 @@ async function clientOf(page: Page, [x, y, z]: Point3): Promise<[number, number]
   );
 }
 
-test("a new project opens with a clean space: nothing in it, then a model imported or a wall drawn", async ({
+test("a new project opens with a clean space: nothing in it, then a model imported or a sketch drawn", async ({
   page,
 }) => {
   await start(page);
@@ -78,8 +75,8 @@ test("a new project opens with a clean space: nothing in it, then a model import
   const dir = await newProject(page);
   expect(readFileSync(join(dir, "scene.hai.json"), "utf8")).toContain('"elements": {}');
 
-  // Draw in it: a wall on the ground level, the only element.
-  await page.keyboard.press("w");
+  // Sketch in it: a path on the ground, kept for the agent and not an element of the scene.
+  await page.keyboard.press("l");
   const from = await clientOf(page, [-4000, -2000, 0]);
   const to = await clientOf(page, [4000, -2000, 0]);
   if (!from || !to) throw new Error("the ground is not in view");
@@ -88,14 +85,14 @@ test("a new project opens with a clean space: nothing in it, then a model import
   await page.mouse.move((from[0] + to[0]) / 2, (from[1] + to[1]) / 2, { steps: 4 });
   await page.mouse.move(to[0], to[1], { steps: 4 });
   await page.mouse.up();
-  await expect.poll(async () => (await elements(page)).length).toBe(1);
-  const [wall] = await elements(page);
-  expect(wall).toMatchObject({ type: "wall", level: "L0" });
+  await expect.poll(async () => (await references(page)).sketches.length).toBe(1);
+  expect(await elements(page)).toEqual([]);
 
-  // Import into it: only the model and the wall are there.
+  // Import into it: the model is the only element, and the sketch is still there.
   await page.getByTestId("import-input").setInputFiles(join(MODELS, "metres-box.3dm"));
   await expect(page.getByTestId("import-summary")).toContainText("Imported 1 object", { timeout: 30_000 });
-  expect((await elements(page)).map((e) => e.type).sort()).toEqual(["imported", "wall"]);
+  expect((await elements(page)).map((e) => e.type)).toEqual(["imported"]);
+  expect((await references(page)).sketches).toHaveLength(1);
 });
 
 test("a folder that already holds a project is not overwritten, and the message says so", async ({
@@ -184,7 +181,7 @@ test("an empty project has nothing to save, and no file is offered", async ({ pa
   expect(downloaded).toBe(false);
 });
 
-test("Endpoint snaps to the top corner of an imported building, and the wall is placed at that height", async ({
+test("Endpoint snaps to the top corner of an imported building, and the sketch is drawn at that height", async ({
   page,
 }) => {
   await start(page);
@@ -201,24 +198,23 @@ test("Endpoint snaps to the top corner of an imported building, and the wall is 
   // ray under it lands.
   const top = await clientOf(page, [8000, 2000, 3000]);
   if (!top) throw new Error("the corner is not clear on screen");
-  await page.keyboard.press("w");
+  await page.keyboard.press("l");
   await page.mouse.move(top[0] + 9, top[1] + 6);
   await expect(page.getByTestId("snap-label")).toHaveText("Endpoint");
   const marker = await page.getByTestId("snap-label").getAttribute("data-point");
   expect(marker).toBe("8000,2000");
 
-  // Draw a wall from that corner to a free point on the roof plane.
+  // Sketch from that corner to a free point on the roof plane.
   const far = await clientOf(page, [8000 - 5000, 2000, 3000]);
   if (!far) throw new Error("the roof is not clear on screen");
   await page.mouse.down();
   await page.mouse.move((top[0] + far[0]) / 2, (top[1] + far[1]) / 2, { steps: 4 });
   await page.mouse.move(far[0], far[1], { steps: 4 });
   await page.mouse.up();
-  await expect.poll(async () => (await elements(page)).filter((e) => e.type === "wall").length).toBe(1);
-  const wall = (await elements(page)).find((e) => e.type === "wall") as El;
-  expect(wall.start).toEqual([8000, 2000]);
-  expect(wall.base).toBe(3000);
-  expect(wall.level).toBeUndefined();
+  await expect.poll(async () => (await references(page)).sketches.length).toBe(1);
+  const points = (await references(page)).sketches[0]?.points as Point3[];
+  expect(points[0]).toEqual([8000, 2000, 3000]);
+  expect(points.every((point) => point[2] === 3000)).toBe(true);
 });
 
 test("Measure snaps to corners at different heights and shows the across and up parts", async ({ page }) => {

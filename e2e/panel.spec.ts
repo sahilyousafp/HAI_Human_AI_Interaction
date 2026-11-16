@@ -144,13 +144,13 @@ test.describe("nod and shake", () => {
 
   test("Shake skips and keeps the tool", async ({ page }) => {
     await start(page);
-    await page.keyboard.press("w"); // Wall
-    await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "wall");
+    await page.keyboard.press("m"); // Move
+    await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "move");
     await askForPanel();
     await expect(offerCard(page)).toBeVisible();
     await gesture(page, "head.shake");
     await expect(offerCard(page).getByTestId("offer-outcome")).toHaveText("Skipped");
-    await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "wall");
+    await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "move");
   });
 
   test("Approval is answered before the offer, which keeps waiting", async ({ page }) => {

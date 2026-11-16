@@ -114,14 +114,14 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
-test("both hands' pointers: the left amber over a control, the right with the Wall tool", async ({
+test("both hands' pointers: the left amber over a control, the right with the Move tool", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   bridge = await startTestBridge(page);
   await openViewer(page);
   await settled(page);
-  await page.keyboard.press("w");
+  await page.keyboard.press("m");
   await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
   const control = page.getByRole("button", { name: "Open project" });
   const box = await control.boundingBox();
@@ -135,7 +135,7 @@ test("both hands' pointers: the left amber over a control, the right with the Wa
   const left = await handAt(page, overControl);
   await page.evaluate(([r, l]) => window.__HAI_INPUT__?.pointer(r, l), [right, left] as const);
   await expect(page.getByTestId("hand-pointer-left")).toHaveAttribute("data-mode", "press");
-  await expect(page.getByTestId("hand-pointer-right")).toHaveAttribute("data-mode", "wall");
+  await expect(page.getByTestId("hand-pointer-right")).toHaveAttribute("data-mode", "move");
   await page.mouse.move(viewer.x + 4, viewer.y + viewer.height - 4); // out of the way
   await settled(page);
   await expect(page.getByTestId("viewer")).toHaveScreenshot("two-pointers.png");

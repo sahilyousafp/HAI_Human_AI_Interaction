@@ -2,7 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { Bridge } from "../apps/bridge/src/server.ts";
 import { camera, openViewer, startTestBridge } from "./viewer.ts";
 
-// The view cube at the viewport's right: true orthographic views, drawing in a side view's plane, and the way back.
+// The view cube at the viewport's right: true orthographic views, and the way back.
 let bridge: (Bridge & { port: number }) | null = null;
 test.afterEach(async () => {
   await bridge?.stop();
@@ -99,47 +99,6 @@ async function mouseDrag(page: Page, from: [number, number], to: [number, number
   await page.mouse.move(to[0], to[1], { steps: 8 });
   await page.mouse.up({ button });
 }
-
-test("a Line drawn in the Front view lies in a vertical plane: Ortho at 90 degrees makes it upright", async ({
-  page,
-}) => {
-  await start(page);
-  await face(page, "front");
-  await expect(viewer(page)).toHaveAttribute("data-view", "front");
-  await page.keyboard.press("n");
-  await expect(page.getByTestId("constraint-ortho")).toHaveAttribute("aria-pressed", "true"); // Line locks by default
-  await page.getByTestId("constraint-step-90").click();
-  const canvas = page.locator("[data-testid=viewer] canvas");
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error("no canvas");
-  const [cx, cy] = [box.x + box.width * 0.55, box.y + box.height * 0.7];
-  await page.mouse.click(cx, cy);
-  // Up the screen and a little to the side: Ortho holds it upright.
-  await page.mouse.click(cx + 25, cy - 220);
-  await page.keyboard.press("Enter");
-  await expect
-    .poll(() => Object.values(bridge?.scene.scene.doc.elements ?? {}).filter((e) => e.type === "line").length)
-    .toBe(1);
-  const line = Object.values(bridge?.scene.scene.doc.elements ?? {}).find((e) => e.type === "line");
-  if (line?.type !== "line") throw new Error("no line");
-  const [a, b] = line.points;
-  expect(b?.[0]).toBe(a?.[0]); // upright: same x
-  expect(b?.[1]).toBe(a?.[1]); // in the Front view's plane: same y
-  expect((b?.[2] ?? 0) - (a?.[2] ?? 0)).toBeGreaterThan(1000);
-});
-
-test("Wall draws in plan: in a side view its drag places nothing", async ({ page }) => {
-  await start(page);
-  await face(page, "front");
-  await page.keyboard.press("w");
-  const canvas = page.locator("[data-testid=viewer] canvas");
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error("no canvas");
-  const before = Object.keys(bridge?.scene.scene.doc.elements ?? {}).length;
-  await mouseDrag(page, [box.x + 500, box.y + 400], [box.x + 700, box.y + 400], "left");
-  await page.waitForTimeout(300);
-  expect(Object.keys(bridge?.scene.scene.doc.elements ?? {}).length).toBe(before);
-});
 
 /** The agent's set_view: a JSON-RPC call to the bridge's MCP server with a token issued to it. */
 async function agentSetView(args: Record<string, unknown>): Promise<{ isError?: boolean }> {

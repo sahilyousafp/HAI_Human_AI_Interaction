@@ -87,7 +87,7 @@ test("the Endpoint marker with its name", async ({ page }) => {
   await page.getByTestId("aid-endpoint").click();
   await closeSettings(page);
   const [x, y] = await clearWallEnd(page);
-  await page.keyboard.press("w");
+  await page.keyboard.press("l");
   await page.mouse.move(x + 8, y + 5);
   await expect(page.getByTestId("snap-label")).toHaveText("Endpoint");
   await page.waitForTimeout(300);
@@ -145,7 +145,7 @@ test("the Endpoint marker on the top corner of an imported building", async ({ p
     return rect && at ? [rect.left + at[0] * rect.width, rect.top + at[1] * rect.height] : null;
   });
   if (!top) throw new Error("the corner is not in view");
-  await page.keyboard.press("w");
+  await page.keyboard.press("l");
   await page.mouse.move((top[0] as number) + 8, (top[1] as number) + 5);
   await expect(page.getByTestId("snap-label")).toHaveText("Endpoint");
   await page.waitForTimeout(300);

@@ -115,34 +115,6 @@ test("Move carries the whole group from any member, as one undo step, and leaves
   expect(byId("a")?.position).toEqual(POSITIONS.a);
 });
 
-test("Copy copies the whole group, and the copies are a group of their own", async ({ page }) => {
-  await start(page);
-  await page.keyboard.press("p");
-  const from = await onColumn(page, "b");
-  await dragOver(page, from, [from[0] + 60, from[1] + 40]);
-  await expect.poll(() => elements().length).toBe(7);
-  const copies = elements().filter((e) => !POSITIONS[e.id]);
-  expect(copies).toHaveLength(3);
-  const group = copies[0]?.tags?.["hai.group"];
-  expect(group).toBeTruthy();
-  expect(group).not.toBe("group-test");
-  expect(copies.every((c) => c.tags?.["hai.group"] === group)).toBe(true);
-  await undo(page);
-  await expect.poll(() => elements().length).toBe(4);
-});
-
-test("Copy carries a selection that is not a group, and its copies are not grouped either", async ({
-  page,
-}) => {
-  await start(page, "none");
-  await page.evaluate(() => window.__HAI_SCENE__?.select(["a", "b"]));
-  await page.keyboard.press("p");
-  const from = await onColumn(page, "a");
-  await dragOver(page, from, [from[0] + 60, from[1] + 40]);
-  await expect.poll(() => elements().length).toBe(6);
-  expect(grouped()).toHaveLength(0);
-});
-
 test("Delete asks once for the whole group, and one undo brings all of it back", async ({ page }) => {
   await start(page);
   await page.keyboard.press("x");
@@ -279,9 +251,7 @@ test("the card's buttons do what they say, and it goes when another tool is acti
   await page.getByTestId("selection-move").click();
   await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "move");
   await page.keyboard.press("v");
-  await page.getByTestId("selection-copy").click();
-  await expect(page.getByTestId("active-tool")).toHaveAttribute("data-tool", "copy");
-  await page.keyboard.press("v");
+  await expect(page.getByTestId("selection-copy")).toHaveCount(0); // HAI copies nothing: the hosts model
   await page.getByTestId("selection-delete").click();
   await expect(page.getByTestId("tool-question")).toContainText("group of 3");
   await page.keyboard.press("Escape");

@@ -1,0 +1,10 @@
+{
+  "type": "host.edited",
+  "id": "message-1",
+  "payload": {
+    "host": "rhino",
+    "id": "edit-2",
+    "ok": false,
+    "error": "There is no object a2 in Rhino any more."
+  }
+}

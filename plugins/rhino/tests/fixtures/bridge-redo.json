@@ -1,0 +1,7 @@
+{
+  "type": "host.redo",
+  "id": "bridge-13",
+  "payload": {
+    "host": "rhino"
+  }
+}

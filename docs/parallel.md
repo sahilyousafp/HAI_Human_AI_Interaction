@@ -59,7 +59,7 @@ Every element can carry **tags**: names up to 64 characters, values up to 200, a
 | `hai.part` | The bridge | The part the creating task works on |
 | `hai.source` | The importer | The file and the object's id in it (`tower.3dm#<id>`), left off when a big model's objects are merged per layer |
 
-Agents never write these: a change that adds, changes or removes a `hai.` tag is refused, so an agent cannot give an element to another owner. They can add their own tags with `set_tags`. Tags are saved in the project, undoable like any change, and optional: a project saved before tags loads as it was. (An older HAI cannot open a project that uses them.)
+Agents never write these: a change that adds, changes or removes a `hai.` tag is refused, so an agent cannot give an element to another owner. Tags are saved in the project, undoable like any change, and optional: a project saved before tags loads as it was. (An older HAI cannot open a project that uses them.)
 
 `get_elements` filters by `owner`, `part` and `tag`, and `get_scene_summary` counts the elements each owner and part holds. While Rhino is connected, the Rhino objects' `hai.*` user strings are listed in the same answers, so one question covers both.
 

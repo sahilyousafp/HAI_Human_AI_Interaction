@@ -18,10 +18,10 @@ const SIZES = [
   { width: 900, height: 600 },
 ];
 
-/** Each tool brings its own panels over the model: the section its readout, the wall its constraints. */
+/** Each tool brings its own panels over the model: the section its readout, a sketch only its notice. */
 const TOOLS: Array<{ key: string; panels: Record<string, string> }> = [
   { key: "s", panels: { "section readout": '[data-testid="section-status"]' } },
-  { key: "w", panels: { constraints: ".constraints" } },
+  { key: "l", panels: {} },
 ];
 
 for (const size of SIZES) {

@@ -12,7 +12,7 @@ describe("tool names by voice", () => {
   it("a transcript that is only a tool's spoken name picks it, whatever its case and punctuation", () => {
     expect(named("measure")).toBe("measure");
     expect(named("Measure.")).toBe("measure");
-    expect(named("Wall!")).toBe("wall");
+    expect(named("Rotate!")).toBe("rotate");
     expect(named("undo")).toBe("undo");
     expect(named("sketch area")).toBe("sketch-area");
     expect(named("Area")).toBe("sketch-area");
@@ -30,8 +30,8 @@ describe("tool names by voice", () => {
     }
   });
 
-  it('the words around a name do not matter: "use the wall tool"', () => {
-    expect(named("use the wall tool")).toBe("wall");
+  it('the words around a name do not matter: "use the rotate tool"', () => {
+    expect(named("use the rotate tool")).toBe("rotate");
     expect(named("tool measure")).toBe("measure");
     expect(named("section tool")).toBe("section");
   });
@@ -39,9 +39,9 @@ describe("tool names by voice", () => {
   it("Near miss within one letter: names of five letters or more allow one letter of difference", () => {
     expect(named("sketch aria")).toBe("sketch-area");
     expect(named("measur")).toBe("measure");
-    expect(named("colum")).toBe("column");
-    // Shorter names must be exact: "wal" is not Wall, "cot" is not Cut.
-    expect(named("wal")).toBeNull();
+    expect(named("sectin")).toBe("section");
+    // Shorter names must be exact: "mov" is not Move, "cot" is not Cut.
+    expect(named("mov")).toBeNull();
     expect(named("cot")).toBeNull();
   });
 
@@ -80,8 +80,25 @@ describe("transcribing short commands", () => {
   });
 
   it("a mode's name picks its tool in that mode, and anything longer does not", () => {
+    // A tool with ways of working, as a plugin may add (none of the built-in tools has modes).
+    const withModes = new ToolRegistry();
+    registerBuiltinTools(withModes);
+    withModes.register({
+      id: "line",
+      label: "Line",
+      icon: "",
+      shortcut: "n",
+      modes: {
+        options: [
+          { id: "straight", label: "Straight", spoken: ["straight", "straight line"], constrained: true },
+          { id: "freeform", label: "Freeform", spoken: ["freeform", "free form"], constrained: false },
+        ],
+        current: () => "straight",
+        set: () => {},
+      },
+    });
     const mode = (text: string) => {
-      const found = toolModeNamed(text, registry.list());
+      const found = toolModeNamed(text, withModes.list());
       return found ? [found.tool.id, found.mode] : null;
     };
     expect(mode("Freeform.")).toEqual(["line", "freeform"]);

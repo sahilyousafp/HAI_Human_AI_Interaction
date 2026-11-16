@@ -22,7 +22,7 @@ The top bar shows one compact pill per connected host: the host's icon with a st
 
 While a host is connected and switched on, every object in its open document is drawn in HAI's viewer, in the host's colours, whoever made it: the agent, a command in the host, or you with the mouse. Adding, changing, moving, recolouring and deleting show within a fraction of a second. The host's window can be minimised. Two hosts are drawn at the same time, each as its own layer.
 
-- **It is a mirror, not part of the HAI scene.** It is not saved with the HAI project, not in its undo history, and not changed by the scene tools. The host owns its objects, and its own undo undoes them.
+- **It is a mirror, not part of the HAI scene.** It is not saved with the HAI project and not in the scene's undo history. The host owns its objects, and its own undo undoes them.
 - **Picking.** Tap an object (with a hand or the mouse) and its host selects it; the other hosts' selections clear, so "this" is always one host's. What is selected in a host is highlighted in HAI.
 - **What a selection is.** When the selection in a host settles, HAI asks the host to describe it: what each object is in the host's own words, its layer, its box, its area, volume or length, its material and its own properties (Rhino's user strings, Blender's custom properties, Revit's parameters). A request you make while something is selected carries that description, so the agent knows exactly what "this" is.
 - **Blocks.** Each kind of block is meshed and uploaded once, and every placement shares that mesh, with its own position and the colours of what the block holds.
@@ -30,6 +30,15 @@ While a host is connected and switched on, every object in its open document is 
 - **What is not drawn.** Curves, points, annotations and other kinds of object are not drawn, and an object over the triangle cap is drawn as its box. Settings > Hosts counts both.
 - **A large document** arrives progressively, smaller objects first.
 - **Speed.** The target is under 300 ms from a change in the host to the drawn frame, for edits of up to 50 objects; measured with a stand-in for the connector, a 50-object edit is drawn in about 100 ms. A real Rhino model of 3180 objects and 3.4 million triangles arrived in about 15 seconds.
+
+## Editing a host's objects in HAI
+
+Select, Move, Rotate and Delete work on a host's objects as on HAI's own elements, with the same gestures, keys and spoken commands ([tools.md](tools.md#tools), [voice.md](voice.md#spoken-commands)). An edit is sent to the host as a transform (a 4 x 4 matrix in millimetres, which the connector scales to the document's units) or a delete, by the objects' ids, and the host makes it as one undo step named after the tool ("HAI: Move", "HAI: Rotate Canopy 30 deg"). No script runs and nothing is approved: it is your own hand on the model, like a drag in the host's window.
+
+- **No jump back.** While you drag, the objects are drawn where they go; when you let go they stay there until the host's result arrives. If the host refuses (an object was deleted there meanwhile, or the connector cannot take edits) or does not answer within 5 seconds, they go back and a notice says why.
+- **One undo order.** HAI's Undo and Redo take back your last edit wherever you made it: a host edit with that host's undo, a scene edit with the scene's ([tools.md](tools.md#tools)). An agent's run is undone from its run report instead.
+- **The selection card.** While objects of a host are selected, a card shows them as the host describes them, with Move, Rotate, Delete and **Ask about this**: a request limited to those objects ([tools.md](tools.md#groups)).
+- **Connectors.** Rhino's connector takes edits from version 0.3.0 (its hello says `edit`); an older one is answered "does not take edits from HAI. Update its connector."
 
 ## What the agent does in a host
 

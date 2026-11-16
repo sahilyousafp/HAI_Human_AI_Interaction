@@ -1,6 +1,6 @@
 # The agent
 
-HAI drives **your own Claude**: the Claude Code command-line tool you installed and signed in to yourself. It runs the unmodified `claude` program on your machine and talks to it over standard input and output, the way a terminal would. Your MCP servers, skills and settings load as usual; HAI adds its scene tools on top and shows everything in the agent panel over the model.
+HAI drives **your own Claude**: the Claude Code command-line tool you installed and signed in to yourself. It runs the unmodified `claude` program on your machine and talks to it over standard input and output, the way a terminal would. Your MCP servers, skills and settings load as usual; HAI adds its own tools on top and shows everything in the agent panel over the model. The agents model in the host applications (Rhino, Blender, Revit, see [hosts.md](hosts.md)), with each host's own tools; HAI is where you see their work and edit it.
 
 ## Before you start
 
@@ -18,8 +18,8 @@ claude -p --input-format stream-json --output-format stream-json --verbose --inc
 
 - **One process per agent.** Every request to Mochi, and every task for a specialist, is a new turn for that agent's process, so each agent remembers its conversation. Opening another project starts that project's own conversations.
 - **Files it writes**, all in the project's `.hai` folder, which is kept out of git:
-  - `agent/<name>/mcp.json` adds only the app's own MCP server, `hai`, at `http://127.0.0.1:<port>/mcp`. It carries a random token issued to this process as a bearer header, and a new one each time the process starts. From the token the bridge knows which agent is calling and offers it only the `hai` tools its definition lists, so Reviewer has no write tools at all. The browsers' session token is not accepted there. These tokens protect the app's local endpoint; they are not Claude credentials.
-  - `agent/<name>/system.md` is added to the system prompt. It says that lengths are millimetres, Z is up, scene work goes through the `hai` tools, and "this" or "that" means what you point at or select. Mochi's also lists the specialists it can hand work to, from their definitions.
+  - `agent/<name>/mcp.json` adds only the app's own MCP server, `hai`, at `http://127.0.0.1:<port>/mcp`. It carries a random token issued to this process as a bearer header, and a new one each time the process starts. From the token the bridge knows which agent is calling and offers it only the `hai` tools its definition lists, so Reviewer has no tool that changes the model at all. The browsers' session token is not accepted there. These tokens protect the app's local endpoint; they are not Claude credentials.
+  - `agent/<name>/system.md` is added to the system prompt. It says that lengths are millimetres, Z is up, the model is changed in a host with `host_run` (no tool builds in HAI's scene), and "this" or "that" means what you point at or select. Mochi's also lists the specialists it can hand work to, from their definitions.
   - `agent/<name>/session.json` holds the agent's conversation id, so its conversation survives restarts.
   - It also holds the version of the instructions HAI gave the agent when the conversation started (the base prompt and what Mochi is told the team can do). When an update to HAI changes those instructions, a conversation from the older version is **not resumed**: the agent starts a new one, because an agent resuming its old conversation keeps to what it said before ("we can only make walls") whatever its new instructions say. The old conversation stays in Claude Code's own history; the bridge log says "saved conversation not resumed". Conversations in files from before this existed are treated as older.
   - The team's definitions are Claude Code agent files in `.claude/agents/`, with HAI's extra details in `.hai/agents.json` ([agents.md](agents.md)).
@@ -30,20 +30,14 @@ claude -p --input-format stream-json --output-format stream-json --verbose --inc
 
 ## What the agent can do in the scene
 
-The `hai` MCP server gives each agent the tools its definition lists, from these:
+The `hai` MCP server gives each agent the tools its definition lists, from these. None of them builds in HAI's scene: an agent changes the model with `host_run` in a host (or, with no host in use, by writing a `.3dm` file with `python_run`). An agent file that still lists a tool HAI no longer has (`create_elements` and the others below) simply gets nothing for it.
 
 | Tool | What it does |
 |---|---|
 | `get_scene_summary` | Levels, element counts by type, how many elements each owner and part holds, and the bounding box, in millimetres |
 | `get_elements` | Full details, with tags, by id, or by type, level, owner, part or tag. An element you changed by hand since the agent last read it is marked `changedByUser` |
 | `get_user_context` | The selection, the element under your hand pointer, and the camera |
-| `create_elements`, `update_elements`, `delete_elements` | Change the scene. Each batch is checked as a whole: if one element is invalid, nothing changes and the error names it |
-| `transform_elements` | Moves, turns, scales or mirrors elements, or makes copies of them (`copies: N` puts each copy through the steps once more than the one before: a linear array). Steps run in order, each on what the one before left, and turn or scale about the elements' centre unless a point is named |
-| `geometry_array_along_curve` | Copies an element along a curve (a line element or a sketch): every spacing, or a count, with its width or size changing from a value at the first copy to a value at the last ("every 30 cm, the width starting at 15 cm and tapering to 5 cm"). The copies are ordinary elements. Needs no extra software (every agent that changes the model) |
-| `geometry_loft`, `geometry_sweep`, `geometry_boolean`, `geometry_offset` | Loft through sections, sweep a profile along a rail, union, subtract or intersect solids, offset a curve - with the OpenCascade geometry kernel, which HAI installs in the project's Python environment the first time one is used, after you have agreed. The result is made in the model at once as one undo step: a mesh you can move, turn, scale and delete (an offset makes line elements). See [Geometry kernel](#geometry-kernel) (every agent that changes the model) |
-| `set_tags` | Sets or removes the agent's own tags on elements. Names starting with `hai.` (`hai.owner`, `hai.part`, `hai.source`, `hai.group`) belong to the system and are refused (every agent that changes the model) |
-| `set_selection` | Select elements for everyone, with the rest of any group they belong to |
-| `group_elements`, `ungroup_elements` | Make elements one group, or take a group apart. A group is one object: `transform_elements` on any member takes the whole group about its middle, a copied group is a new group, and `update_elements` refuses to move or turn one member, as that would scatter it (reshaping one is allowed). `get_elements` with `group` lists the members. See [tools.md](tools.md#groups) |
+| `set_selection` | Select elements for everyone, with the rest of any group they belong to (every agent: it changes no geometry) |
 | `confirm_plan` | Shows the user how the lead means to split a request (agent, title and scope of each part) before it hands anything out; the user removes parts and confirms, or skips, and the lead hands out only the confirmed parts (the lead only; see [agents.md](agents.md#workers)) |
 | `spawn_worker` | Starts a worker for one part of the agent's own task (title, instruction, scope inside its claim): another session of the same agent, with its own undo step; the task ends after its workers (the specialists that change the model; see [Workers](agents.md#workers)) |
 | `get_claims`, `request_claim`, `release_claim` | See who is working on which part of the model, ask for more scope for the running task, give some back (every agent; see [Parallel modelling](parallel.md)) |
@@ -56,6 +50,10 @@ The `hai` MCP server gives each agent the tools its definition lists, from these
 | `host_place_image` | Puts an image from the project into a host as a picture on a plane, as one undo step (Architect, Product) |
 | `host_api` | Looks up a host's scripting API inside the running host, so the answer matches your version (every agent) |
 | `host_describe` | Describes host objects by id: type, layer, quantities, material and their own properties. A request made while something is selected already carries this (every agent) |
+
+**Removed when the hosts took over the modelling:** `create_elements`, `update_elements`, `delete_elements`, `transform_elements`, `group_elements`, `ungroup_elements`, `set_tags`, `context_adopt` and the geometry tools (`geometry_loft`, `geometry_sweep`, `geometry_boolean`, `geometry_offset`, `geometry_array_along_curve`) with the OpenCascade kernel behind them. Lofts, sweeps and booleans are a host's own commands now, through `host_run` (see [decisions.md](decisions.md)).
+
+**A request about a selection.** A request sent from the host selection card's **Ask about this**, or spoken while the card is open, starts with a `[limit]` line naming the host and the objects: the agent is told to change only them and to ask before touching anything else. Mochi's tasks for that request are scoped to them (a task given no scope gets their ids; a scope given ids is narrowed to them), and the check after each run reports anything changed outside, as for any claim. The agent is told to see them by placing a camera on them (`camera_set`, then `camera_capture`); no picture goes with the request itself.
 | `set_view` | Moves your camera: turn, tilt, nearer or further, look at a point, frame elements, or switch to a named view (Top, Front, Right and the rest of the [view cube](navigation.md#the-view-cube-and-orthographic-views), or Perspective). It changes nothing in the model (every agent) |
 | `camera_set` | Places or moves one of your own cameras by name (direction, distance, target or elements to frame); it is private to you and never moves the user's view |
 | `camera_list` | Lists your own cameras |
@@ -72,7 +70,6 @@ The `hai` MCP server gives each agent the tools its definition lists, from these
 | `urban_vegetation` | The land cover shares around the site (ESA WorldCover 2021) and the greenness (NDVI) of the newest low-cloud Sentinel-2 scene, with a ground overlay (Urban) |
 | `urban_metrics` | Building coverage, mean and tallest height, tree count and green share of the square around the site, from what the layer holds; a metric whose data was not fetched is reported missing (Urban) |
 | `context_list`, `context_get` | Read the city context layer (buildings, trees and ground data fetched from open data, drawn read-only beside the model, not part of it): what it holds with sources and dates, and the items near a point, nearest first (every agent; see [open-data.md](open-data.md#the-context-layer)) |
-| `context_adopt` | Brings chosen buildings of the context layer into the model as ordinary elements, inside your claim and as one undo step (the agents that change the model) |
 | `context_clear` | Empties the city context layer (fetched buildings, trees and ground data) when the user asks to clear the site context; the model and the site stay, and the data can be fetched again (every agent) |
 | `open_data_sources` | Says which open-data sources you may use now (hosts, what each gives, licence) and the project's site; only while **Open data** is on (Mochi, Climate, Urban, Simulation; see [open-data.md](open-data.md)) |
 | `site_set` | Proposes the project's site (latitude, longitude, true north) with an approval card showing the values; nothing is saved until you allow it, every time (same agents, only while Open data is on) |
@@ -138,7 +135,7 @@ User-level servers and skills stay yours to manage in Claude Code itself.
 ## Using the panel
 
 - **The panel talks to Mochi.** The team strip shows the specialists, hand-off chips open their work on a task, and the **Agents** tab edits the team ([agents.md](agents.md)). Mochi's replies are spoken.
-- **Speak** is the main way to ask: press the microphone button (or hold the **`** key) and say what to change while you point at the model. The transcript is sent after 1.5 s, or at once with a nod or **Enter**; a shake or **Escape** discards it. See [voice.md](voice.md).
+- **Speak** is the main way to ask: press the microphone button (or hold the **`** key) and say what to change while you point at the model. The transcript is sent after 5 s, or at once with a nod or **Enter**; a shake or **Escape** discards it. See [voice.md](voice.md).
 - Or type a request and press **Enter** to send it (**Shift+Enter** adds a line). You can send while the agent is ready; while it works, the send button becomes **Stop**.
 - **Ask agent** in the tool palette (or the **A** key) opens the panel and starts listening.
 - **The panel is a rail down the left**, beside the model, never over it. Drag its right edge to make it between 320 and 560 px wide, or use the arrow keys on the edge; a double-click puts it back to 380 px, and a press (a hand cannot drag) steps through a few widths. The width is remembered. Below 860 px of window width it is a sheet over the bottom of the model.
@@ -164,15 +161,3 @@ User-level servers and skills stay yours to manage in Claude Code itself.
 | A server shows "failed" | Check its command or URL in the Extensions tab; remove and add it again with the fix |
 | A card timed out | Ask again; or choose Always allow if you trust that tool in this project |
 | "Session recovered" | The agent process ended unexpectedly and the conversation was resumed; nothing to do |
-
-## Geometry kernel
-
-Lofts, sweeps, booleans and offsets need a real geometry kernel, which the scene's own elements and rhino3dm (the file format library) do not have. HAI uses [OpenCascade](https://dev.opencascade.org/) through Python (`cadquery-ocp`, pinned to the release HAI's recipes are tested with). It is not shipped with HAI: the first `geometry_loft`, `geometry_sweep`, `geometry_boolean` or `geometry_offset` shows a card that lists what would be installed, in the project's `.hai/python` environment, and runs after you agree. It is a large download (several hundred MB with its dependencies). After that, the tools run without asking.
-
-- **Loft**: closed sections make a solid, open ones a surface; `ruled` keeps the sides straight. Sections can be line elements or points, anywhere in space.
-- **Sweep**: a profile along a rail; draw the profile across the rail at its start. `smooth` fits one smooth curve through the rail's points.
-- **Boolean**: massings, columns, walls and slabs are combined as the extrusions of their footprints. Imported meshes cannot be combined.
-- **Offset**: a flat curve sideways by a distance. Closed curves grow for a positive distance; open ones move to the right of the way they run.
-
-A request is written to `.hai/geometry` and runs as a kept script in `.hai/scripts`, like any `python_run`. If the operating system refuses to load OpenCascade's native library (Windows Smart App Control does this on some machines), the tool says so and changes nothing. `geometry_array_along_curve` never needs the kernel.
-

@@ -39,7 +39,7 @@ A **view cube** sits at the top right of the model (under the sun badge during a
 
 Panning and zooming keep the view; orbiting (a left drag, a pinch drag, two-hand turn), framing the model or an agent's request for a view returns to perspective. The same size is framed at the camera's target, so switching keeps what you were looking at.
 
-Drawing follows the view. In Top (and in perspective) points land on the ground plane or at the height of a snap, as before. In **Front, Back, Left and Right** the **Line** tool draws in the vertical plane through its first point, so Ortho holds a line to the plane's two axes (an upright line is one Ortho step away), a typed length and the Endpoint, Midpoint, Centre and Grid snaps work there, and Perpendicular and Project (which work in plan) do not. Wall, Slab, Column, Move and Copy are drawn in plan and place nothing in a side view: switch to Top or perspective.
+Drawing follows the view. In Top (and in perspective) points land on the ground plane or at the height of a snap, as before. The built-in tools work in plan: in **Front, Back, Left and Right** a sketch, a move or a turn places nothing, so switch to Top or perspective. A tool a plugin adds can draw in the side view's vertical plane (`drawsInView`, see [tools.md](tools.md#adding-a-tool)).
 
 ## Mouse and keyboard
 

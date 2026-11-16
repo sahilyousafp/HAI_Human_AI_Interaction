@@ -15,8 +15,8 @@ const CAPABILITIES = [
   {
     key: "write",
     label: "Change the model",
-    hint: "one such agent works at a time",
-    tools: hai(HAI_TOOLS.write),
+    hint: "runs code and places images in Rhino, Blender or Revit; one such agent works at a time",
+    tools: hai(HAI_TOOLS.host),
   },
   {
     key: "climate",
@@ -89,7 +89,7 @@ function draftOf(agent: AgentDefinition | null, index: number): Draft {
     aliases: agent?.aliases.join(", ") ?? "",
     capabilities: {
       read: agent ? has(hai(HAI_TOOLS.read)) : true,
-      write: agent ? has(hai(HAI_TOOLS.write)) : false,
+      write: agent ? has(hai(HAI_TOOLS.host)) : false,
       climate: agent ? has(hai(HAI_TOOLS.climate)) : false,
       context: agent ? has(hai(HAI_TOOLS.context)) : false,
       openData: agent ? has(hai(HAI_TOOLS.openData)) : false,
