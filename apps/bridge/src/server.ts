@@ -6,13 +6,16 @@ import { type Duplex, Readable } from "node:stream";
 import type { AgentProvider } from "@hai/agent-core";
 import {
   type BridgeStatusMessage,
+  HOST_DESCRIBE_MAX,
+  HOST_IDS,
+  type HostId,
   type Message,
   type MessageOf,
   OPEN_DATA_SOURCES,
+  olderHostHello,
   PROTOCOL_VERSION,
   parseMessage,
   type RequestContext,
-  type RhinoHello,
   TOKEN_PROTOCOL_PREFIX,
   WS_PATH,
   WS_PROTOCOL,
@@ -24,27 +27,32 @@ import { ClaimTable } from "./agent/claims.ts";
 import { ExtensionHub } from "./agent/extensions.ts";
 import { PanelBroker } from "./agent/panels.ts";
 import { PlanBroker } from "./agent/plans.ts";
-import { findStrays, strayNote } from "./agent/rhino-run-check.ts";
 import { changesModel } from "./agent/roster.ts";
+import { findStrays, strayNote } from "./agent/run-check.ts";
 import { Team } from "./agent/team.ts";
 import { ViewContext } from "./agent/view-context.ts";
 import {
   ASSETS_PATH,
+  CAPTURE_PATH,
   handleAssets,
   handleProjectFile,
   MIRROR_PATH,
   PROJECT_FILE_PATH,
+  projectImagePath,
   projectThreeDmPath,
 } from "./asset-routes.ts";
-import { AssetStore } from "./assets.ts";
+import { AssetStore, checkPng } from "./assets.ts";
 import { assertLoopback } from "./config.ts";
 import { GeometryKernel, KERNEL_PACKAGES } from "./geometry/kernel.ts";
+import { HOST_ADAPTERS } from "./hosts/adapters.ts";
+import type { HostConnection } from "./hosts/host-link.ts";
+import { HostRegistry } from "./hosts/registry.ts";
 import { createLogger, type Logger, silentLogger } from "./log.ts";
 import { MarkerStore } from "./markers.ts";
 import { AgentTokens } from "./mcp/agent-tokens.ts";
+import type { HostTools } from "./mcp/host-tools.ts";
 import { createMcpHandler, MCP_PATH } from "./mcp/mcp-endpoint.ts";
 import { describeSources } from "./mcp/open-data-tools.ts";
-import { RHINO_DOCUMENT_SCRIPT, requirementPackages } from "./mcp/rhino-tools.ts";
 import { createSceneMcpServer } from "./mcp/scene-tools.ts";
 import { OpenDataClient, type Transport } from "./open-data/client.ts";
 import { ContextStore } from "./open-data/context-store.ts";
@@ -53,9 +61,19 @@ import { SiteStore } from "./open-data/site-store.ts";
 import { openDataUserAgent, sourceHosts } from "./open-data/sources.ts";
 import { PythonEnv } from "./python/python-env.ts";
 import { PythonWorkbench } from "./python/python-run.ts";
-import { RhinoLink } from "./rhino-link.ts";
 import { SceneHub, type SceneHubOptions } from "./scene-hub.ts";
 import { SettingsHub } from "./settings.ts";
+
+/** How long a host's capture is kept after the agent has read it. */
+const CAPTURE_KEEP_MS = 10 * 60_000;
+
+const safeJson = (raw: string): unknown => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
 
 export interface BridgeOptions {
   host: string;
@@ -74,8 +92,13 @@ export interface BridgeOptions {
   pythonFallbackRoot?: string;
   /** A ready-made environment (tests share one); the project's own is made on first use otherwise. */
   pythonEnv?: PythonEnv;
-  /** Where the meshes of Rhino's objects are kept while it is connected (`.hai/mirror`); without one nothing is mirrored. */
+  /**
+   * Where the meshes of the hosts' objects are kept while they are connected (`.hai/mirror/<host>`), and the hosts'
+   * captures (`.hai/mirror/captures`); without one nothing is mirrored.
+   */
   mirrorDir?: string;
+  /** How long after a host's selection settles it is described (tests make it short). */
+  describeDelayMs?: number;
   /** Writes one log line (redacted: never secrets or the session token); without it, nothing is logged. */
   log?: (line: string) => void;
   /** Tests give their own way to reach the open-data hosts (a local fake server); the app uses HTTPS. */
@@ -89,8 +112,8 @@ export interface Bridge {
   /** The agent team: Mochi and the specialists. */
   readonly agent: Team | null;
   readonly approvals: ApprovalBroker;
-  /** Rhino: its connection, the mirror of its objects and the way the agent models. */
-  readonly rhino: RhinoLink;
+  /** The hosts (Rhino, Blender, Revit): their connections and the mirrors of their objects. */
+  readonly hosts: HostRegistry;
   /** The Python workbench: the managed environment and the runner. */
   readonly python: PythonWorkbench;
   readonly pythonEnv: PythonEnv;
@@ -187,7 +210,17 @@ export function createBridge(options: BridgeOptions): Bridge {
   let panelsChanged = (_on: boolean) => {};
   // Set once the team exists: the Open data switch ends requests in flight and restarts the agents.
   let openDataChanged = (_on: boolean) => {};
-  const mirrorAssets = new AssetStore(() => options.mirrorDir ?? null);
+  // Each host has its own mirror store, so one going away clears only its meshes; captures are PNGs in a store of their own.
+  const mirrorStores = Object.fromEntries(
+    HOST_IDS.map((id) => [
+      id,
+      new AssetStore(() => (options.mirrorDir ? join(options.mirrorDir, id) : null)),
+    ]),
+  ) as Record<HostId, AssetStore>;
+  const captures = new AssetStore(
+    () => (options.mirrorDir ? join(options.mirrorDir, "captures") : null),
+    checkPng,
+  );
   const settings = new SettingsHub(options.settingsFile ?? null, broadcast, (feature, on) => {
     if (feature === "generatedPanels") panelsChanged(on);
     if (feature === "openData") openDataChanged(on);
@@ -211,9 +244,20 @@ export function createBridge(options: BridgeOptions): Bridge {
       ...(context?.points ? { points: context.points } : {}),
       ...(context?.sketches ? { sketches: context.sketches } : {}),
     };
-    if (markers.markers.length === 0) return message;
+    const components = hosts.inUse.flatMap((link) => link.components.map((c) => ({ host: link.id, ...c })));
+    if (markers.markers.length === 0 && components.length === 0) return message;
     const base = context ?? { references: [], selection: [], groundPoint: null };
-    return { ...message, payload: { ...message.payload, context: { ...base, markers: markers.markers } } };
+    return {
+      ...message,
+      payload: {
+        ...message.payload,
+        context: {
+          ...base,
+          ...(markers.markers.length > 0 ? { markers: markers.markers } : {}),
+          ...(components.length > 0 ? { components: components.slice(0, HOST_DESCRIBE_MAX) } : {}),
+        },
+      },
+    };
   };
   const context = new ContextStore(
     () => scene.projectDir,
@@ -241,8 +285,7 @@ export function createBridge(options: BridgeOptions): Bridge {
   let eyesChanged = () => {};
   const eyes = new AgentEyes({
     doc: () => scene.scene.doc,
-    rhinoBounds: () =>
-      rhino.mirroredObjects.flatMap((o) => (o.bounds ? [{ id: o.id, bounds: o.bounds }] : [])),
+    hostBounds: () => hosts.mirroredObjects.map((o) => ({ id: o.id, bounds: o.bounds })),
     shoot: (request) => view.shoot(request),
     changed: () => eyesChanged(),
   });
@@ -278,10 +321,11 @@ export function createBridge(options: BridgeOptions): Bridge {
     {
       projectDir: () => scene.projectDir,
       log,
-      // What a code run would install: the starting packages on first use plus what it names; for Rhino, its "# r:" lines.
+      // What a code run would install: the starting packages on first use plus what it names; in a host, what its
+      // script names (Rhino's "# r:" lines).
       pythonInstalls: (tool, input) =>
-        tool.endsWith("__rhino_run_python")
-          ? requirementPackages(typeof input.code === "string" ? input.code : "").packages
+        tool.endsWith("__host_run")
+          ? hostPackages(input)
           : KERNEL_TOOLS.includes(tool)
             ? pythonEnv.wouldInstall(KERNEL_PACKAGES)
             : pythonEnv.wouldInstall(
@@ -295,20 +339,161 @@ export function createBridge(options: BridgeOptions): Bridge {
       agent?.approvalsChanged();
     },
   );
-  const rhino = new RhinoLink(
+  const hosts = new HostRegistry(
     {
-      mode: () => settings.modelling,
-      assets: {
-        has: (id) => mirrorAssets.has(id),
-        remove: (id) => mirrorAssets.remove(id),
-        clear: () => mirrorAssets.clearAll(),
-      },
+      switchedOn: (id) => settings.hostOn(id),
+      assets: (id) => ({
+        has: (asset) => mirrorStores[id].has(asset),
+        remove: (asset) => mirrorStores[id].remove(asset),
+        clear: () => mirrorStores[id].clearAll(),
+      }),
       log,
-      // Agents list their tools when their process starts: restart them so the Rhino tools appear or go.
+      // Agents list their tools when their process starts: restart them so the host tools follow.
       availabilityChanged: () => void agent?.restart(),
+      ...(options.describeDelayMs !== undefined ? { describeDelayMs: options.describeDelayMs } : {}),
     },
     broadcast,
   );
+  /** The packages a host run would install, for its approval card (an unknown host installs none). */
+  const hostPackages = (input: Record<string, unknown>): string[] => {
+    const adapter = typeof input.host === "string" ? HOST_ADAPTERS[input.host as HostId] : undefined;
+    return adapter && typeof input.code === "string" ? adapter.packagesOf(input.code).packages : [];
+  };
+  const hostTools: HostTools = {
+    hosts: () =>
+      hosts.inUse.map((link) => ({
+        id: link.id,
+        label: link.adapter.label,
+        strengths: link.adapter.strengths,
+        language: link.adapter.language,
+        runHint: link.adapter.runHint,
+        app: link.app,
+        capabilities: link.capabilities,
+        unavailable: link.unavailable(),
+        readable: link.adapter.documentScript !== null,
+      })),
+    run: async (input, signal) => {
+      const link = hosts.get(input.host);
+      const { label, language } = link.adapter;
+      const requirements = link.adapter.packagesOf(input.code);
+      if (requirements.invalid.length > 0) {
+        return {
+          ok: false,
+          stdout: "",
+          error: `These "# r:" requirements are not package names pip can install: ${requirements.invalid.join(", ")}.`,
+          durationMs: 0,
+          script: null,
+        };
+      }
+      const record = (outcome: Parameters<PythonWorkbench["record"]>[1]) =>
+        python.record({ ...input, packages: requirements.packages, host: label, language }, outcome);
+      try {
+        const claim = input.agent ? claims.forAgent(input.agent) : undefined;
+        const out = await link.runCode(
+          input.code,
+          input.timeoutMs,
+          {
+            ...(input.agent ? { agent: input.agent } : {}),
+            title: input.title,
+            ...(claim?.scope?.part ? { part: claim.scope.part } : {}),
+            ...(claim?.scope ? { claim: claim.scope } : {}),
+          },
+          signal,
+        );
+        // The script is not sandboxed: what it did outside the claim is found afterwards and reported.
+        const { strays, truncated } = out.changes
+          ? findStrays(out.changes, claim, claims)
+          : { strays: [], truncated: false };
+        if (strays.length > 0) {
+          broadcast({
+            type: "host.run.report",
+            id: randomUUID(),
+            payload: { host: input.host, agent: input.agent, title: input.title, strays, truncated },
+          });
+        }
+        const script = record({
+          ...out,
+          ...(out.result !== undefined ? { result: out.result } : {}),
+          ...(out.error ? { error: out.error } : {}),
+        });
+        return {
+          ok: out.ok,
+          stdout: out.stdout,
+          ...(out.result !== undefined ? { result: out.result } : {}),
+          ...(out.error ? { error: out.error } : {}),
+          durationMs: out.durationMs,
+          script,
+          ...(out.changes
+            ? {
+                changed: {
+                  added: out.changes.added.length,
+                  changed: out.changes.changed.length,
+                  deleted: out.changes.deleted.length,
+                },
+              }
+            : {}),
+          ...(strays.length > 0 ? { outsideClaim: strayNote(strays, truncated, label) } : {}),
+        };
+      } catch (error) {
+        const message = (error as Error).message;
+        const script = record({
+          ok: false,
+          stdout: "",
+          error: message,
+          durationMs: 0,
+          stopped: message === "The run was stopped.",
+        });
+        return { ok: false, stdout: "", error: message, durationMs: 0, script };
+      }
+    },
+    document: async (host, signal) => {
+      const link = hosts.get(host);
+      const script = link.adapter.documentScript;
+      if (!script) return { ok: false, error: `${link.adapter.label} cannot be read this way yet.` };
+      try {
+        const out = await link.runCode(script, 15_000, { title: "Read the document" }, signal);
+        return out.ok && out.result
+          ? { ok: true, json: out.result }
+          : { ok: false, error: out.error ?? `${link.adapter.label} did not answer.` };
+      } catch (error) {
+        return { ok: false, error: (error as Error).message };
+      }
+    },
+    capture: async (host, view, width, height) => {
+      try {
+        const out = await hosts.get(host).capture(view, width, height);
+        if (!out.ok) return out;
+        const stream = captures.read(out.asset);
+        if (!stream) return { ok: false, error: "The capture was not uploaded." };
+        const chunks: Buffer[] = [];
+        for await (const chunk of stream) chunks.push(chunk as Buffer);
+        // A capture is read once; it is kept a little while for a retry, then dropped.
+        setTimeout(() => captures.remove(out.asset), CAPTURE_KEEP_MS).unref();
+        return { ok: true, png: Buffer.concat(chunks).toString("base64"), durationMs: out.durationMs };
+      } catch (error) {
+        return { ok: false, error: (error as Error).message };
+      }
+    },
+    placeImage: async (input) => {
+      const file = projectImagePath(scene.projectDir, input.path);
+      if (!file.ok) return file;
+      try {
+        return await hosts.get(input.host).placeImage({
+          path: file.path,
+          origin: input.origin,
+          normal: input.normal,
+          widthMm: input.widthMm,
+          ...(input.heightMm ? { heightMm: input.heightMm } : {}),
+          ...(input.agent ? { agent: input.agent } : {}),
+          title: input.title,
+        });
+      } catch (error) {
+        return { ok: false, error: (error as Error).message };
+      }
+    },
+    api: (host, query) => hosts.get(host).api(query),
+    describe: (host, ids) => hosts.get(host).describe(ids),
+  };
   const plans = new PlanBroker({ log }, broadcast);
   const panels = new PanelBroker({ log, closed: (closure) => agent?.panelClosed(closure) }, broadcast);
   panelsChanged = (on) => {
@@ -418,91 +603,16 @@ export function createBridge(options: BridgeOptions): Bridge {
               return out;
             },
           },
-          ...(rhino.inUse === "rhino"
+          ...(hosts.inUse.length > 0
             ? {
-                rhinoPython: {
-                  run: async (input, signal) => {
-                    const requirements = requirementPackages(input.code).packages;
-                    try {
-                      const claim = input.agent ? claims.forAgent(input.agent) : undefined;
-                      const out = await rhino.runPython(
-                        input.code,
-                        input.timeoutMs,
-                        {
-                          ...(input.agent ? { agent: input.agent } : {}),
-                          title: input.title,
-                          ...(claim?.scope?.part ? { part: claim.scope.part } : {}),
-                          ...(claim?.scope ? { claim: claim.scope } : {}),
-                        },
-                        signal,
-                      );
-                      // The script is not sandboxed: what it did outside the claim is found afterwards and reported.
-                      const { strays, truncated } = out.changes
-                        ? findStrays(out.changes, claim, claims)
-                        : { strays: [], truncated: false };
-                      if (strays.length > 0) {
-                        broadcast({
-                          type: "rhino.run.report",
-                          id: randomUUID(),
-                          payload: { agent: input.agent, title: input.title, strays, truncated },
-                        });
-                      }
-                      const script = python.record(
-                        { ...input, packages: requirements },
-                        {
-                          ...out,
-                          ...(out.result !== undefined ? { result: out.result } : {}),
-                          ...(out.error ? { error: out.error } : {}),
-                        },
-                      );
-                      return {
-                        ok: out.ok,
-                        stdout: out.stdout,
-                        ...(out.result !== undefined ? { result: out.result } : {}),
-                        ...(out.error ? { error: out.error } : {}),
-                        durationMs: out.durationMs,
-                        script,
-                        ...(strays.length > 0 ? { outsideClaim: strayNote(strays, truncated) } : {}),
-                      };
-                    } catch (error) {
-                      const message = (error as Error).message;
-                      const script = python.record(
-                        { ...input, packages: requirements },
-                        {
-                          ok: false,
-                          stdout: "",
-                          error: message,
-                          durationMs: 0,
-                          stopped: message === "The run was stopped.",
-                        },
-                      );
-                      return { ok: false, stdout: "", error: message, durationMs: 0, script };
-                    }
-                  },
-                  document: async (signal) => {
-                    try {
-                      const out = await rhino.runPython(
-                        RHINO_DOCUMENT_SCRIPT,
-                        15_000,
-                        { title: "Read the document" },
-                        signal,
-                      );
-                      return out.ok && out.result
-                        ? { ok: true as const, json: out.result }
-                        : { ok: false as const, error: out.error ?? "Rhino did not answer." };
-                    } catch (error) {
-                      return { ok: false as const, error: (error as Error).message };
-                    }
-                  },
-                },
-              }
-            : {}),
-          ...(rhino.mirrored
-            ? {
-                rhino: {
-                  object: (id) => rhino.object(id),
-                  objects: () => rhino.mirroredObjects,
-                  selection: () => rhino.selection,
+                hosts: hostTools,
+                mirror: {
+                  object: (id) => hosts.object(id),
+                  objects: () => hosts.mirroredObjects,
+                  selections: () =>
+                    hosts.inUse
+                      .filter((link) => link.selection.length > 0)
+                      .map((link) => ({ host: link.id, objects: link.selection })),
                 },
               }
             : {}),
@@ -512,10 +622,13 @@ export function createBridge(options: BridgeOptions): Bridge {
             doc: () => scene.scene.doc,
             site: () => site.site,
             context: () => context.items,
-            rhino: () =>
-              rhino.mirroredObjects.flatMap((o) =>
-                o.bounds ? [{ id: o.id, name: o.name ?? o.id, bounds: o.bounds }] : [],
-              ),
+            hosts: () =>
+              hosts.mirroredObjects.map((o) => ({
+                id: o.id,
+                name: o.name || o.id,
+                host: HOST_ADAPTERS[o.host].label,
+                bounds: o.bounds,
+              })),
           },
           context: {
             summary: () => context.summary(),
@@ -585,11 +698,35 @@ export function createBridge(options: BridgeOptions): Bridge {
       return;
     }
     if (path.startsWith(MIRROR_PATH)) {
+      // `/mirror/<host>/<id>`: each host's connector puts its meshes in its own store.
+      const host = HOST_IDS.find((id) => path.startsWith(`${MIRROR_PATH}${id}/`));
+      if (!host) {
+        res.writeHead(404).end();
+        return;
+      }
       handleAssets(req, res, path, {
         token,
         allowedOrigins: options.allowedOrigins,
-        assets: mirrorAssets,
-        prefix: MIRROR_PATH,
+        assets: mirrorStores[host],
+        prefix: `${MIRROR_PATH}${host}/`,
+        tokensMatch,
+      }).catch(() => {
+        if (!res.headersSent) res.writeHead(500).end();
+      });
+      return;
+    }
+    if (path.startsWith(CAPTURE_PATH)) {
+      // A host's capture of its viewport, as a PNG; only a connector puts one (no browser origin), and only the
+      // bridge reads it.
+      if (req.headers.origin || req.method !== "PUT") {
+        res.writeHead(403).end();
+        return;
+      }
+      handleAssets(req, res, path, {
+        token,
+        allowedOrigins: options.allowedOrigins,
+        assets: captures,
+        prefix: CAPTURE_PATH,
         tokensMatch,
       }).catch(() => {
         if (!res.headersSent) res.writeHead(500).end();
@@ -619,8 +756,8 @@ export function createBridge(options: BridgeOptions): Bridge {
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (new URL(req.url ?? "/", "http://localhost").pathname !== WS_PATH)
       return reject(socket, 404, "Not Found");
-    // A browser always sends an Origin and it must be the app's own. A program on this machine (the Rhino plugin)
-    // sends none and is accepted only with the token, and only to say hello as the Rhino client.
+    // A browser always sends an Origin and it must be the app's own. A program on this machine (a host's connector)
+    // sends none and is accepted only with the token, and only to say hello as a host.
     const origin = req.headers.origin;
     if (origin && !options.allowedOrigins.includes(origin)) return reject(socket, 403, "Forbidden");
     const offered = (req.headers["sec-websocket-protocol"] ?? "").split(",").map((p) => p.trim());
@@ -634,13 +771,28 @@ export function createBridge(options: BridgeOptions): Bridge {
 
   wss.on("connection", (ws: WebSocket, _req: IncomingMessage, local: boolean) => {
     let greeted = false;
-    /** Set when this connection is the Rhino plugin. */
-    let rhinoConnection: { send(m: Message): void; close(): void; hello: RhinoHello } | null = null;
+    /** Set when this connection is a host's connector. */
+    let hostConnection: { host: HostId; connection: HostConnection } | null = null;
     const send = (message: Message) => ws.send(JSON.stringify(message));
     const page = { send };
     let removePage = () => {};
     ws.on("message", (data) => {
-      const result = parseMessage(data.toString());
+      const raw = data.toString();
+      const result = parseMessage(raw);
+      if (!result.ok && local && !greeted) {
+        // A connector built for an older protocol is told to update, not just closed.
+        const older = olderHostHello(safeJson(raw));
+        if (older) {
+          const label = HOST_ADAPTERS[older].label;
+          send({
+            type: "host.refused",
+            id: randomUUID(),
+            payload: { reason: `This HAI for ${label} is older than the bridge: install the new one.` },
+          });
+          ws.close(1008, "Connector too old");
+          return;
+        }
+      }
       if (!result.ok) {
         ws.close(1008, "Invalid message");
         return;
@@ -648,21 +800,25 @@ export function createBridge(options: BridgeOptions): Bridge {
       const message = result.message;
       if (message.type === "hello") {
         if (greeted) return;
-        // Only a local program may say it is Rhino, and a local program may say nothing else: a web page cannot
-        // pretend to be the plugin, and the plugin gets none of the browser's messages.
-        if ((message.payload.client === "rhino") !== local) {
+        // Only a local program may say it is a host, and a local program may say nothing else: a web page cannot
+        // pretend to be a connector, and a connector gets none of the browser's messages.
+        const host = message.payload.client === "web" ? null : message.payload.client;
+        if ((host !== null) !== local) {
           ws.close(1008, "Wrong client for this connection");
           return;
         }
         greeted = true;
-        if (message.payload.client === "rhino") {
-          // The plugin is not a page: it gets none of the pages' messages and counts as no client.
-          rhinoConnection = {
-            send,
-            close: () => ws.close(1000, "Replaced by a newer connection"),
-            hello: message.payload,
+        if (host !== null && message.payload.client !== "web") {
+          // A connector is not a page: it gets none of the pages' messages and counts as no client.
+          hostConnection = {
+            host,
+            connection: {
+              send,
+              close: () => ws.close(1000, "Replaced by a newer connection"),
+              hello: message.payload,
+            },
           };
-          rhino.attach(rhinoConnection);
+          hosts.get(host).attach(hostConnection.connection);
           send(statusMessage());
           return;
         }
@@ -678,7 +834,7 @@ export function createBridge(options: BridgeOptions): Bridge {
         approvals.announce(send);
         panels.greet(send);
         plans.greet(send);
-        rhino.greet(send);
+        hosts.greet(send);
         extensions.greet(send);
         if (agent) agent.greet(send);
         else send(agentNotSetUp());
@@ -690,9 +846,10 @@ export function createBridge(options: BridgeOptions): Bridge {
         return;
       }
       view.activate(page);
-      if (rhinoConnection) {
-        // The plugin may report on Rhino and answer its runs, and nothing else.
-        if (!rhino.handleFromRhino(message)) ws.close(1008, "Not a message for the Rhino client");
+      if (hostConnection) {
+        // A connector may report on its own host and answer its requests, and nothing else.
+        if (!hosts.get(hostConnection.host).handleFromHost(message))
+          ws.close(1008, "Not a message for this host's connector");
         return;
       }
       if (message.type === "settings.set" && message.payload.maxSessions !== undefined) {
@@ -700,15 +857,15 @@ export function createBridge(options: BridgeOptions): Bridge {
         agent?.limitsChanged();
         return;
       }
-      if (message.type === "settings.set" && message.payload.modelling !== undefined) {
+      if (message.type === "settings.set" && message.payload.hosts !== undefined) {
         settings.handle(message);
-        rhino.modeChanged();
+        hosts.switchesChanged();
         return;
       }
-      if (message.type === "rhino.open") {
-        // A page names a file in the project; the plugin is given the absolute path, only for a .3dm inside it.
+      if (message.type === "host.open") {
+        // A page names a file in the project; the connector is given the absolute path, only for a .3dm inside it.
         const file = projectThreeDmPath(scene.projectDir, message.payload.path);
-        if (file) rhino.open(file);
+        if (file) hosts.get(message.payload.host).open(file);
         else
           send({
             type: "request.error",
@@ -717,7 +874,7 @@ export function createBridge(options: BridgeOptions): Bridge {
           });
         return;
       }
-      if (rhino.handleFromWeb(message)) return;
+      if (hosts.handleFromWeb(message)) return;
       if (message.type === "opendata.clear") {
         openDataRecord.clear();
         return;
@@ -746,7 +903,7 @@ export function createBridge(options: BridgeOptions): Bridge {
       agent?.handle(routed, send);
     });
     ws.on("close", () => {
-      if (rhinoConnection) rhino.detach(rhinoConnection);
+      if (hostConnection) hosts.get(hostConnection.host).detach(hostConnection.connection);
       removePage();
       if (clients.delete(ws)) broadcastStatus();
       // With no page left, nothing can show or answer a panel: an open one closes and drops its preview.
@@ -763,7 +920,7 @@ export function createBridge(options: BridgeOptions): Bridge {
     scene,
     agent,
     approvals,
-    rhino,
+    hosts,
     python,
     pythonEnv,
     panels,

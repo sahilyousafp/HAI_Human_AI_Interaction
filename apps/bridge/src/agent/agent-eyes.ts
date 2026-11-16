@@ -71,8 +71,8 @@ export function describeCamera(camera: AgentCamera): string {
 
 export interface EyesDeps {
   doc(): SceneDocument;
-  /** The Rhino objects mirrored now, with their boxes in millimetres. */
-  rhinoBounds(): Array<{ id: string; bounds: BoundsMm }>;
+  /** The host objects mirrored now, with their boxes in millimetres. */
+  hostBounds(): Array<{ id: string; bounds: BoundsMm }>;
   /** Takes pictures off-screen from cameras in a viewer. */
   shoot(request: {
     agent: string;
@@ -99,21 +99,21 @@ export class AgentEyes {
 
   constructor(private readonly deps: EyesDeps) {}
 
-  /** The box of the whole model, or of the named elements (scene elements and mirrored Rhino objects). */
+  /** The box of the whole model, or of the named elements (scene elements and mirrored host objects). */
   box(ids?: string[]): BoundsMm | null {
     const doc = this.deps.doc();
-    const rhino = this.deps.rhinoBounds();
+    const mirror = this.deps.hostBounds();
     const boxes: BoundsMm[] = [];
     if (ids) {
       for (const id of ids) {
-        const mirrored = rhino.find((o) => o.id === id);
+        const mirrored = mirror.find((o) => o.id === id);
         const element = doc.elements[id];
         if (mirrored) boxes.push(mirrored.bounds);
         else if (element) boxes.push(elementBounds(element, doc.levels));
       }
     } else {
       for (const element of Object.values(doc.elements)) boxes.push(elementBounds(element, doc.levels));
-      for (const o of rhino) boxes.push(o.bounds);
+      for (const o of mirror) boxes.push(o.bounds);
     }
     if (boxes.length === 0) return null;
     const along = (k: 0 | 1 | 2) => ({

@@ -2,13 +2,14 @@ import {
   type AgentCamera,
   type Element,
   type HeldTarget,
+  type HostId,
+  type HostObject,
+  type HostSelected,
   type LetterMarker,
   MAX_AGENT_CAMERAS,
   PanelDocument,
   type Point3Mm,
   RESERVED_TAG_PREFIX,
-  type RhinoObject,
-  type RhinoSelected,
   type SceneDocument,
   type SceneOp,
   type Sketch,
@@ -44,10 +45,10 @@ import type { PanelResult } from "../agent/panels.ts";
 import type { Caller } from "./agent-tokens.ts";
 import { type ContextTools, registerContextTools } from "./context-tools.ts";
 import { type GeometryTools, registerGeometryTools } from "./geometry-tools.ts";
+import { type HostTools, registerHostTools } from "./host-tools.ts";
 import { type OpenDataTools, registerOpenDataTools } from "./open-data-tools.ts";
 import { openPanelDescription } from "./panel-api.ts";
 import { pythonRunDescription } from "./python-api.ts";
-import { RHINO_DOCUMENT_DESCRIPTION, RHINO_RUN_DESCRIPTION, requirementPackages } from "./rhino-tools.ts";
 import {
   registerSimulationGeometry,
   registerSurfaceTemperature,
@@ -98,14 +99,14 @@ export interface SceneToolDeps {
   workers?: WorkerTools;
   /** Showing the user the split of a request before it is handed out. */
   plans?: PlanTools;
-  /** Rhino's mirrored objects and selection while the agent models with Rhino; absent otherwise. */
-  rhino?: RhinoContext;
+  /** The mirrored objects and selections of the hosts in use; absent while no host is in use. */
+  mirror?: MirrorContext;
   /** The Python workbench: runs a script in the managed environment. */
   python?: PythonTools;
   /** The geometry tools (array along a curve, and OpenCascade's loft, sweep, boolean and offset). */
   geometry?: GeometryTools;
-  /** Python in the open Rhino document; present while the agent models with Rhino. */
-  rhinoPython?: RhinoPythonTools;
+  /** Code, captures, images, API lookup and descriptions in the hosts in use; absent while no host is in use. */
+  hosts?: HostTools;
   /** Aborted when the agent ends the request before it is answered (Stop): long tool calls end their work. */
   requestSignal?: AbortSignal;
   /** The agents' own cameras and the pictures from them; they never touch the user's view. */
@@ -179,32 +180,17 @@ export interface PythonTools {
   }>;
 }
 
-/** What the Rhino tools do (see rhino-link.ts). */
-export interface RhinoPythonTools {
-  run(
-    input: { code: string; title: string; timeoutMs: number; agent: string | null },
-    signal: AbortSignal,
-  ): Promise<{
-    ok: boolean;
-    stdout: string;
-    result?: string;
-    error?: string;
-    durationMs: number;
-    script: string | null;
-    /** What the run did outside the agent's claim, found after it ran. */
-    outsideClaim?: string;
-  }>;
-  /** Reads the open document (units, layers, counts, selection, active view) as text. */
-  document(signal: AbortSignal): Promise<{ ok: true; json: string } | { ok: false; error: string }>;
-}
+/** A mirrored host object, with its host. */
+export type MirroredObject = HostObject & { host: HostId };
 
-/** What the user context says about Rhino. */
-export interface RhinoContext {
-  /** The mirrored Rhino object with this id (the one under the pointer), if there is one. */
-  object(id: string): RhinoObject | undefined;
-  /** Every mirrored Rhino object, to list them by owner, part or tag. */
-  objects(): RhinoObject[];
-  selection(): RhinoSelected[];
+/** What the user context says about the hosts in use. */
+export interface MirrorContext {
+  /** The mirrored object with this id (the one under the pointer), if there is one. */
+  object(id: string): MirroredObject | undefined;
+  /** Every mirrored object, to list them by owner, part or tag. */
+  objects(): MirroredObject[];
+  /** Each host's selection; a host with nothing selected is left out. */
+  selections(): Array<{ host: HostId; objects: HostSelected[] }>;
 }
 
 /** What the panel tools do for one agent (see panels.ts). */
@@ -331,10 +317,10 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       const owners = countByTag(doc, TAG_OWNER);
       const parts = countByTag(doc, TAG_PART);
       const groups = countByTag(doc, TAG_GROUP);
-      const rhinoObjects = deps.rhino?.objects() ?? [];
-      const rhinoTags = (name: string) => {
+      const hostObjects = deps.mirror?.objects() ?? [];
+      const hostTags = (name: string) => {
         const tally: Record<string, number> = {};
-        for (const o of rhinoObjects) {
+        for (const o of hostObjects) {
           const value = o.tags[name];
           if (value !== undefined) tally[value] = (tally[value] ?? 0) + 1;
         }
@@ -351,12 +337,16 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
         parts: parts.counts,
         withoutPart: parts.without,
         groups: groups.counts,
-        ...(deps.rhino
+        ...(deps.mirror
           ? {
-              rhino: {
-                objects: rhinoObjects.length,
-                owners: rhinoTags(TAG_OWNER),
-                parts: rhinoTags(TAG_PART),
+              hosts: {
+                objects: hostObjects.length,
+                byHost: hostObjects.reduce<Record<string, number>>((tally, o) => {
+                  tally[o.host] = (tally[o.host] ?? 0) + 1;
+                  return tally;
+                }, {}),
+                owners: hostTags(TAG_OWNER),
+                parts: hostTags(TAG_PART),
               },
             }
           : {}),
@@ -368,7 +358,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
   register(
     "get_elements",
     {
-      description: `Full details of elements, with their tags: by ids, or filtered by type, level, owner (the agent that made or last took over the element), part or tag (at most ${MAX_ELEMENTS}). While Rhino is connected the Rhino objects that match are listed too, under rhinoObjects. An element the user changed by hand since you last read it is marked changedByUser. ${ELEMENT_SHAPES}`,
+      description: `Full details of elements, with their tags: by ids, or filtered by type, level, owner (the agent that made or last took over the element), part or tag (at most ${MAX_ELEMENTS}). While hosts are in use the host objects that match are listed too, under hostObjects, each with its host. An element the user changed by hand since you last read it is marked changedByUser. ${ELEMENT_SHAPES}`,
       inputSchema: z.object({
         ids: z.array(z.string()).optional().describe("Element ids"),
         type: z.enum(["massing", "slab", "wall", "column", "line", "imported"]).optional(),
@@ -405,19 +395,26 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
           ) ?? new Set<string>())
         : new Set<string>();
       const filtered = owner !== undefined || part !== undefined || tag !== undefined;
-      const rhinoObjects =
-        deps.rhino && filtered && !ids
-          ? deps.rhino
+      const hostObjects =
+        deps.mirror && filtered && !ids
+          ? deps.mirror
               .objects()
               .filter((o) => tagged(o.tags))
               .slice(0, MAX_ELEMENTS)
-              .map((o) => ({ id: o.id, name: o.name, type: o.type, layer: o.layer, tags: o.tags }))
+              .map((o) => ({
+                host: o.host,
+                id: o.id,
+                name: o.name,
+                type: o.type,
+                layer: o.layer,
+                tags: o.tags,
+              }))
           : [];
       return text({
         elements: shown.map((e) => (changed.has(e.id) ? { ...e, changedByUser: true } : e)),
         ...(elements.length > MAX_ELEMENTS ? { truncated: true, total: elements.length } : {}),
         ...(missing.length ? { notFound: missing } : {}),
-        ...(rhinoObjects.length ? { rhinoObjects } : {}),
+        ...(hostObjects.length ? { hostObjects } : {}),
       });
     },
   );
@@ -433,21 +430,22 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       const doc = deps.doc();
       const { pointed, camera, target, points, sketches, markers } = deps.userContext();
       const pointedElement = pointed ? doc.elements[pointed] : undefined;
-      const pointedRhino = pointed ? deps.rhino?.object(pointed) : undefined;
+      const pointedHost = pointed ? deps.mirror?.object(pointed) : undefined;
       return text({
-        ...(deps.rhino
+        ...(deps.mirror
           ? {
-              rhino: {
-                pointed: pointedRhino
+              hosts: {
+                pointed: pointedHost
                   ? {
-                      id: pointedRhino.id,
-                      name: pointedRhino.name,
-                      type: pointedRhino.type,
-                      layer: pointedRhino.layer,
-                      tags: pointedRhino.tags,
+                      host: pointedHost.host,
+                      id: pointedHost.id,
+                      name: pointedHost.name,
+                      type: pointedHost.type,
+                      layer: pointedHost.layer,
+                      tags: pointedHost.tags,
                     }
                   : null,
-                selection: deps.rhino.selection(),
+                selections: deps.mirror.selections(),
               },
             }
           : {}),
@@ -988,7 +986,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       caller,
     );
 
-  const { python, rhinoPython } = deps;
+  const { python, hosts } = deps;
   if (python) {
     register(
       "python_run",
@@ -1050,60 +1048,13 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
     );
   }
 
-  if (rhinoPython) {
-    register(
-      "rhino_run_python",
-      {
-        description: RHINO_RUN_DESCRIPTION,
-        inputSchema: z.object({
-          code: z
-            .string()
-            .min(1)
-            .max(200_000)
-            .describe("The Python 3 script; '# r: package' lines name packages"),
-          title: z.string().trim().min(1).max(80).describe('A short title, e.g. "Loft the canopy"'),
-          timeoutSeconds: z.number().int().min(1).max(600).optional().describe("Default 60"),
-        }),
-      },
-      async ({ code, title, timeoutSeconds }, ctx) => {
-        const requirements = requirementPackages(code);
-        if (requirements.invalid.length > 0) {
-          return failure(
-            `These "# r:" requirements are not package names pip can install: ${requirements.invalid.join(", ")}.`,
-          );
-        }
-        const out = await rhinoPython.run(
-          { code, title, timeoutMs: (timeoutSeconds ?? 60) * 1000, agent: caller.agent },
-          stopSignal(ctx.mcpReq.signal, deps.requestSignal),
-        );
-        const body = {
-          ok: out.ok,
-          output: out.stdout,
-          ...(out.result !== undefined ? { result: out.result } : {}),
-          ...(out.error ? { error: out.error } : {}),
-          durationMs: out.durationMs,
-          ...(out.script ? { script: out.script } : {}),
-          ...(out.outsideClaim ? { outsideYourClaim: out.outsideClaim } : {}),
-        };
-        return out.ok ? text(body) : failure(JSON.stringify(body, null, 2));
-      },
-    );
-
-    register(
-      "rhino_get_document",
-      { description: RHINO_DOCUMENT_DESCRIPTION, inputSchema: z.object({}) },
-      async (_input, ctx) => {
-        const out = await rhinoPython.document(stopSignal(ctx.mcpReq.signal, deps.requestSignal));
-        return out.ok ? text(out.json) : failure(out.error);
-      },
-    );
-  }
+  if (hosts) registerHostTools(register, { hosts, requestSignal: deps.requestSignal }, caller.agent);
 
   register(
     "set_view",
     {
       description:
-        "Moves the user's camera in the 3D view: turn it (azimuth in degrees around the target, counter-clockwise from east: 0 from the east, 90 from the north, 180 from the west, 270 from the south, 225 from the south-west), tilt it (elevation 5 to 89 degrees above the horizon), move it nearer or further (distance in millimetres from the target), look at a point (target, millimetres) or frame elements (their ids, including Rhino objects), or switch to a named view (view: top, bottom, front, back, left or right for the true orthographic views of the view cube - a plan is Top, an elevation is Front or Right - or perspective to go back; it sets the direction itself, so do not give azimuth or elevation with it). Give at least one; what you leave out stays. The view animates there over under a second and gives way at once if the user orbits. It changes nothing in the model. This moves the USER's camera: use it only to show the user something they asked to see. To look at the model yourself, use your own cameras (camera_set, camera_capture), which leave the user's view alone.",
+        "Moves the user's camera in the 3D view: turn it (azimuth in degrees around the target, counter-clockwise from east: 0 from the east, 90 from the north, 180 from the west, 270 from the south, 225 from the south-west), tilt it (elevation 5 to 89 degrees above the horizon), move it nearer or further (distance in millimetres from the target), look at a point (target, millimetres) or frame elements (their ids, including host objects), or switch to a named view (view: top, bottom, front, back, left or right for the true orthographic views of the view cube - a plan is Top, an elevation is Front or Right - or perspective to go back; it sets the direction itself, so do not give azimuth or elevation with it). Give at least one; what you leave out stays. The view animates there over under a second and gives way at once if the user orbits. It changes nothing in the model. This moves the USER's camera: use it only to show the user something they asked to see. To look at the model yourself, use your own cameras (camera_set, camera_capture), which leave the user's view alone.",
       inputSchema: z.object({
         azimuth: z
           .number()
@@ -1115,7 +1066,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
           .tuple([z.number(), z.number(), z.number()])
           .optional()
           .describe("A point to look at, millimetres"),
-        frame: z.array(z.string()).optional().describe("Element or Rhino object ids to bring into view"),
+        frame: z.array(z.string()).optional().describe("Element or host object ids to bring into view"),
         view: z.enum(VIEW_MODES).optional().describe("A named view: top, front, right... or perspective"),
       }),
     },
@@ -1131,7 +1082,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
     "camera_set",
     {
       description:
-        "Places or moves one of YOUR OWN cameras, by name, for checking your work. It is private to you and never moves the user's view. Aim it like set_view: azimuth (degrees counter-clockwise from east: 0 from the east, 90 from the north, 180 from the west, 270 from the south), elevation (5 to 89 degrees above the horizon), distance (millimetres from the target), target (a point, millimetres) or frame (element or Rhino object ids to bring into view). What you leave out stays; a new camera with nothing given frames the whole model. At most 8 cameras; they end with your task. Take a picture with camera_capture.",
+        "Places or moves one of YOUR OWN cameras, by name, for checking your work. It is private to you and never moves the user's view. Aim it like set_view: azimuth (degrees counter-clockwise from east: 0 from the east, 90 from the north, 180 from the west, 270 from the south), elevation (5 to 89 degrees above the horizon), distance (millimetres from the target), target (a point, millimetres) or frame (element or host object ids to bring into view). What you leave out stays; a new camera with nothing given frames the whole model. At most 8 cameras; they end with your task. Take a picture with camera_capture.",
       inputSchema: z.object({
         name: z.string().min(1).max(32).describe("A short name, e.g. south-east"),
         azimuth: z.number().optional().describe("Degrees counter-clockwise from east (+X)"),
@@ -1141,7 +1092,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
           .tuple([z.number(), z.number(), z.number()])
           .optional()
           .describe("A point to look at, millimetres"),
-        frame: z.array(z.string()).optional().describe("Element or Rhino object ids to bring into view"),
+        frame: z.array(z.string()).optional().describe("Element or host object ids to bring into view"),
       }),
     },
     async ({ name, ...aim }) => {
@@ -1210,7 +1161,7 @@ export function createSceneMcpServer(deps: SceneToolDeps, caller: Caller): McpSe
       if (preset) {
         const box = eyes.box(frame);
         if (frame && !box)
-          return failure("None of those ids is an element or Rhino object, so there is nothing to frame.");
+          return failure("None of those ids is an element or host object, so there is nothing to frame.");
         chosen = presetCameras(preset, box);
       } else if (cameras) {
         const missing = cameras.filter((n) => !eyes.get(agent, n));

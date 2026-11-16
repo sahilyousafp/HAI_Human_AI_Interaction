@@ -716,19 +716,19 @@ describe("set_view", () => {
   });
 });
 
-describe("the user context in Rhino", () => {
-  it("'this' in Rhino: the Rhino object under the pointer, and the Rhino selection, with their layers", async () => {
-    const { connectFakeRhino, rhinoBatch, rhinoObject } = await import("../../test/rhino-client.ts");
+describe("the user context in the hosts", () => {
+  it("'this' in Rhino: the host object under the pointer, and each host's selection, with their layers", async () => {
+    const { connectFakeHost, hostBatch, hostObject } = await import("../../test/host-client.ts");
     const address = await start();
     const browser = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
-    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
+    const rhino = await connectFakeHost(address, { token: TOKEN, track: sockets });
     const asset = await rhino.uploadMesh();
     rhino.send(
-      "rhino.objects",
-      rhinoBatch({
+      "host.objects",
+      hostBatch({
         reset: true,
         changed: [
-          rhinoObject("brep-1", asset, {
+          hostObject("brep-1", asset, {
             name: "Facade panel",
             layer: "Facade",
             tags: { "hai.owner": "architect" },
@@ -736,32 +736,35 @@ describe("the user context in Rhino", () => {
         ],
       }),
     );
-    await browser.waitFor("rhino.objects");
-    rhino.send("rhino.selection", { objects: [{ id: "brep-1", type: "Brep", layer: "Facade" }] });
-    await browser.waitFor("rhino.selection");
+    await browser.waitFor("host.objects");
+    rhino.send("host.selection", { objects: [{ id: "brep-1", type: "Brep", layer: "Facade" }] });
+    await browser.waitFor("host.selection");
     browser.send("context.update", { pointed: "brep-1", camera: null });
     const agent = await mcp(address);
     await expect
       .poll(
         async () =>
-          json(await agent.callTool({ name: "get_user_context", arguments: {} })).rhino?.pointed?.id,
+          json(await agent.callTool({ name: "get_user_context", arguments: {} })).hosts?.pointed?.id,
       )
       .toBe("brep-1");
     const context = json(await agent.callTool({ name: "get_user_context", arguments: {} }));
-    expect(context.rhino.pointed).toEqual({
+    expect(context.hosts.pointed).toEqual({
+      host: "rhino",
       id: "brep-1",
       name: "Facade panel",
       type: "brep",
       layer: "Facade",
       tags: { "hai.owner": "architect" },
     });
-    expect(context.rhino.selection).toEqual([{ id: "brep-1", type: "Brep", layer: "Facade" }]);
+    expect(context.hosts.selections).toEqual([
+      { host: "rhino", objects: [{ id: "brep-1", type: "Brep", layer: "Facade" }] },
+    ]);
   });
 
-  it("without Rhino the context has no Rhino part", async () => {
+  it("without a host the context has no host part", async () => {
     const address = await start();
     const agent = await mcp(address);
-    expect(json(await agent.callTool({ name: "get_user_context", arguments: {} })).rhino).toBeUndefined();
+    expect(json(await agent.callTool({ name: "get_user_context", arguments: {} })).hosts).toBeUndefined();
   });
 });
 
@@ -813,43 +816,44 @@ describe("reading the model by owner, part and tag", () => {
     expect(summary.parts).toEqual({ garden: 2, hall: 1 });
     // The sample scene's own elements and the free column have no owner.
     expect(summary.withoutOwner).toBeGreaterThanOrEqual(1);
-    expect(summary.rhino).toBeUndefined();
+    expect(summary.hosts).toBeUndefined();
   });
 
-  it("while Rhino is connected one question returns both the elements and the Rhino objects", async () => {
-    const { connectFakeRhino, rhinoBatch, rhinoObject } = await import("../../test/rhino-client.ts");
+  it("while a host is connected one question returns both the elements and the host objects", async () => {
+    const { connectFakeHost, hostBatch, hostObject } = await import("../../test/host-client.ts");
     const address = await start();
     seed();
     const browser = await connectClient(address, { token: TOKEN, origin: ORIGIN, track: sockets });
-    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
+    const rhino = await connectFakeHost(address, { token: TOKEN, track: sockets });
     const asset = await rhino.uploadMesh();
     rhino.send(
-      "rhino.objects",
-      rhinoBatch({
+      "host.objects",
+      hostBatch({
         reset: true,
         changed: [
-          rhinoObject("r-1", asset, {
+          hostObject("r-1", asset, {
             name: "Pond",
             tags: { "hai.owner": "architect", "hai.part": "garden" },
           }),
-          rhinoObject("r-2", asset, {
+          hostObject("r-2", asset, {
             name: "Hall roof",
             tags: { "hai.owner": "product", "hai.part": "hall" },
           }),
         ],
       }),
     );
-    await browser.waitFor("rhino.objects");
+    await browser.waitFor("host.objects");
     const agent = await mcp(address);
     await expect
       .poll(
-        async () => json(await agent.callTool({ name: "get_scene_summary", arguments: {} })).rhino?.objects,
+        async () => json(await agent.callTool({ name: "get_scene_summary", arguments: {} })).hosts?.objects,
       )
       .toBe(2);
     const found = json(await agent.callTool({ name: "get_elements", arguments: { part: "garden" } }));
     expect(found.elements.map((e: Element) => e.id).sort()).toEqual(["g-1", "g-2"]);
-    expect(found.rhinoObjects).toEqual([
+    expect(found.hostObjects).toEqual([
       {
+        host: "rhino",
         id: "r-1",
         name: "Pond",
         type: "brep",
@@ -858,8 +862,9 @@ describe("reading the model by owner, part and tag", () => {
       },
     ]);
     const summary = json(await agent.callTool({ name: "get_scene_summary", arguments: {} }));
-    expect(summary.rhino).toEqual({
+    expect(summary.hosts).toEqual({
       objects: 2,
+      byHost: { rhino: 2 },
       owners: { architect: 1, product: 1 },
       parts: { garden: 1, hall: 1 },
     });

@@ -33,19 +33,46 @@ function renameToolNames(file: string): void {
 }
 
 /**
+ * The Rhino tools became the host tools: a project that always allowed Python in Rhino keeps that choice for Rhino
+ * (always allow for a host run is kept per host), and an agent file that listed a Rhino tool lists its host tool.
+ */
+const OLD_HOST_TOOLS: Array<{ file: "approvals" | "agents"; from: string; to: string }> = [
+  { file: "approvals", from: `"${NEW.tools}rhino_run_python"`, to: `"${NEW.tools}host_run:rhino"` },
+  { file: "agents", from: `${NEW.tools}rhino_run_python`, to: `${NEW.tools}host_run` },
+  { file: "approvals", from: `"${NEW.tools}rhino_get_document"`, to: `"${NEW.tools}host_read"` },
+  { file: "agents", from: `${NEW.tools}rhino_get_document`, to: `${NEW.tools}host_read` },
+];
+
+function renameHostTools(file: string, kind: "approvals" | "agents"): void {
+  if (!existsSync(file)) return;
+  const text = readFileSync(file, "utf8");
+  let next = text;
+  for (const { file: applies, from, to } of OLD_HOST_TOOLS)
+    if (applies === kind) next = next.replaceAll(from, to);
+  if (next !== text) writeFileSync(file, next);
+}
+
+/**
  * A folder the app keeps data in (the workspace, or a project) may hold what an older version, named AEX, saved there:
  * the `.aex` folder (settings, sessions, the always-allowed tools, the team) becomes `.hai`, and tool names saved in it
  * and in the project's agent files follow the app's tool server to its new name. Nothing already named the new way is
  * overwritten (an old file whose new name is taken stays where it is), and a folder with nothing old in it is left alone.
+ * The Rhino tools' names move to the host tools' (`OLD_HOST_TOOLS`).
  */
 export function migrateLegacyFolder(dir: string): void {
   moveFolder(join(dir, OLD.dir), join(dir, NEW.dir));
   const data = join(dir, NEW.dir);
   renameToolNames(join(data, "approvals.json"));
   renameToolNames(join(data, "agents.json"));
+  renameHostTools(join(data, "approvals.json"), "approvals");
+  renameHostTools(join(data, "agents.json"), "agents");
   const agents = join(dir, ".claude", "agents");
   if (existsSync(agents))
-    for (const file of readdirSync(agents)) if (file.endsWith(".md")) renameToolNames(join(agents, file));
+    for (const file of readdirSync(agents))
+      if (file.endsWith(".md")) {
+        renameToolNames(join(agents, file));
+        renameHostTools(join(agents, file), "agents");
+      }
 }
 
 /** A project folder: as `migrateLegacyFolder`, and its scene file and imported-model assets take their new names. */

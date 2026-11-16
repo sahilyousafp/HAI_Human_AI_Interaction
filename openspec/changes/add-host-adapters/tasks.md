@@ -9,22 +9,22 @@
 
 ## 2. The bridge: registry and links
 
-- [ ] 2.1 Rename `host-link.ts` to `desktop-link.ts` (the Electron parent link) with its test. Verify the desktop e2e start-up test still passes.
-- [ ] 2.2 Move `RhinoLink` to `hosts/host-link.ts`, generic over the host, and add `hosts/registry.ts` (one link per host, a second connection replaces the first, the set in use from the settings). Verify by moving `rhino-link.test.ts` to `hosts/host-link.test.ts` and running it against a parameterised fake host as `rhino` and as `blender`.
-- [ ] 2.3 Add `hosts/rhino.ts`, the adapter (strengths, language, `# r:` package parsing, run hint). Verify by moving the `# r:` parsing tests into it.
-- [ ] 2.4 Accept token-only connections for every `HostId`, refuse the old hello with its message, and greet a page with one `host.state` per known host. Verify "any host id connects with the token", "an old plugin is refused" and "the mirror reaches a late page" for two hosts.
-- [ ] 2.5 Generalise `agent/rhino-run-check.ts` to `agent/run-check.ts`. Verify the strays tests and `parallel.test.ts` for runs on a host.
-- [ ] 2.6 Replace `modelling` with `hosts` in `settings.ts`, with the migration from `python` and the other values. Verify "an old Python only choice" and "switch a host off" in the settings tests.
+- [x] 2.1 Rename `host-link.ts` to `desktop-link.ts` (the Electron parent link) with its test. Verify the desktop e2e start-up test still passes.
+- [x] 2.2 Move `RhinoLink` to `hosts/host-link.ts`, generic over the host, and add `hosts/registry.ts` (one link per host, a second connection replaces the first, the set in use from the settings). Verify by moving `rhino-link.test.ts` to `hosts/host-link.test.ts` and running it against a parameterised fake host as `rhino` and as `blender`.
+- [x] 2.3 Add `hosts/rhino.ts`, the adapter (strengths, language, `# r:` package parsing, run hint). Verify by moving the `# r:` parsing tests into it.
+- [x] 2.4 Accept token-only connections for every `HostId`, refuse the old hello with its message, and greet a page with one `host.state` per known host. Verify "any host id connects with the token", "an old plugin is refused" and "the mirror reaches a late page" for two hosts.
+- [x] 2.5 Generalise `agent/rhino-run-check.ts` to `agent/run-check.ts`. Verify the strays tests and `parallel.test.ts` for runs on a host.
+- [x] 2.6 Replace `modelling` with `hosts` in `settings.ts`, with the migration from `python` and the other values. Verify "an old Python only choice" and "switch a host off" in the settings tests.
 
 ## 3. The agent's tools
 
-- [ ] 3.1 Add `mcp/host-tools.ts` with `host_list`, `host_read` and `host_run` (approval with the host and packages, per-host always allow), replacing `rhino-tools.ts` and the Rhino tools in `scene-tools.ts`. Verify, by moving `python-tools.test.ts` cases: "a script changes the document", "output and result come back", "an error is returned", "output is capped", "the host is named", "a run waits for the user", "a package is listed", "always allow is per host" and "time limit".
-- [ ] 3.2 Add `host_capture` (request, the asset upload, reading the asset, dropping it after 10 minutes, timing in the tool chip). Verify "capture Rhino's view" with the fake host and a 1.5 s budget check in the bridge test.
-- [ ] 3.3 Add `host_place_image` (path checks against the project, claim check, undo label) and `host_api`. Verify "a site photo behind the model", "outside the project" and "look up a Rhino method" with the fake host.
-- [ ] 3.4 Grant tools by role in `roster.ts` and `agent-config.ts`, and offer host tools only for hosts in use, with descriptions naming them. Verify "roles get their tools", "Reviewer cannot run code in a host" and "no host, no host tools" in `roster.test.ts` and `agent-config.test.ts`.
-- [ ] 3.5 Migrate saved approvals and old tool names in agent files in `legacy.ts`. Verify "old approvals carry over" and a unit test for an agent file naming `rhino_run_python`.
-- [ ] 3.6 Describe each selection 150 ms after it changes, keep it with the selection, send it to the viewer, put it in a request's context, and add `host_describe`. Verify "a selected Brep is described", "a request knows what 'this' is" and "describe by id" with the fake host, and the 300 ms budget for 50 objects.
-- [ ] 3.7 Name the host in the user context (pointed object and selections) in `scene-tools.ts`, and frame every host's bounds in `agent-eyes.ts`. Verify "'this' in Rhino" and "two hosts' selections".
+- [x] 3.1 Add `mcp/host-tools.ts` with `host_list`, `host_read` and `host_run` (approval with the host and packages, per-host always allow), replacing `rhino-tools.ts` and the Rhino tools in `scene-tools.ts`. Verify, by moving `python-tools.test.ts` cases: "a script changes the document", "output and result come back", "an error is returned", "output is capped", "the host is named", "a run waits for the user", "a package is listed", "always allow is per host" and "time limit".
+- [x] 3.2 Add `host_capture` (request, the asset upload, reading the asset, dropping it after 10 minutes, timing in the tool chip). Verify "capture Rhino's view" with the fake host and a 1.5 s budget check in the bridge test.
+- [x] 3.3 Add `host_place_image` (path checks against the project, claim check, undo label) and `host_api`. Verify "a site photo behind the model", "outside the project" and "look up a Rhino method" with the fake host.
+- [x] 3.4 Grant tools by role in `roster.ts` and `agent-config.ts`, and offer host tools only for hosts in use, with descriptions naming them. Verify "roles get their tools", "Reviewer cannot run code in a host" and "no host, no host tools" in `roster.test.ts` and `agent-config.test.ts`.
+- [x] 3.5 Migrate saved approvals and old tool names in agent files in `legacy.ts`. Verify "old approvals carry over" and a unit test for an agent file naming `rhino_run_python`.
+- [x] 3.6 Describe each selection 150 ms after it changes, keep it with the selection, send it to the viewer, put it in a request's context, and add `host_describe`. Verify "a selected Brep is described", "a request knows what 'this' is" and "describe by id" with the fake host, and the 300 ms budget for 50 objects.
+- [x] 3.7 Name the host in the user context (pointed object and selections) in `scene-tools.ts`, and frame every host's bounds in `agent-eyes.ts`. Verify "'this' in Rhino" and "two hosts' selections".
 
 ## 4. The viewer and the HUD
 

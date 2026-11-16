@@ -7,7 +7,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WebSocket } from "ws";
 import { fakeProvider } from "../../test/fake-provider.ts";
-import { connectFakeRhino } from "../../test/rhino-client.ts";
+import { connectFakeHost } from "../../test/host-client.ts";
 import { connectClient } from "../../test/ws-client.ts";
 import { type Bridge, createBridge } from "../server.ts";
 import type { Team } from "./team.ts";
@@ -568,7 +568,7 @@ describe("three scoped tasks at once", () => {
   });
 });
 
-describe("Rhino scripts are checked afterwards", () => {
+describe("scripts in a host are checked afterwards", () => {
   const change = (id: string, name: string, tags: Record<string, string>, at = 0) => ({
     id,
     name,
@@ -579,25 +579,25 @@ describe("Rhino scripts are checked afterwards", () => {
     },
   });
 
-  it("a script that stays in its scope is reported clean, and its part and claim go to Rhino", async () => {
+  it("a script that stays in its scope is reported clean, and its part and claim go to the host", async () => {
     const { team, mcp, viewer, address } = await start();
-    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
+    const rhino = await connectFakeHost(address, { token: TOKEN, track: sockets });
     await team.request("hello");
     await team.request("delegate architect[dome]: work 30000 | product[hall]: work 30000");
     await vi.waitFor(() => expect(taskOf(team, "product").status).toBe("running"));
     const architect = await mcp("architect");
     const call = architect.callTool({
-      name: "rhino_run_python",
-      arguments: { code: "result = 1", title: "Add surfaces" },
+      name: "host_run",
+      arguments: { host: "rhino", code: "result = 1", title: "Add surfaces" },
     });
-    const asked = await rhino.waitFor("rhino.python.run");
+    const asked = await rhino.waitFor("host.run");
     expect(asked.payload).toMatchObject({
       agent: "architect",
       title: "Add surfaces",
       part: "dome",
       claim: { part: "dome" },
     });
-    rhino.send("rhino.python.result", {
+    rhino.send("host.result", {
       id: asked.payload.id,
       ok: true,
       stdout: "",
@@ -613,22 +613,22 @@ describe("Rhino scripts are checked afterwards", () => {
     const out = json(await call);
     expect(out.ok).toBe(true);
     expect(out.outsideYourClaim).toBeUndefined();
-    expect(viewer.received.some((m) => m.type === "rhino.run.report")).toBe(false);
+    expect(viewer.received.some((m) => m.type === "host.run.report")).toBe(false);
   });
 
   it("a script that strays is reported to the agent and to the user, naming the object, its claimant and what changed", async () => {
     const { team, mcp, viewer, address } = await start();
-    const rhino = await connectFakeRhino(address, { token: TOKEN, track: sockets });
+    const rhino = await connectFakeHost(address, { token: TOKEN, track: sockets });
     await team.request("hello");
     await team.request("delegate architect[dome]: work 30000 | product[hall]: work 30000");
     await vi.waitFor(() => expect(taskOf(team, "product").status).toBe("running"));
     const architect = await mcp("architect");
     const call = architect.callTool({
-      name: "rhino_run_python",
-      arguments: { code: "result = 1", title: "Oops" },
+      name: "host_run",
+      arguments: { host: "rhino", code: "result = 1", title: "Oops" },
     });
-    const asked = await rhino.waitFor("rhino.python.run");
-    rhino.send("rhino.python.result", {
+    const asked = await rhino.waitFor("host.run");
+    rhino.send("host.result", {
       id: asked.payload.id,
       ok: true,
       stdout: "",
@@ -645,12 +645,59 @@ describe("Rhino scripts are checked afterwards", () => {
     expect(out.outsideYourClaim).toContain('deleted "Garden bed" (g-1)');
     expect(out.outsideYourClaim).toContain("Checked after the run");
     expect(out.outsideYourClaim).toContain("undo step in Rhino");
-    const report = await viewer.waitFor("rhino.run.report");
-    expect(report.payload).toMatchObject({ agent: "architect", title: "Oops", truncated: false });
+    const report = await viewer.waitFor("host.run.report");
+    expect(report.payload).toMatchObject({
+      host: "rhino",
+      agent: "architect",
+      title: "Oops",
+      truncated: false,
+    });
     expect(report.payload.strays.map((s) => [s.what, s.id])).toEqual([
       ["changed", "h-1"],
       ["deleted", "g-1"],
     ]);
     expect(report.payload.strays[0]?.holder).toContain("product's task");
+  });
+});
+
+describe("a request about what is selected in a host", () => {
+  it("a request knows what 'this' is: the bridge puts the described components in the request's context", async () => {
+    const { viewer, address } = await start();
+    const rhino = await connectFakeHost(address, { token: TOKEN, track: sockets });
+    rhino.send("host.selection", { objects: [{ id: "a1", type: "Brep", layer: "Roof" }] });
+    const asked = await rhino.waitFor("host.describe");
+    rhino.send("host.described", {
+      id: asked.payload.id,
+      components: [
+        {
+          id: "a1",
+          name: "Canopy",
+          type: "Closed Brep",
+          layer: "Roof",
+          bounds: null,
+          quantities: { volumeMm3: 3.24e10 },
+          material: "Timber",
+          properties: { "hai.part": "canopy" },
+        },
+      ],
+    });
+    await viewer.waitFor("host.selection", (m) => (m.payload.components?.length ?? 0) === 1);
+    viewer.send("agent.send", {
+      text: "make these 200 mm thinner",
+      context: { references: [], selection: [], groundPoint: null },
+    });
+    const turn = await viewer.waitFor(
+      "agent.turn",
+      (m) => m.payload.request === "make these 200 mm thinner",
+      10_000,
+    );
+    expect(turn.payload.context?.components).toEqual([
+      expect.objectContaining({
+        host: "rhino",
+        id: "a1",
+        material: "Timber",
+        properties: { "hai.part": "canopy" },
+      }),
+    ]);
   });
 });

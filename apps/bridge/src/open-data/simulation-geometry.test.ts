@@ -132,13 +132,17 @@ describe("simulation geometry", () => {
     const g = simulationGeometry({
       doc: withImport,
       site,
-      rhino: [{ id: "r-9", name: "Roof", bounds: { min: [0, 0, 3500], max: [8000, 6000, 4000] } }],
+      hosts: [
+        { id: "r-9", name: "Roof", host: "Rhino", bounds: { min: [0, 0, 3500], max: [8000, 6000, 4000] } },
+      ],
     });
     const box = g.objects.find((o) => o.id === "i-1");
     expect(box).toMatchObject({ kind: "box", of: "imported model", min: [1, 0, 0.5], max: [3, 3, 4.5] });
     expect(g.objects.find((o) => o.id === "r-9")).toMatchObject({ kind: "box", of: "Rhino object" });
     expect(g.simplified.join(" ")).toMatch(/1 imported model\(s\) are given as their bounding boxes/);
-    expect(g.simplified.join(" ")).toMatch(/Rhino objects are given as their bounding boxes/);
+    expect(g.simplified.join(" ")).toMatch(
+      /Host objects \(from Rhino, Blender or Revit\) are given as their bounding boxes/,
+    );
   });
 
   it("the neighbouring buildings are included as shading objects, marked as context, when asked for", () => {

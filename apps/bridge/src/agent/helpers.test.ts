@@ -19,7 +19,7 @@ const FORBIDDEN = [
   ...HAI_TOOLS.tags,
   ...HAI_TOOLS.panel,
   ...HAI_TOOLS.python,
-  ...HAI_TOOLS.rhino,
+  ...HAI_TOOLS.host,
   ...HAI_TOOLS.workers,
   ...HAI_TOOLS.team,
   ...HAI_TOOLS.view,

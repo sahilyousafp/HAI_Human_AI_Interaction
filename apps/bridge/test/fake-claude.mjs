@@ -538,8 +538,11 @@ function onRequest(raw) {
   history.push(text);
   writeFileSync(historyFile, JSON.stringify(history));
   // What the user pointed at ("[context] ..."), drew ("[sketches] ...") and marked ("[markers] ...") comes before what
-  // they said, one line each.
-  const said = text.replace(/^(\[(context|sketches|markers)\][^\n]*\n)+/, "");
+  // they said, one line each; what is selected in a host ("[components] ...") is a heading and a line per component.
+  const said = text.replace(
+    /^(\[(context|sketches|markers)\][^\n]*\n|\[components\][^\n]*\n(- [^\n]*\n)*)+/,
+    "",
+  );
   if (asLead(forAgent ? text : said, forAgent)) return;
   if (text === "panel" || text.startsWith("panel ")) {
     void panelRequest(text.slice("panel".length).trim());

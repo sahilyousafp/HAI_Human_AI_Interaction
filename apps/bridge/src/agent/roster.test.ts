@@ -137,7 +137,7 @@ describe("the team", () => {
       const tools = names(dir, "architect");
       for (const wanted of [
         "python_run",
-        "rhino_run_python",
+        "host_run",
         "offer_panel",
         "open_panel",
         "set_view",
@@ -177,7 +177,7 @@ describe("the team", () => {
         file("reviewer", "mcp__hai__create_elements, mcp__hai__offer_panel, mcp__hai__get_elements"),
       );
       const reviewer = names(dir, "reviewer");
-      for (const banned of ["create_elements", "rhino_run_python", "python_run"])
+      for (const banned of ["create_elements", "host_run", "python_run"])
         expect(reviewer).not.toContain(`mcp__hai__${banned}`);
       expect(reviewer).toContain("mcp__hai__get_elements");
       // Panels are for every agent: a reader's panel is information only.
@@ -199,7 +199,7 @@ describe("the team", () => {
       const dir = project();
       ensureDefaultAgents(dir);
       const architect = readRoster(dir).find((m) => m.name === "architect");
-      for (const wanted of ["offer_panel", "open_panel", "set_view", "python_run", "rhino_get_document"])
+      for (const wanted of ["offer_panel", "open_panel", "set_view", "python_run", "host_read"])
         expect(architect?.tools).toContain(`mcp__hai__${wanted}`);
     });
   });
@@ -227,11 +227,15 @@ describe("the team", () => {
       "get_elements",
       "get_scene_summary",
       "get_user_context",
+      "host_api",
+      "host_capture",
+      "host_describe",
+      "host_list",
+      "host_read",
       "offer_panel",
       "open_panel",
       "release_claim",
       "request_claim",
-      "rhino_get_document",
       "set_view",
       "update_panel",
     ]);
@@ -262,12 +266,16 @@ describe("the team", () => {
       "context_list",
       "get_claims",
       "get_elements",
+      "host_api",
+      "host_capture",
+      "host_describe",
+      "host_list",
+      "host_read",
       "offer_panel",
       "open_data_sources",
       "open_panel",
       "release_claim",
       "request_claim",
-      "rhino_get_document",
       "set_view",
       "site_set",
       "update_panel",
@@ -293,14 +301,19 @@ describe("the team", () => {
       "geometry_sweep",
       "get_claims",
       "get_elements",
+      "host_api",
+      "host_capture",
+      "host_describe",
+      "host_list",
+      "host_place_image",
+      "host_read",
+      "host_run",
       "offer_panel",
       "open_data_sources",
       "open_panel",
       "python_run",
       "release_claim",
       "request_claim",
-      "rhino_get_document",
-      "rhino_run_python",
       "set_tags",
       "set_view",
       "site_set",
@@ -332,39 +345,54 @@ describe("the team", () => {
       "context_get",
       "context_list",
       "get_claims",
+      "host_api",
+      "host_capture",
+      "host_describe",
+      "host_list",
+      "host_read",
       "offer_panel",
       "open_panel",
       "release_claim",
       "request_claim",
-      "rhino_get_document",
       "set_view",
       "update_panel",
     ]);
   });
 
-  describe("Python and Rhino tools", () => {
+  describe("Python and host tools", () => {
     const toolsOf = (dir: string, name: string) => {
       const member = readRoster(dir).find((m) => m.name === name);
       if (!member) throw new Error(`no ${name}`);
       return allowedHaiTools(member);
     };
 
-    it("Roles get their tools: Architect and Product run Python both ways, Climate the workbench, Reviewer only reads", () => {
+    it("Roles get their tools: Architect and Product run code in hosts and the workbench, Climate the workbench, Reviewer only reads", () => {
       const dir = project();
       ensureDefaultAgents(dir);
       for (const name of ["architect", "product"]) {
         const tools = toolsOf(dir, name);
-        for (const tool of ["python_run", "rhino_run_python", "rhino_get_document"])
+        for (const tool of [
+          "python_run",
+          "host_run",
+          "host_place_image",
+          "host_read",
+          "host_capture",
+          "host_describe",
+        ])
           expect(tools.has(tool), `${name} ${tool}`).toBe(true);
       }
       const climate = toolsOf(dir, "climate");
       expect(climate.has("python_run")).toBe(true);
-      expect(climate.has("rhino_get_document")).toBe(true);
-      expect(climate.has("rhino_run_python")).toBe(false);
+      expect(climate.has("host_read")).toBe(true);
+      expect(climate.has("host_run")).toBe(false);
+      expect(climate.has("host_place_image")).toBe(false);
       const reviewer = toolsOf(dir, "reviewer");
-      expect(reviewer.has("rhino_get_document")).toBe(true);
+      expect(reviewer.has("host_read")).toBe(true);
       expect(reviewer.has("python_run")).toBe(false);
-      expect(reviewer.has("rhino_run_python")).toBe(false);
+      expect(reviewer.has("host_run")).toBe(false);
+      expect(reviewer.has("host_place_image")).toBe(false);
+      for (const tool of ["host_list", "host_capture", "host_api", "host_describe"])
+        expect(reviewer.has(tool)).toBe(true);
       expect(toolsOf(dir, "mochi").has("python_run")).toBe(false);
     });
 
@@ -377,7 +405,7 @@ describe("the team", () => {
       );
       const tools = toolsOf(dir, "architect");
       expect(tools.has("python_run")).toBe(true);
-      expect(tools.has("rhino_run_python")).toBe(true);
+      expect(tools.has("host_run")).toBe(true);
     });
 
     it("Reviewer cannot run Python even if its file lists the tools", () => {
@@ -385,9 +413,9 @@ describe("the team", () => {
       ensureDefaultAgents(dir);
       writeFileSync(
         join(agentsDir(dir), "reviewer.md"),
-        "---\nname: reviewer\ndescription: Checks.\ntools: mcp__hai__rhino_run_python\n---\n\nYou review.\n",
+        "---\nname: reviewer\ndescription: Checks.\ntools: mcp__hai__host_run\n---\n\nYou review.\n",
       );
-      expect(toolsOf(dir, "reviewer").has("rhino_run_python")).toBe(false);
+      expect(toolsOf(dir, "reviewer").has("host_run")).toBe(false);
     });
   });
 

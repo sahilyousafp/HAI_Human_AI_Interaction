@@ -5,8 +5,13 @@ import { pipeline } from "node:stream/promises";
 import type { AssetStore } from "./assets.ts";
 
 export const ASSETS_PATH = "/assets/";
-/** Where the Rhino plugin puts the meshes of its objects, and the viewer reads them: a store apart from the project's. */
+/**
+ * Where a host's connector puts the meshes of its objects, and the viewer reads them: `/mirror/<host>/<id>`, a store per
+ * host, apart from the project's.
+ */
 export const MIRROR_PATH = "/mirror/";
+/** Where a host's connector puts a capture of its viewport (`/captures/<id>`), a PNG only the bridge reads. */
+export const CAPTURE_PATH = "/captures/";
 
 export interface AssetRouteContext {
   /** The session token a caller must present. */
@@ -83,6 +88,29 @@ export async function handleAssets(
 }
 
 export const PROJECT_FILE_PATH = "/project-file/";
+
+/** The image files a host can place. */
+const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"];
+
+/**
+ * An image the agent asks a host to place, as an absolute path, or why not: it must be an image file that exists inside
+ * the open project. The host is given only paths the bridge has checked.
+ */
+export function projectImagePath(
+  projectDir: string | null,
+  relativePath: string,
+): { ok: true; path: string } | { ok: false; error: string } {
+  if (!projectDir) return { ok: false, error: "No project is open." };
+  const path = resolve(projectDir, relativePath);
+  const inside = relative(projectDir, path);
+  if (inside.startsWith("..") || isAbsolute(inside))
+    return { ok: false, error: "That path is outside the project." };
+  if (!IMAGE_EXTENSIONS.some((ext) => path.toLowerCase().endsWith(ext)))
+    return { ok: false, error: `Only ${IMAGE_EXTENSIONS.join(", ")} images can be placed.` };
+  if (!existsSync(path) || !statSync(path).isFile())
+    return { ok: false, error: "There is no such image in the project." };
+  return { ok: true, path };
+}
 
 /** The most a project file served to the viewer may be (the importer's own limit). */
 const MAX_PROJECT_FILE_BYTES = 500_000_000;

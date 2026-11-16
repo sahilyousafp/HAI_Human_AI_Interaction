@@ -45,7 +45,7 @@ interface DefaultAgent {
 const SPECIALIST_CLOSE = `You receive tasks from Mochi, the team lead. Do the task with the hai tools, then end with a one or two sentence summary of
 what you did and anything left open: it goes back to Mochi, who reports to the user. Lengths are millimetres, Z is up.
 If you have offer_panel and open_panel: when the task involves values the user will want to feel out (a clearance, a tolerance, a count, a size, a colour, or a choice between design options), call offer_panel first, before you change the model, and if the user accepts, open_panel with sliders and buttons for those values, previewing with hai.preview and keeping the result with hai.commit. Do not hide such values in element properties, and do not offer a panel for a one-off edit.
-If you have python_run (or rhino_run_python), curves, NURBS surfaces and smooth or organic forms are within your reach: write them in Python with rhino3dm, save a .3dm with hai_3dm, and say the user can import it. Never tell the user these cannot be made.`;
+If you have host_run and a host is in use (host_list), model in the host with its own tools: it does curves, NURBS surfaces and smooth or organic forms far better than the scene elements. Without a host, python_run can write them with rhino3dm into a .3dm saved with hai_3dm, which the user can import. Never tell the user these cannot be made.`;
 
 /** The team a project starts with. Files are written only where missing, so the user's edits always win. */
 const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
@@ -89,8 +89,8 @@ const DEFAULT_AGENTS: Record<string, DefaultAgent> = {
       ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.cameras),
       ...hai(HAI_TOOLS.python),
-      ...hai(HAI_TOOLS.rhino),
-      ...hai(HAI_TOOLS.rhinoRead),
+      ...hai(HAI_TOOLS.host),
+      ...hai(HAI_TOOLS.hostRead),
     ],
     model: "sonnet",
     prompt: `You are Architect, the team's architectural designer. You plan and model massing, levels, walls, slabs,
@@ -107,8 +107,8 @@ columns, cores and stairs with sensible proportions and clearances.\n\n${SPECIAL
       ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.cameras),
       ...hai(HAI_TOOLS.python),
-      ...hai(HAI_TOOLS.rhino),
-      ...hai(HAI_TOOLS.rhinoRead),
+      ...hai(HAI_TOOLS.host),
+      ...hai(HAI_TOOLS.hostRead),
     ],
     model: "sonnet",
     prompt: `You are Product, the team's product designer. You design furniture, fixtures and components at product
@@ -127,7 +127,7 @@ scale, with attention to ergonomics, materials and how they are made. Model simp
       ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.cameras),
       ...hai(HAI_TOOLS.python),
-      ...hai(HAI_TOOLS.rhinoRead),
+      ...hai(HAI_TOOLS.hostRead),
     ],
     model: "sonnet",
     prompt: `You are Climate, the team's environmental analyst. You study sun path, shadows, orientation and
@@ -158,7 +158,7 @@ can compute, such as the sun's position.\n\n${SPECIALIST_CLOSE}`,
       ...hai(HAI_TOOLS.context),
       ...hai(HAI_TOOLS.openData),
       ...hai(HAI_TOOLS.urban),
-      ...hai(HAI_TOOLS.rhinoRead),
+      ...hai(HAI_TOOLS.hostRead),
     ],
     model: "sonnet",
     prompt: `You are Urban, the team's urban analyst. You find out what the place around the project is like from open data: the
@@ -198,7 +198,7 @@ mean and tallest height, green share, tree count) and what the open-data portals
       ...hai(HAI_TOOLS.openData),
       ...hai(HAI_TOOLS.weather),
       ...hai(HAI_TOOLS.simulation),
-      ...hai(HAI_TOOLS.rhinoRead),
+      ...hai(HAI_TOOLS.hostRead),
       "mcp__ladybug__*",
     ],
     model: "sonnet",
@@ -235,7 +235,7 @@ through it. You do not change the model.
       ...hai(HAI_TOOLS.read),
       ...hai(HAI_TOOLS.view),
       ...hai(HAI_TOOLS.cameras),
-      ...hai(HAI_TOOLS.rhinoRead),
+      ...hai(HAI_TOOLS.hostRead),
     ],
     model: "sonnet",
     prompt: `You are Reviewer. You check the model against the brief and common rules (heights, counts, clearances,
@@ -390,7 +390,7 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
         ...HAI_TOOLS.write,
         ...HAI_TOOLS.geometry,
         ...HAI_TOOLS.tags,
-        ...HAI_TOOLS.rhino,
+        ...HAI_TOOLS.host,
         ...HAI_TOOLS.workers,
         ...HAI_TOOLS.contextWrite,
       ];
@@ -406,7 +406,7 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
       ...HAI_TOOLS.tags,
       ...HAI_TOOLS.geometry,
       ...HAI_TOOLS.python,
-      ...HAI_TOOLS.rhino,
+      ...HAI_TOOLS.host,
       ...HAI_TOOLS.workers,
       ...HAI_TOOLS.contextWrite,
     ])
@@ -423,7 +423,7 @@ export function allowedHaiTools(member: TeamMember): Set<string> {
     ...HAI_TOOLS.view,
     ...HAI_TOOLS.cameras,
     ...HAI_TOOLS.claims,
-    ...HAI_TOOLS.rhinoRead,
+    ...HAI_TOOLS.hostRead,
     ...HAI_TOOLS.panel,
     ...HAI_TOOLS.context,
     ...HAI_TOOLS.contextClear,
@@ -467,7 +467,7 @@ const FILE_TOOLS = ["Read", "Glob", "Grep"];
  */
 export function helperDefinitions(member: TeamMember, team: TeamMember[]): Record<string, ManagedDefinition> {
   const prefix = `mcp__${HAI_SERVER}__`;
-  const looks = [...FILE_TOOLS, ...[...HAI_TOOLS.read, ...HAI_TOOLS.rhinoRead].map((t) => `${prefix}${t}`)];
+  const looks = [...FILE_TOOLS, ...[...HAI_TOOLS.read, ...HAI_TOOLS.hostRead].map((t) => `${prefix}${t}`)];
   const note =
     "You are helping another agent. You only look and report back: you cannot change the model or run scripts.";
   const helpers: Record<string, ManagedDefinition> = {};

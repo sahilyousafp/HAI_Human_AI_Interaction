@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { hostLink } from "./host-link.ts";
+import { desktopLink } from "./desktop-link.ts";
 
-describe("hostLink", () => {
+describe("desktopLink", () => {
   it("is null when the bridge was started from a terminal", () => {
-    expect(hostLink({ on: vi.fn() })).toBeNull();
+    expect(desktopLink({ on: vi.fn() })).toBeNull();
   });
 
   it("talks through Electron's parent port", () => {
@@ -14,7 +14,7 @@ describe("hostLink", () => {
         listener = l;
       },
     };
-    const link = hostLink({ parentPort, on: vi.fn() });
+    const link = desktopLink({ parentPort, on: vi.fn() });
     link?.send({ type: "ready", port: 4870, token: "t" });
     expect(parentPort.postMessage).toHaveBeenCalledWith({ type: "ready", port: 4870, token: "t" });
 
@@ -34,7 +34,7 @@ describe("hostLink", () => {
         listener = l;
       },
     };
-    const link = hostLink(proc);
+    const link = desktopLink(proc);
     link?.send({ type: "ready", port: 1, token: "t" });
     expect(proc.send).toHaveBeenCalledWith({ type: "ready", port: 1, token: "t" });
 

@@ -1,15 +1,15 @@
-import type { RhinoChange, RhinoRunChanges } from "@hai/protocol";
+import type { HostChange, HostRunChanges } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
 import { ClaimTable } from "./claims.ts";
-import { findStrays, MAX_STRAYS, strayNote } from "./rhino-run-check.ts";
+import { findStrays, MAX_STRAYS, strayNote } from "./run-check.ts";
 
-const change = (id: string, tags: Record<string, string> = {}, at = 0): RhinoChange => ({
+const change = (id: string, tags: Record<string, string> = {}, at = 0): HostChange => ({
   id,
   name: `Object ${id}`,
   tags,
   bounds: { min: [at, 0, 0], max: [at + 1000, 1000, 1000] },
 });
-const changes = (parts: Partial<RhinoRunChanges>): RhinoRunChanges => ({
+const changes = (parts: Partial<HostRunChanges>): HostRunChanges => ({
   added: [],
   changed: [],
   deleted: [],
@@ -119,6 +119,7 @@ describe("strayNote", () => {
     const note = strayNote(
       [{ id: "h", name: "Hall wall", what: "changed", holder: `product's task "hall"` }],
       false,
+      "Rhino",
     );
     expect(note).toContain("Checked after the run");
     expect(note).toContain('- changed "Hall wall" (h), in product\'s task "hall"');

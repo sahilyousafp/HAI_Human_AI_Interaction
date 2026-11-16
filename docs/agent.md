@@ -49,8 +49,13 @@ The `hai` MCP server gives each agent the tools its definition lists, from these
 | `get_claims`, `request_claim`, `release_claim` | See who is working on which part of the model, ask for more scope for the running task, give some back (every agent; see [Parallel modelling](parallel.md)) |
 | `capture_view` | A PNG of what you see in the viewer, at most 1280 px on its longest side |
 | `python_run` | Runs a Python script in an environment HAI manages in the project (no Rhino needed). You see the whole script and the packages it would install first; every run is kept in `.hai/scripts`; a `.3dm` it writes can be imported into the viewer with one click (Architect, Product, Climate) |
-| `rhino_run_python` | Runs a Python script inside your open Rhino with all of RhinoCommon, as one undo step, after you have seen it. Only offered while Rhino is connected and the mode is not Python only (Architect, Product) |
-| `rhino_get_document` | Reads Rhino's units, layers, object counts, selection and active view (every agent, while Rhino is connected) |
+| `host_list` | The design applications (hosts) you have connected and switched on, what each does best, and whether code can run in it now (every agent, while a host is in use) |
+| `host_run` | Runs a script inside a host, in its own language (Python with RhinoCommon in Rhino, `bpy` in Blender, C# in Revit), as one undo step there, after you have seen the script, the host and any packages. Always allow is kept per host (Architect, Product, while a host is in use) |
+| `host_read` | Reads a host's units, layers or collections, object counts, selection and active view (every agent) |
+| `host_capture` | A picture of a host's own viewport: its active view or a named one (every agent) |
+| `host_place_image` | Puts an image from the project into a host as a picture on a plane, as one undo step (Architect, Product) |
+| `host_api` | Looks up a host's scripting API inside the running host, so the answer matches your version (every agent) |
+| `host_describe` | Describes host objects by id: type, layer, quantities, material and their own properties. A request made while something is selected already carries this (every agent) |
 | `set_view` | Moves your camera: turn, tilt, nearer or further, look at a point, frame elements, or switch to a named view (Top, Front, Right and the rest of the [view cube](navigation.md#the-view-cube-and-orthographic-views), or Perspective). It changes nothing in the model (every agent) |
 | `camera_set` | Places or moves one of your own cameras by name (direction, distance, target or elements to frame); it is private to you and never moves the user's view |
 | `camera_list` | Lists your own cameras |

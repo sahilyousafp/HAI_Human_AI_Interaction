@@ -93,3 +93,35 @@ describe("a folder an older version, named AEX, left behind", () => {
     expect(existsSync(join(dir, "scene.hai.json"))).toBe(true);
   });
 });
+
+describe("the Rhino tools became the host tools", () => {
+  it("old approvals carry over: always allowing Python in Rhino becomes always allowing runs in Rhino", () => {
+    write(
+      join(dir, ".hai", "approvals.json"),
+      '{"alwaysAllow":["mcp__hai__rhino_run_python","mcp__hai__rhino_get_document","Read"]}',
+    );
+    migrateLegacyFolder(dir);
+    expect(JSON.parse(read(join(dir, ".hai", "approvals.json"))).alwaysAllow).toEqual([
+      "mcp__hai__host_run:rhino",
+      "mcp__hai__host_read",
+      "Read",
+    ]);
+  });
+
+  it("an agent file naming rhino_run_python names host_run, and one from AEX is moved both ways", () => {
+    write(
+      join(dir, ".claude", "agents", "architect.md"),
+      "---\nname: architect\ntools: mcp__hai__rhino_run_python, mcp__aex__rhino_get_document, Read\n---\n",
+    );
+    migrateLegacyFolder(dir);
+    expect(read(join(dir, ".claude", "agents", "architect.md"))).toContain(
+      "tools: mcp__hai__host_run, mcp__hai__host_read, Read",
+    );
+  });
+
+  it("a migrated folder is left as it is the second time", () => {
+    write(join(dir, ".hai", "approvals.json"), '{"alwaysAllow":["mcp__hai__host_run:rhino"]}');
+    migrateLegacyFolder(dir);
+    expect(read(join(dir, ".hai", "approvals.json"))).toBe('{"alwaysAllow":["mcp__hai__host_run:rhino"]}');
+  });
+});

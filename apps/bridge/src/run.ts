@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import type { AgentProvider } from "@hai/agent-core";
 import { loadConfig } from "./config.ts";
+import { desktopLink } from "./desktop-link.ts";
 import { discoveryFilePath, removeDiscoveryFile, writeDiscoveryFile } from "./discovery-file.ts";
-import { hostLink } from "./host-link.ts";
 import { migrateLegacyFolder } from "./legacy.ts";
 import { defaultProjectDir, readLastProject, writeLastProject } from "./project.ts";
 import { createBridge } from "./server.ts";
@@ -49,7 +49,7 @@ export async function runBridge(provider: AgentProvider): Promise<void> {
   bridge.log.info(`listening on http://${address.address}:${address.port} (loopback only)`);
 
   // Started by the desktop app: tell it where the bridge listens, and stop cleanly when it asks.
-  const host = hostLink();
+  const host = desktopLink();
   host?.send({ type: "ready", port: address.port, token: bridge.token });
 
   let stopping = false;
