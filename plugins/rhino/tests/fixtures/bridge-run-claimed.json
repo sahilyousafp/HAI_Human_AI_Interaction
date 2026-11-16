@@ -1,8 +1,10 @@
 {
-  "type": "rhino.python.run",
+  "type": "host.run",
   "id": "bridge-2",
   "payload": {
+    "host": "rhino",
     "id": "run-2",
+    "language": "python",
     "code": "result = 1\n",
     "timeoutMs": 30000,
     "agent": "architect",

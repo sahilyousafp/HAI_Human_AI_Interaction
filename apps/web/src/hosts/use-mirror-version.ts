@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import type { ModelAssets } from "../import/model-assets.ts";
-import type { RhinoMirror } from "./rhino-mirror.ts";
+import type { HostMirrors } from "./host-mirror.ts";
 
 /**
- * A number that changes when Rhino's objects or their meshes do, at most once per animation frame: an edit of fifty
+ * A number that changes when a host's objects or their meshes do, at most once per animation frame: an edit of fifty
  * objects brings fifty meshes one after another, and the view needs to hear of them once.
  */
-export function useMirrorVersion(mirror: RhinoMirror, assets: ModelAssets): number {
+export function useMirrorVersion(mirror: HostMirrors, assets: ReadonlyArray<ModelAssets>): number {
   const [version, setVersion] = useState(0);
   useEffect(() => {
     let frame = 0;
@@ -18,11 +18,11 @@ export function useMirrorVersion(mirror: RhinoMirror, assets: ModelAssets): numb
       });
     };
     const offMirror = mirror.subscribe(bump);
-    const offAssets = assets.subscribe(bump);
+    const offAssets = assets.map((a) => a.subscribe(bump));
     return () => {
       cancelAnimationFrame(frame);
       offMirror();
-      offAssets();
+      for (const off of offAssets) off();
     };
   }, [mirror, assets]);
   return version;

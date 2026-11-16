@@ -1,4 +1,4 @@
-import type { RhinoObject } from "@hai/protocol";
+import type { HostObject } from "@hai/protocol";
 import type { MeshPart } from "@hai/scene";
 import { useFrame } from "@react-three/fiber";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { ModelAssets } from "../import/model-assets.ts";
 import { MM, modelGeometry } from "../viewer/geometry.ts";
 import { OWNER_TINT, tint, useOwnerDisplay, useWear } from "../viewer/owner-display.tsx";
-import { isRepeatedPlacement, placementsByAsset, type RhinoMirror } from "./rhino-mirror.ts";
+import { type HostMirror, isRepeatedPlacement, placementsByAsset } from "./host-mirror.ts";
 
 /** The colours the layer needs from the viewer. */
 export interface MirrorColors {
@@ -16,7 +16,7 @@ export interface MirrorColors {
 }
 
 /** A box for an object too heavy to mirror in full, or one whose mesh could not be had. */
-function boxGeometry({ bounds }: RhinoObject): THREE.BufferGeometry {
+function boxGeometry({ bounds }: HostObject): THREE.BufferGeometry {
   const size = [0, 1, 2].map((k) => Math.max(1, (bounds.max[k] as number) - (bounds.min[k] as number)) * MM);
   const geometry = new THREE.BoxGeometry(size[0], size[1], size[2]);
   geometry.translate(
@@ -67,7 +67,7 @@ const MirrorMesh = memo(function MirrorMesh({
   hovered,
   selected,
 }: {
-  object: RhinoObject;
+  object: HostObject;
   assets: ModelAssets;
   colors: MirrorColors;
   hovered: boolean;
@@ -129,7 +129,7 @@ const MirrorMesh = memo(function MirrorMesh({
             matrixAutoUpdate={false}
             castShadow
             receiveShadow
-            userData={{ elementId: object.id, rhino: true, cleanColor: part.clean }}
+            userData={{ elementId: object.id, mirrored: true, cleanColor: part.clean }}
           >
             <meshStandardMaterial
               color={part.shown}
@@ -157,7 +157,7 @@ function BatchedPart({
 }: {
   part: MeshPart;
   index: number;
-  placements: RhinoObject[];
+  placements: HostObject[];
   capacity: number;
   fallbackColor: string;
 }) {
@@ -187,7 +187,7 @@ function BatchedPart({
       castShadow
       receiveShadow
       // A string `elementId` is how the section tool finds what to cut; a pick goes by `elementIds` and the instance hit.
-      userData={{ elementId: "rhino-batch", elementIds, rhino: true }}
+      userData={{ elementId: "mirror-batch", elementIds, mirrored: true }}
     >
       <meshStandardMaterial
         roughness={0.9}
@@ -209,7 +209,7 @@ const BlockBatch = memo(function BlockBatch({
   fallbackColor,
 }: {
   asset: string;
-  placements: RhinoObject[];
+  placements: HostObject[];
   capacity: number;
   assets: ModelAssets;
   fallbackColor: string;
@@ -236,9 +236,9 @@ const BlockBatch = memo(function BlockBatch({
 });
 
 /**
- * Rhino's objects, drawn read-only beside the HAI scene. They are not elements of the scene: a pick on one has the
- * object's Rhino id, and the viewer sends it to Rhino to select. After each drawn frame the mirror is told which
- * batches are now on screen, which is how the Rhino to HAI latency is measured.
+ * One host's objects, drawn read-only beside the HAI scene. They are not elements of the scene: a pick on one has the
+ * object's id in its host, and the viewer sends it to that host to select. After each drawn frame the mirror is told
+ * which batches are now on screen, which is how the host to HAI latency is measured.
  */
 export function MirrorLayer({
   mirror,
@@ -246,7 +246,7 @@ export function MirrorLayer({
   colors,
   hoverId,
 }: {
-  mirror: RhinoMirror;
+  mirror: HostMirror;
   assets: ModelAssets;
   colors: MirrorColors;
   hoverId: string | null;
@@ -257,8 +257,8 @@ export function MirrorLayer({
   // being pointed at, selected or owned by an agent, is drawn on its own.
   const { singles, batches } = useMemo(() => {
     const counts = placementsByAsset(state.objects);
-    const single: RhinoObject[] = [];
-    const batched = new Map<string, RhinoObject[]>();
+    const single: HostObject[] = [];
+    const batched = new Map<string, HostObject[]>();
     for (const object of state.objects) {
       const quiet =
         hoverId !== object.id && !selected.has(object.id) && Object.keys(object.tags).length === 0;

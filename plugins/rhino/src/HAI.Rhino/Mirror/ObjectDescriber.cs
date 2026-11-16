@@ -58,10 +58,10 @@ namespace HAI.Rhino.Mirror
             return Limits.Clip(layer?.FullPath ?? "Default", Limits.LayerPath);
         }
 
-        public static RhinoObjectInfo Describe(RhinoDoc doc, RhinoObject obj, Guid? asset, int triangles)
+        public static HostObjectInfo Describe(RhinoDoc doc, RhinoObject obj, Guid? asset, int triangles)
         {
             var colour = obj.Attributes.DrawColor(doc);
-            return new RhinoObjectInfo
+            return new HostObjectInfo
             {
                 Id = obj.Id.ToString("D"),
                 Name = Limits.Clip(obj.Attributes.Name ?? "", Limits.ObjectName),

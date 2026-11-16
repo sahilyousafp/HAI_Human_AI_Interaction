@@ -6,6 +6,16 @@ export const HostId = z.enum(["rhino", "blender", "revit"]);
 export type HostId = z.infer<typeof HostId>;
 export const HOST_IDS = HostId.options;
 
+/** Each host's name and how the user connects it, for the HUD and for an agent told it is not connected. */
+export const HOST_INFO: Record<HostId, { label: string; connectHint: string }> = {
+  rhino: { label: "Rhino", connectHint: "Run HaiConnect in Rhino." },
+  blender: {
+    label: "Blender",
+    connectHint: "Enable the HAI add-on in Blender and press Connect in its panel.",
+  },
+  revit: { label: "Revit", connectHint: "Load the HAI add-in in Revit and press Connect on its ribbon." },
+};
+
 /** The languages a host runs the agent's code in. */
 export const HostLanguage = z.enum(["python", "csharp"]);
 export type HostLanguage = z.infer<typeof HostLanguage>;

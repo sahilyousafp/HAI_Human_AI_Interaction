@@ -7,6 +7,7 @@ import type {
   ApprovalOutcome,
   ApprovalRequest,
   ExtensionsState,
+  HostId,
   McpServerSpec,
   Message,
   PlanOutcome,
@@ -86,9 +87,10 @@ export interface WrittenFile {
   outside?: boolean;
 }
 
-/** A Rhino script that touched objects outside its agent's claim, found after it ran. */
+/** A script in a host that touched objects outside its agent's claim, found after it ran. */
 export interface RunReportView {
   id: string;
+  host: HostId;
   agent: string | null;
   title: string;
   strays: Array<{ id: string; name: string; what: "added" | "changed" | "deleted"; holder?: string }>;
@@ -132,7 +134,7 @@ export interface AgentState {
   alwaysAllowed: string[];
   /** Files the agent's Python wrote, until the user imports, opens or dismisses them. */
   written: WrittenFile[];
-  /** Rhino scripts that went outside their claim, until the user undoes or dismisses them. */
+  /** Scripts in hosts that went outside their claim, until the user undoes or dismisses them. */
   runReports: RunReportView[];
   /** The claim under the pointer in the panel (its task id): its elements are lit in the viewer. */
   highlightedClaim: string | null;
@@ -404,7 +406,7 @@ export class AgentClient {
         this.update({ written: [...this.state.written.filter((w) => !paths.has(w.path)), ...fresh] });
         return true;
       }
-      case "rhino.run.report":
+      case "host.run.report":
         this.update({ runReports: [...this.state.runReports, { id: message.id, ...message.payload }] });
         return true;
       case "approvals.allowed":
@@ -559,9 +561,10 @@ export class AgentClient {
     this.update({ written: this.state.written.filter((w) => w.path !== path) });
   }
 
-  /** Asks Rhino to undo the last script (each run is one undo step) and takes the report off the list. */
-  undoRhinoRun(id: string): void {
-    this.send({ type: "rhino.undo", id: newId(), payload: {} });
+  /** Asks the report's host to undo its last script (each run is one undo step) and takes the report off the list. */
+  undoHostRun(id: string): void {
+    const report = this.state.runReports.find((r) => r.id === id);
+    if (report) this.send({ type: "host.undo", id: newId(), payload: { host: report.host } });
     this.dismissRunReport(id);
   }
 

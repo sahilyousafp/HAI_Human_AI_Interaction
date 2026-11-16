@@ -87,7 +87,7 @@ describe("which host tools the agent has", () => {
     await fakeHost(address, { host: "blender" });
     const agent = await mcp(address);
     const run = (await agent.listTools()).tools.find((t) => t.name === "host_run");
-    expect(run?.description).toContain("- rhino (Rhino 8 8.36.0): best for form and NURBS");
+    expect(run?.description).toContain("- rhino (Rhino 8.36.0): best for form and NURBS");
     expect(run?.description).toContain("- blender (Blender 5.1.0): best for visualisation");
     expect(run?.description).not.toContain("revit");
     expect(run?.inputSchema.properties?.host).toMatchObject({ enum: ["rhino", "blender"] });

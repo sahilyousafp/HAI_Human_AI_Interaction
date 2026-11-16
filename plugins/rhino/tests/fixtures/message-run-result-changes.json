@@ -1,7 +1,8 @@
 {
-  "type": "rhino.python.result",
+  "type": "host.result",
   "id": "message-1",
   "payload": {
+    "host": "rhino",
     "id": "run-3",
     "ok": true,
     "stdout": "",

@@ -6,12 +6,12 @@ import { expect, test } from "@playwright/test";
 import type { Team } from "../../apps/bridge/src/agent/team.ts";
 import type { Bridge } from "../../apps/bridge/src/server.ts";
 import { fakeProvider } from "../../apps/bridge/test/fake-provider.ts";
+import { connectFakeHost, hostBatch } from "../../apps/bridge/test/host-client.ts";
 import { sharedPythonEnv } from "../../apps/bridge/test/python-env.ts";
-import { connectFakeRhino, rhinoBatch } from "../../apps/bridge/test/rhino-client.ts";
 import { openSettings } from "../settings.ts";
 import { openViewer, startTestBridge } from "../viewer.ts";
 
-// How the Rhino pieces look: the approval card for a script, and Settings > Modelling.
+// How the host pieces look: the approval card for a script, and Settings > Hosts.
 
 const env = await sharedPythonEnv().catch(() => null);
 let bridge: (Bridge & { port: number }) | null = null;
@@ -40,25 +40,25 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(page.getByTestId("agent-panel")).toHaveScreenshot(`rhino-approval-card-${scheme}.png`);
   });
 
-  test(`Settings > Modelling with Rhino connected (${scheme})`, async ({ page }) => {
+  test(`Settings > Hosts with Rhino connected (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     bridge = await startTestBridge(page);
     await openViewer(page);
-    const rhino = await connectFakeRhino({ port: bridge.port } as AddressInfo, {
+    const rhino = await connectFakeHost({ port: bridge.port } as AddressInfo, {
       token: bridge.token,
       document: "tower.3dm",
     });
     closers.push(() => rhino.ws.close());
     rhino.send(
-      "rhino.objects",
-      rhinoBatch({
+      "host.objects",
+      hostBatch({
         reset: true,
         sync: { done: 120, total: 4000 },
         notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 2, simplified: 0 },
       }),
     );
-    await openSettings(page, "modelling");
-    await expect(page.getByTestId("modelling-not-drawn")).toBeVisible();
-    await expect(page.getByTestId("settings-panel")).toHaveScreenshot(`rhino-modelling-${scheme}.png`);
+    await openSettings(page, "hosts");
+    await expect(page.getByTestId("host-rhino-not-drawn")).toBeVisible();
+    await expect(page.getByTestId("settings-panel")).toHaveScreenshot(`hosts-settings-${scheme}.png`);
   });
 }

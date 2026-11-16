@@ -4,7 +4,7 @@ import { expect, type Page } from "@playwright/test";
 export type SettingsSection =
   | "camera"
   | "features"
-  | "modelling"
+  | "hosts"
   | "open-data"
   | "drawing-aids"
   | "gestures"

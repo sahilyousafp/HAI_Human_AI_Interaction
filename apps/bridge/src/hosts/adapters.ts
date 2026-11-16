@@ -1,4 +1,4 @@
-import type { HostId, HostLanguage } from "@hai/protocol";
+import { HOST_INFO, type HostId, type HostLanguage } from "@hai/protocol";
 import { isPackageSpec } from "../python/python-env.ts";
 
 /**
@@ -86,10 +86,10 @@ result = json.dumps({
 export const HOST_ADAPTERS: Record<HostId, HostAdapter> = {
   rhino: {
     id: "rhino",
-    label: "Rhino",
+    label: HOST_INFO.rhino.label,
     strengths:
       "form and NURBS: lofts, sweeps, booleans, fillets, offsets, SubD, precise surfaces and solids, fabrication geometry, Grasshopper",
-    connectHint: "Run HaiConnect in Rhino.",
+    connectHint: HOST_INFO.rhino.connectHint,
     language: "python",
     runHint:
       'Python 3 inside the open Rhino document, with all of RhinoCommon, rhinoscriptsyntax and scriptcontext: loft, sweep, boolean, fillet, offset, intersect, mesh, move, rotate, mirror and array, build SubDs, work with layers and attributes, and do many operations in one run with loops. Name packages on "# r: package" comment lines at the top (for example "# r: ladybug-core"). Tag what you make: obj.Attributes.SetUserString("hai.owner", "<your name>").',
@@ -98,10 +98,10 @@ export const HOST_ADAPTERS: Record<HostId, HostAdapter> = {
   },
   blender: {
     id: "blender",
-    label: "Blender",
+    label: HOST_INFO.blender.label,
     strengths:
       "visualisation and mesh work: materials, lighting, cameras and renders, modifiers, sculpting and organic forms, IFC through Bonsai",
-    connectHint: "Enable the HAI add-on in Blender and press Connect in its panel.",
+    connectHint: HOST_INFO.blender.connectHint,
     language: "python",
     runHint:
       'Python inside the open Blender file, with bpy and bmesh. Tag what you make: obj["hai.owner"] = "<your name>".',
@@ -110,10 +110,10 @@ export const HOST_ADAPTERS: Record<HostId, HostAdapter> = {
   },
   revit: {
     id: "revit",
-    label: "Revit",
+    label: HOST_INFO.revit.label,
     strengths:
       "BIM: walls, floors, roofs, doors and windows as native elements, levels and grids, families and types, parameters, schedules, sheets and views",
-    connectHint: "Load the HAI add-in in Revit and press Connect on its ribbon.",
+    connectHint: HOST_INFO.revit.connectHint,
     language: "csharp",
     runHint:
       "C# compiled inside Revit, with the Revit API: the body of a method given `UIApplication app` and `Document doc`, run inside one transaction group. Tag what you make with the shared parameter hai.owner.",

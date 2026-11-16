@@ -184,14 +184,14 @@ test.describe("the limit on sessions", () => {
   }) => {
     await start(page);
     // Mochi and Architect are two sessions: with a limit of 3, one worker fits.
-    await openSettings(page, "modelling");
+    await openSettings(page, "hosts");
     await page.getByTestId("max-sessions-3").click();
     await closeSettings(page);
     await team().request(`${PAVILION}spawn a[pavilion/a]: work 30000 ;; b[pavilion/b]: work 30000`);
     await expect(page.getByTestId("team-worker-state-architect.2")).toHaveText(/pavilion\/a/);
     await expect(page.getByTestId("team-worker-state-architect.3")).toHaveText("waits for a free session");
     await expect(page.getByTestId("part-waiting-session")).toContainText("waits for a free session (3 of 3");
-    await openSettings(page, "modelling");
+    await openSettings(page, "hosts");
     await page.getByTestId("max-sessions-6").click();
     await closeSettings(page);
     await expect(page.getByTestId("team-worker-architect.3")).toHaveAttribute("data-state", "running");

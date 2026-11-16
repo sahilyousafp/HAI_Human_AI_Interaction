@@ -9,8 +9,11 @@ export type AssetState =
 export type AssetSource = () => { port: number; token: string } | null;
 
 export const assetUrl = (port: number, id: string): string => `http://127.0.0.1:${port}/assets/${id}`;
-/** Where the bridge keeps the meshes of Rhino's objects while it is connected (apart from the project's assets). */
-export const mirrorAssetUrl = (port: number, id: string): string => `http://127.0.0.1:${port}/mirror/${id}`;
+/** Where the bridge keeps the meshes of a host's objects while it is connected (apart from the project's assets). */
+export const mirrorAssetUrl =
+  (host: string) =>
+  (port: number, id: string): string =>
+    `http://127.0.0.1:${port}/mirror/${host}/${id}`;
 
 /**
  * The imported geometry the viewer draws, fetched from the bridge once per asset and kept (assets never change under

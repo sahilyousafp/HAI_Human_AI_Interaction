@@ -91,7 +91,7 @@ function hostLines(hosts: HostToolHost[]): string {
   return hosts
     .map(
       (h) =>
-        `- ${h.id} (${h.app ? `${h.app.name} ${h.app.version}` : h.label}): best for ${h.strengths}.${h.unavailable ? ` Code cannot run now: ${h.unavailable}` : ""}`,
+        `- ${h.id} (${h.app ? `${h.label} ${h.app.version}` : h.label}): best for ${h.strengths}.${h.unavailable ? ` Code cannot run now: ${h.unavailable}` : ""}`,
     )
     .join("\n");
 }

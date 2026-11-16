@@ -75,7 +75,7 @@ namespace HAI.Rhino.Core.Python
         /// The answer for a run, from what the wrapper wrote. No file, or one that cannot be read, means the wrapper never
         /// finished (a package that would not install, say), and what Rhino printed is all there is to say about it.
         /// </summary>
-        public static PythonResult Answer(string id, string? written, string commandOutput, TimeSpan took)
+        public static RunResult Answer(string id, string? written, string commandOutput, TimeSpan took)
         {
             JObject? outcome = null;
             try

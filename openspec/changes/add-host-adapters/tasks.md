@@ -28,15 +28,15 @@
 
 ## 4. The viewer and the HUD
 
-- [ ] 4.1 Move `apps/web/src/rhino/` to `apps/web/src/hosts/`: the mirror store keyed by host, one `MirrorLayer` per host in use, and picks as `{ host, id }` that clear the other hosts. Verify the mirror unit tests and "two hosts at once" and "a host disconnects" in `e2e/hosts.spec.ts` (moved from `e2e/rhino.spec.ts`).
+- [x] 4.1 Move `apps/web/src/rhino/` to `apps/web/src/hosts/`: the mirror store keyed by host, one `MirrorLayer` per host in use, and picks as `{ host, id }` that clear the other hosts. Verify the mirror unit tests and "two hosts at once" and "a host disconnects" in `e2e/hosts.spec.ts` (moved from `e2e/rhino.spec.ts`).
 - [ ] 4.2 Add the host chips to the HUD (glyph, name, connected, p90, not-drawn counts, run status and how to fix it). Show the glyph options to the owner in an Artifact first. Verify "latency readout", "curves are counted" and "run unavailable" in e2e. Check screenshots at 1280, 1024 and 900 px and run `e2e/hud-layout.spec.ts`.
-- [ ] 4.3 Replace Settings > Modelling with Settings > Hosts (a switch, status and how to connect, per host; the owner and camera switches). Verify "switch a host off" in e2e and update the settings screenshots.
-- [ ] 4.4 Move the remaining readers of the Rhino state (`agent-client.ts`, `import/`, `export/`, `Viewer.tsx`, `App.tsx`). Verify the unit tests and `e2e/import.spec.ts`, `e2e/project-files.spec.ts`, `e2e/parallel.spec.ts` and `e2e/visual/rhino.visual.spec.ts` (renamed to `hosts.visual.spec.ts`; baselines renamed, not regenerated, unless the pictures differ and the difference is looked at).
+- [x] 4.3 Replace Settings > Modelling with Settings > Hosts (a switch, status and how to connect, per host; the owner and camera switches). Verify "switch a host off" in e2e and update the settings screenshots.
+- [x] 4.4 Move the remaining readers of the Rhino state (`agent-client.ts`, `import/`, `export/`, `Viewer.tsx`, `App.tsx`). Verify the unit tests and `e2e/import.spec.ts`, `e2e/project-files.spec.ts`, `e2e/parallel.spec.ts` and `e2e/visual/rhino.visual.spec.ts` (renamed to `hosts.visual.spec.ts`; baselines renamed, not regenerated, unless the pictures differ and the difference is looked at).
 
 ## 5. The Rhino plugin
 
-- [ ] 5.1 Move the message models to `HAI.Rhino.Core/Protocol.cs` with `host: "rhino"` and the versioned hello. Add a contract test in which C# writes one fixture per message and `packages/protocol` parses them. Verify `dotnet test` and the protocol tests.
-- [ ] 5.2 Add the C# job to CI on windows-latest (`dotnet test` for the core library, build for the plugin), carried over from `add-rhino-connector` 2.4. Verify it runs green.
+- [x] 5.1 Move the message models to `HAI.Rhino.Core/Protocol.cs` with `host: "rhino"` and the versioned hello. Add a contract test in which C# writes one fixture per message and `packages/protocol` parses them. Verify `dotnet test` and the protocol tests.
+- [x] 5.2 Add the C# job to CI on windows-latest (`dotnet test` for the core library, build for the plugin), carried over from `add-rhino-connector` 2.4. Verify it runs green.
 - [ ] 5.3 Connect, discovery, reconnect within 5 s and the command-line messages, including the refusal, carried over from 3.1. Verify "connect", "bridge not running", "bridge restart" and "an old plugin is refused" by the manual script in Rhino 8 and 9.
 - [ ] 5.4 Check the mirror, selection both ways and the not-drawn counts in the viewer with a real Rhino, carried over from 3.2 to 3.4. Verify "a new object appears", "a moved object follows", "a deleted object goes", "Rhino minimised", "tap selects a Rhino object" and "mouse selection mirrored" by the manual script, and record the p90.
 - [ ] 5.5 Add `Capture.cs` (`ViewCapture`, named views, asset upload). Verify by the manual script in Rhino 8 and Rhino 9's Direct3D display, recording the time at 1280 x 720.

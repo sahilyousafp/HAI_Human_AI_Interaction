@@ -1,6 +1,7 @@
 import {
   type AgentStatus,
   DEFAULT_STRIP,
+  HOST_INFO,
   PANEL_OFFER_TIMEOUT_MS,
   type PanelOfferState,
   type StripLayout,
@@ -111,7 +112,7 @@ export function toolLabel(name: string): { tool: string; server?: string } {
   return match ? { tool: match[2] ?? name, server: match[1] ?? "" } : { tool: name };
 }
 
-/** The script a code tool (python_run, rhino_run_python) would run, or null for any other call. */
+/** The script a code tool (python_run, host_run) would run, or null for any other call. */
 function codeOf(input: unknown): string | null {
   const code = typeof input === "object" && input !== null ? (input as { code?: unknown }).code : undefined;
   return typeof code === "string" && code.length > 0 ? code : null;
@@ -649,9 +650,9 @@ function RunReports({ reports, client }: { reports: RunReportView[]; client: Age
               className="primary"
               data-testid="run-report-undo"
               data-hand-press
-              onClick={() => client.undoRhinoRun(report.id)}
+              onClick={() => client.undoHostRun(report.id)}
             >
-              Undo in Rhino
+              Undo in {HOST_INFO[report.host].label}
             </button>
             <button
               type="button"

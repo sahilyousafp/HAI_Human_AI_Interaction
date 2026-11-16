@@ -53,17 +53,26 @@ interface Window {
       doc: unknown,
     ): { elements: Record<string, { type: string; position?: [number, number] }> } | null;
   };
-  /** The Rhino mirror: what Rhino reported, and how long its changes took to be drawn. */
+  /** Every host's mirror: what each host reported, and how long its changes took to be drawn. */
   __HAI_MIRROR__?: {
-    getSnapshot(): {
-      connected: boolean;
-      mode: "auto" | "rhino" | "python";
-      inUse: "rhino" | "python";
-      objects: Array<{ id: string; name: string; layer: string; bounds: { min: number[]; max: number[] } }>;
-      selection: string[];
-      sync: { done: number; total: number } | null;
-    };
-    latencyP90(): number | null;
+    byHost: Record<
+      string,
+      {
+        getSnapshot(): {
+          switchedOn: boolean;
+          connected: boolean;
+          objects: Array<{
+            id: string;
+            name: string;
+            layer: string;
+            bounds: { min: number[]; max: number[] };
+          }>;
+          selection: string[];
+          sync: { done: number; total: number } | null;
+        };
+        latencyP90(): number | null;
+      }
+    >;
   };
   __HAI_TOOLS__?: {
     getSnapshot(): {

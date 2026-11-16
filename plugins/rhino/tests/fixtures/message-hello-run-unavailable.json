@@ -1,0 +1,27 @@
+{
+  "type": "hello",
+  "id": "message-1",
+  "payload": {
+    "client": "rhino",
+    "protocolVersion": 2,
+    "app": {
+      "name": "Rhino 8",
+      "version": "8.36.25180.15001"
+    },
+    "connectorVersion": "0.2.0",
+    "run": {
+      "state": "unavailable",
+      "reason": "Rhino has no Python 3 runtime yet"
+    },
+    "document": null,
+    "capabilities": {
+      "languages": [
+        "python"
+      ],
+      "capture": true,
+      "placeImage": true,
+      "apiLookup": true,
+      "describe": true
+    }
+  }
+}

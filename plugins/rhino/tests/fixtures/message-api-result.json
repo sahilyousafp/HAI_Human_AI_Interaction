@@ -1,0 +1,18 @@
+{
+  "type": "host.api.result",
+  "id": "message-1",
+  "payload": {
+    "host": "rhino",
+    "id": "api-1",
+    "entries": [
+      {
+        "name": "Rhino.Geometry.Brep.CreateFromLoft",
+        "kind": "method",
+        "signature": "static Brep[] CreateFromLoft(IEnumerable<Curve> curves, Point3d start, Point3d end, LoftType loftType, bool closed)",
+        "summary": "Constructs one or more Breps by lofting through a set of curves."
+      }
+    ],
+    "truncated": false,
+    "partial": false
+  }
+}

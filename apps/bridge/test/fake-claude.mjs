@@ -25,7 +25,7 @@
 //   "work N"     streams for N ms, then replies "Finished work N" (stoppable, like slow)
 //   anything     replies "agent=<--agent> pid=<pid> turn=<n> previous=<the previous request>" in three pieces
 //   "columns N every MS"  the same, MS milliseconds apart (so several agents' work can be seen to overlap)
-//   "rhino run TITLE"  runs a script in Rhino (rhino_run_python) with that title and replies with the outcome
+//   "rhino run TITLE"  runs a script in Rhino (host_run with host rhino) with that title and replies with the outcome
 //   "touch ID"   renames the element ID with update_elements and replies "Touched ID", or "Refused: <why>"
 //   "tool NAME JSON"  calls the app's tool NAME with JSON as its input (asking the permission prompt tool first) and
 //                replies with its output, or "Refused: <why>" (for tools that need no script of their own, like site_set)
@@ -596,7 +596,7 @@ function onRequest(raw) {
   }
   const rhinoRun = /^rhino run (.+)$/.exec(text);
   if (rhinoRun) {
-    appTool("rhino_run_python", { title: rhinoRun[1], code: "result = 1\n" }).then((out) => {
+    appTool("host_run", { host: "rhino", title: rhinoRun[1], code: "result = 1\n" }).then((out) => {
       delta(out.error ? `Rhino refused: ${out.error}` : `Rhino ran: ${JSON.stringify(out)}`);
       result();
     });

@@ -15,7 +15,7 @@ namespace HAI.Rhino
     /// </summary>
     internal static class PythonRunner
     {
-        public static PythonResult Run(PythonRunRequest request)
+        public static RunResult Run(RunRequest request)
         {
             var clock = Stopwatch.StartNew();
             var doc = RhinoDoc.ActiveDoc;
@@ -75,7 +75,7 @@ namespace HAI.Rhino
             }
         }
 
-        private static PythonResult Failed(PythonRunRequest request, string message, Stopwatch clock) =>
+        private static RunResult Failed(RunRequest request, string message, Stopwatch clock) =>
             PythonResultShaper.Failed(request.Id, "", message, clock.Elapsed);
 
         private static void TryDelete(string folder)

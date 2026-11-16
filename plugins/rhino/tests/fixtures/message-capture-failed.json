@@ -1,0 +1,11 @@
+{
+  "type": "host.captured",
+  "id": "message-1",
+  "payload": {
+    "host": "rhino",
+    "id": "capture-2",
+    "ok": false,
+    "error": "No active view.",
+    "durationMs": 2.0
+  }
+}

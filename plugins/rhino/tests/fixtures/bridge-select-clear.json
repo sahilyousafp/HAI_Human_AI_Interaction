@@ -1,7 +1,8 @@
 {
-  "type": "rhino.select",
+  "type": "host.select",
   "id": "bridge-3",
   "payload": {
+    "host": "rhino",
     "ids": []
   }
 }

@@ -1,9 +1,9 @@
-import type { Message, RhinoObject } from "@hai/protocol";
+import type { HostId, HostObject, Message } from "@hai/protocol";
 import { describe, expect, it } from "vitest";
-import { RhinoMirror } from "./rhino-mirror.ts";
+import { HostMirror, HostMirrors } from "./host-mirror.ts";
 
 const ASSET = "0f8fad5b-d9cb-469f-a165-70867728950e";
-const object = (id: string, extra: Partial<RhinoObject> = {}): RhinoObject => ({
+const object = (id: string, extra: Partial<HostObject> = {}): HostObject => ({
   id,
   name: id,
   type: "brep",
@@ -16,46 +16,75 @@ const object = (id: string, extra: Partial<RhinoObject> = {}): RhinoObject => ({
   ...extra,
 });
 const notDrawn = { curves: 0, points: 0, annotations: 0, other: 0, heavy: 0, simplified: 0 };
-const batch = (partial: Record<string, unknown> = {}) =>
+const batch = (partial: Record<string, unknown> = {}, host: HostId = "rhino") =>
   ({
-    type: "rhino.objects",
+    type: "host.objects",
     id: "b",
-    payload: { changed: [], deleted: [], notDrawn, sync: null, reset: false, changedAt: 1000, ...partial },
+    payload: {
+      host,
+      changed: [],
+      deleted: [],
+      notDrawn,
+      sync: null,
+      reset: false,
+      changedAt: 1000,
+      ...partial,
+    },
   }) as Message;
-const state = (partial: Record<string, unknown> = {}) =>
+const state = (partial: Record<string, unknown> = {}, host: HostId = "rhino") =>
   ({
-    type: "rhino.state",
+    type: "host.state",
     id: "s",
     payload: {
+      host,
+      switchedOn: true,
       connected: true,
-      mode: "auto",
-      inUse: "rhino",
-      python: { state: "ready" },
+      app: { name: "Rhino 8", version: "8.36.0" },
+      run: { state: "ready" },
+      capabilities: null,
       document: "tower.3dm",
       objects: [],
       notDrawn,
       sync: null,
       selection: [],
+      components: [],
       ...partial,
+    },
+  }) as Message;
+const selection = (ids: string[], host: HostId = "rhino", components?: unknown[]) =>
+  ({
+    type: "host.selection",
+    id: "x",
+    payload: {
+      host,
+      objects: ids.map((id) => ({ id, type: "Brep", layer: "L" })),
+      ...(components ? { components } : {}),
     },
   }) as Message;
 
 function setup() {
   const sent: Message[] = [];
-  const mirror = new RhinoMirror((m) => {
+  const mirror = new HostMirror("rhino", (m) => {
     sent.push(m);
     return true;
   });
   return { mirror, sent };
 }
 
-describe("RhinoMirror", () => {
+describe("HostMirror", () => {
   it("starts disconnected, and takes the state the bridge sends", () => {
     const { mirror } = setup();
-    expect(mirror.getSnapshot()).toMatchObject({ connected: false, objects: [], inUse: "python" });
+    expect(mirror.getSnapshot()).toMatchObject({ connected: false, objects: [], app: null });
     mirror.handle(state({ objects: [object("a")] }));
-    expect(mirror.getSnapshot()).toMatchObject({ connected: true, inUse: "rhino", document: "tower.3dm" });
+    expect(mirror.getSnapshot()).toMatchObject({ connected: true, switchedOn: true, document: "tower.3dm" });
     expect(mirror.has("a")).toBe(true);
+  });
+
+  it("takes only its own host's messages", () => {
+    const { mirror } = setup();
+    expect(mirror.handle(state({ objects: [object("b")] }, "blender"))).toBe(false);
+    expect(mirror.handle(batch({ reset: true, changed: [object("b")] }, "blender"))).toBe(false);
+    expect(mirror.has("b")).toBe(false);
   });
 
   it("a new object appears, a changed one is replaced, a deleted one goes", () => {
@@ -159,29 +188,42 @@ describe("RhinoMirror", () => {
     expect(mirror.framingBounds()?.max[0]).toBe(7500);
   });
 
-  it("Rhino's selection is held, and an object that goes leaves it", () => {
+  it("the host's selection is held with its description, and an object that goes leaves both", () => {
     const { mirror } = setup();
     mirror.handle(batch({ reset: true, changed: [object("a"), object("b")] }));
-    mirror.handle({
-      type: "rhino.selection",
-      id: "x",
-      payload: {
-        objects: [
-          { id: "a", type: "Brep", layer: "L" },
-          { id: "b", type: "Brep", layer: "L" },
-        ],
-      },
-    });
+    mirror.handle(selection(["a", "b"]));
     expect(mirror.getSnapshot().selection).toEqual(["a", "b"]);
     mirror.handle(batch({ deleted: ["a"] }));
     expect(mirror.getSnapshot().selection).toEqual(["b"]);
   });
 
-  it("a pick selects in Rhino and highlights at once; an unknown object is refused", () => {
+  it("the selection's description arrives with it", () => {
+    const { mirror } = setup();
+    mirror.handle(batch({ reset: true, changed: [object("a"), object("b")] }));
+    const described = {
+      id: "a",
+      name: "a",
+      type: "Closed Brep",
+      layer: "L",
+      bounds: null,
+      quantities: {},
+      quantitiesSkipped: false,
+      material: "Timber",
+      properties: {},
+    };
+    mirror.handle(selection(["a"], "rhino", [described]));
+    expect(mirror.getSnapshot().components.map((c) => c.material)).toEqual(["Timber"]);
+    mirror.handle(batch({ deleted: ["a"] }));
+    expect(mirror.getSnapshot().components).toEqual([]);
+  });
+
+  it("a pick selects in its host and highlights at once; an unknown object is refused", () => {
     const { mirror, sent } = setup();
     mirror.handle(batch({ reset: true, changed: [object("a")] }));
     expect(mirror.select(["a"])).toBe(true);
-    expect(sent).toEqual([expect.objectContaining({ type: "rhino.select", payload: { ids: ["a"] } })]);
+    expect(sent).toEqual([
+      expect.objectContaining({ type: "host.select", payload: { host: "rhino", ids: ["a"] } }),
+    ]);
     expect(mirror.getSnapshot().selection).toEqual(["a"]);
     expect(mirror.select(["nope"])).toBe(false);
     expect(sent).toHaveLength(1);
@@ -192,18 +234,18 @@ describe("RhinoMirror", () => {
   it("disconnect empties the mirror", () => {
     const { mirror } = setup();
     mirror.handle(state({ objects: [object("a")] }));
-    mirror.handle(state({ connected: false, inUse: "python", python: null, document: null }));
+    mirror.handle(state({ connected: false, app: null, run: null, document: null }));
     expect(mirror.getSnapshot()).toMatchObject({ connected: false, objects: [] });
     expect(mirror.has("a")).toBe(false);
   });
 
-  it("ignores messages that are not about Rhino", () => {
+  it("ignores messages that are not about a host", () => {
     const { mirror } = setup();
     expect(mirror.handle({ type: "scene.undo", id: "u", payload: {} } as Message)).toBe(false);
   });
 });
 
-describe("Rhino to HAI latency", () => {
+describe("host to HAI latency", () => {
   it("is measured from the plugin's stamp to the frame that has the mesh", () => {
     const { mirror } = setup();
     mirror.handle(batch({ reset: true, changedAt: 1000, changed: [object("a")] }));
@@ -239,11 +281,7 @@ describe("the status the chrome shows", () => {
     const before = mirror.getStatus();
     mirror.handle(batch({ changed: [object("a")] }));
     mirror.handle(batch({ changed: [object("a", { name: "moved" })], notDrawn: { ...notDrawn } }));
-    mirror.handle({
-      type: "rhino.selection",
-      id: "x",
-      payload: { objects: [{ id: "a", type: "brep", layer: "Default" }] },
-    } as Message);
+    mirror.handle(selection(["a"]));
     expect(mirror.getStatus()).toBe(before);
   });
 
@@ -259,5 +297,61 @@ describe("the status the chrome shows", () => {
     expect(mirror.getStatus()).not.toBe(syncing);
     mirror.handle(state({ connected: false }));
     expect(mirror.getStatus().connected).toBe(false);
+  });
+});
+
+describe("HostMirrors", () => {
+  function many() {
+    const sent: Message[] = [];
+    const mirrors = new HostMirrors((m) => {
+      sent.push(m);
+      return true;
+    });
+    mirrors.handle(batch({ reset: true, changed: [object("r1")] }, "rhino"));
+    mirrors.handle(batch({ reset: true, changed: [object("b1", { type: "object" })] }, "blender"));
+    return { mirrors, sent };
+  }
+
+  it("two hosts at once: each message goes to its host, and an object is found in the host that has it", () => {
+    const { mirrors } = many();
+    expect(mirrors.owner("r1")?.host).toBe("rhino");
+    expect(mirrors.owner("b1")?.host).toBe("blender");
+    expect(mirrors.object("b1")?.host).toBe("blender");
+    expect(mirrors.owner("nope")).toBeUndefined();
+  });
+
+  it("a pick selects in the owning host and clears the others", () => {
+    const { mirrors, sent } = many();
+    mirrors.handle(selection(["b1"], "blender"));
+    expect(mirrors.select(["r1"])).toBe(true);
+    expect(sent.at(-1)).toMatchObject({ type: "host.select", payload: { host: "rhino", ids: ["r1"] } });
+    expect(mirrors.byHost.blender.getSnapshot().selection).toEqual([]);
+    expect(mirrors.selection).toEqual(["r1"]);
+  });
+
+  it("a pick across two hosts, or of something no host has, is not theirs", () => {
+    const { mirrors } = many();
+    expect(mirrors.select(["r1", "b1"])).toBe(false);
+    expect(mirrors.select(["wall-1"])).toBe(false);
+  });
+
+  it("a tap on empty space clears every host that has a selection", () => {
+    const { mirrors, sent } = many();
+    mirrors.handle(selection(["r1"], "rhino"));
+    mirrors.handle(selection(["b1"], "blender"));
+    mirrors.clear();
+    expect(
+      sent
+        .filter((m) => m.type === "host.select")
+        .map((m) => (m.payload as { host: string }).host)
+        .sort(),
+    ).toEqual(["blender", "rhino"]);
+    expect(mirrors.selection).toEqual([]);
+  });
+
+  it("frames every host's model together, and counts each arrival", () => {
+    const { mirrors } = many();
+    expect(mirrors.synced).toBe(2);
+    expect(mirrors.framingBounds()).toEqual({ min: [0, 0, 0], max: [1000, 1000, 500] });
   });
 });

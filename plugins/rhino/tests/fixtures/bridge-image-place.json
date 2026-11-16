@@ -1,0 +1,22 @@
+{
+  "type": "host.image.place",
+  "id": "bridge-7",
+  "payload": {
+    "host": "rhino",
+    "id": "image-1",
+    "path": "C:\\Users\\sahil\\project\\.hai\\images\\site.jpg",
+    "origin": [
+      0,
+      0,
+      0
+    ],
+    "normal": [
+      0,
+      -1,
+      0
+    ],
+    "widthMm": 40000,
+    "agent": "architect",
+    "title": "Site photo"
+  }
+}

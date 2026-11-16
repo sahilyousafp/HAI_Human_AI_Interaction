@@ -1,0 +1,9 @@
+{
+  "type": "host.api",
+  "id": "bridge-8",
+  "payload": {
+    "host": "rhino",
+    "id": "api-1",
+    "query": "Brep.CreateFromLoft"
+  }
+}

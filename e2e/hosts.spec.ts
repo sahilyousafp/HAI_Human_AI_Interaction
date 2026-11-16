@@ -6,19 +6,21 @@ import { expect, type Page, test } from "@playwright/test";
 import type { Team } from "../apps/bridge/src/agent/team.ts";
 import type { Bridge } from "../apps/bridge/src/server.ts";
 import { fakeProvider } from "../apps/bridge/test/fake-provider.ts";
+import { connectFakeHost, hostBatch, hostObject } from "../apps/bridge/test/host-client.ts";
 import { sharedPythonEnv } from "../apps/bridge/test/python-env.ts";
-import { connectFakeRhino, rhinoBatch, rhinoObject } from "../apps/bridge/test/rhino-client.ts";
+import type { HostId } from "../packages/protocol/src/host.ts";
 import { allow } from "./budget.ts";
 import { openSettings } from "./settings.ts";
 import { camera, findElementOnScreen, openViewer, startTestBridge } from "./viewer.ts";
 
-// Rhino next to HAI: a fake Rhino plugin connects the way the real one does, and the viewer draws its model.
+// Hosts next to HAI: a fake connector (Rhino unless a test says otherwise) connects the way the real ones do, and the
+// viewer draws its model.
 
 // One real managed environment (kept between runs); null where no Python 3.10 or newer is installed.
 const env = await sharedPythonEnv().catch(() => null);
 
 let bridge: (Bridge & { port: number }) | null = null;
-const sockets: FakeRhino["ws"][] = [];
+const sockets: FakeHost["ws"][] = [];
 
 test.afterEach(async () => {
   for (const ws of sockets.splice(0)) ws.close();
@@ -31,7 +33,7 @@ function team(): Team {
   return bridge.agent;
 }
 
-type FakeRhino = Awaited<ReturnType<typeof connectFakeRhino>>;
+type FakeHost = Awaited<ReturnType<typeof connectFakeHost>>;
 
 async function start(page: Page, options: Parameters<typeof startTestBridge>[1] = {}) {
   bridge = await startTestBridge(page, options);
@@ -40,13 +42,14 @@ async function start(page: Page, options: Parameters<typeof startTestBridge>[1] 
 }
 
 const connect = (
-  options: { document?: string; python?: Parameters<typeof connectFakeRhino>[1]["python"] } = {},
-): Promise<FakeRhino> => {
+  options: { document?: string; host?: HostId; run?: Parameters<typeof connectFakeHost>[1]["run"] } = {},
+): Promise<FakeHost> => {
   if (!bridge) throw new Error("no bridge");
-  return connectFakeRhino({ port: bridge.port } as AddressInfo, {
+  return connectFakeHost({ port: bridge.port } as AddressInfo, {
     token: bridge.token,
     document: options.document ?? "tower.3dm",
-    ...(options.python ? { python: options.python } : {}),
+    ...(options.host ? { host: options.host } : {}),
+    ...(options.run ? { run: options.run } : {}),
     track: sockets,
   });
 };
@@ -54,13 +57,13 @@ const connect = (
 type Corner = [number, number, number];
 
 /** Puts one object (a triangle 1 m wide at `at`) into Rhino's document, with its mesh uploaded first. */
-async function addObject(rhino: FakeRhino, id: string, at: Corner, color: string | null = null) {
+async function addObject(rhino: FakeHost, id: string, at: Corner, color: string | null = null) {
   const asset = await rhino.uploadMesh(1000, at);
   rhino.send(
-    "rhino.objects",
-    rhinoBatch({
+    "host.objects",
+    hostBatch({
       changed: [
-        rhinoObject(id, asset, {
+        hostObject(id, asset, {
           color,
           bounds: { min: at, max: [at[0] + 1000, at[1] + 1000, at[2]] },
         }),
@@ -70,14 +73,14 @@ async function addObject(rhino: FakeRhino, id: string, at: Corner, color: string
 }
 
 /** Opens a document the way the plugin does: every mesh uploaded, then one first batch that replaces whatever was held. */
-async function loadModel(rhino: FakeRhino, objects: Array<{ id: string; at: Corner; color?: string }>) {
+async function loadModel(rhino: FakeHost, objects: Array<{ id: string; at: Corner; color?: string }>) {
   const assets = await Promise.all(objects.map((o) => rhino.uploadMesh(1000, o.at)));
   rhino.send(
-    "rhino.objects",
-    rhinoBatch({
+    "host.objects",
+    hostBatch({
       reset: true,
       changed: objects.map((o, n) =>
-        rhinoObject(o.id, assets[n] ?? null, {
+        hostObject(o.id, assets[n] ?? null, {
           color: o.color ?? null,
           bounds: { min: o.at, max: [o.at[0] + 1000, o.at[1] + 1000, o.at[2]] },
         }),
@@ -86,9 +89,13 @@ async function loadModel(rhino: FakeRhino, objects: Array<{ id: string; at: Corn
   );
 }
 
-const mirrorObjects = (page: Page) =>
-  page.evaluate(() => window.__HAI_MIRROR__?.getSnapshot().objects.map((o) => o.id) ?? []);
-const mirrorState = (page: Page) => page.evaluate(() => window.__HAI_MIRROR__?.getSnapshot());
+const mirrorObjects = (page: Page, host: HostId = "rhino") =>
+  page.evaluate((h) => window.__HAI_MIRROR__?.byHost[h]?.getSnapshot().objects.map((o) => o.id) ?? [], host);
+const mirrorState = (page: Page, host: HostId = "rhino") =>
+  page.evaluate((h) => window.__HAI_MIRROR__?.byHost[h]?.getSnapshot(), host);
+/** What a host's chip in the top bar says (its latency, once measured, is beside it). */
+const chip = (page: Page, host: HostId = "rhino") =>
+  page.locator(`[data-testid=host-status][data-host=${host}] [data-testid=host-status-text]`);
 const sceneIds = (page: Page) =>
   page.evaluate(() => Object.keys(window.__HAI_SCENE__?.getSnapshot().doc?.elements ?? {}));
 
@@ -126,7 +133,7 @@ test.describe("the mirror layer", () => {
       { id: "rhino-slab", at: [-9000, -6000, 0] },
     ]);
     await expect.poll(() => mirrorObjects(page)).toEqual(["rhino-wall", "rhino-slab"]);
-    await expect(page.getByTestId("rhino-status")).toHaveText("Rhino connected");
+    await expect(chip(page)).toHaveText("Rhino connected");
     await expect.poll(() => findElementOnScreen(page, "rhino-wall").catch(() => null)).not.toBeNull();
     await expect.poll(() => findElementOnScreen(page, "rhino-slab").catch(() => null)).not.toBeNull();
   });
@@ -138,7 +145,7 @@ test.describe("the mirror layer", () => {
     const rhino = await connect();
     const shared = await rhino.uploadMesh(3000);
     const placed = (id: string, x: number, y: number) =>
-      rhinoObject(id, shared, {
+      hostObject(id, shared, {
         type: "block",
         name: "Tree",
         color: "#325023",
@@ -147,8 +154,8 @@ test.describe("the mirror layer", () => {
         transform: [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, 0, 0, 0, 0, 1],
       });
     rhino.send(
-      "rhino.objects",
-      rhinoBatch({
+      "host.objects",
+      hostBatch({
         reset: true,
         changed: [placed("tree-a", -30000, -30000), placed("tree-b", -20000, -30000)],
       }),
@@ -181,7 +188,7 @@ test.describe("the mirror layer", () => {
     const ids = Array.from({ length: 10 }, (_, i) => `tree-${i}`);
     const xOf = (i: number) => -30000 + i * 1500;
     const placements = ids.map((id, i) =>
-      rhinoObject(id, shared, {
+      hostObject(id, shared, {
         type: "block",
         name: "Tree",
         color: "#325023",
@@ -189,7 +196,7 @@ test.describe("the mirror layer", () => {
         transform: [1 / 3, 0, 0, xOf(i), 0, 1 / 3, 0, -30000, 0, 0, 1 / 3, 0, 0, 0, 0, 1],
       }),
     );
-    rhino.send("rhino.objects", rhinoBatch({ reset: true, changed: placements }));
+    rhino.send("host.objects", hostBatch({ reset: true, changed: placements }));
     await expect.poll(() => mirrorObjects(page).then((o) => o.length)).toBe(10);
     const box = await page.locator("[data-testid=viewer] canvas").boundingBox();
     await page.mouse.move((box?.x ?? 0) + (box?.width ?? 0) / 2, (box?.y ?? 0) + (box?.height ?? 0) / 2);
@@ -204,7 +211,7 @@ test.describe("the mirror layer", () => {
       await expect.poll(() => pickedAt(xOf(i) + 200), { timeout: 15_000 }).toBe(`tree-${i}`);
     }
     // Selected in Rhino, one placement is drawn apart in the selection colour, and the rest stay as they are.
-    rhino.send("rhino.selection", {
+    rhino.send("host.selection", {
       objects: [{ id: "tree-7", type: "InstanceReference", layer: "Default" }],
     });
     await expect
@@ -251,12 +258,12 @@ test.describe("the mirror layer", () => {
     ]);
     await expect.poll(() => findElementOnScreen(page, "rhino-wall").catch(() => null)).not.toBeNull();
     await tap(page, "rhino-wall");
-    await rhino.waitFor("rhino.select", (m) => m.payload.ids.join() === "rhino-wall");
+    await rhino.waitFor("host.select", (m) => m.payload.ids.join() === "rhino-wall");
     // Rhino answers with its selection; the layer shows it.
-    rhino.send("rhino.selection", { objects: [{ id: "rhino-wall", type: "brep", layer: "Default" }] });
+    rhino.send("host.selection", { objects: [{ id: "rhino-wall", type: "brep", layer: "Default" }] });
     await expect.poll(async () => (await mirrorState(page))?.selection).toEqual(["rhino-wall"]);
     // Selecting in Rhino alone is shown too.
-    rhino.send("rhino.selection", { objects: [{ id: "rhino-slab", type: "brep", layer: "Default" }] });
+    rhino.send("host.selection", { objects: [{ id: "rhino-slab", type: "brep", layer: "Default" }] });
     await expect.poll(async () => (await mirrorState(page))?.selection).toEqual(["rhino-slab"]);
   });
 
@@ -264,76 +271,82 @@ test.describe("the mirror layer", () => {
     await start(page);
     const rhino = await connect();
     rhino.send(
-      "rhino.objects",
-      rhinoBatch({
+      "host.objects",
+      hostBatch({
         reset: true,
         sync: { done: 5, total: 50 },
         notDrawn: { curves: 12, points: 0, annotations: 1, other: 0, heavy: 0, simplified: 0 },
       }),
     );
-    await expect(page.getByTestId("rhino-status")).toHaveText("Syncing 5 of 50");
-    await openSettings(page, "modelling");
-    await expect(page.getByTestId("modelling-sync")).toContainText("Syncing 5 of 50");
-    await expect(page.getByTestId("modelling-not-drawn")).toContainText(
+    await expect(chip(page)).toHaveText("Syncing 5 of 50");
+    await openSettings(page, "hosts");
+    await expect(page.getByTestId("host-rhino-sync")).toContainText("Syncing 5 of 50");
+    await expect(page.getByTestId("host-rhino-not-drawn")).toContainText(
       "12 curves and 1 annotation not drawn",
     );
   });
 });
 
-test.describe("Settings > Modelling", () => {
-  test("Automatic follows the connection", async ({ page }) => {
+test.describe("Settings > Hosts", () => {
+  test("each host says whether it is connected, and how to connect it when it is not", async ({ page }) => {
     await start(page);
-    await openSettings(page, "modelling");
-    await expect(page.getByTestId("modelling-in-use-value")).toHaveText("Python only");
-    await expect(page.getByTestId("modelling-connection")).toContainText("Not connected");
-    const rhino = await connect();
-    await addObject(rhino, "rhino-wall", [-12000, -6000, 0]);
-    await expect(page.getByTestId("modelling-in-use-value")).toHaveText("Rhino");
-    await expect(page.getByTestId("modelling-connection")).toContainText("Connected to tower.3dm");
-    expect(bridge?.rhino.inUse).toBe("rhino");
-    rhino.ws.close();
-    await expect(page.getByTestId("modelling-in-use-value")).toHaveText("Python only");
-    await expect.poll(() => mirrorObjects(page)).toEqual([]);
-  });
-
-  test("Python inside Rhino: ready, or why not and what to do", async ({ page }) => {
-    await start(page);
-    const rhino = await connect({ python: { state: "unavailable", reason: "no Python 3 engine" } });
-    await openSettings(page, "modelling");
-    await expect(page.getByTestId("modelling-python-status")).toContainText(
-      "Python not available in Rhino: no Python 3 engine",
+    await openSettings(page, "hosts");
+    await expect(page.getByTestId("host-rhino-connection")).toContainText(
+      "Not connected. Run HaiConnect in Rhino.",
     );
-    await expect(page.getByTestId("modelling-python-status")).toContainText("run HaiConnect again");
-    // Rhino reports it works now.
-    rhino.send("rhino.status", { python: { state: "ready" }, document: "tower.3dm" });
-    await expect(page.getByTestId("modelling-python-status")).toContainText("Python ready");
+    await expect(page.getByTestId("host-blender-connection")).toContainText("HAI add-on in Blender");
+    const rhino = await connect();
+    await addObject(rhino, "rhino-wall", [-12000, -6000, 0]);
+    await expect(page.getByTestId("host-rhino-connection")).toContainText("Rhino 8.36.0, tower.3dm");
+    rhino.ws.close();
+    await expect(page.getByTestId("host-rhino-connection")).toContainText("Not connected");
+    await expect.poll(() => mirrorObjects(page)).toEqual([]);
   });
 
-  test("Python only hides the Rhino tools from the agent and the mirror layer", async ({ page }) => {
+  test("run unavailable: the agent cannot run code, and the page says why and what to do", async ({
+    page,
+  }) => {
+    await start(page);
+    const rhino = await connect({ run: { state: "unavailable", reason: "no Python 3 engine" } });
+    await openSettings(page, "hosts");
+    await expect(page.getByTestId("host-rhino-run")).toContainText(
+      "The agent cannot run code in Rhino: no Python 3 engine",
+    );
+    await expect(page.getByTestId("host-rhino-run")).toContainText("run HaiConnect again");
+    await expect(chip(page)).toHaveText("Rhino: cannot run code");
+    // Rhino reports it works now.
+    rhino.send("host.status", { run: { state: "ready" }, document: "tower.3dm" });
+    await expect(page.getByTestId("host-rhino-run")).toContainText("The agent can run code in Rhino");
+  });
+
+  test("switch a host off: its layer and chip go, the agent loses it, and switching it on brings it back", async ({
+    page,
+  }) => {
     await start(page);
     const rhino = await connect();
     await addObject(rhino, "rhino-wall", [-12000, -6000, 0]);
     await expect.poll(() => mirrorObjects(page)).toEqual(["rhino-wall"]);
-    await openSettings(page, "modelling");
-    await page.getByTestId("modelling-python").click();
-    await expect(page.getByTestId("modelling-python")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("modelling-in-use-value")).toHaveText("Python only");
-    await expect(page.getByTestId("rhino-status")).toHaveText("Python only");
+    await openSettings(page, "hosts");
+    await page.getByTestId("host-rhino-switch").click();
+    await expect(page.getByTestId("host-rhino-switch")).toHaveAttribute("aria-checked", "false");
+    await expect(page.getByTestId("host-rhino-connection")).toContainText(
+      "Off: the agent does not use Rhino",
+    );
+    await expect(chip(page)).toHaveCount(0);
     await expect.poll(() => mirrorObjects(page)).toEqual([]);
-    expect(bridge?.rhino.inUse).toBe("python");
-    expect(bridge?.rhino.mirrored).toBe(false);
-    // Back to Automatic: the model comes back without Rhino doing anything.
-    await page.getByTestId("modelling-auto").click();
+    expect(bridge?.hosts.get("rhino").inUse).toBe(false);
+    // On again: the model comes back without Rhino doing anything.
+    await page.getByTestId("host-rhino-switch").click();
     await expect.poll(() => mirrorObjects(page)).toEqual(["rhino-wall"]);
-    expect(bridge?.rhino.inUse).toBe("rhino");
+    expect(bridge?.hosts.get("rhino").inUse).toBe(true);
   });
 
   test("the choice follows the workspace", async ({ page, browser }) => {
-    const root = mkdtempSync(join(tmpdir(), "hai-e2e-modelling-"));
+    const root = mkdtempSync(join(tmpdir(), "hai-e2e-hosts-"));
     await start(page, { root });
-    await openSettings(page, "modelling");
-    await page.getByTestId("modelling-python").click();
-    await expect(page.getByTestId("modelling-python")).toHaveAttribute("aria-pressed", "true");
+    await openSettings(page, "hosts");
+    await page.getByTestId("host-rhino-switch").click();
+    await expect(page.getByTestId("host-rhino-switch")).toHaveAttribute("aria-checked", "false");
     await bridge?.stop();
     bridge = null;
     // The same workspace opened again, in another browser.
@@ -341,13 +354,49 @@ test.describe("Settings > Modelling", () => {
     const second = await other.newPage();
     bridge = await startTestBridge(second, { root });
     await openViewer(second);
-    await openSettings(second, "modelling");
-    await expect(second.getByTestId("modelling-python")).toHaveAttribute("aria-pressed", "true");
+    await openSettings(second, "hosts");
+    await expect(second.getByTestId("host-rhino-switch")).toHaveAttribute("aria-checked", "false");
+    await expect(second.getByTestId("host-blender-switch")).toHaveAttribute("aria-checked", "true");
     await other.close();
   });
 });
 
-test.describe("Rhino to HAI latency", () => {
+test.describe("more than one host", () => {
+  test("two hosts at once: both models are drawn, each has its chip, and a pick goes to its own host", async ({
+    page,
+  }) => {
+    await start(page);
+    const rhino = await connect();
+    const blender = await connect({ host: "blender" });
+    await loadModel(rhino, [{ id: "rhino-wall", at: [-12000, -6000, 0] }]);
+    await loadModel(blender, [{ id: "blender-chair", at: [-12000, -3000, 0] }]);
+    await expect.poll(() => mirrorObjects(page, "rhino")).toEqual(["rhino-wall"]);
+    await expect.poll(() => mirrorObjects(page, "blender")).toEqual(["blender-chair"]);
+    await expect(chip(page, "rhino")).toHaveText("Rhino connected");
+    await expect(chip(page, "blender")).toHaveText("Blender connected");
+    await expect.poll(() => findElementOnScreen(page, "blender-chair").catch(() => null)).not.toBeNull();
+    await tap(page, "blender-chair");
+    await blender.waitFor("host.select", (m) => m.payload.ids.join() === "blender-chair");
+    expect(rhino.received.some((m) => m.type === "host.select" && m.payload.ids.length > 0)).toBe(false);
+  });
+
+  test("a host disconnects: its layer and chip go, and the other host's stay", async ({ page }) => {
+    await start(page);
+    const rhino = await connect();
+    const blender = await connect({ host: "blender" });
+    await loadModel(rhino, [{ id: "rhino-wall", at: [-12000, -6000, 0] }]);
+    await loadModel(blender, [{ id: "blender-chair", at: [-12000, -3000, 0] }]);
+    await expect.poll(() => mirrorObjects(page, "blender")).toEqual(["blender-chair"]);
+    rhino.ws.close();
+    await expect.poll(() => mirrorObjects(page, "rhino")).toEqual([]);
+    await expect(chip(page, "rhino")).toHaveCount(0);
+    expect(await mirrorObjects(page, "blender")).toEqual(["blender-chair"]);
+    await expect(chip(page, "blender")).toHaveText("Blender connected");
+    blender.ws.close();
+  });
+});
+
+test.describe("host to HAI latency", () => {
   test("a change in Rhino is drawn within the budget, and the readout says how long it took", async ({
     page,
   }) => {
@@ -366,13 +415,13 @@ test.describe("Rhino to HAI latency", () => {
       // The plugin stamps a batch when it sends it, after its meshes are uploaded (the meshing is the plugin's own time).
       const changedAt = Date.now();
       rhino.send(
-        "rhino.objects",
-        rhinoBatch({
+        "host.objects",
+        hostBatch({
           reset: first,
           changedAt,
           changed: assets.map((asset, n) => {
             const at = place(n, shift);
-            return rhinoObject(`obj-${n}`, asset, {
+            return hostObject(`obj-${n}`, asset, {
               bounds: { min: at, max: [at[0] + 1000, at[1] + 1000, at[2]] },
             });
           }),
@@ -390,13 +439,15 @@ test.describe("Rhino to HAI latency", () => {
         await page.waitForTimeout(150);
       }
       await expect
-        .poll(() => page.evaluate(() => window.__HAI_MIRROR__?.latencyP90() ?? null), { timeout: 10_000 })
+        .poll(() => page.evaluate(() => window.__HAI_MIRROR__?.byHost.rhino?.latencyP90() ?? null), {
+          timeout: 10_000,
+        })
         .not.toBeNull();
-      p90 = Math.min(p90, await page.evaluate(() => window.__HAI_MIRROR__?.latencyP90() ?? 0));
+      p90 = Math.min(p90, await page.evaluate(() => window.__HAI_MIRROR__?.byHost.rhino?.latencyP90() ?? 0));
       console.log(`Rhino to HAI p90 for a 50-object edit (round ${round + 1}): ${Math.round(p90)} ms`);
     }
     expect(p90).toBeLessThan(allow(300, 2500));
-    await expect(page.getByTestId("rhino-latency")).toHaveText(/^Rhino to HAI \d+ ms$/);
+    await expect(page.locator("[data-testid=host-latency][data-host=rhino]")).toHaveText(/^\d+ ms$/);
   });
 });
 
@@ -477,7 +528,7 @@ test.describe("the agent sets the view", () => {
   });
 });
 
-test.describe("a Rhino script that goes outside its claim", () => {
+test.describe("a script in a host that goes outside its claim", () => {
   test("the user is told what it touched and can undo the run in Rhino", async ({ page }) => {
     await start(page, { agent: fakeProvider(mkdtempSync(join(tmpdir(), "hai-e2e-rhino-run-"))) });
     await page.evaluate(() => window.__HAI_INPUT__?.engaged(true));
@@ -488,10 +539,10 @@ test.describe("a Rhino script that goes outside its claim", () => {
     await expect(card).toHaveAttribute("data-outcome", "pending");
     await card.getByRole("button", { name: "Allow", exact: true }).click();
     // The script goes to Rhino with the agent, the title and the part its task works on.
-    const asked = await rhino.waitFor("rhino.python.run");
+    const asked = await rhino.waitFor("host.run");
     expect(asked.payload).toMatchObject({ agent: "architect", title: "Oops", part: "dome" });
     // Rhino answers: it changed a wall that belongs to no part of the dome.
-    rhino.send("rhino.python.result", {
+    rhino.send("host.result", {
       id: asked.payload.id,
       ok: true,
       stdout: "",
@@ -516,7 +567,7 @@ test.describe("a Rhino script that goes outside its claim", () => {
     await expect(report.getByTestId("run-report-stray")).toContainText("changed");
     await expect(report.getByTestId("run-report-stray")).toContainText("Garden wall");
     await report.getByTestId("run-report-undo").click();
-    await rhino.waitFor("rhino.undo");
+    await rhino.waitFor("host.undo");
     await expect(page.getByTestId("run-report")).toHaveCount(0);
   });
 
@@ -528,8 +579,8 @@ test.describe("a Rhino script that goes outside its claim", () => {
     await team().request("delegate architect[dome]: rhino run Fine");
     const card = page.getByTestId("approval-card").last();
     await card.getByRole("button", { name: "Allow", exact: true }).click();
-    const asked = await rhino.waitFor("rhino.python.run");
-    rhino.send("rhino.python.result", {
+    const asked = await rhino.waitFor("host.run");
+    rhino.send("host.result", {
       id: asked.payload.id,
       ok: true,
       stdout: "",
@@ -627,7 +678,7 @@ test.describe("files the agent's Python wrote", () => {
     const rhino = await connect();
     await card.getByRole("button", { name: "Allow", exact: true }).click();
     await page.getByTestId("written-open").click();
-    const opened = await rhino.waitFor("rhino.open");
+    const opened = await rhino.waitFor("host.open");
     expect(opened.payload.path).toMatch(/written-box\.3dm$/);
     await expect(page.getByTestId("written-files")).toHaveCount(0);
   });

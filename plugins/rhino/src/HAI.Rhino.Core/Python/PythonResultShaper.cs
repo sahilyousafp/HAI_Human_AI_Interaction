@@ -38,8 +38,8 @@ namespace HAI.Rhino.Core.Python
         }
 
         /// <summary>The answer for a run that finished: its output, and its <c>result</c> when it set one.</summary>
-        public static PythonResult Finished(string id, string stdout, string? result, TimeSpan took) =>
-            new PythonResult
+        public static RunResult Finished(string id, string stdout, string? result, TimeSpan took) =>
+            new RunResult
             {
                 Id = id,
                 Ok = true,
@@ -49,8 +49,8 @@ namespace HAI.Rhino.Core.Python
             };
 
         /// <summary>The answer for a run that failed: the output so far and the end of the traceback.</summary>
-        public static PythonResult Failed(string id, string stdout, string error, TimeSpan took) =>
-            new PythonResult
+        public static RunResult Failed(string id, string stdout, string error, TimeSpan took) =>
+            new RunResult
             {
                 Id = id,
                 Ok = false,

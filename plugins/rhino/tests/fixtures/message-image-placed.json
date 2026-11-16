@@ -1,0 +1,10 @@
+{
+  "type": "host.image.placed",
+  "id": "message-1",
+  "payload": {
+    "host": "rhino",
+    "id": "image-1",
+    "ok": true,
+    "objectId": "c4e6a8b0-0000-4000-8000-000000000004"
+  }
+}
