@@ -485,7 +485,8 @@ export function App() {
     };
   }, [agent, sceneClient, mirror, tools, requestChanges]);
   useEffect(
-    () => agent.subscribe(() => requestChanges.working(agent.getSnapshot().status?.state === "working")),
+    // The team, not only the lead: Mochi's turn ends as soon as it has handed the work out.
+    () => agent.subscribe(() => requestChanges.working(agent.busy)),
     [agent, requestChanges],
   );
   // A request carries the sketches the user drew for it (without which hand drew them), and clears them once sent.
@@ -534,10 +535,12 @@ export function App() {
               tools.choose(tool.id);
               return { label: tool.label };
             }
+            // "This" is what was pointed at or selected in HAI's scene, else what is selected in a host.
+            const pointed = context.references.map((reference) => reference.id);
             const run = runCommand(
               said,
               commandHost,
-              context.references.map((reference) => reference.id),
+              pointed.length > 0 ? pointed : mirror.selection,
               commandMemory,
             );
             return run ? { label: run.label, ran: true } : null;
@@ -562,7 +565,7 @@ export function App() {
           return named !== null && rest.trim() === "";
         },
       }),
-    [transcriber, agent, sceneClient, viewLink, speaker, tools, commandHost, commandMemory, features],
+    [transcriber, agent, sceneClient, viewLink, speaker, tools, commandHost, commandMemory, features, mirror],
   );
   // In the desktop app the voice models are downloaded after install: until they are in place the voice says so, the
   // speaker stays quiet and nothing asks for them. When they verify, voice starts without a reload.
@@ -988,7 +991,7 @@ export function App() {
       icon: "M12 3v5M12 16v5M3 12h5M16 12h5M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
       tint: "var(--tint-green)",
       detail: `${Object.values(aidState).filter(Boolean).length} on`,
-      render: () => <DrawingAidsSettings store={aids} />,
+      render: () => <DrawingAidsSettings store={aids} tools={tools} />,
     },
     {
       id: "gestures",

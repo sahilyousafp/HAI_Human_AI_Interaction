@@ -146,6 +146,10 @@ function sketchTool(options: {
       ctx.references.setDraft(null);
       ctx.setOverlay({ notice: null });
     },
+    // The snap shows before the pinch, so the path starts where the marker says.
+    onHover(ctx, at) {
+      if (!drawn) placed(ctx, at);
+    },
     onDragStart(ctx, at) {
       const start = placed(ctx, at);
       if (!start) return false;

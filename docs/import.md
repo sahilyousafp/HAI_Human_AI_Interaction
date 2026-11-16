@@ -30,7 +30,7 @@ A Brep saved by Rhino with **Save small** has no render meshes, so its objects c
 
 ## What you get
 
-Imported models are **reference geometry**: you can select, measure, section, move, copy and delete them, snap to their bounding boxes (Endpoint, Midpoint, Centre), and the agent sees each one as an element with a name, layer, colour and bounding box (never the triangles). Their shape cannot be edited.
+Imported models are **reference geometry**: you can select, measure, section, move, turn and delete them, snap to their bounding boxes (Endpoint, Midpoint, Centre), and the agent sees each one as an element with a name, layer, colour and bounding box (never the triangles). Their shape cannot be edited.
 
 - One element per object, named after the object (or the block, or the layer), with its layer name and display colour (Rhino's default black means no colour was chosen).
 - A model with **more than 1000 objects** becomes one element per layer and colour, named after the layer and the number of objects it holds (`Facade (4210 objects)`), so the scene file stays small and quick to draw. A stand with 48 692 objects and 2.9 million triangles became 14 elements.

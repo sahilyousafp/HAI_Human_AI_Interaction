@@ -3,7 +3,7 @@ import { DEFAULT_DRAWING_AIDS, DRAWING_AID_IDS, DRAWING_AIDS, resolveDrawingAids
 
 describe("drawing aids", () => {
   it("only Grid and the Line tool's angle lock are on until the user changes them", () => {
-    expect(DRAWING_AID_IDS.filter((id) => DEFAULT_DRAWING_AIDS[id])).toEqual(["grid", "lineOrtho"]);
+    expect(DRAWING_AID_IDS.filter((id) => DEFAULT_DRAWING_AIDS[id])).toEqual(["grid"]);
     expect(resolveDrawingAids(null)).toEqual(DEFAULT_DRAWING_AIDS);
   });
 

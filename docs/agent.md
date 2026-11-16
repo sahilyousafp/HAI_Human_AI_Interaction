@@ -135,7 +135,7 @@ User-level servers and skills stay yours to manage in Claude Code itself.
 ## Using the panel
 
 - **The panel talks to Mochi.** The team strip shows the specialists, hand-off chips open their work on a task, and the **Agents** tab edits the team ([agents.md](agents.md)). Mochi's replies are spoken.
-- **Speak** is the main way to ask: press the microphone button (or hold the **`** key) and say what to change while you point at the model. The transcript is sent after 1.5 s, or at once with a nod or **Enter**; a shake or **Escape** discards it. See [voice.md](voice.md).
+- **Speak** is the main way to ask: press the microphone button (or hold the **`** key) and say what to change while you point at the model. The transcript is sent after 5 s, or at once with a nod or **Enter**; a shake or **Escape** discards it. See [voice.md](voice.md).
 - Or type a request and press **Enter** to send it (**Shift+Enter** adds a line). You can send while the agent is ready; while it works, the send button becomes **Stop**.
 - **Ask agent** in the tool palette (or the **A** key) opens the panel and starts listening.
 - **The panel is a rail down the left**, beside the model, never over it. Drag its right edge to make it between 320 and 560 px wide, or use the arrow keys on the edge; a double-click puts it back to 380 px, and a press (a hand cannot drag) steps through a few widths. The width is remembered. Below 860 px of window width it is a sheet over the bottom of the model.

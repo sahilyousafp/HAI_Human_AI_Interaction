@@ -113,7 +113,7 @@ A group is a system tag, `hai.group`, on each member, so it is saved with the pr
 
 ## Placing points exactly: drawing aids
 
-Move, Measure and the sketch tools put their points through the **drawing aids** in **Settings > Drawing aids**. Each is a switch; only Grid and Ortho for Line are on until you change them, and a change applies to the very next point. The status bar lists the aids that apply to the active tool.
+Move, Measure and the sketch tools put their points through the **drawing aids** in **Settings > Drawing aids**. Each is a switch, and Ortho's angle step (90, 45 or 15 degrees) is chosen on the same page; only Grid is on until you change it, and a change applies to the very next point. The status bar lists the aids that apply to the active tool.
 
 | Aid | What it does |
 |---|---|

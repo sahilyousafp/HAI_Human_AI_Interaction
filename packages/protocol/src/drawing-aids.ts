@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 /**
- * The aids that help the create tools and Move place a point exactly (Settings > Drawing aids). Grid and the Line
- * tool's angle lock are on until the user turns them off; the rest are off until the user turns them on.
+ * The aids that help the sketch tools, Measure, Move and Rotate place a point exactly (Settings > Drawing aids). Grid
+ * is on until the user turns it off; the rest are off until the user turns them on.
  */
 export const DRAWING_AIDS = [
   {
@@ -14,19 +14,13 @@ export const DRAWING_AIDS = [
   {
     id: "ortho",
     label: "Ortho",
-    description: "Walls lock to the X axis, the Y axis or 45 degrees from where they start.",
+    description: "A sketched path and a turn lock to the angle step from where they start.",
     default: false,
-  },
-  {
-    id: "lineOrtho",
-    label: "Ortho for Line",
-    description: "The Line tool's segments lock to the angle step from the point before them.",
-    default: true,
   },
   {
     id: "endpoint",
     label: "Endpoint",
-    description: "Points snap to the ends of walls, the corners of slabs and the centres of columns.",
+    description: "Points snap to the corners and ends of the model's elements.",
     default: false,
   },
   {
@@ -50,7 +44,7 @@ export const DRAWING_AIDS = [
   {
     id: "perpendicular",
     label: "Perpendicular",
-    description: "A line meets an edge at a right angle.",
+    description: "A path meets an edge at a right angle.",
     default: false,
   },
 ] as const satisfies ReadonlyArray<{ id: string; label: string; description: string; default: boolean }>;

@@ -170,8 +170,8 @@ export interface ToolSnapshot {
   overlay: ToolOverlay;
   /** The question waiting for a yes or no, if any. */
   question: string | null;
-  /** How the line being drawn is held: the angles Ortho takes (degrees), and a length typed for the next segment. */
-  constraints: { angleStepDeg: number; lengthMm: number | null };
+  /** How a line being drawn is held: the angles Ortho takes (degrees). */
+  constraints: { angleStepDeg: number };
   /** Bumped when tools are registered, so lists of available tools refresh. */
   registryVersion: number;
 }
@@ -225,7 +225,7 @@ export class ToolController {
       palette: null,
       overlay: EMPTY_OVERLAY,
       question: null,
-      constraints: { angleStepDeg: readAngleStep(), lengthMm: null },
+      constraints: { angleStepDeg: readAngleStep() },
       registryVersion: 0,
     };
     registry.onChange(() => {
@@ -267,7 +267,6 @@ export class ToolController {
     this.update({
       activeId: id,
       overlay: { ...this.snapshot.overlay, notice: null },
-      constraints: { ...this.snapshot.constraints, lengthMm: null },
     });
     tool.activate?.(ctx);
   }
@@ -286,12 +285,6 @@ export class ToolController {
   setAngleStep(angleStepDeg: number): void {
     this.update({ constraints: { ...this.snapshot.constraints, angleStepDeg } });
     writeAngleStep(angleStepDeg);
-  }
-
-  /** A length for the next segment (millimetres), or null to free it; it is also freed once a point is placed. */
-  setLength(lengthMm: number | null): void {
-    const length = lengthMm !== null && lengthMm > 0 ? Math.round(lengthMm) : null;
-    this.update({ constraints: { ...this.snapshot.constraints, lengthMm: length } });
   }
 
   setDominantHand(hand: Hand): void {
@@ -503,7 +496,7 @@ export class ToolController {
     return this.active?.canRedo?.() ?? false;
   }
 
-  /** Switches the active tool to one of its modes (its panel, or by voice). */
+  /** Switches the active tool to one of its modes (by voice). */
   setToolMode(id: string): void {
     const ctx = this.ctx();
     if (!ctx) return;
@@ -753,7 +746,6 @@ export class ToolController {
       resolve: (at, options) => this.resolveSnap(env, at, options),
       clearSnap: () => this.clearSnap(),
       constraints: () => this.snapshot.constraints,
-      setLength: (lengthMm) => this.setLength(lengthMm),
       bounds: () => env.bounds(),
       onSectionLine: (at) => env.onSectionLine(at),
       overlay: () => this.snapshot.overlay,
@@ -792,10 +784,7 @@ export class ToolController {
     options: { anchor?: Point3Mm | null; exclude?: string[]; probe?: Point3Mm; free?: boolean } = {},
   ): Resolved | null {
     const doc = env.doc();
-    const allAids = env.aids?.() ?? DEFAULT_DRAWING_AIDS;
-    const orthoAid = this.active?.orthoAid;
-    const toolAids = orthoAid ? { ...allAids, ortho: allAids[orthoAid] } : allAids;
-    const aids = options.free ? NO_AIDS : toolAids;
+    const aids = options.free ? NO_AIDS : (env.aids?.() ?? DEFAULT_DRAWING_AIDS);
     const project = env.projector?.() ?? null;
     const [width, height] = env.screenSize?.() ?? [1, 1];
     let pointer: Point2 = [at[0] * width, at[1] * height];

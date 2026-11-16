@@ -1,5 +1,4 @@
 import type {
-  DrawingAidId,
   DrawingAids,
   Element,
   FeatureId,
@@ -123,10 +122,8 @@ export interface ToolContext {
   ): Resolved | null;
   /** Removes the snap marker. */
   clearSnap(): void;
-  /** How the line being drawn is held: Ortho's angle step (degrees) and a length typed for the next segment. */
-  constraints(): { angleStepDeg: number; lengthMm: number | null };
-  /** Sets, or with null frees, the length for the next segment. */
-  setLength(lengthMm: number | null): void;
+  /** How a line being drawn is held: the angles Ortho takes (degrees). */
+  constraints(): { angleStepDeg: number };
   /** Bounding box of the scene, millimetres. */
   bounds(): { min: Point3Mm; max: Point3Mm };
   /** Whether a viewer position is on the section's outline on screen (within a finger's width). */
@@ -169,8 +166,6 @@ export interface Tool {
   instant?: boolean;
   /** The tool draws points in any view, in a side view's vertical plane too (Line); others need the ground in plan. */
   drawsInView?: boolean;
-  /** The aid that holds this tool's lines to the angle step, instead of the shared Ortho. */
-  orthoAid?: DrawingAidId;
   /**
    * A hand's pinch places one thing: while this says so, the preview stands still as the fingers close, and the tool
    * takes the pinch however far the hand drifts (no orbit). A long pinch that stays still is dropped, for talking or a
@@ -179,14 +174,14 @@ export interface Tool {
   pressPlaces?(): boolean;
   /** The hand steering what is being drawn, which is followed even when the other hand has the focus. */
   followsHand?(): Hand | null;
-  /** The ways of working this tool has, switched in its panel at the right of the view (Line: Straight or Freeform). */
+  /** The ways of working this tool has, switched by voice (a plugin's tool may have them; the built-in ones do not). */
   modes?: {
     options: Array<{
       id: string;
       label: string;
       /** What can be said to pick the tool in this mode, lower case. */
       spoken: string[];
-      /** The panel's angle, length and snap controls apply in this mode. */
+      /** The drawing aids apply in this mode. */
       constrained: boolean;
     }>;
     current(): string;
@@ -202,8 +197,6 @@ export interface Tool {
   canUndo?(): boolean;
   /** Whether `onRedo` has something to redo. */
   canRedo?(): boolean;
-  /** Whether a nod or Enter would finish what is drawn. A tool with this gets a Finish button in its panel. */
-  canFinish?(): boolean;
   /** The feature that switches this tool on and off (Settings > Features); without one it is always available. */
   feature?: FeatureId;
   run?(ctx: ToolContext): void;

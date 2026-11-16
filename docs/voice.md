@@ -103,7 +103,7 @@ All values live in `apps/web/src/voice/voice-config.ts`; a unit test checks that
 | `afterNameMs` | 5000 | After a name on its own ("Hey Mochi") the microphone stays open this long for the rest of the request |
 | `dwellMs` | 300 | With Number what I point at on, the hand pointer must rest on an element this long while you speak for it to be captured |
 
-The Voice settings show where transcription runs and the 90th percentile of the time from the end of speech to the transcript. The target is under one second; on the reference laptop a two-second phrase transcribes in about 0.2 s. The speech model (63 MB) loads while you speak the first request, in about 1.5 s.
+The Voice settings show where transcription runs and the 90th percentile of the time from the end of speech to the transcript. The target is under one second; on the reference laptop a spoken command transcribes in about a third of a second (docs/decisions.md, "Speech to text: Moonshine v2 small"). The speech model (166 MB) loads while you speak the first request.
 
 ## Mochi's voice
 

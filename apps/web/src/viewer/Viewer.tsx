@@ -8,6 +8,7 @@ import {
   type GestureEvent,
   type Hand,
   HOST_IDS,
+  HOST_INFO,
   type HostId,
   type Point2,
   type Point3Mm,
@@ -76,7 +77,6 @@ import type { SceneClient, SceneState } from "../scene/scene-client.ts";
 import type { DrawingAidsStore } from "../settings/drawing-aids.ts";
 import type { FeatureFlags } from "../settings/feature-flags.ts";
 import { overSectionPlane, SECTION_PAD_MM } from "../tools/builtin.ts";
-import { ConstraintsPanel } from "../tools/ConstraintsPanel.tsx";
 import type { PointerSource, ToolController } from "../tools/controller.ts";
 import type { EditHistory } from "../tools/history.ts";
 import { InputRouter, type RouterOptions } from "../tools/input-router.ts";
@@ -1008,17 +1008,19 @@ export function Viewer({
   const sun = useSyncExternalStore(view.onSun, () => view.sun);
   const featureState = useSyncExternalStore(features.subscribe, features.getSnapshot);
   const aidState = useSyncExternalStore(aids.subscribe, aids.getSnapshot);
-  /** An aid as it applies now: Ortho in the status bar is the active tool's own lock when it has one (Line). */
+  /** An aid as it applies now to the active tool. */
   const aidOn = (id: DrawingAidId): boolean => {
     const tool = tools.registry.get(toolState.activeId);
-    // A tool in a mode that takes no aids (Line in Freeform) has none on, whatever the switches say.
+    // A tool in a mode that takes no aids has none on, whatever the switches say.
     const mode = tool?.modes?.options.find((option) => option.id === tool.modes?.current());
     if (mode && !mode.constrained) return false;
-    return aidState[id === "ortho" && tool?.orthoAid ? tool.orthoAid : id];
+    return aidState[id];
   };
   const modelVersion = useSyncExternalStore(modelAssets.subscribe, modelAssets.getVersion);
   // The count of documents that have arrived whole, to frame each once; the objects themselves are the layer's own.
   const hostsSynced = useSyncExternalStore(mirror.subscribe, () => mirror.synced);
+  // What is selected in a host, for the status bar (a selection is always one host's).
+  const hostSelection = useSyncExternalStore(mirror.subscribe, () => JSON.stringify(mirror.selection));
   const mirrorAssetList = useMemo(() => HOST_IDS.map((host) => mirrorAssets[host]), [mirrorAssets]);
   const mirrorVersion = useMirrorVersion(mirror, mirrorAssetList);
   // The cut is applied again when elements change or a model's triangles arrive.
@@ -1840,6 +1842,13 @@ export function Viewer({
   else if (selected && scene.doc && soleGroup(scene.doc, scene.selection))
     selectionText = `Group of ${scene.selection.length}`;
   else if (selected) selectionText = `${scene.selection.length} selected`;
+  else {
+    const ids = JSON.parse(hostSelection) as string[];
+    const first = ids[0] ? mirror.object(ids[0]) : undefined;
+    if (first && ids.length === 1)
+      selectionText = `${first.name || first.type} (${HOST_INFO[first.host].label})`;
+    else if (first) selectionText = `${ids.length} selected in ${HOST_INFO[first.host].label}`;
+  }
   // Drafts standing in for elements (Rotate): drawn in their place until the change they show arrives.
   const standIns = overlay.drafts.filter((draft) => {
     const from = overlay.draftsOf[draft.id];
@@ -2120,7 +2129,6 @@ export function Viewer({
 
       <LassoOutline controller={tools} />
       <Palette controller={tools} />
-      {/* The viewport's right column: the drawing constraints while Line or Wall is active. */}
       <SelectionPanel
         controller={tools}
         client={client}
@@ -2139,7 +2147,6 @@ export function Viewer({
       />
       <div className="viewer-right">
         <ViewCube mode={viewMode} onView={showView} cubeRef={cubeRef} initial={nav.current} />
-        <ConstraintsPanel controller={tools} aids={aids} />
       </div>
       <UndoStrip client={client} history={history} />
       <GeneratedPanel client={panels} scene={client} />
@@ -2255,7 +2262,7 @@ export function Viewer({
           <span data-testid="selection-status">{selectionText}</span>
           <span data-testid="aids-status">
             Aids:{" "}
-            {DRAWING_AIDS.filter((a) => a.id !== "lineOrtho" && aidOn(a.id))
+            {DRAWING_AIDS.filter((a) => aidOn(a.id))
               .map((a) => a.label)
               .join(", ") || "none"}
           </span>
