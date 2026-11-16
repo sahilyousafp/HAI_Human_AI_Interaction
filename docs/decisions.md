@@ -386,3 +386,65 @@ What it still gets wrong: "Bake" as "Make", "Column" as "Colon" (one voice of tw
 **A freeze found on the way.** With the face off, the "no stray tap" check on the same clip failed about one session in three. The cause was older: the speech detector (`@ricky0123/vad-web`) builds its ONNX runtime on the page, and it was built at the first engagement, holding the main thread, where camera frames are taken, for about 0.4 s just as the hands began to pinch. A pinch hidden by the freeze started too late to join the other hand's, and came out as a tap. ONNX Runtime's proxy worker would have moved the work off the page, but vad-web bundles its own copy of the runtime, which cannot find its script to start one. So the detector is now built when the camera starts, while the hand model loads and before any gesture can be made: the longest gap between frames on the clip went from 370 to about 110 ms.
 
 **Checked by the owner** with a real camera (2026-11-09): the pinch across the face and the lasso that had broken up mid-loop both work. On the recorded clip alone the lasso could not be shown fixed: hands were unseen for more than 250 ms (which ends a drag) about as often with the face off as on.
+
+## HAI orchestrates host applications: hosts model, HAI views and edits, Speckle carries hand-offs (2026-11-16)
+
+**Question.** The owner asked to move HAI from a modelling environment to an orchestrator: the Claude agent should direct Rhino, Revit, Blender and other applications, which model with their own tools, instead of building geometry itself. They also asked how good modelling through an MCP server is compared with modelling directly in Rhino.
+
+**What was found** (sources in [research/host-connectors.md](research/host-connectors.md)):
+
+- **No benchmark compares an MCP tool list with code inside the host**, but the evidence points one way:
+  - CodeAct measured Python actions up to 20 points more successful than JSON tool calls.
+  - Every serious host server ends up with a run-code tool.
+  - RhinoAI's own developer reports that Claude mostly writes Python and rarely uses the commands.
+  - Users of the official Rhino server report destructive edits and a `run_csharp` that reports success while doing nothing.
+- **The servers fall short of what HAI needs.**
+  - None has an approval gate or one undo per run.
+  - Revit's official server (2027.2 only) cannot run code, and writes only parameters, moves and rotations.
+  - The community servers listen on unauthenticated sockets.
+- **Pictures help.**
+  - SceneCraft lost 38 points without its render critique.
+  - CADCodeVerify gained about 5 per cent from a render check.
+  - HAI already renders pictures for its agents.
+- **Speckle's stock connectors send and receive only from their own UI.**
+  - The SDKs (`Send3`/`Receive3`, specklepy) can be called from a plugin.
+  - A version takes seconds to exist.
+  - The free plan stops at 100 versions.
+  - No JavaScript loader reads the current data.
+  - The open-source server cannot read the current format.
+
+**Decided.**
+
+- **HAI drives each host through its own thin connector.** The Rhino plugin exists. A Blender add-on comes next, then a Revit add-in. They share one message contract: mirror, selection, run code, undo, capture, place image, edit, and Speckle publish and load.
+- **Agents model only by approved code in a host**, or with the Python workbench, which writes a file. They lose HAI's scene write tools.
+- **HAI's viewer is where the user views and edits.**
+  - A move, rotate, delete or undo on a mirrored object is applied by the host that owns it.
+  - A zone shows each host's work live, with the host's glyph and the agent's state.
+- **Speckle carries hand-offs between hosts**, triggered by HAI's plugins through the SDKs. It is never the live view, which stays on each plugin's direct mesh stream.
+- **HAI's own scene becomes a sketch and review layer.**
+  - The creation tools (wall, slab, column, copy, massing, line as geometry) leave the rings.
+  - The dominant hand gets an edit ring.
+
+**Rejected.**
+
+- *Routing the agent through RhinoAI, blender-mcp or the Revit MCP server.* They have no approval gate and no single undo, Revit's server has no code execution, and each tool list is a ceiling.
+- *Keeping HAI as a modeller alongside the hosts.* Two places to model, and the weaker one is HAI.
+- *Files on disk as the bus.* The owner chose Speckle.
+- *Speckle as the view.* Too slow, capped, and unreadable from JavaScript today.
+
+**Costs accepted.**
+
+- *Hand-offs need a Speckle account and the internet.* This is a second opt-in exception to localhost, next to open data.
+- *The Blender add-on must be GPL-3.* It lives in its own folder and talks to HAI over a socket.
+- *Three plugins in three languages,* each with a core library tested without its host.
+- *Revit receives Speckle geometry as DirectShapes,* so its agent rebuilds native elements with code where that matters.
+
+**Added the same day, at the owner's request.**
+
+- *Other plugins and MCP servers add capabilities.* The user can connect them beside HAI's connectors: RhinoAI's Grasshopper tools, blender-mcp's assets, the Revit MCP's read and export tools, Ladybug Tools MCP, and the hosts' own plugins and add-ons, which each connector reports. Each is offered to the agents working on its host, behind the usual approval card. They add to a connector and never replace it, because only HAI's connector gives the mirror, the approval of each script and one undo per run.
+- *Generated panels reach further.*
+  - A panel can read the web, but only through the bridge and only from the sites on its offer card. The frame itself keeps `connect-src 'none'`: opening its policy would let the agent's code talk to any server unseen.
+  - A panel can search openly licensed images (Openverse, Wikimedia Commons) and keeps each one with its licence and author.
+  - A panel is worked fully by hand: drag, scroll, hover, and moving and resizing it by its header, building on the presses and sliders `frame-runtime.ts` already handles.
+
+The work is split into ten OpenSpec changes, listed in `openspec/changes/pivot-to-host-orchestration/proposal.md`.

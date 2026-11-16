@@ -1,5 +1,7 @@
 # Tasks
 
+> **2026-11-16:** HAI now orchestrates host applications (`pivot-to-host-orchestration`). The open tasks below continue in `add-host-adapters` under the host-generic `host.*` messages, and Rhino becomes that change's reference adapter. They are left open here and ticked there.
+
 ## 1. Bridge side
 
 - [x] 1.1 Add Rhino protocol messages (hello client "rhino" with Python status, object batches with descriptors and deletions, object select, selection, Python run request and result) and `view.set`, and the new tool names in `packages/protocol`; verify schema unit tests
