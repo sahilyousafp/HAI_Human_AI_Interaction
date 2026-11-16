@@ -121,6 +121,11 @@ export const RequestContext = z.strictObject({
     .array(z.strictObject({ host: HostId, ...HostComponent.shape }))
     .max(HOST_DESCRIBE_MAX)
     .optional(),
+  /**
+   * Only these objects may change: a request made from the selection card (or spoken while it is open). The agent is
+   * told, and the tasks it hands out are scoped to them.
+   */
+  limitTo: z.strictObject({ host: HostId, ids: z.array(z.string().min(1)).min(1).max(500) }).optional(),
 });
 export type RequestContext = z.infer<typeof RequestContext>;
 

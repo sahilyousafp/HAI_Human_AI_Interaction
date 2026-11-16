@@ -1,0 +1,33 @@
+{
+  "type": "host.edit",
+  "id": "bridge-11",
+  "payload": {
+    "host": "rhino",
+    "id": "edit-1",
+    "label": "Move",
+    "op": {
+      "op": "transform",
+      "ids": [
+        "7f1c0b0e-3f0a-4a53-9d0e-5d3f1c9a1b11"
+      ],
+      "matrix": [
+        1,
+        0,
+        0,
+        2000,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    }
+  }
+}

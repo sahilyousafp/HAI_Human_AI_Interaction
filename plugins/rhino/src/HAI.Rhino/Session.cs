@@ -136,6 +136,21 @@ namespace HAI.Rhino
                     var query = message.As<ApiRequest>();
                     if (query != null) _ = client.Send(Wire.ApiResult, api.Index.Find(query.Id, query.Query));
                     break;
+                case Wire.Edit:
+                    var edit = message.As<EditRequest>();
+                    if (edit != null)
+                        RhinoApp.InvokeOnUiThread(new Action(() =>
+                        {
+                            var doc = RhinoDoc.ActiveDoc;
+                            _ = client.Send(
+                                Wire.Edited,
+                                doc == null ? new Edited { Id = edit.Id, Error = "No document is open." } : HostEdits.Apply(doc, edit));
+                        }));
+                    break;
+                case Wire.Redo:
+                    // The user redid an edit made in HAI. Each edit is one undo step.
+                    RhinoApp.InvokeOnUiThread(new Action(() => RhinoApp.RunScript("_Redo", false)));
+                    break;
                 case Wire.Describe:
                     var describe = message.As<DescribeRequest>();
                     if (describe != null)

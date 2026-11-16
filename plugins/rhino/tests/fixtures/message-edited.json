@@ -1,0 +1,9 @@
+{
+  "type": "host.edited",
+  "id": "message-1",
+  "payload": {
+    "host": "rhino",
+    "id": "edit-1",
+    "ok": true
+  }
+}

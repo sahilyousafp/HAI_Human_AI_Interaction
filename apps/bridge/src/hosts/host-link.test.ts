@@ -919,3 +919,86 @@ describe("project files and opening them in a host", () => {
     expect(rhino.received.filter((m) => m.type === "host.open")).toHaveLength(1);
   });
 });
+
+describe("edits made in HAI", () => {
+  const moveBy = (x: number) => [1, 0, 0, x, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+  it("move a host object by hand: the page's edit reaches the connector as it was made, and the answer reaches the page", async () => {
+    await start();
+    const rhino = await hostClient();
+    const browser = await page();
+    browser.send("host.edit", {
+      host: "rhino",
+      id: "edit-1",
+      label: "Move",
+      op: { op: "transform", ids: ["a1"], matrix: moveBy(2000) },
+    });
+    const asked = await rhino.waitFor("host.edit");
+    expect(asked.payload).toMatchObject({
+      id: "edit-1",
+      label: "Move",
+      op: { op: "transform", ids: ["a1"] },
+    });
+    expect(asked.payload.op.op === "transform" && asked.payload.op.matrix[3]).toBe(2000);
+    rhino.send("host.edited", { id: "edit-1", ok: true });
+    expect((await browser.waitFor("host.edited")).payload).toMatchObject({
+      host: "rhino",
+      id: "edit-1",
+      ok: true,
+    });
+  });
+
+  it("a refused edit: the host's reason reaches the page", async () => {
+    await start();
+    const rhino = await hostClient();
+    const browser = await page();
+    browser.send("host.edit", {
+      host: "rhino",
+      id: "edit-2",
+      label: "Delete",
+      op: { op: "delete", ids: ["gone"] },
+    });
+    await rhino.waitFor("host.edit");
+    rhino.send("host.edited", { id: "edit-2", ok: false, error: "No object gone" });
+    expect((await browser.waitFor("host.edited")).payload).toMatchObject({
+      ok: false,
+      error: "No object gone",
+    });
+  });
+
+  it("a host without edits: nothing is sent, and the page is told the host does not take edits from HAI", async () => {
+    await start();
+    const rhino = await hostClient({ capabilities: { edit: false } });
+    const browser = await page();
+    browser.send("host.edit", {
+      host: "rhino",
+      id: "edit-3",
+      label: "Move",
+      op: { op: "delete", ids: ["a1"] },
+    });
+    const answer = await browser.waitFor("host.edited");
+    expect(answer.payload).toMatchObject({ id: "edit-3", ok: false });
+    expect(answer.payload.error).toMatch(/does not take edits from HAI/);
+    expect(rhino.received.some((m) => m.type === "host.edit")).toBe(false);
+  });
+
+  it("an edit for a host that is not connected is answered at once", async () => {
+    await start();
+    const browser = await page();
+    browser.send("host.edit", {
+      host: "blender",
+      id: "edit-4",
+      label: "Move",
+      op: { op: "delete", ids: ["a1"] },
+    });
+    expect((await browser.waitFor("host.edited")).payload.error).toMatch(/Blender is not connected/);
+  });
+
+  it("redo a host edit: the page's redo reaches the connector", async () => {
+    await start();
+    const rhino = await hostClient();
+    const browser = await page();
+    browser.send("host.redo", { host: "rhino" });
+    await rhino.waitFor("host.redo");
+  });
+});

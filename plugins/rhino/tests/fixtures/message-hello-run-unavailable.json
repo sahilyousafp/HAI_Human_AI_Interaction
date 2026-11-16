@@ -21,7 +21,8 @@
       "capture": true,
       "placeImage": true,
       "apiLookup": true,
-      "describe": true
+      "describe": true,
+      "edit": true
     }
   }
 }

@@ -86,7 +86,7 @@ export class HostRegistry {
     for (const link of this.all) link.switchChanged();
   }
 
-  /** Handles a message from a page: picks select in their host, undo goes to its host. Returns false for others. */
+  /** Handles a message from a page: picks select in their host; edits, undo and redo go to their host. Returns false for others. */
   handleFromWeb(message: Message): boolean {
     switch (message.type) {
       case "host.select": {
@@ -100,6 +100,12 @@ export class HostRegistry {
       }
       case "host.undo":
         this.links[message.payload.host].undoRun();
+        return true;
+      case "host.redo":
+        this.links[message.payload.host].redo();
+        return true;
+      case "host.edit":
+        this.links[message.payload.host].edit(message);
         return true;
       default:
         return false;

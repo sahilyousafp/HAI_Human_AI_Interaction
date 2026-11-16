@@ -26,6 +26,7 @@ namespace HAI.Rhino.Core.Protocol
         public const string ImagePlaced = "host.image.placed";
         public const string ApiResult = "host.api.result";
         public const string Described = "host.described";
+        public const string Edited = "host.edited";
 
         // Bridge to connector.
         public const string Refused = "host.refused";
@@ -37,6 +38,8 @@ namespace HAI.Rhino.Core.Protocol
         public const string ImagePlace = "host.image.place";
         public const string Api = "host.api";
         public const string Describe = "host.describe";
+        public const string Edit = "host.edit";
+        public const string Redo = "host.redo";
     }
 
     /// <summary>Whether the agent can run code in Rhino now: ready, or unavailable with the reason.</summary>
@@ -68,6 +71,7 @@ namespace HAI.Rhino.Core.Protocol
         [JsonProperty("placeImage")] public bool PlaceImage { get; set; } = true;
         [JsonProperty("apiLookup")] public bool ApiLookup { get; set; } = true;
         [JsonProperty("describe")] public bool Describe { get; set; } = true;
+        [JsonProperty("edit")] public bool Edit { get; set; } = true;
     }
 
     /// <summary>What the connector tells the bridge about itself when it connects.</summary>
@@ -419,6 +423,40 @@ namespace HAI.Rhino.Core.Protocol
     {
         [JsonProperty("id")] public string Id { get; set; } = "";
         [JsonProperty("ids")] public List<string> Ids { get; set; } = new List<string>();
+    }
+
+    /// <summary>The user's own edit of objects, made in HAI: a transform by a matrix, or a delete, by ids.</summary>
+    public sealed class EditOp
+    {
+        /// <summary>"transform" or "delete".</summary>
+        [JsonProperty("op")] public string Op { get; set; } = "";
+
+        [JsonProperty("ids")] public List<string> Ids { get; set; } = new List<string>();
+
+        /// <summary>For a transform: 16 numbers, row by row, millimetres, Z up.</summary>
+        [JsonProperty("matrix")] public double[]? Matrix { get; set; }
+    }
+
+    /// <summary>Bridge to Rhino: apply the user's edit as one undo record.</summary>
+    public sealed class EditRequest
+    {
+        [JsonProperty("id")] public string Id { get; set; } = "";
+
+        /// <summary>The undo step's label: "Move", "Rotate 30 deg".</summary>
+        [JsonProperty("label")] public string Label { get; set; } = "";
+
+        [JsonProperty("op")] public EditOp Op { get; set; } = new EditOp();
+    }
+
+    /// <summary>The edit was applied, or why not.</summary>
+    public sealed class Edited
+    {
+        [JsonProperty("host")] public string Host { get; set; } = Wire.HostId;
+        [JsonProperty("id")] public string Id { get; set; } = "";
+        [JsonProperty("ok")] public bool Ok { get; set; }
+
+        [JsonProperty("error", NullValueHandling = NullValueHandling.Ignore)]
+        public string? Error { get; set; }
     }
 
     /// <summary>Limits the bridge's schemas enforce, applied here so the connector never sends a message it would refuse.</summary>

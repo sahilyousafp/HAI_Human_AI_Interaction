@@ -33,6 +33,7 @@ import {
   HostCapabilities,
   HostChoices,
   HostComponent,
+  HostEditOp,
   HostId,
   HostLanguage,
   HostNotDrawn,
@@ -437,6 +438,19 @@ export const HostRunMessage = message(
 );
 /** Undo the last run (it is one undo step). */
 export const HostUndoMessage = message("host.undo", z.strictObject({ host: HostId }));
+/** Redo the last undone step in the host (the user's Redo after an Undo of a host edit). */
+export const HostRedoMessage = message("host.redo", z.strictObject({ host: HostId }));
+/** The user's own edit of a host's objects, made in HAI: a page sends it, the bridge passes it to the host. */
+export const HostEditMessage = message(
+  "host.edit",
+  z.strictObject({
+    host: HostId,
+    id: z.string().min(1).max(64),
+    /** The undo step's label in the host: "Move", "Rotate 30 deg", "Delete 2 objects". */
+    label: z.string().min(1).max(80),
+    op: HostEditOp,
+  }),
+);
 /** Capture the host's own viewport: a named view, or the active one. The connector uploads a PNG as an asset. */
 export const HostCaptureMessage = message(
   "host.capture",
@@ -563,6 +577,16 @@ export const HostApiResultMessage = message(
     truncated: z.boolean(),
     /** The index is still being built: these are the entries indexed so far. */
     partial: z.boolean().default(false),
+  }),
+);
+/** The host applied the edit, or why not; the bridge passes it to the pages. */
+export const HostEditedMessage = message(
+  "host.edited",
+  z.strictObject({
+    host: HostId,
+    id: z.string().min(1).max(64),
+    ok: z.boolean(),
+    error: z.string().max(2000).optional(),
   }),
 );
 export const HostDescribedMessage = message(
@@ -786,6 +810,8 @@ export const Message = z.discriminatedUnion("type", [
   HostRefusedMessage,
   HostRunMessage,
   HostUndoMessage,
+  HostRedoMessage,
+  HostEditMessage,
   HostCaptureMessage,
   HostImagePlaceMessage,
   HostApiMessage,
@@ -799,6 +825,7 @@ export const Message = z.discriminatedUnion("type", [
   HostImagePlacedMessage,
   HostApiResultMessage,
   HostDescribedMessage,
+  HostEditedMessage,
   HostSelectMessage,
   HostOpenMessage,
   PythonWrittenMessage,
