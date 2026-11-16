@@ -2,6 +2,8 @@
 
 **Hands, face and voice for AEC agents.** HAI (Human AI Interface) is an open-source interaction layer that lets AEC professionals work with their own AI agent and their design software using a normal laptop webcam: point at a wall, say "make it 300 thick", nod to accept.
 
+**Where it is going (decided 2026-11-16):** HAI becomes an orchestrator. Rhino, Blender and Revit do the modelling with their own tools, and your Claude directs them by writing code in them, which you approve before it runs. Speckle carries models between them. HAI is the one place where you see every application's model live, and select and edit it with your hands. Why: [docs/decisions.md](docs/decisions.md) and [docs/research/host-connectors.md](docs/research/host-connectors.md).
+
 > Status: past week 14 of a 19-week build in public. Hand and face tracking, both hands as equal pointers, gestures, hand navigation, tool rings with hand-drawn walls, slabs and columns, your own Claude as a small design team (Mochi and its specialists), on-device voice in and out, an Apple-style studio layout with feature switches and a "show my hands" overlay for recordings, pointers that snap to buttons, drawing aids (snap, ortho, projection) import of Rhino .3dm models, snapping and measuring at every height, new empty projects and saving as a Rhino file all work in the built-in viewer. Since then: the Rhino 8 connector, agents working in parallel on separate parts of the model, generated panels, an OpenCascade geometry kernel, hold to talk with spoken commands, a lasso, and on-device speech with Moonshine v2. Where the work stands and what is open: [docs/handoff.md](docs/handoff.md).
 
 Watch the build stage by stage, each with its clip and LinkedIn post, at [hai.spairl.si](https://hai.spairl.si). The site's source is in [website/](website/).
@@ -41,6 +43,7 @@ Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 - [Claude Code](https://claude.com/claude-code), installed and signed in, for the agent team
 - Rhino 8 (optional, from week 13: HAI's own plugin connects it and runs the agent's Python in it)
 - Python 3.10 or newer (optional, from week 13: the agent's Python workbench, with libraries such as Ladybug)
+- Planned: Blender 4.2 or newer, Revit 2025 or newer, and a Speckle account for hand-offs between them (all optional)
 
 ## Run it
 
@@ -78,10 +81,11 @@ HAI was called AEX until week 12. Nothing is lost: when the bridge starts, an ol
 | 11 | Precision and import: pointers snap to buttons, drawing aids (snap, ortho, projection), Rhino .3dm import |
 | 12 | Snapping at every height, Measure that snaps, new empty projects, save as 3dm |
 | 13 | Rhino 8 connector |
-| 14 | More modelling by hand: openings, roofs, arrays |
+| 14 | ~~More modelling by hand~~, replaced by orchestration (below) |
 | 14b | Hold to talk: a long pinch says "this" and listens; rings by role; sketches and markers for the agent; tool names by voice |
 | 15 | Reviewable agent turns: nod to keep, shake to revert |
-| 16-19 | More providers, overlay over Rhino, custom gestures, v0.1 |
+| 16-19 | More providers, custom gestures, v0.1 |
+| From 2026-11-16 | Orchestration: one contract for every host application, HAI as the edit surface, live zones with the host's icon, images to and from hosts, other MCP servers and host plugins as extra capabilities, panels that read the web, source images and are worked by hand, the Blender connector, Speckle hand-offs, the Revit connector, Mochi as the orchestrator |
 
 The full plan is in [docs/PLAN.md](docs/PLAN.md), with research notes in [docs/research](docs/research) and the reasoning behind the architecture in [docs/decision](docs/decision/index.html). Work is specified with OpenSpec: current behaviour in [openspec/specs](openspec/specs), planned changes in [openspec/changes](openspec/changes).
 

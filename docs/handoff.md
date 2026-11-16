@@ -6,6 +6,18 @@ This page is for whoever picks the project up next, a person or a new chat with 
 
 HAI (Human AI Interface) is an open-source layer for directing AEC agents with hands, face and voice. A pnpm monorepo: `apps/web` (React, three.js viewer, tools, voice), `apps/bridge` (Node server and MCP tools, the agent team), `apps/desktop` (Electron installer), `plugins/rhino` (C# plugin), `packages/{protocol,scene,perception,agent-core}`, `openspec/` (specified changes), `docs/`, `e2e/` (Playwright). Start with [README.md](../README.md), then [agents.md](agents.md), [tools.md](tools.md), [gestures.md](gestures.md) and [voice.md](voice.md). Why things are the way they are: [decisions.md](decisions.md), newest at the end.
 
+## The new direction (2026-11-16)
+
+HAI stops being a modelling environment and becomes an orchestrator:
+
+- Rhino, then Blender, then Revit do the modelling with their own tools.
+- The Claude agent directs them by writing code in them, each run approved by the user.
+- HAI's viewer shows every host's model live and is where the user selects and edits.
+- Speckle carries models between hosts.
+- HAI's own scene keeps only sketches, markers, views and references, and the creation tools leave the rings.
+
+Why, and what was rejected: [decisions.md](decisions.md), "HAI orchestrates host applications", and [research/host-connectors.md](research/host-connectors.md). The order of the work: `openspec/changes/pivot-to-host-orchestration/proposal.md` and [PLAN.md](PLAN.md#the-orchestration-changes-from-2026-11-16). Until those changes land, the code still behaves as described below.
+
 ## How work is done here
 
 - **Branches, merges, pushes.** Work on a short branch, merge it into local `main` with `git merge --no-ff`, delete the branch. **Push to `main` only when the owner says so**; each push is authorised separately. Check `git branch --show-current` before committing: another session may share the checkout and switch branches (worktrees are safer).
@@ -58,14 +70,15 @@ Newest first; each has its commit and, where it was a decision, a section in [de
 ## Open, in the order to take them
 
 1. **Read the CI runs above** and fix what they show.
-2. **The four Windows hold-ring visual tests** still time out even at 120 s. The trace shows each wait after the speech detector starts taking longer than the one before (12 s, 20 s, 42 s). Not reproduced locally, not caused by the microphone stream (tried), not by CPU throttling (tried six times). Next step that was not taken: log the page's event-loop lag and the detector's frame rate inside those tests and read them after one Windows run. Do not skip the tests to get green.
-3. **`voice:undo` flakes on Windows CI**: the fake microphone plays its fixture once, from when the page opens it, and the speech detector can take 20 s or more to be ready there, so a short phrase is over. Padding the audio with silence does not work (listening gives up after 8 s of silence). A fix has to align the microphone's opening with the detector's readiness.
-4. **Spoken commands that were planned and not built**: "ortho on/off", "angle 45", "length 3 metres", "top view", "front view", "perspective". They exist only as the constraints panel and the view cube. See the plan in `openspec/changes/add-line-tool-and-view-cube`.
-5. **The speech model is measured on synthetic voices only.** Real speakers, accents and a noisy room were not tested; the fixtures in `test-assets/speech` are synthetic too. The only ONNX export transformers.js loads is one person's (Workmind, MIT, pinned by hash). Move to an official export when `moonshine_streaming` is supported or Useful Sensors publish one. Moonshine v2 medium has no loadable export.
-6. **Screenshot tolerance is loose** (2 to 6 per cent of pixels), which let stale baselines pass. Tightening it may make CI flaky between local Edge and the Windows runner; try it with a run to watch.
-7. **Narrow layouts**: between 860 and about 1100 px the chat rail leaves a small model view; the panels now fit but are tight. Below 860 px the rail becomes a bottom sheet.
-8. **Housekeeping**: leftover plain folders `AEC_wt_*` next to the checkout (unregistered worktrees, safe to delete); an old `models/moonshine-base` folder in a user's data folder is no longer used.
+2. **The orchestration changes, in order**: `add-host-adapters` first. It is the host contract with Rhino as the reference adapter, and it also finishes `add-rhino-connector`'s open plugin tasks, including the first look at Rhino's mirror in the viewer with a real Rhino. Then `make-hai-the-edit-surface`, `add-host-zones`, `add-image-flow`, `add-capability-connectors`, `extend-generated-panels`, `add-blender-connector`, `add-speckle-handoffs`, `add-revit-connector` and `reshape-agent-team-as-orchestrator`. Each is specified as its own OpenSpec change before it is built. The zone visuals go to the owner as options first.
+3. **The four Windows hold-ring visual tests** still time out even at 120 s. The trace shows each wait after the speech detector starts taking longer than the one before (12 s, 20 s, 42 s). Not reproduced locally, not caused by the microphone stream (tried), not by CPU throttling (tried six times). Next step that was not taken: log the page's event-loop lag and the detector's frame rate inside those tests and read them after one Windows run. Do not skip the tests to get green.
+4. **`voice:undo` flakes on Windows CI**: the fake microphone plays its fixture once, from when the page opens it, and the speech detector can take 20 s or more to be ready there, so a short phrase is over. Padding the audio with silence does not work (listening gives up after 8 s of silence). A fix has to align the microphone's opening with the detector's readiness.
+5. **Spoken view commands that were planned and not built**: "top view", "front view", "perspective". They exist only as the view cube. See the plan in `openspec/changes/add-line-tool-and-view-cube`. The drawing ones ("ortho on/off", "angle 45", "length 3 metres") are dropped with the creation tools.
+6. **The speech model is measured on synthetic voices only.** Real speakers, accents and a noisy room were not tested; the fixtures in `test-assets/speech` are synthetic too. The only ONNX export transformers.js loads is one person's (Workmind, MIT, pinned by hash). Move to an official export when `moonshine_streaming` is supported or Useful Sensors publish one. Moonshine v2 medium has no loadable export.
+7. **Screenshot tolerance is loose** (2 to 6 per cent of pixels), which let stale baselines pass. Tightening it may make CI flaky between local Edge and the Windows runner; try it with a run to watch.
+8. **Narrow layouts**: between 860 and about 1100 px the chat rail leaves a small model view; the panels now fit but are tight. Below 860 px the rail becomes a bottom sheet.
+9. **Housekeeping**: leftover plain folders `AEC_wt_*` next to the checkout (unregistered worktrees, safe to delete); an old `models/moonshine-base` folder in a user's data folder is no longer used.
 
 ## Rules from the owner that are easy to forget
 
-Never the em dash. No co-author line in commits. Prefer quality, simplicity, robustness and maintainability over development cost. UI proposals go to the owner as options in an Artifact to pick from. Push only when told.
+Never the em dash. No co-author line in commits. Prefer quality, simplicity, robustness and maintainability over development cost. Agents direct host applications; they do not model in HAI. UI proposals go to the owner as options in an Artifact to pick from. Push only when told.

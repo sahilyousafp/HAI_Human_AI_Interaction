@@ -1,35 +1,49 @@
 # Plan: gesture + agent interaction layer for AEC
 
-Decided 2026-10-19, updated the same day with the gesture tool palette, and on 2026-10-21 with the agent team, two-hand input and hand modelling tools. Research notes: `docs/research/`. Interactive decision page: `docs/decision/index.html`. Every milestone is specified as an OpenSpec change under `openspec/changes/`.
+Decided 2026-10-19, updated the same day with the gesture tool palette, on 2026-10-21 with the agent team, two-hand input and hand modelling tools, and on 2026-11-16 with the turn to orchestration: hosts model, HAI views and edits. Research notes: `docs/research/` (the latest is [host-connectors.md](research/host-connectors.md)). Interactive decision page: `docs/decision/index.html`. Every milestone is specified as an OpenSpec change under `openspec/changes/`.
 
 ## Decision
 
-**Hybrid.** Build our own interaction-layer app (camera, gestures, tool palette, HUD, agent loop), not our own modeler. Browser-first, with an Electron desktop app (`apps/desktop`) as the way to give it to someone: a signed installer that starts the bridge, serves the web app and walks a first-time user through Claude Code and the voice models (see [desktop.md](desktop.md)). Rhino is the first external host, for modelling and drafting: the agent works through Python (a managed environment with any library, and Python inside the open Rhino), and a thin C# plugin adds camera sync, pointing, selection, the Python runner and turn review. Blender/Bonsai comes later.
+**An orchestrator, not a modeller (2026-11-16).** HAI is the interaction layer and the one place to look: camera, gestures, voice, tool rings, HUD, the viewer and the agent loop. The modelling is done by the user's own design applications, each with its own tools: Rhino for form and NURBS, Blender for visualisation and mesh work, Revit for BIM and documents. Others can follow through the same contract.
+
+- **The Claude agent orchestrates.** Mochi breaks a request into tasks, each for one host, and sequences the hand-offs.
+- **Specialists drive the hosts by writing code in them.** Each run is shown to the user and approved before it runs, and is one undo record in the host.
+- **Every host's model is mirrored live into HAI's viewer.** The user selects, moves, rotates, deletes and undoes host objects there. A zone with the host's glyph shows where a host is working.
+- **Speckle carries models between hosts.** HAI's own plugins publish and load through the Speckle SDKs, so no connector needs a click.
+- **HAI's own scene holds only sketches, markers, views and references.**
+- **Other plugins and MCP servers add capabilities.** The user can connect them beside HAI's connectors, and each is offered to the agents working on its host.
+- **Generated panels** can read the web through the bridge, show sourced images and be worked fully by hand.
+
+Browser-first, with an Electron desktop app (`apps/desktop`) as the way to give it to someone: a signed installer that starts the bridge, serves the web app and walks a first-time user through Claude Code and the voice models (see [desktop.md](desktop.md)). The decision and its evidence: [decisions.md](decisions.md), "HAI orchestrates host applications".
 
 Why:
 - The novel part is the interaction layer. No maintained webcam-gesture + LLM-agent CAD/BIM tool exists.
+- The hosts already model, document and render better than an agent building geometry call by call. An agent writing code in the host beats one calling a fixed tool list (CodeAct: up to 20 points), and pictures of its own work improve its results.
+- The host vendors' MCP servers have no approval gate and no single undo per run. Revit's server cannot run code at all. So HAI keeps its own thin connector per host.
 - MediaPipe runs best in the browser on Windows (GPU delegate); Python GPU is Linux-only.
-- A Rhino-only plugin limits reach to Rhino owners and competes with McNeel's own RhinoAI panel (the original reason for a separate app; the agent's Python capability layer does not need Rhino at all).
-- A from-scratch modeler means months rebuilding NURBS, booleans and IFC.
+- A from-scratch modeler means months rebuilding NURBS, booleans and IFC. The first plan avoided that too, but still had agents and hands build walls and slabs in HAI's own scene. That part is now dropped.
 
 ## Architecture
 
 ```
-apps/web (Vite + React + R3F)       camera -> perception -> gestures -> palette, tools, navigation, HUD, viewer
-apps/bridge (Node)                  WebSocket hub, scene store, agent process, MCP scene tools, approvals
+apps/web (Vite + React + R3F)       camera -> perception -> gestures -> rings, edit tools, navigation, HUD,
+                                    viewer with one live mirror per host, zones, sketches
+apps/bridge (Node)                  WebSocket hub, host registry, agent processes, MCP host tools, approvals,
+                                    Speckle (GraphQL: projects, models, new-version events)
 apps/desktop                        Electron app and installer: the window, the bridge, first run, updates
-apps/overlay (Electron, later)      transparent click-through HUD over Rhino
-packages/protocol                   shared zod schemas for every cross-process message
+packages/protocol                   shared zod schemas for every cross-process message, the host contract
 packages/perception                 MediaPipe worker, One Euro filter, gesture state machines
-packages/scene                      architectural scene model, transactions, undo
+packages/scene                      sketches, markers, views and references, transactions, undo
 packages/agent-core                 AgentProvider: ClaudeCli now; Codex, ACP, local models later
-plugins/rhino (C#)                  camera, pointer, selection, Python runner, turn grouping
+plugins/rhino (C#)                  mirror, selection, Python runner, edits, capture, images, Speckle SDK
+plugins/blender (Python, GPL-3)     the same contract in Blender (later)
+plugins/revit (C#)                  the same contract in Revit, C# runs through ExternalEvent (later)
 ```
 
 Three speeds of control:
 - **Gestures and head pose:** navigation, pointing, selection, confirm/reject. Local, no LLM, under 50 ms.
-- **Tool palette:** long pinch opens a radial menu of direct tools (move, measure, section, add massing, delete, undo). No LLM.
-- **Voice + agent:** intent-level edits through MCP tools, reviewed per turn (nod to keep, shake to revert).
+- **Tool rings:** a long pinch opens a radial menu of direct edits on host objects (select, move, rotate, delete, undo, measure, section) and references for the agent (sketch, marker, lasso, zone). The owning host applies an edit. No LLM.
+- **Voice + agent:** intent-level work. The agent writes code in a host and the user approves it; each turn is reviewed (nod to keep, shake to revert).
 
 The user's own Claude Code setup (MCP servers, skills) loads in the agent session; tools that are not pre-approved ask the user in the HUD. Only landmarks and intents leave the perception worker; video and audio never leave the device.
 
@@ -65,6 +79,23 @@ The user's own Claude Code setup (MCP servers, skills) loads in the agent sessio
 | 19 | release v0.1 (to specify) | Launch reel | Lessons + how to contribute |
 
 Weeks 1-8 are built and their changes archived (`openspec/specs/` holds the current specs); weeks 9, 10, 11 and 12 are built and wait for their clips. Weeks 14 and 16-19 get their OpenSpec changes once the weeks before them have taught us what they need. After v0.1: Blender/Bonsai IFC connector, coarse gaze (WebEyeTrack), dynamic gestures, a small user study.
+
+### The orchestration changes (from 2026-11-16)
+
+The turn to orchestration (`pivot-to-host-orchestration`) replaces weeks 14 and 17 of the table above. "More modelling by hand" no longer fits, and an overlay over Rhino is not needed now that Rhino's window can stay minimised. It adds these changes, in order:
+
+1. `add-host-adapters`: one host contract (`host.*` messages, a host registry, `host_run`, `host_capture`, `host_place_image` and the rest), with Rhino as the reference adapter. It finishes the open plugin tasks of `add-rhino-connector`.
+2. `make-hai-the-edit-surface`: the edit ring and the reference ring, edits on host objects applied by their host, and the scene write tools and creation tools removed.
+3. `add-host-zones`: live zones with the host's glyph and the agent's state. The look is chosen by the owner from options first.
+4. `add-image-flow`: pictures from HAI into a host, and the host's own captures back to the agent.
+5. `add-capability-connectors`: other MCP servers and the hosts' own plugins as extra capabilities. It adds a catalogue per host, gives each server to the agents working on its hosts, and has each host report its installed plugins to `host_run`.
+6. `extend-generated-panels`: web reads through the bridge from the sites on the offer card, openly licensed image search with attribution, and panels worked fully by hand (drag, scroll, hover, move and resize).
+7. `add-blender-connector`: the add-on in `plugins/blender` (GPL-3).
+8. `add-speckle-handoffs`: spikes, then hand-offs between hosts through the plugins' SDKs.
+9. `add-revit-connector`: the add-in in `plugins/revit`.
+10. `reshape-agent-team-as-orchestrator`: Mochi plans host tasks and hand-offs; specialists drive hosts.
+
+`add-agent-turn-review` (week 15) stays, reviewed in the hosts.
 
 ### Clips to record
 

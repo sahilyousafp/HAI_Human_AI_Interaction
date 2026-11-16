@@ -4,8 +4,14 @@ context: |
   Product: open-source (Apache-2.0) interaction layer that lets one architect drive an AI agent and AEC design
   software with hand + face tracking from a laptop webcam, plus voice. It reimagines how a single user interacts
   with their own Claude; it is not a hosted service and earns no money.
-  Primary platform: Windows 11 laptop, built-in RGB webcam, Chrome or Edge. Rhino 8 (+ Grasshopper) is the first
-  external host; Blender/Bonsai comes later. A built-in three.js viewer is the zero-install default host.
+  Primary platform: Windows 11 laptop, built-in RGB webcam, Chrome or Edge.
+  HAI orchestrates; it does not model (decided 2026-11-16). The user's design applications are the hosts and model
+  with their own tools: Rhino 8/9 first, then Blender, then Revit. Each host connects through HAI's own thin
+  connector, which implements one contract (`host.*` messages): a live mesh mirror into HAI's viewer, selection both
+  ways, approved code runs as one undo record, edits applied by the owning host, viewport capture, placing images,
+  and Speckle publish and load. HAI's viewer is where the user views and edits everything; host windows are
+  optional. HAI's own scene holds only sketches, markers, views and references; agents never write geometry there.
+  Speckle is the only bus between hosts, triggered by the connectors through the Speckle SDKs, never the live view.
   Agent: the user's own locally installed, self-logged-in `claude` CLI, spawned unmodified as a long-lived
   `claude -p --input-format stream-json --output-format stream-json` process. Never read, copy, store or proxy
   Claude credentials or tokens; never spoof headers; never bundle the claude binary. Other providers come later
@@ -13,22 +19,29 @@ context: |
   The user keeps full use of their own Claude Code setup: their MCP servers and skills load in the agent session,
   and they can install more from the app. Tool calls that are not pre-approved go to an in-app approval prompt
   (gesture, voice or click) instead of being silently allowed or silently denied.
-  HAI is an interface for an agent and a human working together; Rhino is its modelling and drafting host. The
-  agent's capabilities come from Python, not from a fixed tool list: `python_run` runs in a managed environment in
-  the project (rhino3dm, ladybug-core, numpy to start, any other library on demand) and works with Rhino closed;
-  `rhino_run_python` runs Python 3 inside the open Rhino 8 document through our plugin. Both show the code and the
-  packages for approval and are not sandboxed. McNeel's RhinoAI MCP server is not required, wrapped or detected. Our
-  own Rhino plugin adds camera sync, selection sync, the Python runner, and ghost previews.
-  Everything runs on localhost: servers bind to 127.0.0.1 only and require a random per-session token. The one
-  exception is open data: when the user switches it on (off by default) the bridge asks a fixed list of open-data hosts
-  over HTTPS, and a request carries a place, an area, a time or a search text, never the user's work.
+  HAI is an interface for an agent and a human working together. The agent's capabilities come from code, not from
+  a fixed tool list: `host_run` runs code in a connected host (RhinoCommon Python, Blender `bpy`, Revit C#), and
+  `python_run` runs in a managed environment in the project (rhino3dm, ladybug-core, numpy to start, any other
+  library on demand) with no host open. Both show the code and the packages for approval and are not sandboxed.
+  Host vendors' and community MCP servers (RhinoAI, blender-mcp, Revit MCP, Ladybug Tools MCP) and the hosts' own
+  plugins are never required, but the user can connect them as extra capabilities: each is offered to the agents
+  working on its host, behind the usual approval, and never replaces HAI's own connector.
+  Everything runs on localhost: servers bind to 127.0.0.1 only and require a random per-session token. There are two
+  opt-in exceptions. Open data: when the user switches it on (off by default) the bridge asks a fixed list of
+  open-data hosts over HTTPS, and a request carries a place, an area, a time or a search text, never the user's work.
+  Speckle: when the user signs in to their own Speckle account (off until then), a hand-off sends the model to it.
+  Generated panels: a panel reads the web only through the bridge, from the sites on the offer card the user
+  accepted; the panel's frame itself never has network access.
   Privacy: camera frames never leave the perception Web Worker; only landmarks, gestures and intents cross it.
   No emotion inference; face blendshapes are only explicit control switches.
   Latency: gesture navigation and selection must never wait on the LLM.
   Stack: pnpm workspace, TypeScript, Vite, React, React Three Fiber, @mediapipe/tasks-vision, Node 24 bridge with
   `ws`, MCP TypeScript SDK v2 (@modelcontextprotocol/server + /node), zod 4, Biome, Vitest, Playwright
-  (E2E uses Chromium's fake camera fed from recorded .y4m clips). C# only inside plugins/rhino.
-  Licences: no AGPL, GPL or non-commercial dependencies in shipped code or shipped model weights.
+  (E2E uses Chromium's fake camera fed from recorded .y4m clips). C# only inside plugins/rhino and
+  plugins/revit; Python inside plugins/blender.
+  Licences: no AGPL, GPL or non-commercial dependencies in shipped code or shipped model weights. The one exception
+  is plugins/blender, which must be GPL-3 because it imports Blender's `bpy`: it has its own LICENSE, is distributed
+  as a separate Blender add-on, and talks to HAI only over the bridge's socket.
   Budget: the maintainer has 5-8 hours per week and publishes two LinkedIn videos per week, so every change must
   end in a short filmable demo.
   Writing: never use the em dash character in any artifact; use a plain hyphen.
