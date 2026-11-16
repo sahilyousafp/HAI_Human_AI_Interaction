@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HOST_DESCRIBE_MAX, HostComponent, HostId } from "./host.ts";
 import { LetterMarkers, MAX_SKETCHES, Sketch } from "./references.ts";
 import { ElementId, Point3Mm, PointMm } from "./scene.ts";
 
@@ -112,6 +113,14 @@ export const RequestContext = z.strictObject({
   sketches: z.array(Sketch).max(MAX_SKETCHES).optional(),
   /** The project's lettered markers, added by the bridge to every request. */
   markers: LetterMarkers.optional(),
+  /**
+   * The selected host components as their hosts describe them, added by the bridge to a request made while something
+   * is selected in a host, so the agent knows what "this" is without a call.
+   */
+  components: z
+    .array(z.strictObject({ host: HostId, ...HostComponent.shape }))
+    .max(HOST_DESCRIBE_MAX)
+    .optional(),
 });
 export type RequestContext = z.infer<typeof RequestContext>;
 
@@ -277,10 +286,10 @@ export const HAI_TOOLS = {
   ],
   /** Runs Python in the managed environment; granted to the agents that change the model, and to any agent whose file lists it. */
   python: ["python_run"],
-  /** Runs Python inside the open Rhino document; granted to the agents that change the model. */
-  rhino: ["rhino_run_python"],
-  /** Reads the Rhino document without running code; every agent has it. */
-  rhinoRead: ["rhino_get_document"],
+  /** Runs code in a connected host and places images in it, one undo step each; granted to the agents that change the model. */
+  host: ["host_run", "host_place_image"],
+  /** Lists the hosts, reads a host's document, captures its viewport, looks up its API and describes components; every agent. */
+  hostRead: ["host_list", "host_read", "host_capture", "host_api", "host_describe"],
 } as const;
 
 /** An agent's whole definition, for the Agents tab: what the panel shows plus its instructions. */

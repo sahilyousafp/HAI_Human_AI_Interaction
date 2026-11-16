@@ -52,8 +52,8 @@
 - Rejected: one message type per host. The page and the bridge would branch on the host everywhere.
 
 **A versioned hello.**
-- A host says `hello { client: <HostId>, protocol: 2, app, capabilities }`.
-- `client: "rhino"` with no `protocol` is the old plugin. The bridge answers `host.refused { reason: "This HAI for Rhino is older than the bridge: install the new one" }`. The plugin prints that on Rhino's command line and does not reconnect.
+- A host says `hello { client: <HostId>, protocolVersion: 2, app, connectorVersion, run, document, capabilities }`. `PROTOCOL_VERSION` goes from 1 to 2 for every client, pages included, since they are served by the same bridge.
+- A host hello with an older `protocolVersion` is the old plugin (`olderHostHello` in `envelope.ts` reads it loosely). The bridge answers `host.refused { reason: "This HAI for Rhino is older than the bridge: install the new one" }`. The plugin prints that on Rhino's command line and does not reconnect.
 - Token-only connections without an Origin are accepted for any `HostId`, as they are for `rhino` today.
 - Rejected: accepting both versions. The plugin and the bridge ship together in one installer, and two protocols double the tests.
 

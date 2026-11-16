@@ -2,10 +2,10 @@
 
 ## 1. The contract (`packages/protocol`)
 
-- [ ] 1.1 Add `host.ts` (`HostId`, `HostObjectType`, `HostObject`, `HostNotDrawn`, `HostSync`, `HostBatch`, `HostSelected`, `HostChange`, `HostRunChanges`, `HostRunResult`, `HostCapabilities`). Move `ViewRequest` and `VIEW_MODES` to `view.ts` and delete `rhino.ts`. Verify by moving `rhino.test.ts` to `host.test.ts`, adding cases for the Blender and Revit object types.
-- [ ] 1.2 Replace the `rhino.*` messages with the `host.*` messages of the design, with `host.refused` and the versioned hello. Verify the schema tests, including "an old hello without a protocol version is refused".
-- [ ] 1.3 Add `HostComponent`, `host.describe` and `host.described`, the described components on `host.selection`, and `components` in `RequestContext`. Verify the schema tests, including the 100-property and 200-character limits.
-- [ ] 1.4 Add the tool names and the `host` and `hostRead` groups to `HAI_TOOLS`, removing `rhino` and `rhinoRead`. Verify with `pnpm typecheck` across the workspace, which lists every place still to move.
+- [x] 1.1 Add `host.ts` (`HostId`, `HostObjectType`, `HostObject`, `HostNotDrawn`, `HostSync`, `HostBatch`, `HostSelected`, `HostChange`, `HostRunChanges`, `HostRunResult`, `HostCapabilities`). Move `ViewRequest` and `VIEW_MODES` to `view.ts` and delete `rhino.ts`. Verify by moving `rhino.test.ts` to `host.test.ts`, adding cases for the Blender and Revit object types.
+- [x] 1.2 Replace the `rhino.*` messages with the `host.*` messages of the design, with `host.refused` and the versioned hello. Verify the schema tests, including "an old hello without a protocol version is refused".
+- [x] 1.3 Add `HostComponent`, `host.describe` and `host.described`, the described components on `host.selection`, and `components` in `RequestContext`. Verify the schema tests, including the 100-property and 200-character limits.
+- [x] 1.4 Add the tool names and the `host` and `hostRead` groups to `HAI_TOOLS`, removing `rhino` and `rhinoRead`. Verify with `pnpm typecheck` across the workspace, which lists every place still to move.
 
 ## 2. The bridge: registry and links
 
